@@ -79,9 +79,12 @@ function InlineText(props: {
 export function MarkdownText(props: {
   markdown: string;
   color?: string;
+  fontSize?: number;
 }): React.ReactElement {
   const theme = useTheme();
   const color = props.color ?? theme.bubbleAiText;
+  // Chat UI customization: message body font size (undefined = typography.body).
+  const sizeStyle = props.fontSize != null ? { fontSize: props.fontSize } : undefined;
   const lines = props.markdown.replace(/\r\n/g, '\n').split('\n');
   const blocks: React.ReactElement[] = [];
 
@@ -116,7 +119,7 @@ export function MarkdownText(props: {
             text={quote[1] ?? ''}
             color={theme.textSecondary}
             linkColor={theme.brandPrimary}
-            baseStyle={{ fontStyle: 'italic' }}
+            baseStyle={{ fontStyle: 'italic', ...sizeStyle }}
           />
         </View>,
       );
@@ -126,9 +129,9 @@ export function MarkdownText(props: {
     if (bullet) {
       blocks.push(
         <View key={key} style={styles.listRow}>
-          <Text style={[typography.body, { color }]}>{'• '}</Text>
+          <Text style={[typography.body, { color }, sizeStyle]}>{'• '}</Text>
           <View style={{ flex: 1 }}>
-            <InlineText text={bullet[1] ?? ''} color={color} linkColor={theme.brandPrimary} />
+            <InlineText text={bullet[1] ?? ''} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />
           </View>
         </View>,
       );
@@ -138,12 +141,13 @@ export function MarkdownText(props: {
     if (numbered) {
       blocks.push(
         <View key={key} style={styles.listRow}>
-          <Text style={[typography.body, { color }]}>{`${numbered[1]}. `}</Text>
+          <Text style={[typography.body, { color }, sizeStyle]}>{`${numbered[1]}. `}</Text>
           <View style={{ flex: 1 }}>
             <InlineText
               text={numbered[2] ?? ''}
               color={color}
               linkColor={theme.brandPrimary}
+              baseStyle={sizeStyle}
             />
           </View>
         </View>,
@@ -151,7 +155,7 @@ export function MarkdownText(props: {
       return;
     }
     blocks.push(
-      <InlineText key={key} text={line} color={color} linkColor={theme.brandPrimary} />,
+      <InlineText key={key} text={line} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />,
     );
   });
 

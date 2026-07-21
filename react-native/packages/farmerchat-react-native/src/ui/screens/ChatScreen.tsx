@@ -483,13 +483,25 @@ export function ChatScreen(props: {
 function UserBubble(props: { message: UserMessage }): React.ReactElement {
   const theme = useTheme();
   const label = useLabel();
+  const cfg = useSdk().config;
   const { message } = props;
+  // Chat UI customization (null = current theme behavior). Keep the sharp tail.
+  const cornerOverride =
+    cfg.bubbleCornerRadius != null
+      ? {
+          borderTopLeftRadius: cfg.bubbleCornerRadius,
+          borderTopRightRadius: cfg.bubbleCornerRadius,
+          borderBottomLeftRadius: cfg.bubbleCornerRadius,
+        }
+      : null;
+  const fontOverride = cfg.messageFontSize != null ? { fontSize: cfg.messageFontSize } : null;
   return (
     <View style={styles.userRow}>
       <View
         style={[
           styles.userBubble,
-          { backgroundColor: theme.bubbleUser },
+          { backgroundColor: cfg.userBubbleColor ?? theme.bubbleUser },
+          cornerOverride,
           message.userBubbleImageWideBanner && styles.wideBanner,
           message.isFailed && { opacity: 0.6 },
         ]}
@@ -503,7 +515,9 @@ function UserBubble(props: { message: UserMessage }): React.ReactElement {
         ) : null}
         {message.audioUri ? <VoiceClip audioUri={message.audioUri} tint="onBrand" /> : null}
         {message.text.length > 0 ? (
-          <Text style={[typography.body, { color: theme.bubbleUserText }]}>{message.text}</Text>
+          <Text style={[typography.body, { color: cfg.userBubbleTextColor ?? theme.bubbleUserText }, fontOverride]}>
+            {message.text}
+          </Text>
         ) : null}
       </View>
       {message.isFailed ? (
@@ -533,6 +547,7 @@ function AiBubble(props: {
 }): React.ReactElement {
   const theme = useTheme();
   const label = useLabel();
+  const cfg = useSdk().config;
   const { message } = props;
   // Action row appears only once the answer has finished revealing.
   const showActions = props.isLast && props.revealed;
@@ -557,7 +572,8 @@ function AiBubble(props: {
         <AiAnswerBlock
           text={message.text}
           animate={props.animate}
-          color={theme.bubbleAiText}
+          color={cfg.aiBubbleTextColor ?? theme.bubbleAiText}
+          fontSize={cfg.messageFontSize ?? undefined}
           onRevealComplete={props.onRevealComplete}
         />
         {message.contentProvider && message.hideSource !== true ? (

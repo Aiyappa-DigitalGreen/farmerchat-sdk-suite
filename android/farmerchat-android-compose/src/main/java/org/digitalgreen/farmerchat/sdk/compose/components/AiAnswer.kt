@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import kotlin.math.ceil
@@ -55,7 +56,8 @@ fun AiAnswerBlock(
     text: String,
     animate: Boolean,
     modifier: Modifier = Modifier,
-    color: Color = LocalContentColors.current.foregroundPrimary,
+    color: Color = FarmerChat.requireGraph().config.aiBubbleTextColor?.let { Color(it) }
+        ?: LocalContentColors.current.foregroundPrimary,
     onRevealComplete: () -> Unit = {}
 ) {
     val chunks = remember(text) { revealChunks(text) }

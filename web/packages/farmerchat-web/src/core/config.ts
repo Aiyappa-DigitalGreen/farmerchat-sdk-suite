@@ -134,6 +134,18 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   /** FAB default icon/label color (CSS color); omitted → on-brand. */
   fabContentColor?: string;
 
+  // --- Chat UI customization (omitted → current theme behavior) ---
+  /** User message bubble background (CSS color). */
+  userBubbleColor?: string;
+  /** User message bubble text color (CSS color). */
+  userBubbleTextColor?: string;
+  /** AI message body text color (CSS color). */
+  aiBubbleTextColor?: string;
+  /** Message bubble corner radius (px). */
+  bubbleCornerRadius?: number;
+  /** Chat message body font size (px). */
+  messageFontSize?: number;
+
   // --- Theming (docs/07 Part B) ---
   theme?: FarmerChatTheme;
 
@@ -187,6 +199,11 @@ export interface ResolvedConfig {
   showHistory: boolean;
   showDrawer: boolean;
   enableSsfr: boolean;
+  userBubbleColor?: string;
+  userBubbleTextColor?: string;
+  aiBubbleTextColor?: string;
+  bubbleCornerRadius?: number;
+  messageFontSize?: number;
   stringOverrides?: Record<string, string>;
   locale?: string;
   callbacks: FarmerChatCallbacks;
@@ -224,6 +241,11 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     showHistory: config.showHistory ?? true,
     showDrawer: config.showDrawer ?? true,
     enableSsfr: config.enableSsfr ?? true,
+    userBubbleColor: config.userBubbleColor,
+    userBubbleTextColor: config.userBubbleTextColor,
+    aiBubbleTextColor: config.aiBubbleTextColor,
+    bubbleCornerRadius: config.bubbleCornerRadius,
+    messageFontSize: config.messageFontSize,
     stringOverrides: config.stringOverrides,
     locale: config.locale,
     callbacks: {

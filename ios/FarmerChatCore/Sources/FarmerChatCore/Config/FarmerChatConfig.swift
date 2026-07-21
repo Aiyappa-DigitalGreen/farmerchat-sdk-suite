@@ -96,6 +96,18 @@ public struct FarmerChatConfig: Sendable {
     /// Default launcher icon/text color; nil = on-brand.
     public var fabContentColor: Color?
 
+    // MARK: - Chat UI customization (nil = current theme behavior)
+    /// User message bubble background; nil = theme default.
+    public var userBubbleColor: Color?
+    /// User message bubble text color; nil = theme default.
+    public var userBubbleTextColor: Color?
+    /// AI message body text color; nil = theme default.
+    public var aiBubbleTextColor: Color?
+    /// Message bubble corner radius; nil = theme default.
+    public var bubbleCornerRadius: CGFloat?
+    /// Chat message body font size; nil = theme default.
+    public var messageFontSize: CGFloat?
+
     // MARK: - C2 Identity injection
     public var authMode: FarmerChatAuthMode
     /// Host-supplied access token (used when `authMode == .hostToken`).
@@ -144,6 +156,11 @@ public struct FarmerChatConfig: Sendable {
         fabLabel: String? = nil,
         fabBackgroundColor: Color? = nil,
         fabContentColor: Color? = nil,
+        userBubbleColor: Color? = nil,
+        userBubbleTextColor: Color? = nil,
+        aiBubbleTextColor: Color? = nil,
+        bubbleCornerRadius: CGFloat? = nil,
+        messageFontSize: CGFloat? = nil,
         authMode: FarmerChatAuthMode = .sdkOtp,
         accessToken: String? = nil,
         refreshToken: String? = nil,
@@ -177,6 +194,11 @@ public struct FarmerChatConfig: Sendable {
         self.fabLabel = fabLabel
         self.fabBackgroundColor = fabBackgroundColor
         self.fabContentColor = fabContentColor
+        self.userBubbleColor = userBubbleColor
+        self.userBubbleTextColor = userBubbleTextColor
+        self.aiBubbleTextColor = aiBubbleTextColor
+        self.bubbleCornerRadius = bubbleCornerRadius
+        self.messageFontSize = messageFontSize
         self.authMode = authMode
         self.accessToken = accessToken
         self.refreshToken = refreshToken

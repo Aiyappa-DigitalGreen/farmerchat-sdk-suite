@@ -18,6 +18,7 @@ Applies to all six packages. Read `01-app-specification.md` (screens/nav/lifecyc
 FarmerChat.initialize(config: FarmerChatConfig)
 FarmerChat.launch(...)            // Android: Activity/Compose entry; iOS: UIViewController/View; RN: <FarmerChatView/>; Web: <FarmerChat/> or mount(el)
 FarmerChat.openChat(question?, conversationId?)   // deep-link style entry
+FarmerChat.updateTokens(accessToken, refreshToken?)  // HOST_TOKEN: push a freshly-refreshed token at runtime (refresh omitted preserves stored)
 FarmerChat.logout()
 FarmerChat.isAuthenticated / onAuthStateChanged
 FarmerChat.setAnalyticsListener(listener)
@@ -37,10 +38,16 @@ FarmerChatConfig {
   appearance: day|night|auto
   languageCode?                   // preselect, skips language screen if valid
   enableVoice = true, enableImages = true, enableWeather = true
+  // FAB customization (config defaults; per-instance FAB params win):
+  fabLabel?, fabBackgroundColor?, fabContentColor?
+  // Chat UI customization (null/omitted = current theme behavior):
+  userBubbleColor?, userBubbleTextColor?, aiBubbleTextColor?, bubbleCornerRadius?, messageFontSize?  (Android: messageFontSizeSp)
   onEvent?: (name, props) -> Unit // analytics fan-out
   onSessionExpired?: () -> Unit
 }
 ```
+
+> Chat UI knobs `aiBubbleColor`, `aiAvatarEmoji`, `showUserAvatar` (from READMENEW.md) are intentionally NOT shipped — they require net-new per-message UI (AI bubble container / avatars) that no platform renders today. Tracked in `04-parity-matrix.md`.
 
 ## Screen modules every platform must ship
 

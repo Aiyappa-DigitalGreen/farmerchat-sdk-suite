@@ -146,6 +146,18 @@ export interface FarmerChatConfig {
   /** FAB default icon/label color (hex); omitted → on-brand (per-instance `contentColor` wins). */
   fabContentColor?: string;
 
+  // --- Chat UI customization (omitted → current theme behavior) ---
+  /** User message bubble background (hex). */
+  userBubbleColor?: string;
+  /** User message bubble text color (hex). */
+  userBubbleTextColor?: string;
+  /** AI message body text color (hex). */
+  aiBubbleTextColor?: string;
+  /** Message bubble corner radius (px). */
+  bubbleCornerRadius?: number;
+  /** Chat message body font size (px). */
+  messageFontSize?: number;
+
   /** Host theme overrides (docs/07 Part B). Omitted → built-in green brand. */
   theme?: FarmerChatTheme;
 
@@ -192,6 +204,11 @@ export interface ResolvedFarmerChatConfig {
   fabLabel: string | null;
   fabBackgroundColor: string | null;
   fabContentColor: string | null;
+  userBubbleColor: string | null;
+  userBubbleTextColor: string | null;
+  aiBubbleTextColor: string | null;
+  bubbleCornerRadius: number | null;
+  messageFontSize: number | null;
   theme: FarmerChatTheme | null;
   mode: FarmerChatMode;
   authMode: FarmerChatAuthMode;
@@ -236,6 +253,11 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     fabLabel: config.fabLabel ?? null,
     fabBackgroundColor: config.fabBackgroundColor ?? null,
     fabContentColor: config.fabContentColor ?? null,
+    userBubbleColor: config.userBubbleColor ?? null,
+    userBubbleTextColor: config.userBubbleTextColor ?? null,
+    aiBubbleTextColor: config.aiBubbleTextColor ?? null,
+    bubbleCornerRadius: config.bubbleCornerRadius ?? null,
+    messageFontSize: config.messageFontSize ?? null,
     theme: config.theme ?? null,
     mode: config.mode ?? 'FULL_JOURNEY',
     authMode: config.authMode ?? 'SDK_OTP',

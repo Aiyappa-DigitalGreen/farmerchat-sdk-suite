@@ -28,6 +28,7 @@ export function AiAnswerBlock(props: {
   text: string;
   animate: boolean;
   color?: string;
+  fontSize?: number;
   onRevealComplete?: () => void;
 }): React.ReactElement {
   const { text, animate } = props;
@@ -82,7 +83,7 @@ export function AiAnswerBlock(props: {
     <Pressable onPress={skip} disabled={finished} accessibilityRole={finished ? undefined : 'button'}>
       <View style={styles.answerRow}>
         <View style={{ flex: 1 }}>
-          <MarkdownText markdown={display} color={props.color} />
+          <MarkdownText markdown={display} color={props.color} fontSize={props.fontSize} />
         </View>
         {!finished ? <BlinkingCaret color={props.color} /> : null}
       </View>

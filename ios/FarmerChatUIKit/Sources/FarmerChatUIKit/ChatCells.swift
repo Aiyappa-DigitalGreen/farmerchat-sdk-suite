@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import UIKit
+import SwiftUI
 import FarmerChatCore
 
 // MARK: - Chat bubble cell (user / AI / loading)
@@ -24,13 +25,15 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        bubble.layer.cornerRadius = 18
+        // Chat UI customization (nil = current defaults 18 / 16).
+        let cfg = FarmerChat.shared.config
+        bubble.layer.cornerRadius = cfg.bubbleCornerRadius ?? 18
         bubble.layer.cornerCurve = .continuous
         bubble.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubble)
 
         textLabel.numberOfLines = 0
-        textLabel.font = .systemFont(ofSize: 16)
+        textLabel.font = .systemFont(ofSize: cfg.messageFontSize ?? 16)
 
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -89,8 +92,8 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         case .user(let user):
             currentText = user.text
             alignRight(true)
-            bubble.backgroundColor = FCUITheme.brandSurfacePrimary
-            textLabel.textColor = .white
+            bubble.backgroundColor = FarmerChat.shared.config.userBubbleColor.map(UIColor.init) ?? FCUITheme.brandSurfacePrimary
+            textLabel.textColor = FarmerChat.shared.config.userBubbleTextColor.map(UIColor.init) ?? .white
             textLabel.text = user.text
             textLabel.isHidden = user.text.isEmpty
             spinner.stopAnimating()
@@ -113,7 +116,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             currentText = ai.text
             alignRight(false)
             bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
-            textLabel.textColor = FCUITheme.foregroundPrimary
+            textLabel.textColor = FarmerChat.shared.config.aiBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
             textLabel.text = ai.text
             textLabel.isHidden = false
             spinner.stopAnimating()

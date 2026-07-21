@@ -118,6 +118,18 @@ class FarmerChatConfig private constructor(
     /** Default launcher icon/text color as an ARGB color int; null = on-brand. */
     val fabContentColor: Int?,
 
+    // --- Chat UI customization (config-level; null = current theme behavior) -
+    /** User message bubble background (ARGB int); null = theme default. */
+    val userBubbleColor: Int?,
+    /** User message bubble text color (ARGB int); null = theme default. */
+    val userBubbleTextColor: Int?,
+    /** AI message body text color (ARGB int); null = theme default. */
+    val aiBubbleTextColor: Int?,
+    /** Message bubble corner radius in dp; null = theme default. */
+    val bubbleCornerRadius: Int?,
+    /** Chat message body font size in sp; null = theme default. */
+    val messageFontSizeSp: Float?,
+
     // --- C4: semantic event hooks -----------------------------------------
     val hooks: FarmerChatHooks,
 
@@ -157,6 +169,11 @@ class FarmerChatConfig private constructor(
         .fabLabel(fabLabel)
         .fabBackgroundColor(fabBackgroundColor)
         .fabContentColor(fabContentColor)
+        .userBubbleColor(userBubbleColor)
+        .userBubbleTextColor(userBubbleTextColor)
+        .aiBubbleTextColor(aiBubbleTextColor)
+        .bubbleCornerRadius(bubbleCornerRadius)
+        .messageFontSizeSp(messageFontSizeSp)
         .onChatOpened(hooks.onChatOpened)
         .onMessageSent(hooks.onMessageSent)
         .onAnswerReceived(hooks.onAnswerReceived)
@@ -194,6 +211,12 @@ class FarmerChatConfig private constructor(
         private var fabLabel: String? = null
         private var fabBackgroundColor: Int? = null
         private var fabContentColor: Int? = null
+
+        private var userBubbleColor: Int? = null
+        private var userBubbleTextColor: Int? = null
+        private var aiBubbleTextColor: Int? = null
+        private var bubbleCornerRadius: Int? = null
+        private var messageFontSizeSp: Float? = null
 
         private var onChatOpened: (() -> Unit)? = null
         private var onMessageSent: ((String) -> Unit)? = null
@@ -241,6 +264,15 @@ class FarmerChatConfig private constructor(
         /** Default launcher icon/text color as an ARGB color int; null = on-brand. */
         fun fabContentColor(@ColorInt color: Int?) = apply { fabContentColor = color }
 
+        // Chat UI customization ------------------------------------------
+        fun userBubbleColor(@ColorInt color: Int?) = apply { userBubbleColor = color }
+        fun userBubbleTextColor(@ColorInt color: Int?) = apply { userBubbleTextColor = color }
+        fun aiBubbleTextColor(@ColorInt color: Int?) = apply { aiBubbleTextColor = color }
+        /** Message bubble corner radius in dp. */
+        fun bubbleCornerRadius(dp: Int?) = apply { bubbleCornerRadius = dp }
+        /** Chat message body font size in sp. */
+        fun messageFontSizeSp(sp: Float?) = apply { messageFontSizeSp = sp }
+
         // C4 -------------------------------------------------------------
         fun onChatOpened(cb: (() -> Unit)?) = apply { onChatOpened = cb }
         fun onMessageSent(cb: ((String) -> Unit)?) = apply { onMessageSent = cb }
@@ -279,6 +311,11 @@ class FarmerChatConfig private constructor(
             fabLabel = fabLabel,
             fabBackgroundColor = fabBackgroundColor,
             fabContentColor = fabContentColor,
+            userBubbleColor = userBubbleColor,
+            userBubbleTextColor = userBubbleTextColor,
+            aiBubbleTextColor = aiBubbleTextColor,
+            bubbleCornerRadius = bubbleCornerRadius,
+            messageFontSizeSp = messageFontSizeSp,
             hooks = FarmerChatHooks(
                 onChatOpened, onMessageSent, onAnswerReceived,
                 onScreenView, onError, onSessionStart

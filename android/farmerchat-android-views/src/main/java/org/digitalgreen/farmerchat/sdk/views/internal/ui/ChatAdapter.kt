@@ -1,8 +1,11 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.ui
 
+import android.graphics.drawable.GradientDrawable
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
@@ -144,11 +147,36 @@ internal class ChatAdapter(
             b.root.context,
             if (message.isFailed) R.drawable.fc_bg_user_bubble_failed else R.drawable.fc_bg_user_bubble
         )
+
+        // Chat UI customization (null = XML/theme default). Applied per-bind so
+        // recycled views stay consistent.
+        val cfg = FarmerChat.requireGraph().config
+        cfg.userBubbleTextColor?.let { b.fcUserText.setTextColor(it) }
+        cfg.messageFontSizeSp?.let { b.fcUserText.setTextSize(TypedValue.COMPLEX_UNIT_SP, it) }
+        if (!message.isFailed) {
+            (b.fcUserBubble.background as? GradientDrawable)?.let { bg ->
+                val d = bg.mutate() as GradientDrawable
+                cfg.userBubbleColor?.let { d.setColor(it) }
+                cfg.bubbleCornerRadius?.let { r ->
+                    val density = b.root.resources.displayMetrics.density
+                    val px = r * density
+                    val sharp = 6f * density // keep the bottom-right tail
+                    // order: top-left, top-right, bottom-right, bottom-left (x,y each)
+                    d.cornerRadii = floatArrayOf(px, px, px, px, sharp, sharp, px, px)
+                }
+                b.fcUserBubble.background = d
+            }
+        }
     }
 
     private fun bindAi(holder: AiHolder, row: ChatRow.Ai) {
         val b = holder.binding
         b.fcAiText.text = Markdown.render(row.message.text)
+
+        // Chat UI customization (null = XML/theme default).
+        val cfg = FarmerChat.requireGraph().config
+        cfg.aiBubbleTextColor?.let { b.fcAiText.setTextColor(it) }
+        cfg.messageFontSizeSp?.let { b.fcAiText.setTextSize(TypedValue.COMPLEX_UNIT_SP, it) }
 
         b.fcAiReadFull.isVisible = row.showReadFullAdvice
         b.fcAiReadFull.text = callbacks.labelFor(Labels.READ_FULL_ADVICE, "Read full advice")

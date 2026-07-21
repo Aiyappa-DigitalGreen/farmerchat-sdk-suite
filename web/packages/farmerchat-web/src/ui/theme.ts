@@ -263,7 +263,7 @@ const css = `
   align-self: flex-end; max-width: 84%;
   background: var(--fc-bubble-user); color: var(--fc-bubble-user-text);
   border-radius: var(--fc-radius-bubble) var(--fc-radius-bubble) 6px var(--fc-radius-bubble);
-  padding: 11px 15px; font-size: 15px;
+  padding: 11px 15px; font-size: var(--fc-bubble-font-size, 15px);
   display: flex; flex-direction: column; gap: 8px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
@@ -271,10 +271,10 @@ const css = `
 .fcsdk-bubble-user--failed { opacity: 0.65; border: 1.5px dashed rgba(255,255,255,0.7); }
 .fcsdk-bubble-ai {
   align-self: flex-start; max-width: min(94%, 640px);
-  background: var(--fc-bubble-ai); color: var(--fc-text);
+  background: var(--fc-bubble-ai); color: var(--fc-bubble-ai-text, var(--fc-text));
   border: 1px solid var(--fc-border);
   border-radius: var(--fc-radius-bubble) var(--fc-radius-bubble) var(--fc-radius-bubble) 6px;
-  padding: 14px 16px; font-size: 15px;
+  padding: 14px 16px; font-size: var(--fc-bubble-font-size, 15px);
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 /* Tap-to-skip surface for the reveal; cursor hints it is interactive. */

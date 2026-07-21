@@ -127,12 +127,12 @@ private struct FCMarkdownTextColored: View {
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
             Text(attributed)
-                .font(.system(size: 16))
+                .font(.system(size: FarmerChat.shared.config.messageFontSize ?? 16))
                 .foregroundColor(color)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text(text)
-                .font(.system(size: 16))
+                .font(.system(size: FarmerChat.shared.config.messageFontSize ?? 16))
                 .foregroundColor(color)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -158,19 +158,19 @@ public struct FCUserChatBubble: View {
                 // Port of UserChatBubble.kt: light reading surface, dark text,
                 // asymmetric shape (3 corners XL=20, bottom-trailing sharp tail).
                 Text(message.text)
-                    .font(.system(size: 16))
-                    .foregroundColor(theme.content.foregroundPrimary)
+                    .font(.system(size: FarmerChat.shared.config.messageFontSize ?? 16))
+                    .foregroundColor(FarmerChat.shared.config.userBubbleTextColor ?? theme.content.foregroundPrimary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .frame(maxWidth: 300, alignment: .leading)
-                    .background(theme.content.surfaceReadingSecondary)
+                    .background(FarmerChat.shared.config.userBubbleColor ?? theme.content.surfaceReadingSecondary)
                     .clipShape(UnevenRoundedRectangle(
-                        topLeadingRadius: 20,
-                        bottomLeadingRadius: 20,
+                        topLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
+                        bottomLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
                         bottomTrailingRadius: 4,
-                        topTrailingRadius: 20,
+                        topTrailingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
                         style: .continuous
                     ))
             }
@@ -313,6 +313,7 @@ public struct FCAiResponseBubble: View {
                 FCAiAnswerText(
                     text: message.text,
                     animate: animate,
+                    color: FarmerChat.shared.config.aiBubbleTextColor,
                     onRevealComplete: {
                         withAnimation(.easeOut(duration: 0.35)) { revealFinished = true }
                         onRevealComplete()
@@ -357,7 +358,7 @@ public struct FCAiResponseBubble: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.content.surfaceReadingSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: min(theme.shapes.card, 22), style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: FarmerChat.shared.config.bubbleCornerRadius ?? min(theme.shapes.card, 22), style: .continuous))
     }
 
     private func actionChip(icon: String, title: String, loading: Bool, action: @escaping () -> Void) -> some View {

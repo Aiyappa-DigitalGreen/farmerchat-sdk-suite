@@ -271,6 +271,17 @@ export function FarmerChatRoot(props: {
     () => resolveThemeVars(services.config.theme, theme),
     [services.config.theme, theme],
   );
+  // Chat UI customization → scoped CSS vars (undefined = stylesheet default).
+  const chatVars = useMemo(() => {
+    const c = services.config;
+    const v: Record<string, string> = {};
+    if (c.userBubbleColor) v['--fc-bubble-user'] = c.userBubbleColor;
+    if (c.userBubbleTextColor) v['--fc-bubble-user-text'] = c.userBubbleTextColor;
+    if (c.aiBubbleTextColor) v['--fc-bubble-ai-text'] = c.aiBubbleTextColor;
+    if (c.bubbleCornerRadius != null) v['--fc-radius-bubble'] = `${c.bubbleCornerRadius}px`;
+    if (c.messageFontSize != null) v['--fc-bubble-font-size'] = `${c.messageFontSize}px`;
+    return v;
+  }, [services.config]);
   const logo = services.config.theme?.logo;
 
   const ctx = useMemo(
@@ -283,7 +294,7 @@ export function FarmerChatRoot(props: {
       <div
         className={`fcsdk-root${props.inline ? ' fcsdk-root--inline' : ''}`}
         data-fc-theme={theme}
-        style={themeVars as CSSProperties}
+        style={{ ...themeVars, ...chatVars } as CSSProperties}
       >
         {renderScreen()}
 

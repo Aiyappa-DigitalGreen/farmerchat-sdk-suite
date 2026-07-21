@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 
 private sealed class MarkdownBlock {
@@ -49,6 +51,9 @@ fun MarkdownText(
     color: Color = LocalContentColors.current.foregroundPrimary
 ) {
     val type = MaterialTheme.typography
+    // Chat UI customization: message body font size (null = theme bodyMedium).
+    val bodyStyle = FarmerChat.requireGraph().config.messageFontSizeSp
+        ?.let { type.bodyMedium.copy(fontSize = it.sp) } ?: type.bodyMedium
     val colors = LocalContentColors.current
 
     val blocks = parseMarkdownBlocks(text)
@@ -99,7 +104,7 @@ fun MarkdownText(
                 is MarkdownBlock.Paragraph -> {
                     Text(
                         text = parseBoldAndItalic(block.text, color),
-                        style = type.bodyMedium,
+                        style = bodyStyle,
                         color = color
                     )
                 }
@@ -120,7 +125,7 @@ fun MarkdownText(
                         ) {}
                         Text(
                             text = parseBoldAndItalic(block.text, color),
-                            style = type.bodyMedium,
+                            style = bodyStyle,
                             color = color
                         )
                     }
@@ -134,12 +139,12 @@ fun MarkdownText(
                     ) {
                         Text(
                             text = "${block.number}.",
-                            style = type.bodyMedium,
+                            style = bodyStyle,
                             color = color
                         )
                         Text(
                             text = parseBoldAndItalic(block.text, color),
-                            style = type.bodyMedium,
+                            style = bodyStyle,
                             color = color
                         )
                     }
