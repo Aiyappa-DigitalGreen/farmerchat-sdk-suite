@@ -213,6 +213,8 @@ interface FarmerChatStatics {
   /** C4 — programmatic: navigate to a named screen (home/settings/help/chatHistory/chat/settingsLanguage). */
   openScreen(destination: string): void;
   logout(): Promise<void>;
+  /** Push a freshly-refreshed token into the active session (HOST_TOKEN mode). */
+  updateTokens(accessToken: string, refreshToken?: string): void;
   isAuthenticated(): boolean;
   onAuthStateChanged(listener: (isAuthenticated: boolean) => void): () => void;
   setAnalyticsListener(listener: FarmerChatEventListener | undefined): void;
@@ -279,6 +281,10 @@ export const FarmerChat: typeof FarmerChatComponent & FarmerChatStatics = Object
       return;
     }
     if (sharedServices) await sharedServices.session.logout();
+  },
+
+  updateTokens(accessToken: string, refreshToken?: string): void {
+    sharedServices?.session.updateTokens(accessToken, refreshToken);
   },
 
   isAuthenticated(): boolean {

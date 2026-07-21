@@ -81,6 +81,16 @@ export const FarmerChat = {
     await requireInstance().session.logout();
   },
 
+  /**
+   * Push a freshly-refreshed token into the active session (HOST_TOKEN mode).
+   * Call after the host refreshes its own auth so subsequent SDK requests use
+   * the new token — no re-configure needed. `refreshToken` omitted preserves the
+   * stored one.
+   */
+  updateTokens(accessToken: string, refreshToken?: string): void {
+    requireInstance().session.updateTokens(accessToken, refreshToken);
+  },
+
   /** True once OTP has been verified (`OTP_VERIFIED`). */
   isAuthenticated(): boolean {
     return requireInstance().session.isAuthenticated;

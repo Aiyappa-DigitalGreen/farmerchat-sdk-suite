@@ -200,4 +200,15 @@ object FarmerChat {
     fun setAnalyticsListener(listener: FarmerChatAnalyticsListener?) {
         graphInternal?.analytics?.listener = listener
     }
+
+    /**
+     * Push a freshly-refreshed token into the active session (HOST_TOKEN mode).
+     * Call after the host refreshes its own auth so subsequent SDK requests use
+     * the new token — no re-initialize needed. [refreshToken] null preserves the
+     * stored one. No-op if the SDK has not been initialized.
+     */
+    @JvmStatic
+    fun updateTokens(accessToken: String, refreshToken: String? = null) {
+        graphInternal?.sessionManager?.updateTokens(accessToken, refreshToken)
+    }
 }

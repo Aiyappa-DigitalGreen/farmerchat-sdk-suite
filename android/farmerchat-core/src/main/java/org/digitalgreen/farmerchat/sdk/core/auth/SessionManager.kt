@@ -96,6 +96,17 @@ class SessionManager(
     }
 
     /**
+     * Push a freshly-refreshed token into the active session at runtime — e.g.
+     * after the host app refreshes its own auth in HOST_TOKEN mode. Additive to
+     * the init-time seed + pull-based [FarmerChatConfig.tokenProvider]: lets a
+     * host update the token without re-initializing. When [refreshToken] is null
+     * the stored refresh token is preserved. Does not alter OTP auth markers.
+     */
+    fun updateTokens(accessToken: String, refreshToken: String? = null) {
+        tokenStore.saveTokens(accessToken, refreshToken ?: tokenStore.getRefreshToken())
+    }
+
+    /**
      * Logout (app semantics): POST api/user/logout/ best-effort, clear all SDK prefs
      * (preserving appearance), clear tokens, flip auth state.
      */

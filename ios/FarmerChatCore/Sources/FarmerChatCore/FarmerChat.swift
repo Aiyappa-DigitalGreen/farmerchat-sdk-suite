@@ -191,6 +191,14 @@ public final class FarmerChat: @unchecked Sendable {
         await session.logout()
     }
 
+    /// Push a freshly-refreshed token into the active session (HOST_TOKEN mode).
+    /// Call after the host refreshes its own auth so subsequent SDK requests use
+    /// the new token — no reconfigure needed. `refresh` nil preserves the stored
+    /// refresh token.
+    public func updateTokens(access: String, refresh: String? = nil) {
+        session.updateTokens(access: access, refresh: refresh)
+    }
+
     public var isAuthenticated: Bool { session.isAuthenticated }
 
     /// Cold + live auth state (`onAuthStateChanged`).

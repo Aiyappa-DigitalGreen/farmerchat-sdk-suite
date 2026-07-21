@@ -41,6 +41,16 @@ export class SessionManager {
     this.emit(true);
   }
 
+  /**
+   * Push a freshly-refreshed token into the active session at runtime
+   * (HOST_TOKEN mode) — additive to the init seed + tokenProvider. `refreshToken`
+   * omitted preserves the stored refresh token. Does not alter OTP auth markers.
+   */
+  updateTokens(accessToken: string, refreshToken?: string): void {
+    this.store.setString(PrefKeys.ACCESS_TOKEN, accessToken);
+    if (refreshToken) this.store.setString(PrefKeys.REFRESH_TOKEN, refreshToken);
+  }
+
   get deviceId(): string {
     return getOrCreateDeviceId(this.store);
   }

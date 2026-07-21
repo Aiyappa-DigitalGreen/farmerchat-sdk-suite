@@ -86,6 +86,16 @@ export class SessionManager {
     return this.store.userId;
   }
 
+  /**
+   * Push a freshly-refreshed token into the active session at runtime
+   * (HOST_TOKEN mode) — additive to the init seed + tokenProvider. When
+   * `refreshToken` is undefined the stored refresh token is preserved. Does not
+   * alter OTP auth markers.
+   */
+  updateTokens(accessToken: string, refreshToken?: string): void {
+    this.store.saveTokens(accessToken, refreshToken ?? this.store.refreshToken);
+  }
+
   addAuthStateListener(listener: AuthStateListener): () => void {
     this.authListeners.add(listener);
     return () => {
