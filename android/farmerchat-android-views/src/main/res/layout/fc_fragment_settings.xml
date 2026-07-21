@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_green700"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <include
+        android:id="@+id/fcSettingsAppBar"
+        layout="@layout/fc_view_appbar" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/fc_surface_primary">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:id="@+id/fcAppearanceTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:text="Appearance" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/fcModeDay"
+                    style="@style/FcAppearanceButton">
+                    <ImageView
+                        android:id="@+id/fcModeDayIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_ic_sun"
+                        app:tint="@color/fc_foreground_primary" />
+                    <TextView
+                        android:id="@+id/fcModeDayLabel"
+                        style="@style/FcAppearanceButtonLabel"
+                        tools:text="Day" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/fcModeNight"
+                    style="@style/FcAppearanceButton"
+                    android:layout_marginStart="8dp">
+                    <ImageView
+                        android:id="@+id/fcModeNightIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_ic_moon"
+                        app:tint="@color/fc_foreground_primary" />
+                    <TextView
+                        android:id="@+id/fcModeNightLabel"
+                        style="@style/FcAppearanceButtonLabel"
+                        tools:text="Night" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/fcModeAuto"
+                    style="@style/FcAppearanceButton"
+                    android:layout_marginStart="8dp">
+                    <ImageView
+                        android:id="@+id/fcModeAutoIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_ic_auto"
+                        app:tint="@color/fc_foreground_primary" />
+                    <TextView
+                        android:id="@+id/fcModeAutoLabel"
+                        style="@style/FcAppearanceButtonLabel"
+                        tools:text="Auto" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/fcAppearanceHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                tools:text="FarmerChat adjusts with your phone settings" />
+
+            <TextView
+                android:id="@+id/fcAccountTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:text="Account details" />
+
+            <LinearLayout
+                android:id="@+id/fcNameRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/fc_bg_card_md"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/fcNameRowLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/fc_foreground_secondary"
+                        android:textSize="13sp"
+                        tools:text="Your name" />
+
+                    <TextView
+                        android:id="@+id/fcNameRowValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="16sp"
+                        tools:text="Asha" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_ic_chevron_right"
+                    app:tint="@color/fc_foreground_tertiary" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/fcLogoutButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/fc_bg_secondary_button"
+                android:gravity="center"
+                android:padding="14dp"
+                android:textColor="@color/fc_foreground_primary"
+                android:textSize="16sp"
+                tools:text="Logout" />
+        </LinearLayout>
+    </ScrollView>
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+        android:id="@+id/fcSettingsToast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/fcAppBar"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:background="@color/fc_green700">
+
+    <ImageView
+        android:id="@+id/fcAppBarGlow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no"
+        android:src="@drawable/fc_glow_yellow" />
+
+    <ImageButton
+        android:id="@+id/fcAppBarLeft"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="16dp"
+        android:background="@drawable/fc_bg_appbar_chip"
+        android:contentDescription="@null"
+        android:padding="10dp"
+        android:src="@drawable/fc_ic_menu"
+        app:tint="@color/fc_white" />
+
+    <TextView
+        android:id="@+id/fcAppBarTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginStart="64dp"
+        android:layout_marginEnd="64dp"
+        android:textColor="@color/fc_white"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end"
+        tools:text="Settings" />
+
+    <ImageView
+        android:id="@+id/fcAppBarLogo"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="center"
+        android:importantForAccessibility="no"
+        android:src="@drawable/fc_logo_mark"
+        android:visibility="gone"
+        app:tint="@color/fc_white" />
+
+    <TextView
+        android:id="@+id/fcAppBarRightLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="42dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/fc_bg_appbar_chip"
+        android:gravity="center"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:textColor="@color/fc_white"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="Skip" />
+
+    <!-- Weather pill (Home only) -->
+    <LinearLayout
+        android:id="@+id/fcAppBarWeather"
+        android:layout_width="wrap_content"
+        android:layout_height="42dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/fc_bg_weather_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/fcAppBarWeatherIcon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/fc_weather_sunclouds" />
+
+        <TextView
+            android:id="@+id/fcAppBarWeatherTemp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="@color/fc_white"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            tools:text="24°" />
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="2dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/fc_ic_chevron_right"
+            app:tint="@color/fc_green500" />
+    </LinearLayout>
+</FrameLayout>

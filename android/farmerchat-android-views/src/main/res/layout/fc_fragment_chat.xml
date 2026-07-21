@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_green700">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:fitsSystemWindows="true">
+
+        <include
+            android:id="@+id/fcChatAppBar"
+            layout="@layout/fc_view_appbar" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/fc_surface_reading">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/fcChatList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingTop="8dp"
+                android:paddingBottom="24dp" />
+
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LogoSpinnerView
+                android:id="@+id/fcChatLoading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- Follow-up Photo / Speak / Type row (chat variant: 72dp on green surface) -->
+        <LinearLayout
+            android:id="@+id/fcChatInputButtons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/fc_green700"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
+
+            <LinearLayout
+                android:id="@+id/fcChatInputPhoto"
+                style="@style/FcInputButton"
+                android:layout_height="72dp"
+                android:paddingTop="13dp"
+                android:paddingBottom="9dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_camera" />
+                <TextView
+                    android:id="@+id/fcChatInputPhotoLabel"
+                    style="@style/FcInputButtonLabel"
+                    android:layout_marginTop="4dp"
+                    tools:text="Photo" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fcChatInputSpeak"
+                style="@style/FcInputButton"
+                android:layout_height="72dp"
+                android:layout_marginStart="6dp"
+                android:paddingTop="13dp"
+                android:paddingBottom="9dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_mic" />
+                <TextView
+                    android:id="@+id/fcChatInputSpeakLabel"
+                    style="@style/FcInputButtonLabel"
+                    android:layout_marginTop="4dp"
+                    tools:text="Speak" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fcChatInputType"
+                style="@style/FcInputButton"
+                android:layout_height="72dp"
+                android:layout_marginStart="6dp"
+                android:paddingTop="13dp"
+                android:paddingBottom="9dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_keyboard" />
+                <TextView
+                    android:id="@+id/fcChatInputTypeLabel"
+                    style="@style/FcInputButtonLabel"
+                    android:layout_marginTop="4dp"
+                    tools:text="Type" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <include
+        android:id="@+id/fcChatOverlays"
+        layout="@layout/fc_view_input_overlays" />
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+        android:id="@+id/fcChatToast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="100dp"
+        android:visibility="gone" />
+</FrameLayout>

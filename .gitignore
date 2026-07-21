@@ -1,0 +1,48 @@
+# ---- OS / editor ----
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# ---- Secrets / signing (never commit) ----
+keystore.properties
+*.jks
+*.keystore
+local.properties
+*.p12
+*.mobileprovision
+
+# ---- Node / JS (web + react-native) ----
+node_modules/
+dist/
+*.tgz
+npm-debug.log*
+yarn-error.log
+.expo/
+.expo-shared/
+
+# ---- Android / Gradle ----
+.gradle/
+build/
+captures/
+.cxx/
+*.apk
+*.aar
+*.ap_
+*.dex
+
+# ---- iOS / Swift / Xcode ----
+.build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+xcuserdata/
+.swiftpm/
+ios/dist/
+
+# ---- SDK build outputs / distribution proofs ----
+# The packaged example apps install from generated tarballs — regenerate, don't commit.
+**/example-packaged/node_modules/
+**/example-packaged/dist/
+**/dist-bundle/

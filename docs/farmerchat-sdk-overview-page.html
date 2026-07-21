@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FarmerChat SDK — Overview</title>
+<style>
+  :root {
+    --paper:   #F4F7F2;
+    --surface: #FFFFFF;
+    --ink:     #0F1A13;
+    --muted:   #55655B;
+    --line:    #DCE6DD;
+    --brand:   #008236;
+    --brand-bright: #00C950;
+    --brand-deep:   #05351C;
+    --chip:    #EAF3EC;
+    --shadow:  0 1px 2px rgba(15,26,19,.04), 0 8px 24px rgba(15,26,19,.06);
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --maxw: 980px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:   #0A110C;
+      --surface: #111A13;
+      --ink:     #E9F1EB;
+      --muted:   #90A396;
+      --line:    #223129;
+      --brand:   #34D26B;
+      --brand-bright: #6EE79A;
+      --brand-deep:   #0B2015;
+      --chip:    #16241A;
+      --shadow:  0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#F4F7F2; --surface:#FFFFFF; --ink:#0F1A13; --muted:#55655B; --line:#DCE6DD;
+    --brand:#008236; --brand-bright:#00C950; --brand-deep:#05351C; --chip:#EAF3EC;
+    --shadow:0 1px 2px rgba(15,26,19,.04), 0 8px 24px rgba(15,26,19,.06);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0A110C; --surface:#111A13; --ink:#E9F1EB; --muted:#90A396; --line:#223129;
+    --brand:#34D26B; --brand-bright:#6EE79A; --brand-deep:#0B2015; --chip:#16241A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--font-sans); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: .72rem; font-weight: 600;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--brand);
+    margin: 0 0 10px;
+  }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  a { color: var(--brand); }
+
+  /* Hero */
+  .hero { padding: 72px 0 40px; }
+  .mark {
+    display:inline-flex; align-items:center; gap:12px; margin-bottom: 26px;
+  }
+  .mark svg { width: 34px; height: 34px; }
+  .mark span {
+    font-family: var(--font-mono); font-size:.8rem; letter-spacing:.14em;
+    text-transform:uppercase; color: var(--muted); font-weight:600;
+  }
+  .hero h1 {
+    font-size: clamp(2.1rem, 5.2vw, 3.3rem); font-weight: 800;
+    letter-spacing: -0.025em; line-height: 1.04;
+  }
+  .hero h1 em { font-style: normal; color: var(--brand); }
+  .lede {
+    margin: 20px 0 0; max-width: 60ch; font-size: 1.12rem; color: var(--muted);
+  }
+  .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top: 28px; }
+  .badge {
+    font-family: var(--font-mono); font-size:.78rem; font-weight:600;
+    padding: 7px 12px; border-radius: 999px; background: var(--chip);
+    border: 1px solid var(--line); color: var(--ink);
+  }
+  .badge b { color: var(--brand); font-weight: 700; }
+
+  section { padding: 40px 0; }
+  .sec-head { margin-bottom: 26px; }
+  .sec-head h2 { font-size: 1.5rem; font-weight: 750; letter-spacing:-0.01em; }
+  .sec-head p { margin: 8px 0 0; color: var(--muted); max-width: 62ch; }
+
+  /* Architecture diagram */
+  .arch { display:flex; flex-direction:column; gap: 0; }
+  .band {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow);
+    display:flex; align-items:center; gap: 18px; flex-wrap: wrap;
+  }
+  .band--core { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: color-mix(in srgb, var(--brand) 7%, var(--surface)); }
+  .band__label {
+    font-family: var(--font-mono); font-size:.68rem; font-weight:700;
+    letter-spacing:.13em; text-transform:uppercase; color: var(--muted);
+    min-width: 96px;
+  }
+  .band--core .band__label { color: var(--brand); }
+  .band__items { display:flex; flex-wrap:wrap; gap: 8px; }
+  .node {
+    font-size:.86rem; font-weight:600; padding: 6px 11px; border-radius: 8px;
+    background: var(--chip); border: 1px solid var(--line); color: var(--ink);
+  }
+  .band--core .node { background: color-mix(in srgb, var(--brand) 14%, var(--surface)); border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); }
+  .flow { display:flex; justify-content:center; color: var(--muted); }
+  .flow svg { width: 18px; height: 22px; opacity:.55; }
+  .cap { font-size:.8rem; color: var(--muted); font-weight:600; }
+
+  /* Feature grid */
+  .grid {
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 20px; box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 1.02rem; font-weight: 700; margin-bottom: 6px; display:flex; align-items:center; gap:9px; }
+  .card h3::before {
+    content:""; width: 8px; height: 8px; border-radius: 2px; flex: none;
+    background: var(--brand); transform: rotate(45deg);
+  }
+  .card p { margin: 0; font-size: .92rem; color: var(--muted); }
+
+  /* Code */
+  .code {
+    background: var(--brand-deep); color: #DCF3E4; border-radius: 14px;
+    padding: 20px 22px; overflow-x: auto; box-shadow: var(--shadow);
+    border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  }
+  .code pre { margin: 0; font-family: var(--font-mono); font-size: .84rem; line-height: 1.7; }
+  .code .c { color: #86C79E; }
+  .code .k { color: #7FE0A6; font-weight: 600; }
+  .code .s { color: #FFD79A; }
+
+  /* Install table */
+  .installs { display:grid; gap: 8px; }
+  .row {
+    display:grid; grid-template-columns: 150px 1fr; gap: 14px; align-items:center;
+    padding: 12px 14px; background: var(--surface); border:1px solid var(--line); border-radius: 10px;
+  }
+  .row .plat { font-weight: 700; font-size:.9rem; }
+  .row code {
+    font-family: var(--font-mono); font-size:.8rem; color: var(--ink);
+    background: var(--chip); padding: 4px 8px; border-radius: 6px; overflow-wrap:anywhere;
+  }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; gap:6px; } }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 24px; padding: 28px 0 56px;
+    color: var(--muted); font-size: .85rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap: 10px;
+  }
+  footer .v { font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="mark">
+      <svg viewBox="0 0 130 130" aria-hidden="true" fill="var(--brand)">
+        <path d="M65 8c9 16 9 34 0 50-9-16-9-34 0-50zM65 122c-9-16-9-34 0-50 9 16 9 34 0 50zM8 65c16-9 34-9 50 0-16 9-34 9-50 0zM122 65c-16 9-34 9-50 0 16-9 34-9 50 0zM25 25c17 4 30 17 34 34-17-4-30-17-34-34zM105 105c-17-4-30-17-34-34 17 4 30 17 34 34zM105 25c-4 17-17 30-34 34 4-17 17-30 34-34zM25 105c4-17 17-30 34-34-4 17-17 30-34 34z"/>
+      </svg>
+      <span>FarmerChat&nbsp;SDK · v1.0.0</span>
+    </div>
+    <h1>Drop the whole FarmerChat experience into <em>any</em> app — one call, your branding.</h1>
+    <p class="lede">A multi-platform SDK that ships the complete journey — onboarding, phone auth, home feed, and an AI chat for farmers — behind a single entry point. Import it, theme it to match your app, and launch.</p>
+    <div class="badges">
+      <span class="badge">Android <b>Compose + Views</b></span>
+      <span class="badge">iOS <b>SwiftUI + UIKit</b></span>
+      <span class="badge"><b>React Native</b></span>
+      <span class="badge"><b>Web</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">How it fits together</p>
+      <h2>Architecture</h2>
+      <p>Your app talks to one entry point. Every platform shares the same headless core; only the top UI layer is native to each. The green band is written once and reused everywhere.</p>
+    </div>
+
+    <div class="arch">
+      <div class="band">
+        <span class="band__label">Your app</span>
+        <div class="band__items">
+          <span class="node">Android</span><span class="node">iOS</span>
+          <span class="node">React Native</span><span class="node">Web</span>
+        </div>
+      </div>
+      <div class="flow"><svg viewBox="0 0 18 22"><path d="M9 0v16M3 12l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <div class="band">
+        <span class="band__label">Entry</span>
+        <div class="band__items">
+          <span class="node">initialize()</span><span class="node">launch()</span>
+          <span class="node">openChat()</span><span class="node">FarmerChatFab</span>
+          <span class="node">inline view</span>
+        </div>
+      </div>
+      <div class="flow"><svg viewBox="0 0 18 22"><path d="M9 0v16M3 12l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <div class="band">
+        <span class="band__label">UI · theme-aware</span>
+        <div class="band__items">
+          <span class="node">Compose</span><span class="node">XML Views</span>
+          <span class="node">SwiftUI</span><span class="node">UIKit</span>
+          <span class="node">RN</span><span class="node">Web</span>
+        </div>
+      </div>
+      <div class="flow"><svg viewBox="0 0 18 22"><path d="M9 0v16M3 12l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <div class="band band--core">
+        <span class="band__label">Shared core</span>
+        <div class="band__items">
+          <span class="node">Networking</span><span class="node">Auth &amp; session</span>
+          <span class="node">Server labels</span><span class="node">Theme resolver</span>
+          <span class="node">Analytics dispatch</span>
+        </div>
+      </div>
+      <div class="flow"><svg viewBox="0 0 18 22"><path d="M9 0v16M3 12l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+      <div class="band">
+        <span class="band__label">Backend</span>
+        <div class="band__items">
+          <span class="node">FarmerChat API</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">What you get</p>
+      <h2>Features</h2>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>One-call journey</h3><p>Splash → language → name → home → chat, fully wired. You launch; the SDK runs the flow.</p></div>
+      <div class="card"><h3>Auth, handled</h3><p>Phone + OTP built in with token refresh — or switch to host-token mode and pass your own user.</p></div>
+      <div class="card"><h3>Themed to your app</h3><p>Override colors, fonts, corner radii, and the logo from one config. Every screen recolors — no per-screen work.</p></div>
+      <div class="card"><h3>Import by coordinate</h3><p>Maven for Android, SPM/CocoaPods for iOS, npm for React Native and Web. Standard dependency, standard install.</p></div>
+      <div class="card"><h3>Rich chat</h3><p>Text, voice-to-text, and photo questions; listen (TTS); share &amp; save. Answers arrive as a single response, revealed with a typewriter-style animation (Android Compose today — not live streaming).</p></div>
+      <div class="card"><h3>Speaks their language</h3><p>Server-driven labels with English fallback, plus host string overrides and a forced-locale option.</p></div>
+      <div class="card"><h3>Fits any layout</h3><p>Full-screen journey, a floating button, chat-only mode, or embed it inline inside your own screen.</p></div>
+      <div class="card"><h3>Your analytics</h3><p>Every event reaches you through one listener. No third-party trackers bundled in the SDK.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Add it in minutes</p>
+      <h2>Integration — Android</h2>
+      <p>The same shape applies on every platform: add the dependency, initialize once with a theme, then launch.</p>
+    </div>
+    <div class="code"><pre><span class="c">// settings.gradle.kts</span>
+repositories { <span class="k">mavenCentral</span>() }
+
+<span class="c">// app/build.gradle.kts</span>
+<span class="k">implementation</span>(<span class="s">"org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0"</span>)
+
+<span class="c">// Application.onCreate — initialize once, themed to your app</span>
+FarmerChat.<span class="k">initialize</span>(this,
+  FarmerChatConfig.<span class="k">builder</span>(FarmerChatEnvironment.PROD)
+    .<span class="k">theme</span>(FarmerChatTheme.<span class="k">builder</span>()
+      .<span class="k">brandPrimary</span>(<span class="s">0xFF1565C0</span>.toInt())   <span class="c">// your brand color</span>
+      .<span class="k">fontFamily</span>(R.font.host_sans)     <span class="c">// your font</span>
+      .<span class="k">logo</span>(R.drawable.host_logo)       <span class="c">// your mark</span>
+      .<span class="k">build</span>())
+    .<span class="k">build</span>())
+
+<span class="c">// anywhere in your app</span>
+FarmerChat.<span class="k">launch</span>(context)</pre></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Every platform</p>
+      <h2>Install</h2>
+    </div>
+    <div class="installs">
+      <div class="row"><span class="plat">Android</span><code>org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0</code></div>
+      <div class="row"><span class="plat">iOS</span><code>FarmerChatCore + FarmerChatSwiftUI  ·  SPM / CocoaPods</code></div>
+      <div class="row"><span class="plat">React Native</span><code>npm i @digitalgreenorg/farmerchat-react-native</code></div>
+      <div class="row"><span class="plat">Web</span><code>npm i @digitalgreenorg/farmerchat-web</code></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>FarmerChat SDK — built for Digital Green. Green brand shown; fully re-themeable.</span>
+    <span class="v">v1.0.0 · Android · iOS · React Native · Web</span>
+  </footer>
+
+</div>
+</body>
+</html>

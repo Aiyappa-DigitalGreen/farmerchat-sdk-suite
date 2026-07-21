@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="300dp"
+    android:layout_height="match_parent"
+    android:background="@color/fc_surface_secondary"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="24dp"
+            android:paddingBottom="16dp">
+
+            <ImageView
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/fc_logo_mark"
+                android:contentDescription="@null"
+                app:tint="@color/fc_green700" />
+
+            <TextView
+                android:id="@+id/fcDrawerHomeRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_home"
+                tools:text="Home" />
+
+            <TextView
+                android:id="@+id/fcDrawerRecentTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp"
+                android:textSize="13sp"
+                android:textColor="@color/fc_foreground_secondary"
+                tools:text="Recent chats" />
+
+            <ProgressBar
+                android:id="@+id/fcDrawerHistoryLoading"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/fcDrawerHistoryError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/fcDrawerHistoryErrorTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/fc_foreground_primary"
+                    android:textSize="14sp"
+                    tools:text="Failed to load chats" />
+
+                <TextView
+                    android:id="@+id/fcDrawerHistoryErrorSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="12sp"
+                    tools:text="Check your connection and try again" />
+
+                <TextView
+                    android:id="@+id/fcDrawerHistoryRetry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:textColor="@color/fc_green700"
+                    android:textStyle="bold"
+                    tools:text="Try again" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/fcDrawerNoChats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="14sp"
+                android:visibility="gone"
+                tools:text="No chats yet." />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/fcDrawerRecentList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never" />
+
+            <TextView
+                android:id="@+id/fcDrawerSeeAll"
+                style="@style/FcDrawerRow"
+                android:textColor="@color/fc_green700"
+                tools:text="See all" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="@color/fc_divider" />
+
+            <TextView
+                android:id="@+id/fcDrawerSettingsRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_settings"
+                tools:text="Settings" />
+
+            <TextView
+                android:id="@+id/fcDrawerLanguageRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_language"
+                tools:text="Language: English" />
+
+            <TextView
+                android:id="@+id/fcDrawerHelpRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_help"
+                tools:text="Help &amp; Support" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/fcDrawerSignUpSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/fcDrawerSignUpTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            tools:text="Save your past questions" />
+
+        <TextView
+            android:id="@+id/fcDrawerSignUpSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/fc_foreground_secondary"
+            android:textSize="13sp"
+            tools:text="Keep your answers and come back anytime" />
+
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+            android:id="@+id/fcDrawerSignUpButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" />
+    </LinearLayout>
+</LinearLayout>

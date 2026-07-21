@@ -1,0 +1,55 @@
+/**
+ * Composition root — builds the whole core object graph from a FarmerChatConfig.
+ */
+
+import { FarmerChatConfig, ResolvedConfig, resolveConfig } from './config';
+import { SessionStore, PrefKeys } from './storage';
+import { LabelManager } from './labels';
+import { HttpClient } from './http';
+import { FarmerChatApi } from './api';
+import { SessionManager } from './session';
+import { Analytics } from './analytics';
+
+export interface SdkServices {
+  config: ResolvedConfig;
+  store: SessionStore;
+  labels: LabelManager;
+  http: HttpClient;
+  api: FarmerChatApi;
+  session: SessionManager;
+  analytics: Analytics;
+}
+
+export function createServices(config: FarmerChatConfig): SdkServices {
+  const resolved = resolveConfig(config);
+  const store = new SessionStore();
+  const labels = new LabelManager(store, {
+    stringOverrides: resolved.stringOverrides,
+    forcedLocale: resolved.locale,
+  });
+  const http = new HttpClient({
+    baseUrl: resolved.baseUrl,
+    guestApiKey: resolved.guestApiKey,
+    store,
+    labels,
+    onSessionExpired: resolved.onSessionExpired,
+    authMode: resolved.authMode,
+    tokenProvider: resolved.tokenProvider,
+  });
+  const api = new FarmerChatApi(http, resolved.guestApiKey, resolved.geoApiKey);
+  const analytics = new Analytics(resolved.onEvent, resolved.callbacks);
+  const session = new SessionManager(store, api, analytics);
+
+  // Preselect language from config: skips the language screen when provided.
+  if (resolved.languageCode && !store.getBool(PrefKeys.LANGUAGE_DONE, false)) {
+    labels.setLanguageCode(resolved.languageCode);
+  }
+
+  // C2 HOST_TOKEN: seed host-supplied tokens and treat the user as authenticated,
+  // so the phone/OTP UI is skipped entirely (docs/07 Part C).
+  if (resolved.authMode === 'HOST_TOKEN') {
+    session.seedHostToken(resolved.accessToken, resolved.refreshToken);
+  }
+
+  return { config: resolved, store, labels, http, api, session, analytics };
+}

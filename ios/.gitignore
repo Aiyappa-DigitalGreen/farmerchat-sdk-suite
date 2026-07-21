@@ -1,0 +1,15 @@
+# SwiftPM / Xcode build artifacts
+.build/
+.swiftpm/
+DerivedData/
+
+# XCFramework build outputs (regenerate with build-xcframework.sh)
+dist/
+.xcframework-build/
+
+# Generated Xcode projects (regenerate with `xcodegen generate`)
+SampleApp/SampleApp.xcodeproj/
+ConsumerApp/ConsumerApp.xcodeproj/
+
+# Manifest backups left by build-xcframework.sh if interrupted
+**/Package.swift.dist-bak

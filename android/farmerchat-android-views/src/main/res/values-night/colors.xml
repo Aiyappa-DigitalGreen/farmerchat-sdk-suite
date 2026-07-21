@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Content semantic (DarkContentColors) -->
+    <color name="fc_surface_primary">#18181B</color>
+    <color name="fc_surface_secondary">#27272A</color>
+    <color name="fc_surface_tertiary">#3F3F46</color>
+    <color name="fc_surface_reading">#18181B</color>
+    <color name="fc_surface_reading_secondary">#27272A</color>
+    <color name="fc_foreground_primary">#FFFFFF</color>
+    <color name="fc_foreground_secondary">#9F9FA9</color>
+    <color name="fc_foreground_tertiary">#3F3F46</color>
+    <color name="fc_border_default">#3F3F46</color>
+    <color name="fc_form_placeholder">#9F9FA9</color>
+    <color name="fc_divider">#3F3F46</color>
+    <color name="fc_skeleton">#3F3F46</color>
+    <color name="fc_input_background">#27272A</color>
+    <color name="fc_button_primary_surface">#008236</color>
+    <color name="fc_scrim">#99000000</color>
+</resources>

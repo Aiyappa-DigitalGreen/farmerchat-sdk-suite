@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SAMPLE-APP ONLY. Permits cleartext HTTP to the local mock backend
+  (tools/mock-server) for end-to-end verification. NEVER add this to the SDK
+  libraries. Production hosts talk HTTPS to real backends.
+    - 10.0.2.2  = host loopback as seen from the Android emulator
+    - localhost = same-device / adb reverse tcp:8899 tcp:8899
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

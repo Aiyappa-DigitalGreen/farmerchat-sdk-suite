@@ -1,0 +1,208 @@
+package org.digitalgreen.farmerchat.sdk.compose.screens
+
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collect
+import org.digitalgreen.farmerchat.sdk.FarmerChat
+import org.digitalgreen.farmerchat.sdk.compose.components.DefaultAppBar
+import org.digitalgreen.farmerchat.sdk.compose.components.ListCard
+import org.digitalgreen.farmerchat.sdk.compose.components.ListItem
+import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
+import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import org.digitalgreen.farmerchat.sdk.compose.util.label
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
+import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.core.model.HelpSupportResponse
+import org.digitalgreen.farmerchat.sdk.core.navigation.handleError
+import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+
+/**
+ * Help & Support (doc 01 §3.12). FAQ list (skeleton while loading), More
+ * section (Terms / Privacy from the API legal block), version footer.
+ */
+@Composable
+fun HelpScreen(
+    openDrawer: () -> Unit,
+    onOpenUrl: (title: String, url: String) -> Unit
+) {
+    val graph = FarmerChat.requireGraph()
+    val colors = LocalContentColors.current
+
+    var response by remember { mutableStateOf<HelpSupportResponse?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var reloadToken by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        graph.analytics.trackScreenView(AnalyticsScreens.HELP)
+        graph.errorNavigationManager.setActiveScreen("help")
+    }
+
+    LaunchedEffect(reloadToken) {
+        isLoading = true
+        val lang = graph.prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "en").ifBlank { "en" }
+        val appearance = graph.prefs.getString(SdkPreferences.Keys.APPEARANCE_MODE, "auto")
+        val country = graph.prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "").ifBlank { null }
+        graph.getHelpSupportUseCase.getHelpSupport(lang, 5, appearance, country).collect { result ->
+            when (result) {
+                is ApiResult.Success -> {
+                    response = result.data
+                    isLoading = false
+                }
+                is ApiResult.Error -> {
+                    isLoading = false
+                    result.handleError(graph.errorNavigationManager, fromScreen = "help") {
+                        reloadToken++
+                    }
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { graph.analytics.trackScreenExit(AnalyticsScreens.HELP) }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.surfacePrimary)
+    ) {
+        DefaultAppBar(
+            title = label(Labels.HELP, "Help"),
+            leftIcon = Icons.Filled.Menu,
+            onLeftClick = openDrawer
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = label(Labels.HOW_TO_USE_FARMERCHAT, "How to use FarmerChat"),
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.foregroundPrimary
+            )
+
+            Crossfade(targetState = isLoading, label = "faqCrossfade") { loading ->
+                if (loading) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(5) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .background(colors.shimmer, SmoothShapes.rounded(Radius.MD))
+                            )
+                        }
+                    }
+                } else {
+                    val faqs = response?.data?.faqs.orEmpty()
+                    if (faqs.isEmpty()) {
+                        Text(
+                            text = label(Labels.NO_FAQS_AVAILABLE, "No FAQs available"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.foregroundSecondary
+                        )
+                    } else {
+                        ListCard {
+                            faqs.forEachIndexed { index, faq ->
+                                ListItem(
+                                    textLeft = faq.title,
+                                    onClick = {
+                                        graph.analytics.track(AnalyticsEvents.FAQ_CLICKED)
+                                        val url = faq.webviewUrl
+                                        if (!url.isNullOrBlank()) {
+                                            onOpenUrl("faq_terms", url)
+                                        }
+                                    },
+                                    showDivider = index < faqs.lastIndex
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text(
+                text = label(Labels.MORE, "More"),
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.foregroundPrimary
+            )
+
+            ListCard {
+                val legal = response?.data?.legal
+                val termsTitle = legal?.termsOfUse?.title ?: label(Labels.TERMS_OF_USE, "Terms of use")
+                val privacyTitle = legal?.privacyPolicy?.title ?: label(Labels.PRIVACY_POLICY, "Privacy policy")
+
+                ListItem(
+                    textLeft = termsTitle,
+                    onClick = {
+                        val url = legal?.termsOfUse?.webviewUrl
+                        if (!url.isNullOrBlank()) onOpenUrl(termsTitle, url)
+                    },
+                    showDivider = true
+                )
+                ListItem(
+                    textLeft = privacyTitle,
+                    onClick = {
+                        val url = legal?.privacyPolicy?.webviewUrl
+                        if (!url.isNullOrBlank()) onOpenUrl(privacyTitle, url)
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = label(Labels.FARMERCHAT_V200, "FarmerChat v2.0.0"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.foregroundSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = label(Labels.DIGITAL_GREEN, "© Digital Green"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.foregroundSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}

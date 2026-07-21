@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Post-splash theme for FarmerChatActivity (plain, Compose draws everything). -->
+    <style name="Theme.FarmerChatSdk" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fc_sdk_brand_green</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Splash-capable launch theme (androidx.core splashscreen). -->
+    <style name="Theme.FarmerChatSdk.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/fc_sdk_brand_green</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/fc_logo_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.FarmerChatSdk</item>
+    </style>
+</resources>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/fc_green700"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/fc_logo_mark"
+            app:tint="@color/fc_white" />
+
+        <TextView
+            android:id="@+id/fcShareAppName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:textColor="@color/fc_white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            tools:text="FarmerChat" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/fcShareQuestion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:textColor="@color/fc_sun300"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        tools:text="What is wrong with my crop?" />
+
+    <TextView
+        android:id="@+id/fcShareAnswer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="@color/fc_white"
+        android:textSize="15sp"
+        android:lineSpacingExtra="4dp"
+        tools:text="The advice..." />
+
+    <TextView
+        android:id="@+id/fcShareFooter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:textColor="#CCFFFFFF"
+        android:textSize="12sp"
+        tools:text="© Digital Green" />
+</LinearLayout>
