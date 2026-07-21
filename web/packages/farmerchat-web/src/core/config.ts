@@ -126,6 +126,14 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   enableImages?: boolean;
   enableWeather?: boolean;
 
+  // --- FAB customization (config-level defaults; per-instance props win) ---
+  /** FAB default label; omitted → round icon-only FAB. */
+  fabLabel?: string;
+  /** FAB default background (CSS color); omitted → theme brand. */
+  fabBackgroundColor?: string;
+  /** FAB default icon/label color (CSS color); omitted → on-brand. */
+  fabContentColor?: string;
+
   // --- Theming (docs/07 Part B) ---
   theme?: FarmerChatTheme;
 

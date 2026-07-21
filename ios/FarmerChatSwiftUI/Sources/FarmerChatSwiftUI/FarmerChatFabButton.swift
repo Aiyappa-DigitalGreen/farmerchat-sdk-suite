@@ -23,17 +23,34 @@ public struct FarmerChatFabButton: View {
     private let question: String?
     private let label: String?
     private let alignment: Alignment
+    private let backgroundColorOverride: Color?
+    private let contentColorOverride: Color?
+    private let systemImage: String?
 
     /// - Parameters:
     ///   - question: when set, tapping deep-links straight into a chat asking it;
     ///     when nil the full journey opens.
-    ///   - label: when set, renders as an extended launcher with this text.
+    ///   - label: when set, renders as an extended launcher with this text;
+    ///     defaults to `config.fabLabel`.
     ///   - bottomLeading: pin to the bottom-leading corner instead of trailing.
-    public init(question: String? = nil, label: String? = nil, bottomLeading: Bool = false) {
+    ///   - backgroundColor: override the launcher background (else `config.fabBackgroundColor`, else theme brand).
+    ///   - contentColor: override the icon/label color (else `config.fabContentColor`, else on-brand).
+    ///   - systemImage: SF Symbol name to use instead of the FarmerChat logo mark.
+    public init(
+        question: String? = nil,
+        label: String? = nil,
+        bottomLeading: Bool = false,
+        backgroundColor: Color? = nil,
+        contentColor: Color? = nil,
+        systemImage: String? = nil
+    ) {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatFabButton()")
         self.question = question
-        self.label = label
+        self.label = label ?? FarmerChat.shared.config.fabLabel
         self.alignment = bottomLeading ? .bottomLeading : .bottomTrailing
+        self.backgroundColorOverride = backgroundColor
+        self.contentColorOverride = contentColor
+        self.systemImage = systemImage
     }
 
     private var theme: FCTheme {
@@ -41,8 +58,9 @@ public struct FarmerChatFabButton: View {
     }
 
     public var body: some View {
-        let bg = theme.brand.surfacePrimary
-        let fg = theme.brand.foregroundPrimary
+        // Precedence: per-instance override → config default → theme brand.
+        let bg = backgroundColorOverride ?? FarmerChat.shared.config.fabBackgroundColor ?? theme.brand.surfacePrimary
+        let fg = contentColorOverride ?? FarmerChat.shared.config.fabContentColor ?? theme.brand.foregroundPrimary
         return Button {
             // Set the deep-link target before revealing, so the presented
             // view's router consumes it on init.
@@ -50,7 +68,13 @@ public struct FarmerChatFabButton: View {
             isPresented = true
         } label: {
             HStack(spacing: label == nil ? 0 : 10) {
-                FCLogoMark(size: 26, tint: fg)
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(fg)
+                } else {
+                    FCLogoMark(size: 26, tint: fg)
+                }
                 if let label {
                     Text(label)
                         .font(.system(size: 15, weight: .semibold))

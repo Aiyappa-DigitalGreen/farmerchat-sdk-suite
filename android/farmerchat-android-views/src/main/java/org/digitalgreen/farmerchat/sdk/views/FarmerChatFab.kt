@@ -34,15 +34,18 @@ class FarmerChatFab @JvmOverloads constructor(
     init {
         setImageResource(R.drawable.fc_logo_mark)
         contentDescription = "FarmerChat"
+        // Config-level FAB colors (additive): override only when the host set them;
+        // null keeps the prior fc_green700 / white defaults exactly.
+        val config = runCatching { FarmerChat.requireGraph().config }.getOrNull()
         // Material's constructor always seeds a theme tint, so "not set" can't be
         // detected via backgroundTintList — honor only an explicit XML backgroundTint.
         val hasExplicitTint = attrs != null &&
             (0 until attrs.attributeCount).any { attrs.getAttributeName(it) == "backgroundTint" }
         if (!hasExplicitTint) {
-            backgroundTintList =
-                ColorStateList.valueOf(context.getColor(R.color.fc_green700))
+            val bg = config?.fabBackgroundColor ?: context.getColor(R.color.fc_green700)
+            backgroundTintList = ColorStateList.valueOf(bg)
         }
-        imageTintList = ColorStateList.valueOf(Color.WHITE)
+        imageTintList = ColorStateList.valueOf(config?.fabContentColor ?: Color.WHITE)
         setOnClickListener {
             val q = question
             if (q != null) FarmerChat.openChat(context, question = q)

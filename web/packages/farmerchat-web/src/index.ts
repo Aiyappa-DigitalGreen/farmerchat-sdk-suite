@@ -101,19 +101,31 @@ export interface FarmerChatFabProps {
   config?: FarmerChatConfig;
   /** Deep-link straight into a chat asking this question; when omitted the full journey launches. */
   question?: string;
-  /** Render as an extended launcher with this text beside the mark. */
+  /** Render as an extended launcher with this text beside the mark. Defaults to `config.fabLabel`. */
   label?: string;
   /** Corner to pin the launcher to (default 'bottom-right'). */
   position?: 'bottom-right' | 'bottom-left';
+  /** Override the launcher background (else `config.fabBackgroundColor`, else theme brand). */
+  backgroundColor?: string;
+  /** Override the icon/label color (else `config.fabContentColor`, else on-brand). */
+  contentColor?: string;
+  /** Custom launcher icon; overrides the logo/emoji. */
+  icon?: React.ReactNode;
 }
 
-function fabBrandColors(config?: FarmerChatConfig): { bg: string; fg: string } {
-  const colors = (config ?? sharedConfig)?.theme?.colors;
-  return { bg: colors?.brandPrimary ?? '#146152', fg: colors?.onBrand ?? '#ffffff' };
+function fabBrandColors(props: FarmerChatFabProps): { bg: string; fg: string } {
+  const config = props.config ?? sharedConfig;
+  const colors = config?.theme?.colors;
+  // Precedence: per-instance prop → config default → theme brand → built-in.
+  return {
+    bg: props.backgroundColor ?? config?.fabBackgroundColor ?? colors?.brandPrimary ?? '#146152',
+    fg: props.contentColor ?? config?.fabContentColor ?? colors?.onBrand ?? '#ffffff',
+  };
 }
 
-function fabLogo(config?: FarmerChatConfig): React.ReactNode {
-  const logo = (config ?? sharedConfig)?.theme?.logo;
+function fabLogo(props: FarmerChatFabProps): React.ReactNode {
+  if (props.icon != null) return props.icon;
+  const logo = (props.config ?? sharedConfig)?.theme?.logo;
   if (typeof logo === 'string' && logo) {
     return createElement('img', {
       src: logo,
@@ -125,6 +137,11 @@ function fabLogo(config?: FarmerChatConfig): React.ReactNode {
   return '🌱';
 }
 
+/** FAB label: per-instance prop → config default. */
+function fabLabel(props: FarmerChatFabProps): string | undefined {
+  return props.label ?? (props.config ?? sharedConfig)?.fabLabel;
+}
+
 /**
  * Drop-in floating launcher that opens the full FarmerChat overlay on click.
  * Unlike a bare `openChat()` call, this reveals (mounts) the SDK root — the
@@ -133,7 +150,8 @@ function fabLogo(config?: FarmerChatConfig): React.ReactNode {
  */
 export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const [open, setOpen] = useState(false);
-  const { bg, fg } = fabBrandColors(props.config);
+  const { bg, fg } = fabBrandColors(props);
+  const label = fabLabel(props);
   const side = props.position === 'bottom-left' ? { left: '20px' } : { right: '20px' };
 
   if (open) {
@@ -178,15 +196,15 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
       style: {
         position: 'fixed', bottom: '20px', ...side, zIndex: 2147483000,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        gap: props.label ? '10px' : '0', height: '56px',
-        width: props.label ? 'auto' : '56px', padding: props.label ? '0 22px' : '0',
+        gap: label ? '10px' : '0', height: '56px',
+        width: label ? 'auto' : '56px', padding: label ? '0 22px' : '0',
         borderRadius: '999px', border: 'none', cursor: 'pointer',
         background: bg, color: fg,
         boxShadow: '0 4px 14px rgba(0,0,0,0.25)', fontFamily: 'system-ui, -apple-system, sans-serif',
       },
     },
-    createElement('span', { style: { display: 'inline-flex', fontSize: '24px', lineHeight: 1 } }, fabLogo(props.config)),
-    props.label ? createElement('span', { style: { fontSize: '15px', fontWeight: 600 } }, props.label) : null,
+    createElement('span', { style: { display: 'inline-flex', fontSize: '24px', lineHeight: 1 } }, fabLogo(props)),
+    label ? createElement('span', { style: { fontSize: '15px', fontWeight: 600 } }, label) : null,
   );
 }
 

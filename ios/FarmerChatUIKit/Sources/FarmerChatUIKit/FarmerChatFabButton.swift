@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import UIKit
+import SwiftUI
 import FarmerChatCore
 
 /// Drop-in floating launcher (docs/04 row 52). A `UIButton` subclass the host
@@ -26,12 +27,26 @@ public final class FarmerChatFabButton: UIButton {
     /// - Parameters:
     ///   - question: when set, tapping deep-links straight into a chat asking it;
     ///     when nil the full journey opens.
-    ///   - title: when set, renders as an extended pill with this text.
-    public init(question: String? = nil, title: String? = nil) {
+    ///   - title: when set, renders as an extended pill with this text; defaults
+    ///     to `config.fabLabel`.
+    ///   - backgroundColor: override the launcher background (else `config.fabBackgroundColor`, else theme brand).
+    ///   - contentColor: override the icon/title color (else `config.fabContentColor`, else white).
+    ///   - systemImage: SF Symbol name to use instead of the default leaf glyph.
+    public init(
+        question: String? = nil,
+        title: String? = nil,
+        backgroundColor: UIColor? = nil,
+        contentColor: UIColor? = nil,
+        systemImage: String? = nil
+    ) {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatFabButton()")
         self.question = question
         super.init(frame: .zero)
-        configureAppearance(title: title)
+        let config = FarmerChat.shared.config
+        // Precedence: per-instance override → config default → theme brand / white.
+        let bg = backgroundColor ?? config.fabBackgroundColor.map(UIColor.init) ?? FCUITheme.brandSurfacePrimary
+        let fg = contentColor ?? config.fabContentColor.map(UIColor.init) ?? .white
+        configureAppearance(title: title ?? config.fabLabel, bg: bg, fg: fg, systemImage: systemImage ?? "leaf.circle.fill")
         addTarget(self, action: #selector(handleTap), for: .touchUpInside)
     }
 
@@ -40,12 +55,10 @@ public final class FarmerChatFabButton: UIButton {
         fatalError("FarmerChatFabButton is created in code")
     }
 
-    private func configureAppearance(title: String?) {
-        let bg = FCUITheme.brandSurfacePrimary
-        let fg = UIColor.white
+    private func configureAppearance(title: String?, bg: UIColor, fg: UIColor, systemImage: String) {
         backgroundColor = bg
         tintColor = fg
-        let symbol = UIImage(systemName: "leaf.circle.fill",
+        let symbol = UIImage(systemName: systemImage,
                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .regular))
         setImage(symbol, for: .normal)
         imageView?.contentMode = .scaleAspectFit

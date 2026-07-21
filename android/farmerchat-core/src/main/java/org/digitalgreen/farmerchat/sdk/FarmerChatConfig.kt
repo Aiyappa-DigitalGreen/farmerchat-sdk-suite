@@ -1,5 +1,7 @@
 package org.digitalgreen.farmerchat.sdk
 
+import androidx.annotation.ColorInt
+
 /**
  * Server environment for the FarmerChat SDK. Base URLs mirror the production app flavors.
  */
@@ -108,6 +110,14 @@ class FarmerChatConfig private constructor(
     val showDrawer: Boolean,
     val enableSsfr: Boolean,
 
+    // --- FAB customization (config-level defaults; per-instance params win) -
+    /** Default launcher label; null = round icon-only FAB (current behavior). */
+    val fabLabel: String?,
+    /** Default launcher background as an ARGB color int; null = theme brand. */
+    val fabBackgroundColor: Int?,
+    /** Default launcher icon/text color as an ARGB color int; null = on-brand. */
+    val fabContentColor: Int?,
+
     // --- C4: semantic event hooks -----------------------------------------
     val hooks: FarmerChatHooks,
 
@@ -144,6 +154,9 @@ class FarmerChatConfig private constructor(
         .showHistory(showHistory)
         .showDrawer(showDrawer)
         .enableSsfr(enableSsfr)
+        .fabLabel(fabLabel)
+        .fabBackgroundColor(fabBackgroundColor)
+        .fabContentColor(fabContentColor)
         .onChatOpened(hooks.onChatOpened)
         .onMessageSent(hooks.onMessageSent)
         .onAnswerReceived(hooks.onAnswerReceived)
@@ -177,6 +190,10 @@ class FarmerChatConfig private constructor(
         private var showHistory: Boolean = true
         private var showDrawer: Boolean = true
         private var enableSsfr: Boolean = true
+
+        private var fabLabel: String? = null
+        private var fabBackgroundColor: Int? = null
+        private var fabContentColor: Int? = null
 
         private var onChatOpened: (() -> Unit)? = null
         private var onMessageSent: ((String) -> Unit)? = null
@@ -216,6 +233,14 @@ class FarmerChatConfig private constructor(
         fun showDrawer(show: Boolean) = apply { showDrawer = show }
         fun enableSsfr(enabled: Boolean) = apply { enableSsfr = enabled }
 
+        // FAB customization ----------------------------------------------
+        /** Default launcher label; null = round icon-only FAB. */
+        fun fabLabel(label: String?) = apply { fabLabel = label }
+        /** Default launcher background as an ARGB color int; null = theme brand. */
+        fun fabBackgroundColor(@ColorInt color: Int?) = apply { fabBackgroundColor = color }
+        /** Default launcher icon/text color as an ARGB color int; null = on-brand. */
+        fun fabContentColor(@ColorInt color: Int?) = apply { fabContentColor = color }
+
         // C4 -------------------------------------------------------------
         fun onChatOpened(cb: (() -> Unit)?) = apply { onChatOpened = cb }
         fun onMessageSent(cb: ((String) -> Unit)?) = apply { onMessageSent = cb }
@@ -251,6 +276,9 @@ class FarmerChatConfig private constructor(
             showHistory = showHistory,
             showDrawer = showDrawer,
             enableSsfr = enableSsfr,
+            fabLabel = fabLabel,
+            fabBackgroundColor = fabBackgroundColor,
+            fabContentColor = fabContentColor,
             hooks = FarmerChatHooks(
                 onChatOpened, onMessageSent, onAnswerReceived,
                 onScreenView, onError, onSessionStart

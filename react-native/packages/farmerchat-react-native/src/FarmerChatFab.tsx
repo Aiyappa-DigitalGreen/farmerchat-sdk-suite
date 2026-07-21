@@ -6,7 +6,15 @@
  * <FarmerChatView/> itself. Needs only a prior `FarmerChat.initialize(config)`.
  */
 import React from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ImageSourcePropType,
+} from 'react-native';
 import { FarmerChat } from './FarmerChat';
 import { FarmerChatView } from './FarmerChatView';
 import { Assets } from './ui/assets';
@@ -15,21 +23,39 @@ import { brandLogo, dayTheme } from './ui/theme';
 export interface FarmerChatFabProps {
   /** Deep-link straight into a chat asking this question; when omitted the full journey opens. */
   question?: string;
-  /** Render as an extended launcher with this text beside the mark. */
+  /** Render as an extended launcher with this text beside the mark. Defaults to `config.fabLabel`. */
   label?: string;
   /** Corner to pin the launcher to (default 'bottom-right'). */
   position?: 'bottom-right' | 'bottom-left';
-  /** Override the launcher background (defaults to the resolved host brand color). */
+  /** Override the launcher background (else `config.fabBackgroundColor`, else host brand). */
   backgroundColor?: string;
-  /** Override the icon/label color (defaults to the resolved on-brand color). */
+  /** Override the icon/label color (else `config.fabContentColor`, else on-brand). */
   contentColor?: string;
+  /** Custom launcher icon; overrides the FarmerChat logo mark (rendered untinted). */
+  icon?: ImageSourcePropType;
+}
+
+/** Config-level FAB defaults, read outside the provider (safe before/without init). */
+function fabConfigDefaults(): { label?: string; bg?: string; fg?: string } {
+  if (!FarmerChat.isInitialized) return {};
+  const c = FarmerChat.getInstance().config;
+  return {
+    label: c.fabLabel ?? undefined,
+    bg: c.fabBackgroundColor ?? undefined,
+    fg: c.fabContentColor ?? undefined,
+  };
 }
 
 export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
-  const bg = props.backgroundColor ?? dayTheme.brandPrimary;
-  const fg = props.contentColor ?? dayTheme.textOnBrand;
+  const defaults = fabConfigDefaults();
+  // Precedence: per-instance prop → config default → theme brand.
+  const bg = props.backgroundColor ?? defaults.bg ?? dayTheme.brandPrimary;
+  const fg = props.contentColor ?? defaults.fg ?? dayTheme.textOnBrand;
+  const label = props.label ?? defaults.label;
   const hostLogo = brandLogo;
+  const iconSource = props.icon ?? hostLogo ?? Assets.logoMark;
+  const iconIsCustom = props.icon != null || hostLogo != null;
 
   const onPress = () => {
     setOpen(true);
@@ -50,16 +76,16 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
           styles.fab,
           sidePin,
           { backgroundColor: bg },
-          props.label ? styles.fabExtended : styles.fabRound,
+          label ? styles.fabExtended : styles.fabRound,
         ]}
       >
         <Image
-          source={hostLogo ?? Assets.logoMark}
+          source={iconSource}
           resizeMode="contain"
-          style={[styles.icon, { tintColor: hostLogo ? undefined : fg }]}
+          style={[styles.icon, { tintColor: iconIsCustom ? undefined : fg }]}
         />
-        {props.label ? (
-          <Text style={[styles.label, { color: fg }]}>{props.label}</Text>
+        {label ? (
+          <Text style={[styles.label, { color: fg }]}>{label}</Text>
         ) : null}
       </Pressable>
 

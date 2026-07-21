@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Backend environment. Base URLs match `docs/02-api-reference.md` exactly.
 public enum FarmerChatEnvironment: String, CaseIterable, Sendable {
@@ -87,6 +88,14 @@ public struct FarmerChatConfig: Sendable {
     public var enableImages: Bool
     public var enableWeather: Bool
 
+    // MARK: - FAB customization (config-level defaults; per-instance params win)
+    /// Default launcher label; nil = round icon-only FAB (current behavior).
+    public var fabLabel: String?
+    /// Default launcher background; nil = theme brand.
+    public var fabBackgroundColor: Color?
+    /// Default launcher icon/text color; nil = on-brand.
+    public var fabContentColor: Color?
+
     // MARK: - C2 Identity injection
     public var authMode: FarmerChatAuthMode
     /// Host-supplied access token (used when `authMode == .hostToken`).
@@ -132,6 +141,9 @@ public struct FarmerChatConfig: Sendable {
         enableVoice: Bool = true,
         enableImages: Bool = true,
         enableWeather: Bool = true,
+        fabLabel: String? = nil,
+        fabBackgroundColor: Color? = nil,
+        fabContentColor: Color? = nil,
         authMode: FarmerChatAuthMode = .sdkOtp,
         accessToken: String? = nil,
         refreshToken: String? = nil,
@@ -162,6 +174,9 @@ public struct FarmerChatConfig: Sendable {
         self.enableVoice = enableVoice
         self.enableImages = enableImages
         self.enableWeather = enableWeather
+        self.fabLabel = fabLabel
+        self.fabBackgroundColor = fabBackgroundColor
+        self.fabContentColor = fabContentColor
         self.authMode = authMode
         self.accessToken = accessToken
         self.refreshToken = refreshToken

@@ -139,6 +139,13 @@ export interface FarmerChatConfig {
   /** Show the hamburger/drawer chrome at all. Default true. */
   showDrawer?: boolean;
 
+  /** FAB default label; omitted → round icon-only FAB (per-instance `label` wins). */
+  fabLabel?: string;
+  /** FAB default background color (hex); omitted → theme brand (per-instance `backgroundColor` wins). */
+  fabBackgroundColor?: string;
+  /** FAB default icon/label color (hex); omitted → on-brand (per-instance `contentColor` wins). */
+  fabContentColor?: string;
+
   /** Host theme overrides (docs/07 Part B). Omitted → built-in green brand. */
   theme?: FarmerChatTheme;
 
@@ -182,6 +189,9 @@ export interface ResolvedFarmerChatConfig {
   showSettings: boolean;
   showHistory: boolean;
   showDrawer: boolean;
+  fabLabel: string | null;
+  fabBackgroundColor: string | null;
+  fabContentColor: string | null;
   theme: FarmerChatTheme | null;
   mode: FarmerChatMode;
   authMode: FarmerChatAuthMode;
@@ -223,6 +233,9 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     showSettings: config.showSettings ?? true,
     showHistory: config.showHistory ?? true,
     showDrawer: config.showDrawer ?? true,
+    fabLabel: config.fabLabel ?? null,
+    fabBackgroundColor: config.fabBackgroundColor ?? null,
+    fabContentColor: config.fabContentColor ?? null,
     theme: config.theme ?? null,
     mode: config.mode ?? 'FULL_JOURNEY',
     authMode: config.authMode ?? 'SDK_OTP',
