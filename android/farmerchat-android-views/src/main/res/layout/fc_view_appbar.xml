@@ -68,6 +68,46 @@
         tools:text="Skip" />
 
     <!-- Weather pill (Home only) -->
+    <!--
+      CHAT_ONLY action slot: with the drawer hidden there is nowhere else to reach
+      Past Advice or the language chooser, so they sit here. Both default to GONE and
+      are shown by ChatFragment only when the drawer is off and the feature is enabled.
+      Placed before the weather pill so `end|center_vertical` stacking puts weather
+      outermost when both are somehow visible.
+    -->
+    <LinearLayout
+        android:id="@+id/fcAppBarActions"
+        android:layout_width="wrap_content"
+        android:layout_height="42dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/fcAppBarHistory"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/fc_icon_timer"
+            android:visibility="gone"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/fcAppBarLanguage"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/fc_icon_language"
+            android:visibility="gone"
+            app:tint="@android:color/white" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/fcAppBarWeather"
         android:layout_width="wrap_content"

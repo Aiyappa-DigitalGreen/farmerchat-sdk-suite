@@ -126,6 +126,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         if (isHistoryEntry) {
             binding.fcChatAppBar.fcAppBarLeft.isVisible = graph.config.showDrawer
         }
+        setUpAppBarActions()
 
         overlays = InputOverlaysController(
             fragment = this,
@@ -559,5 +560,44 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         overlays = null
         vm.onAction(ChatAction.ClearMessages)
         super.onDestroyView()
+    }
+
+    /**
+     * Past Advice + language icons in the chat app bar.
+     *
+     * Only shown when the drawer is OFF — with `showDrawer(false)` (the CHAT_ONLY setup) there
+     * is otherwise no way to reach either screen. When the drawer is on, these stay hidden and
+     * the drawer remains the single navigation surface, exactly as before.
+     *
+     * Each icon is independently gated on its own config flag, so a host can expose history
+     * without language or vice versa.
+     */
+    private fun setUpAppBarActions() {
+        val bar = binding.fcChatAppBar
+        val drawerOff = !graph.config.showDrawer
+        val showHistory = drawerOff && graph.config.showHistory
+        // Language is always reachable when the drawer is off: it is the only way for a user
+        // to change language once onboarding is skipped.
+        val showLanguage = drawerOff
+
+        bar.fcAppBarHistory.isVisible = showHistory
+        bar.fcAppBarLanguage.isVisible = showLanguage
+        bar.fcAppBarActions.isVisible = showHistory || showLanguage
+
+        bar.fcAppBarHistory.contentDescription =
+            label(Labels.RECENT_CHATS, "Past Advice")
+        bar.fcAppBarLanguage.contentDescription =
+            label(Labels.LANGUAGE, "Language")
+
+        bar.fcAppBarHistory.setOnClickListener {
+            findNavController().navigate(
+                R.id.fc_dest_chat_history, null, NavRoutes.drawerOptions(findNavController())
+            )
+        }
+        bar.fcAppBarLanguage.setOnClickListener {
+            findNavController().navigate(
+                R.id.fc_dest_settings_language, null, NavRoutes.drawerOptions(findNavController())
+            )
+        }
     }
 }
