@@ -316,8 +316,9 @@ export function FarmerChatRoot(props: {
             onOpenQuestion={(item) => {
               setDrawerOpen(false);
               services.analytics.track(Events.NEW_CHAT_CLICK_EVENT, { conversation_id: item.conversation_id ?? '', source: 'drawer' });
+              // Drawer recent items are conversations — always opened by id
+              // (the app's ConversationListItem has no free-text `question`).
               if (item.conversation_id) openChat({ source: 'history', conversationId: item.conversation_id });
-              else if (item.question) openChat({ source: 'home', question: item.question });
             }}
           />
         ) : null}
@@ -349,8 +350,13 @@ export function FarmerChatRoot(props: {
             params={current.params}
             onOpenDrawer={() => setDrawerOpen(true)}
             onClose={() => {
-              // Chat onClose (Home entry) → popUpTo(Home){!inclusive} singleTop.
-              navigator.popUpToAndPush('home', true, { name: 'home' });
+              // CHAT_ONLY has no Home — signal the host to exit/unmount the SDK
+              // (host wires config.onExit); otherwise popUpTo(Home){!inclusive}.
+              if (services.config.mode === 'CHAT_ONLY') {
+                services.analytics.exit();
+              } else {
+                navigator.popUpToAndPush('home', true, { name: 'home' });
+              }
             }}
           />
         );
@@ -362,6 +368,7 @@ export function FarmerChatRoot(props: {
             onOpenDrawer={() => setDrawerOpen(true)}
             onOpenChat={(conversationId) => openChat({ source: 'history', conversationId })}
             onNavigateToError={(isNetworkError) => navigateToError(isNetworkError, 'chatHistory', () => void historyActions.refresh())}
+            onSignUpClick={() => void handleSignUpClick()}
           />
         );
       case 'settings':

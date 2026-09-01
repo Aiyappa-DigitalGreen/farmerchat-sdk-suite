@@ -228,22 +228,27 @@ struct HomeView: View {
 
     @ViewBuilder
     private func sectionView(_ section: SectionDto) -> some View {
-        switch section.type {
-        case "single_select":
-            FCSingleSelectCard(
-                section: section,
-                isSubmitting: submittingSectionId == section.id,
-                onSubmit: { option in submitSingleSelect(section: section, option: option) },
-                onDismiss: { viewModel.dismissCard(sectionId: section.id) }
-            )
-        case "multi_select":
-            FCMultiSelectCard(
-                section: section,
-                isSubmitting: submittingSectionId == section.id,
-                onSubmit: { options in submitMultiSelect(section: section, options: options) },
-                onDismiss: { viewModel.dismissCard(sectionId: section.id) }
-            )
-        default:
+        // App parity: question cards arrive as `type == "question"` discriminated
+        // by `selection_type` ("single"/"multiple") — NOT `type == "single_select"`.
+        // (Mirror UIKit HomeCells, which keys off `options` + `selectionType`.)
+        let isSelect = section.type == "question" || section.options?.isEmpty == false
+        if isSelect {
+            if section.selectionType == "single" || section.type == "single_select" {
+                FCSingleSelectCard(
+                    section: section,
+                    isSubmitting: submittingSectionId == section.id,
+                    onSubmit: { option in submitSingleSelect(section: section, option: option) },
+                    onDismiss: { viewModel.dismissCard(sectionId: section.id) }
+                )
+            } else {
+                FCMultiSelectCard(
+                    section: section,
+                    isSubmitting: submittingSectionId == section.id,
+                    onSubmit: { options in submitMultiSelect(section: section, options: options) },
+                    onDismiss: { viewModel.dismissCard(sectionId: section.id) }
+                )
+            }
+        } else {
             FCContentCard(
                 section: section,
                 onTap: { contentCardTapped(section) },
@@ -298,7 +303,8 @@ struct HomeView: View {
 
     private func weatherTapped() {
         FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
-        let question = fcLabel("weather_advice_question", "What does today's weather mean for my farm?")
+        // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
+        let question = fcLabel("WHAT_IS_THE_PRESENT_WEATHER", "What is the present weather?")
         if locationPrompt.isLocationKnown {
             openChat(FCDestination.ChatArgs(question: question, isWeatherAdviceCTA: true))
         } else {
@@ -326,7 +332,14 @@ struct HomeView: View {
             return
         }
         pendingCardSection = section
-        viewModel.onAction(.fetchImageStatement(statementId: statementId, triggeredInputType: "card"))
+        // App parity (HomeScreen.kt:580-584): content-card tap sends image_card / text_card by type.
+        let triggerType: String
+        switch section.type?.lowercased() {
+        case "image": triggerType = "image_card"
+        case "statement": triggerType = "text_card"
+        default: triggerType = "card"
+        }
+        viewModel.onAction(.fetchImageStatement(statementId: statementId, triggeredInputType: triggerType))
     }
 
     private var imageStatement: ImageStatementResponse? {

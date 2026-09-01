@@ -74,10 +74,12 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `environment` | `'dev' \| 'stage' \| 'demo' \| 'prod' \| 'eks'` | — (required) | Selects the API base URL. |
-| `geoApiKey` | `string` | `''` | Google Geolocation key for the language auto-detect fallback. Without it, geolocate is skipped and the server infers location from IP at guest init. |
+| `geoApiKey` | `string` | `''` | Google Geolocation key for the language auto-detect fallback. Without it, geolocate is skipped and the server infers location from IP at guest init. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
 | `guestApiKey` | `string` | `''` | API key for guest initialization (`initialize_user`) and the guest-token refresh fallback (`send_tokens`). Required for the SDK to work — provisioned per host. |
 | `appearance` | `'day' \| 'night' \| 'auto'` | `'auto'` | `auto` follows `prefers-color-scheme` live. |
 | `languageCode` | `string` | — | Preselects the UI language code. |
+| `defaultCountryCode` | `string` | `'IN'` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
+| `defaultStateCode` | `string` | `'Karnataka'` | State/region paired with `defaultCountryCode`. Endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages. |
 | `enableVoice` | `boolean` | `true` | Speak input + voice-clip playback (needs MediaRecorder). |
 | `enableImages` | `boolean` | `true` | Photo input + image analysis queries. |
 | `enableWeather` | `boolean` | `true` | Weather chip on Home + weather advice CTA. |

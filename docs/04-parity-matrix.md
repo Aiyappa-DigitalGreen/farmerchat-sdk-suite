@@ -16,6 +16,7 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 | Guest init flow (endpoint #1) | ✅ (SessionManager) | ✅ (Language screen geo→guest-init) | ✅ (same) | ✅ (SessionManager.ensureGuestSession) | ✅ (Splash) | ✅ (Splash) | ✅ | ✅ |
 | Splash + routeFromSplash tree (01 §2) | n/a | ✅ | ✅ | ✅ (SplashRouter shared) | ✅ | ✅ | ✅ | ✅ |
 | Language onboarding (01 §3.2) | ✅ (OnboardingSharedViewModel) | ✅ (priority+expand, per-row label fetch, legal dialog) | ✅ (same) | ✅ (OnboardingViewModel) | ✅ (priority+expand, legal links, bottom bar) | 🟡 (table UI; no legal-links footer/tagline) | ✅ | ✅ |
+| Blank-`country_code` guard on #2 (`defaultCountryCode`/`defaultStateCode`) | ✅ | ✅ (via core) | ✅ (via core) | ✅ | ✅ (via core) | ✅ (via core) | ✅ | ✅ |
 | Enter Name (01 §3.3) | ✅ (EnterNameViewModel) | ✅ | ✅ | ✅ (EnterNameViewModel + normalizer) | ✅ | ✅ | ✅ | ✅ |
 | Auth phone entry + country picker (01 §3.4) | ✅ (AuthViewModel) | ✅ (full-screen picker w/ search) | ✅ (picker dialog w/ search; no SIM prefill — see debts) | ✅ (AuthViewModel) | ✅ (picker sheet w/ search) | ✅ (picker w/ UISearchController) | ✅ | ✅ |
 | Auth OTP entry + 180s timer (01 §3.4) | ✅ (state; timer in UI) | ✅ | ✅ (CountDownTimer) | ✅ (timer in VM) | ✅ | ✅ | ✅ | ✅ |
@@ -23,6 +24,11 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 | SMS auto-read | n/a | ✅ (SMS Retriever, runCatching-guarded) | ✅ (SMS Retriever, runCatching-guarded) | n/a | ✅ .oneTimeCode autofill | ✅ .oneTimeCode autofill | ⛔ platform | 🟡 WebOTP (needs Chrome/Android runtime test) |
 | AccountBenefits + AccountSuccess | ✅ (question-count gate) | ✅ (back-stack nuance — see debts) | ✅ (back-stack nuance — see debts) | ✅ (shouldBypassInterstitial) | ✅ | ✅ | ✅ | ✅ |
 | Home feed sections (content/single/multi/SSFR) | ✅ (HomeViewModel) | ✅ (all four card types) | ✅ (all four card types) | ✅ (HomeViewModel + cache fallback) | ✅ (all four card types) | ✅ (content/single/multi + **SSFR card** now rendered above the feed, C3+`ssfr_enable` gated; **screenshot mock `ios-uikit-05-home.png`**) | ✅ | ✅ |
+| Guest home: seed #11 with default coords when country unresolved | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Composer lifted above the IME (`imePadding`) | n/a (UI) | ✅ | n/a (XML adjustResize) | n/a (UI) | ✅ | ✅ | ✅ | ✅ |
+| Drawer order matches app (nav → divider → recent) | n/a (UI) | ✅ | ✅ | n/a (UI) | ✅ | ✅ | ✅ | ✅ |
+| `plotline_widget` sections filtered from feed + analytics | ✅ | ✅ | ✅ | ✅ | ✅ (via core) | ✅ (via core) | ✅ | ✅ |
+| Greeting falls back to label when #12 omits it | n/a (UI) | ✅ | ✅ (static label) | n/a (UI) | ✅ | n/a | ✅ | ✅ |
 | Home greeting + weather chip | ✅ | ✅ (greeting skeleton + weather chip) | ✅ (greeting static above pinned inputs — see debts) | ✅ | ✅ | 🟡 (greeting ✅; weather = nav-bar temp text only) | ✅ | ✅ |
 | Home Photo/Speak/Type inputs | ✅ (AudioRecorder/transcribe) | ✅ (sticky row + overlays) | ✅ (pinned row + overlays; simple voice panel) | ✅ (AudioRecorderService m4a/aac) | ✅ (overlays) | ✅ (pinned header; Type = alert input) | ✅ | ✅ |
 | Card mark-viewed + dismiss | ✅ | ✅ (fires on composition ≈ visibility — see debts) | ✅ (≥50% visibility measured) | ✅ (dedup per statement) | ✅ (onAppear ≈ visibility) | ✅ (willDisplay + dismiss button) | ✅ | ✅ |
@@ -36,10 +42,11 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 | Chat: Listen TTS (#31) | ✅ (+AudioPlayback) | ✅ | ✅ | ✅ (AVPlayer service) | ✅ | ✅ | ✅ | ✅ |
 | Chat: voice-clip bubbles play/pause | ✅ (AudioPlayback + duration) | ✅ (waveform + duration) | ✅ (play/pause + duration) | ✅ (position/duration published) | ✅ (progress + duration) | 🟡 (play/pause; no progress bar) | ✅ | ✅ |
 | Chat: share/download answer card | n/a (UI concern) | ✅ (graphicsLayer→PNG; share intent + MediaStore save) | ✅ (offscreen view→Bitmap; FileProvider share + MediaStore save) | n/a | ✅ (ImageRenderer card + share sheet; download → Photos) | 🟡 (UIGraphicsImageRenderer card + share sheet; no separate download action) | ✅ (view-shot optional; save = share sheet) | ✅ (canvas PNG + navigator.share / download) |
-| Chat: history load + pagination (#32) | ✅ | ✅ (scroll restore) | ✅ (anchor-based restore + one-time scroll-to-bottom) | ✅ (page prepend + nextPage) | ✅ (load-earlier affordance) | 🟡 (page 1 load ✅; load-earlier not surfaced in UI) | ✅ | ✅ |
+| Chat: history load + pagination (#32) | ✅ | ✅ (scroll restore) | ✅ (anchor-based restore + one-time scroll-to-bottom) | ✅ (pages by raw `data` non-empty — app parity, **2026-07-30 fix**) | ✅ (load-earlier + position-preserving prepend) | ✅ (load-earlier row + offset-preserving prepend, **2026-07-30**) | ✅ (pages by raw items) | ✅ (pages by raw items) |
+| Chat: unique history bubble ids (no duplicate list keys) | ✅ | ✅ | ✅ | ✅ | ✅ (via core) | ✅ (via core) | ✅ | ✅ |
 | Chat: cosmetic answer reveal + follow-up/action restyle (UI-only, **NOT streaming**) | n/a (no core/ChatState change) | ✅ **android-compose only**: client-side typewriter reveal of *fresh* answers (blinking caret + tap-to-skip; history + pre-generated render in full immediately, no reveal), restyled "Related questions" suggestion cards, brand-accent Share/Save/Listen chips, and a pulsing logo "thinking" indicator — all driven by existing theme tokens (green/blue/dark screenshot-verified on emulator 2026-07-21, `scratchpad/chat-redesign-*`). Chat replies stay synchronous JSON per guardrail #3; the reveal is a purely cosmetic Compose animation over the already-received text | ⛔ not ported (intentional UI-only parity gap) | n/a | ⛔ not ported | ⛔ not ported | ⛔ not ported | ⛔ not ported |
 | ChatHistory screen grouped + paginated (#22) | ✅ (ChatHistoryViewModel) | ✅ | ✅ | ✅ (dual-format decode + grouping) | ✅ | ✅ | ✅ | ✅ |
-| Drawer (recent 8, nav) | ✅ (recentDrawerQuestions) | ✅ (side drawer, typed icons, sign-up card) | ✅ (recent-8, typed icons, refreshSilently) | ✅ (recentQuestions in VM) | ✅ (side overlay, typed icons) | ✅ (real slide-in drawer: header, active-row, recent-8 typed rows + See all, C3-gated History/Language/Settings/Help, guest sign-up card; **screenshot mock `ios-uikit-19-drawer.png`**) | ✅ | ✅ |
+| Drawer (recent 8, nav) | ✅ (recentDrawerQuestions) | ✅ (side drawer, typed icons, sign-up card; recent-chats + History gated `isAuthenticated && showHistory`) | ✅ (recent-8, typed icons; recent-chats + See-all gated `isAuthenticated && showHistory`, guests see sign-up card, `refreshSilently` + onAuthStateChanged refresh auth-only — **2026-07-30 fix**; authed+showHistory=false shows neither history nor sign-up, minor gap vs compose) | ✅ (recentQuestions in VM) | ✅ (side overlay, typed icons; recent-chats + History row gated `isAuthenticated && showHistory`, guests see sign-up card, silent refresh auth-only — **2026-07-30 fix**) | ✅ (real slide-in drawer: header, active-row, recent-8 typed rows + See all, C3-gated Language/Settings/Help; recent-chats + History row gated `isAuthenticated && showHistory`, guest sign-up footer, silent refresh + onAuthStateChanged refresh auth-only — **2026-07-30 fix**; **screenshot mock `ios-uikit-19-drawer.png`**) | ✅ (DrawerContent recent-chats section gated `isAuthenticated && showHistory`, guests see sign-up card, ChatHistory screen mount refresh auth-guarded — **2026-07-30 fix**; `tsc` clean) | ✅ (side drawer, typed icons; recent-chats + History row gated `isAuthenticated && showHistory`, guests see the sign-up card, silent refresh + onAuthStateChanged refresh auth-only, ChatHistory screen self-guards its mount refresh + shows a sign-up card for guests — **2026-07-30 fix**; `tsc --noEmit` + `vite build` clean) |
 | Settings + appearance Day/Night/Auto | ✅ (pref; render in UI) | ✅ | ✅ (activity-local night mode) | ✅ (pref + THEME attr) | ✅ | ✅ | ✅ | ✅ (auto = prefers-color-scheme, live) |
 | SettingsName | ✅ | ✅ | ✅ (toast via savedStateHandle) | ✅ | ✅ (+name-updated toast) | ✅ | ✅ | ✅ |
 | LanguageChooser (settings) | ✅ (SettingsViewModel) | ✅ (save→toast→Home popUpTo(0)) | ✅ (same) | ✅ (SettingsViewModel) | ✅ | ✅ | ✅ | ✅ |
@@ -59,6 +66,387 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 | **C4 callbacks + programmatic API** | ✅ `FarmerChatHooks` dispatched from Analytics stream (onScreenView/onChatOpened/onMessageSent/onAnswerReceived/onError) + deterministic onSessionStart in initialize; `sendQuestion`/`openConversation`/`openScreen` on `FarmerChat` | ✅ (openScreen routes to Settings/History/Help) | ✅ (openScreen routing wired in NavRoutes) | ✅ semantic callbacks: onScreenView/onChatOpened via `AnalyticsDispatcher.screenViewed`; onMessageSent/onAnswerReceived/onError from `ChatViewModel`; onSessionStart once in `initialize`; programmatic `sendQuestion`/`openConversation`/`openScreen` on `FarmerChat` (pending targets). Type-checked | ✅ `openScreen` consumed by `FCRouter` (`pendingScreenTarget`→drawer routes); openChat pending target pre-existing | ✅ `openScreen` now consumed by `FarmerChatViewController` (`pendingScreenTarget` → `navigateDrawerRoute` home/chatHistory/settings/help/language); openChat pending target pre-existing; semantic callbacks fire from Core | ✅ callbacks onScreenView/onChatOpened (from Analytics.trackScreenView), onMessageSent/onAnswerReceived (useChat), onError (HttpClient final errors, code 0=transport), onSessionStart (session, once) — alongside raw onEvent; `FarmerChat`.sendQuestion/openConversation/openScreen queue a pending target consumed by the mounted graph. **Runtime-verified on the Android emulator (mock, 2026-07-20)** from the Metro console: onSessionStart, onScreenView (per screen), onChatOpened, onMessageSent, onAnswerReceived (real message_id) all fired; onError/programmatic API not separately exercised (type-checked) | ✅ callbacks onChatOpened/onMessageSent/onAnswerReceived/onScreenView/onError/onSessionStart (dispatched at source via Analytics/session/chat, alongside raw onEvent); `FarmerChat`/`FarmerChatSDK`.sendQuestion/openConversation/openScreen (queued until a root mounts). **Runtime-verified in headless Chromium**: all six semantic hooks fired (onScreenView per screen, onSessionStart, onChatOpened, onMessageSent, onAnswerReceived w/ real message_id, onError API+network) + 32 raw analytics events, captured from the console (2026-07-20) |
 | **C5 stringOverrides (host wins) + forced locale** | ✅ LabelManager: host override → `${key}_${lang}` → `${key}_en` → English fallback → raw key; `locale` forces language + skips language screen | ✅ (all strings via labelManager) | ✅ same LabelManager resolution. **Runtime-verified on emulator (2026-07-20)**: `stringOverrides` visibly changed Home input tiles to "PHOTO✦/SPEAK✦/TYPE✦" over server labels (`scratchpad/andv-25-override-home.png`); `locale:"hi"` forced the language (skipped the Language screen → EnterName) and loaded the hi label set (copy differs from dev-default, `andv-25-override-language.png`) | ✅ `LabelManager`: host `stringOverrides[key]` → server `${key}_${lang}` → `${key}_en` → English fallback → raw key; `locale` forces language (`forcedLocale` + persisted `selectedLanguageCode`). **Unit-tested** (host-override precedence + forced locale; 12/12) | ✅ all strings via `fcLabel` → LabelManager (inherits C5) | ✅ all strings via `fcuiLabel` → LabelManager (inherits C5) | ✅ LabelManager resolution: host `stringOverrides[key]` → server `${key}_${lang}` → `${key}_en` → built-in English → raw key; `locale` forces the language code (wins over stored/onboarding). **Runtime-verified on the Android emulator (mock, 2026-07-20)**: `stringOverrides` visibly changed the Language screen — title "Pick your preferred language" + subtitle "Host override active — you can switch anytime" (over the server/English labels), incl. inside the inline embed (`scratchpad/rn-19-stringoverride.png`); `locale:'hi'` forced the language and **skipped the Language screen** entirely (Splash → EnterName, no Select-Language event, `scratchpad/rn-20-forced-locale.png`) | ✅ LabelManager resolution: host override → `${key}_${lang}` → `${key}_en` → English fallback → raw key; `locale` forces the language code and is not overridden by onboarding selection. **Runtime-verified in headless Chromium**: `stringOverrides` visibly change copy — app bar "AgriAssist", feed header "Your AgriAssist briefing", Language "Pick your language (host copy)" + "Continue with AgriAssist" (`scratchpad/web-32/33`). `locale` is wired (forces langCode) but not separately visible with the mock's label set, which ships no localized strings under the SDK's base keys |
 
+## Fix — blank `country_code` blanked the language screen (2026-09-01)
+
+**Symptom reported**: "nothing loading in ui for language & all screens".
+
+**Root cause (verified against the live prod API, not inferred)**: `initialize_user` returns
+`country_code: null` / `state: null` for a fresh guest whose IP the backend cannot resolve.
+Endpoint #2 then rejects the blank value with **HTTP 400** `{"error": "Country code is required"}`.
+400 is non-retryable per the root-CLAUDE.md invariants, so the language list failed silently to
+empty — and because the language screen is the first screen, nothing downstream ever loaded.
+
+The reference app guards this with a hardcoded fallback (`fc-compose`
+`OnboardingSharedViewModel.kt:402` → `?: "KE"` / `?: "NY"`, and `:191` → `?: "IN"` / `?: "KA"` —
+the app is internally inconsistent here, worth reporting upstream). The SDK had dropped the
+guard on three of four platforms:
+
+| Platform | Before | Status |
+|---|---|---|
+| android-core | `?: prefs.getString(USER_COUNTRY_CODE, "")` → `""` | was **broken** |
+| ios-core | `?? prefs.string(.userCountryCode) ?? ""` → `""` | was **broken** |
+| web | `store.getString(...) ?? ''` (never read the init response at all) | was **broken** |
+| react-native | `?? 'IN'` | worked incidentally |
+
+`?:` / `??` only catch `null`, never `""`, so even the persisted-preference hop could not save it.
+
+**Fix**: added `defaultCountryCode` / `defaultStateCode` to `FarmerChatConfig` on all four
+platforms (defaults `"IN"` / `"KA"`, host-overridable — an SDK cannot hardcode a deployment
+country the way a single-program app can). Every call site now resolves
+*init response → persisted pref → config default* with a **blank-safe** test at each hop, applied
+to both the onboarding path and the Settings → Language chooser path (which had the same bug).
+
+**Defaults are `"IN"` / `"Karnataka"`** — note the state is a *name*, not a code. Endpoint #2
+matches `state` on the display name and uses it only to rank languages: verified live,
+`state=Karnataka` returns `priority_view=[Kannada, English (India), Hindi]` while `state=KA`
+returns `priority_view=[Hindi, English (India)]` with Kannada demoted to "All languages". Both
+return the same five languages, so a code was never *broken* — just a worse first screen. See
+docs/02 endpoint #2 param semantics.
+
+**Verified 2026-09-01**:
+- `?country_code=IN&state=Karnataka` returns a non-empty India group on **all five envs**
+  (dev / stage / demo / prod / eks — 1 group, 5 languages each), so the default is safe
+  everywhere, not just prod.
+- No direct `countryWiseSupportedLanguages` / `getSupportedLanguages` call sites exist in
+  `ios/FarmerChatSwiftUI`, `ios/FarmerChatUIKit`, `android-compose`, or `android-views` — all four
+  UI packages route through the two Core view models fixed here, so the "via core" cells above are
+  accurate.
+- Per-platform checks per root CLAUDE.md §5 all passed:
+  `:farmerchat-core:compileDebugKotlin` ✅, `swift build` ✅, `tsc --noEmit` (rn + web) ✅,
+  `vite build` ✅.
+
+**Adjacent inconsistency, NOT changed** (out of scope for this fix, tracked here so it is not
+lost): `android-compose/util/Utils.kt:56` and `android-views/util/Ui.kt:31` fall back to `"ke"`
+(Kenya) when `USER_COUNTRY_CODE` is blank, for the phone-picker flag. That default now disagrees
+with `defaultCountryCode = "IN"`. Changing it would move the auth country picker's default, which
+is a separate behavioural decision — raise it before touching it.
+
+**Not changed**: endpoint constants and wire models were already character-for-character
+identical to the app on all platforms — nothing needed re-integrating there.
+
+## Fix — empty / blank home screen (2026-09-01)
+
+**Symptom reported**: "why nothing loads on home screen".
+
+Two independent causes, both verified against the live prod API.
+
+### (a) Empty feed — the same null-location chain as the language bug
+
+Endpoint #12 is **gated on a resolved location**. A guest with `country_code: null` gets HTTP 200
+`{"sections": [], "ssfr_enable": false}` with no `greeting` — an empty feed, not an error, so no
+error state ever shows. Verified: guest init **with** `lat`/`long` returns
+`country_code: IN, state: Karnataka` and a **21-section** feed; **without** them, on an
+unresolvable IP, `country_code: null` and **0 sections**. `update_user_location` (#11) repairs it
+after the fact, and coordinates alone are enough — the backend reverse-geocodes, so the
+`{lat, long, user_id}` body that iOS and web already send is sufficient.
+
+**react-native had the ordering inverted.** `useOnboarding.ts` called
+`sdk.session.ensureGuestSession()` with **no arguments** and ran `geolocate()` *afterwards*,
+storing coords that guest init had already missed. `ensureGuestSession` no-ops once a session
+exists, so the first (and only) guest init was permanently coordinate-less → null country →
+empty home feed forever. Android, iOS and web already geolocate first and pass the coords in, matching
+the app. **Fixed**: RN now geolocates first and passes `{lat, long, accuracy}` into guest init.
+
+| Platform | geolocate → guest-init order | |
+|---|---|---|
+| android-core | geo first, coords passed | was correct |
+| ios-core | geo first, coords passed | was correct |
+| web | geo first, coords passed | was correct |
+| react-native | **init first, geo after, coords dropped** | **fixed** |
+
+### (b) 14 blank cards — unfiltered `plotline_widget` sections
+
+`plotline_widget` sections carry **only** `type`, `unique_key`, `label` — no headline, image or
+statement id. In prod they were **14 of 21** sections. The app renders them with
+`PlotlineComposeWidget` (`ui/home/HomeScreen.kt:1091`) and skips them in card analytics (`:792`);
+root CLAUDE.md §6 forbids Plotline inside SDK packages, so the SDK must **drop** them.
+
+`android-compose` and `android-views` had no `plotline_widget` case — the `else ->` catch-all
+rendered each as a `ContentCard` with an empty headline, no image and no badge. That is a wall of
+blank boxes, which is what "nothing loads on home" looked like. react-native and web were already
+filtering in their render paths, but still **counted** the widgets in `DASHBOARD_VIEWED` /
+`CARD_SHOWN` analytics, diverging from the app.
+
+**Fixed**: added one filter at the model layer on every platform —
+`HomeUdfResponse.renderableSections()` (Kotlin / Swift) and `renderableSections()` in
+`core/types.ts` (RN / web) — and routed **both** the render paths and the analytics paths through
+it, so the exclusion cannot be forgotten in one renderer.
+
+| Platform | Before | |
+|---|---|---|
+| android-compose | catch-all rendered 14 blank ContentCards | **fixed** |
+| android-views | same catch-all via adapter | **fixed** |
+| react-native | filtered when rendering; counted in analytics | **fixed (analytics)** |
+| web | filtered when rendering; counted in analytics | **fixed (analytics)** |
+
+**Not changed**: home wire models already matched the live response exactly (`type`, `id`,
+`image_url`, `title`, `question_text`, `statement_id`, `badge{icon,count,show}`,
+`cta{text,action}`, `is_viewed`, `meta{...}`, plus top-level `greeting` / `ssfr_enable`).
+
+**Verified 2026-09-01**: `:farmerchat-core:` + `:farmerchat-android-compose:` +
+`:farmerchat-android-views:compileDebugKotlin` ✅, `swift build` ✅, `tsc --noEmit` (rn + web) ✅,
+`vite build` ✅.
+
+### (c) Permanent greeting skeleton on a loaded-but-empty feed
+
+The #12 response omits the `greeting` key entirely when the feed is empty. `android-compose` and
+`react-native` rendered `greeting != null ? Text : Skeleton`, so a *successfully loaded* empty feed
+left a shimmer bar at the top of the screen forever — the most literal reading of "nothing loads
+on home". The app never hits this because it does not use the API greeting at all: `fc-compose`
+`ui/home/HomeScreen.kt:892-893` reads the
+`fc_v2_app_label_get_started_by_clicking_on_photo_speak_or_type_to_ask_your_question` label and has
+the response greeting commented out.
+
+**Fixed** on android-compose and react-native: prefer the API greeting when non-blank, else that
+label; the skeleton now shows only while the feed is genuinely loading.
+
+| Platform | Greeting when API omits it | |
+|---|---|---|
+| android-compose | permanent skeleton | **fixed** |
+| react-native | permanent skeleton | **fixed** |
+| android-views | already seeded from the label in `renderStaticTexts()` | was correct |
+| ios-swiftui | already falls back to `fcLabel("home_greeting")` | was correct |
+| web | already falls back to `label('home_greeting_fallback')` | was correct |
+
+### Verified section-type behaviour
+
+Confirmed by dumping each type from the live prod feed (not inferred from the key union):
+- `statement` (2 of 21) carries `title`, `question_text`, `statement_id`, `cta`, `meta` — it renders
+  as a real content card through the Android catch-all and is **not** broken. No platform has an
+  explicit `statement` branch; behaviour is correct, so none was added.
+- `question` (2 of 21) carries `statement`, `selection_type`, `options[]` (e.g. the gender card) and
+  is handled by an explicit branch on every platform.
+
+### ⚠ Precondition this fix does NOT remove: `geoApiKey`
+
+Coordinates reach guest init only via Google `geolocate`, which every platform skips when
+`FarmerChatConfig.geoApiKey` is unset (Android: `FetchGeoLocationUseCase` returns an error without
+it; iOS: `FarmerChatAPI.swift:425` returns `"Missing geoApiKey"`). **With no `geoApiKey`, guest
+init falls back to backend IP geolocation** — which is what returned `country_code: null` in every
+probe from this machine. On a host that does not set `geoApiKey`, and whose users are on IPs the
+backend cannot resolve, the home feed will still be empty and no code change here prevents that.
+
+Hosts embedding the SDK **must** set `geoApiKey`, or accept IP-only location. Not auto-recovered
+today: the SDK does not call `update_user_location` (#11) on its own when guest init comes back
+with a null `country_code` — that call only happens through the location-permission prompt. A
+follow-up worth considering is firing #11 automatically once coordinates become available from any
+source. Tracked here rather than implemented, because it changes when a permission-gated call runs.
+
+## Fix — chat history click crashed the host app (2026-09-01)
+
+```
+java.lang.IllegalArgumentException: Key "msg_31e2a14b-…" was already used.
+If you are using LazyColumn/Row please make sure you provide a unique key for each item.
+```
+
+**Root cause (verified live, not inferred):** a query and its response **share one
+`message_id`**. Endpoint #32 returns a single turn as three items — `message_type_id` 1 (query),
+3 (response) and 7 (follow-ups) — all carrying the *same* `message_id`. Every platform mapped the
+bubble id straight from it (`id = item.message_id`), so types 1 and 3 produced two messages with
+identical ids. Compose hard-crashes on a duplicate `LazyColumn` key; React silently corrupts list
+identity. This fired on **every conversation with at least one turn**.
+
+`?:` / `??` fallbacks did not help — they only trigger when `message_id` is null, and it never is.
+
+**Fix** (all four platforms): key on `message_id + message_type_id + page + index`, matching the
+app (`fc-compose ChatViewModel.kt:1027`, which uses `message_id + message_type_id + index`; `page`
+is added because the index restarts per page and older pages are prepended). `messageId` still
+carries the raw API id for TTS (#31) and follow-ups (#29). A `distinctBy`/`dedupeById` guard was
+added at every page-merge point as well — a duplicate key takes the HOST app down, so the wire is
+never trusted here.
+
+| Platform | Before | After |
+|---|---|---|
+| android-core (+compose/views) | `id = item.message_id` → **hard crash** | ✅ unique id + `distinctBy` |
+| ios-core | `idBase = messageId` → broken list identity | ✅ unique id + dedup filter |
+| react-native | `id: item.message_id ?? …` | ✅ unique id + `dedupeById` |
+| web | `id: item.message_id ?? …` | ✅ unique id + `dedupeById` |
+
+**Pagination checked while here**: out-of-range pages return `{"data": []}` (verified pages 2, 3
+and 99 on a one-turn conversation), so the `items.isNotEmpty() → page + 1` guard terminates
+correctly on all four platforms. No infinite-append loop.
+
+**Verified on a real device** (motorola edge 60 fusion, API 36) inside RationSmart: a conversation
+whose history genuinely contains duplicate `message_id`s was opened from Past Advice — the thread
+rendered in full, `FATAL EXCEPTION`/`was already used` count **0**, process pid unchanged.
+
+## Fix — chat input row did not match the app (2026-09-01)
+
+Two differences, both on `android-compose`:
+
+1. **Icon tint.** The SDK applied `ColorFilter.tint(brandColor.foregroundSecondary)` to the
+   Photo/Speak/Type icons; the app applies none. Both apps' vectors already carry
+   `fillColor="#00C950"`, so the tint was overriding the intended green with a flat secondary
+   colour. Removed — verified the drawables are self-coloured first, so they do not vanish.
+2. **Show/hide behaviour.** The app never adds/removes this row: it **slides** it 150.dp down over
+   450ms while an answer is generating (`ChatThreadContent.kt:151`) and slides it back. The SDK
+   hard-removed it with `if (!textComposerActive)`, so it popped in and out. Now it slides with
+   the app's exact animation, and the SDK's own composer rule (the text composer carries its own
+   camera/mic) is applied through the same slide instead of a removal.
+
+## Sample apps — demo surface reduced (2026-09-01)
+
+Per request, the host-demo surface is **Launch journey + Open chat + FAB** only. "Embed inline"
+and "Logout" are hidden, not deleted — `InlineActivity` and `FarmerChat.logout()` remain public
+API and reachable in code.
+
+| Sample | Change |
+|---|---|
+| `android/sample-compose` | "Embed inline (composable)" + "Logout" buttons removed from MainActivity |
+| `android/sample-views` | `inlineButton` + `logoutButton` set `visibility="gone"` (kept so findViewById bindings stay valid) |
+| `android/sample-jetpack` | "Open embedded assistant (inline component)" button removed; FAB is the surface |
+| `ios/SampleApp` | "Log out" row removed from the Session section |
+| `android/sample-consumer` | already only Launch + Open chat — unchanged |
+| `react-native/example`, `web/example` | no such buttons — unchanged |
+
+## Fix — guest home screen was permanently empty (2026-09-01)
+
+**Requirement**: a guest must never land on a blank home screen.
+
+Endpoint #12 is gated on the backend having a resolved location for the user, and the decisive
+finding is **how** it can be resolved. Verified live on a fresh guest:
+
+| Attempt | Result |
+|---|---|
+| `initialize_user` with no coords, IP unresolvable | `country_code: null` → **0 sections** |
+| `update_user_location` with `{user_id, country: "India", level_2: "Karnataka"}` | profile stays empty → **0 sections** |
+| `update_user_location` with `{user_id, lat, long}` | profile resolved → **21 sections** |
+
+**Coordinates are the only thing the backend accepts.** A country name is rejected, so no
+config value alone could fix this — the SDK has to post a real lat/long.
+
+**Fix**: added `defaultLatitude` / `defaultLongitude` to `FarmerChatConfig` (default
+`12.9716, 77.5946` — Bengaluru, pairing with `IN`/`Karnataka`). When guest init returns a blank
+`country_code`, the SDK now posts those coordinates to #11 before loading the feed, so the home
+screen is populated for every guest regardless of GPS permission or `geoApiKey`. Best-effort: a
+failure leaves the feed empty, i.e. the previous behaviour, and never blocks onboarding.
+
+Hosts overriding `defaultCountryCode` **must** also set `defaultLocation(lat, long)`, or the feed
+shows advice for the wrong region.
+
+| Platform | Status |
+|---|---|
+| android-core (+compose/views) | ✅ `seedDefaultLocation()` in `OnboardingSharedViewModel` |
+| ios-core | ✅ `seedDefaultLocation()` in `OnboardingViewModel` |
+| react-native | ✅ in `useOnboarding.bootstrapLanguages` |
+| web | ✅ in `useOnboardingLanguage.bootstrap` |
+
+**Known gap, tracked not fixed**: this runs on the onboarding path. A host launching straight
+into `CHAT_ONLY` skips onboarding and therefore skips the seed — same shape as
+`[[chat-only-guest-bootstrap]]`. Also, iOS's `GetLocationResponse` models only the flat
+`country`/`state` fields while the live #11 response nests everything under `user_profile`, so
+iOS cannot persist the resolved values (the call still sets the location server-side, which is
+what unblocks the feed).
+
+## Fix — composer hidden behind the keyboard (2026-09-01)
+
+"I am not able to see what I type." `TextInputOverlay` is bottom-aligned inside a `fillMaxSize`
+Box, so under edge-to-edge + `adjustResize` it sits at the **raw screen bottom — behind the IME**.
+The app passes `Modifier.imePadding().navigationBarsPadding()` at both of its call sites
+(`ChatInputOverlays.kt:49`, `HomeScreen.kt:1276`); the SDK passed no modifier at all, so the
+default `Modifier` applied neither.
+
+**Fixed** on `android-compose` Chat and Home. `navigationBarsPadding()` also keeps the composer
+clear of the gesture bar when the keyboard is closed.
+
+## Fix — side menu order did not match the app (2026-09-01)
+
+The **views** drawer (`fc_drawer.xml`) had a different structure from the app and from the SDK's
+own Compose drawer:
+
+| | App / Compose SDK | views SDK (before) |
+|---|---|---|
+| Order | Home → Language → Settings → Help → divider → Recent chats → Sign up | Home → Recent chats → divider → Settings → Language → Help → Sign up |
+
+The nav items were split across the divider and Settings preceded Language. `fc_drawer.xml` now
+matches the app: all four nav rows together, then the divider, then recent chats.
+
+## Voice recording — checked, no difference found
+
+Compared against `fc-compose` and found **identical** on every axis: `MediaRecorder` with
+OGG/OPUS above API 28 and MPEG_4/AAC below, `AudioSource.MIC`, 48 kHz sampling, 30 s cap
+(`AppConstants.MAX_AUDIO_DURATION_SEC` = SDK `MAX_RECORDING_SECONDS` = 30), 36 waveform bars at
+the call site, and the same label keys and Delete/Waveform/Send row. Both use synthetic
+amplitudes rather than `getMaxAmplitude()`. **No change made** — the reported difference could
+not be reproduced from the code, so it needs a specific description of what looks wrong.
+
+## Cross-platform audit of the 2026-09-01 fixes
+
+Asked directly whether every fix landed on every platform. Audited by grep + a live key
+intersection rather than from memory. Honest result: **most did, two did not.**
+
+| Fix | android | ios | react-native | web |
+|---|---|---|---|---|
+| `defaultCountryCode` / `defaultStateCode` blank guard | ✅ | ✅ | ✅ | ✅ |
+| `state` = display name, not ISO code | ✅ | ✅ | ✅ | ✅ |
+| `plotline_widget` filtered (render + analytics) | ✅ | ✅ | ✅ | ✅ |
+| Unique history bubble ids + dedupe guard | ✅ | ✅ | ✅ | ✅ |
+| Guest home: seed #11 with default coords | ✅ | ✅ | ✅ | ✅ |
+| `defaultLatitude` / `defaultLongitude` knobs | ✅ | ✅ | ✅ | ✅ |
+| Greeting falls back to label | ✅ | ✅ was already correct | ✅ | ✅ was already correct |
+| geolocate BEFORE guest init | ✅ was correct | ✅ was correct | ✅ **fixed** | ✅ was correct |
+| Drawer order (Home → Language → Settings → Help → divider → recent) | ✅ **fixed (views)** | ✅ **fixed** | ✅ **fixed** | ✅ **fixed** |
+| Composer lifted above the IME | ✅ **fixed** (`imePadding`) | ✅ SwiftUI handles it | ✅ **fixed** (`behavior` was a no-op on Android) | ✅ browser handles it |
+| Chat input icon tint removed | ✅ **fixed** | n/a — no tint override | n/a | n/a |
+| Composer slide (150.dp / 450 ms) | ✅ **fixed** | ⛔ **NOT PORTED** | ⛔ **NOT PORTED** | ⛔ **NOT PORTED** |
+
+### ⛔ Major pre-existing gap found during this audit: iOS and web never localize
+
+`LabelManager` resolves `"\(baseKey)_\(lang)"` → `"\(baseKey)_en"` → hardcoded fallback. The
+server's keys are all `fc_v2_app_label_*`. Intersecting each platform's key set against the 276
+base keys returned live by endpoint #3:
+
+| Platform | distinct keys used | match the server | |
+|---|---|---|---|
+| Android | 229 | **222** | 96% — localization works |
+| iOS | 127 | **1** | **0%** |
+| web | 147 | **0** | **0%** |
+
+iOS and web use invented keys (`drawer_language`, `help_title`, `account_benefits_cta`, …) that
+exist nowhere in the API response, so **every string falls through to its hardcoded English
+fallback and the UI stays English no matter which language the user picks.** This violates root
+CLAUDE.md §2 ("user-visible text … always resolved through LabelManager").
+
+**Not fixed here — deliberately.** Remapping ~270 literals is mechanical but only ~50% can be
+resolved automatically: joining each call's English fallback text against the server's `_en`
+values matches 63/126 on iOS and 68/142 on web. The remaining half have reworded fallbacks and
+need a human to choose the right key, and guessing would silently show farmers the wrong string.
+This should be its own focused task.
+
+## Feature — land a fresh install straight on Home (2026-09-01)
+
+Asked whether the FAB could open Home instead of onboarding on a fresh install,
+without touching geolocation or the API flow. It can. `routeFromSplash()` checks exactly two
+gates before Home:
+
+1. `isLanguageSelected()` — already clearable via the existing C5 `config.locale`, which sets
+   `LANGUAGE_DONE`.
+2. `!isProfileDone() && !hasSeenNameScreenOnce()` — gated on `showNameScreen`, which
+   `RouteDecider` already modelled as a constructor lambda but the graph hard-coded to `{ true }`.
+
+**Added** `FarmerChatConfig.showNameScreen` (default `true`, so no behaviour change for existing
+hosts) and wired it into `RouteDecider`. `locale` + `showNameScreen(false)` now lands Home.
+
+**The correctness catch**: the language screen is also the only caller of #3 `get_labels` and
+#6 `set_preferred_language`. Skipping it left a fresh install with zero server labels — every
+string falling back to its hardcoded English — and a backend that never learned the user's
+language. Added `FarmerChatGraph.ensureSkippedOnboardingBootstrap()`, called from both splash
+implementations, which runs that work headlessly: guest init → #2 languages → resolve the
+configured code to its id → #3 labels → #6 preferred language. Best-effort and idempotent — it
+no-ops once labels exist, and any failure just leaves the English fallbacks, i.e. the
+pre-existing behaviour, so it can never block the splash.
+
+**Verified on device** (motorola edge 60 fusion, API 36, RationSmart, STAGE) after a clean
+uninstall/reinstall: `Splash Screen → Dashboard Screen`, no language screen, no name screen;
+prefs show `is_language_screen_done=true`, `is_name_screen_done=true`,
+`is_language_labels_loaded=true`, `language_selected_id=1`, and **275** `fc_v2_app_label_*`
+entries stored.
+
+| Platform | Status |
+|---|---|
+| android-core (+compose/views) | ✅ `showNameScreen` knob + headless bootstrap |
+| ios / react-native / web | ⛔ **NOT PORTED** — `locale` already skips the language screen on those platforms, but they have no `showNameScreen` knob and no headless label bootstrap, so a fresh install there would still hit the name screen and run on English fallbacks. |
+
 ## Known intentional gaps (docs/03 adaptation table)
 - Play in-app update/review: all platforms ⛔ (host concern).
 - Plotline/MoEngage/Adjust/Firebase SDKs: all platforms ⛔ (replaced by analytics listener).
@@ -70,6 +458,21 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 
 ## Open verification debts
 (record here anything claimed but not proven — keep current)
+
+- **CHAT_ONLY guest chat — real-backend gap found & fixed on android-compose (2026-07-27)**: the C3 row (line ~58) marked CHAT_ONLY ✅, but that was only verified *landing* in a fresh chat against the **mock**. Driven against **real dev** (emulator Pixel 6 Pro, guest, `sample-jetpack`), a guest CHAT_ONLY chat could NOT complete: `get_answer_for_text_query` returned **500** because CHAT_ONLY skips onboarding+Home, which are where the guest session and the conversation are established. Root causes + fixes (android only):
+  - **No guest session** → `401 "Authorization credentials were not provided"`. Fix: `FarmerChatRoot.navigateFromSplash()` now calls `sessionManager.initializeGuestUser()` (idempotent) on CHAT_ONLY entry when `!hasSession()`.
+  - **Empty `conversation_id`** (Home normally creates it via `new_conversation`) → 500. Fix: CHAT_ONLY entry now creates a conversation (`chatUseCase.newConversation`) and stores `NEW_CONVERSATION_ID` before entering chat.
+  - **First typed message classified as `triggered_input_type:"follow_up"`** (composer always dispatches `SendFollowUpQuestion`) — a follow-up to an empty chat. Fix (core `ChatViewModel`, covers compose+views): first turn (`messages` has no `UserMessage`) sends `"text"`.
+  - **Text composer overlapped the Photo/Speak/Type bar** (mode-agnostic, compose `ChatScreen`): the composer overlay and `PrimaryInputButtons` were both rendered at the bottom, so the tiles peeked above the text field. Fix: wired `TextInputOverlay(onFocusChange=…)` to a `textComposerActive` flag and hid `PrimaryInputButtons` while the composer is focused (the composer has its own camera/mic). Runtime-verified.
+  - **Chat close (X) navigated to SDK `Home`** — but CHAT_ONLY has no Home, so it dumped the user on the SDK's home feed instead of returning to the host app. Fix (`FarmerChatRoot` chat `onClose`): in CHAT_ONLY, `(context as? Activity)?.finish()` exits the SDK back to the host. Runtime-verified: FAB → ask → close now lands on the host's `MainActivity`.
+  - Runtime-verified on real dev 2026-07-27: `initialize_user 201 → new_conversation 200 → get_answer_for_text_query 200` with a real AI answer. `set_preferred_language` turned out NOT to be required. `./gradlew :farmerchat-core:compileDebugKotlin :farmerchat-android-compose:compileDebugKotlin` clean; `:sample-jetpack:assembleDebug` + `installDebug` runtime-verified.
+  - **Cross-platform port status (2026-07-27):**
+    - **Bootstrap (A)** was refactored into a shared core helper `FarmerChatGraph.ensureChatOnlySession()` (guest-init if `!hasSession` + `newConversation` → `NEW_CONVERSATION_ID`). **android-compose** (`FarmerChatRoot.navigateFromSplash`) and **android-views** (`SplashFragment`) both call it. ✅ compose runtime-verified; views compile-verified (`:farmerchat-android-views:compileDebugKotlin` clean). **iOS/RN/web do NOT need (A)** — their Splash establishes the guest session for all modes AND their `ChatViewModel/useChat.ensureConversationId()` creates the conversation lazily before the first send (so `conversation_id` is never empty). Android was the outlier (its `ChatViewModel.conversationId()` only reads the pref, never creates).
+    - **Close→exit (B)**: android-compose (`FarmerChatRoot` onClose) + android-views (`ChatFragment` close) → `Activity.finish()` in CHAT_ONLY. ✅ compose runtime-verified, views compiled. **DONE 2026-07-27 (build/type-check-verified, not runtime):** ios SwiftUI (`ChatView` X → `exitSdk()` dismisses the top presented VC when `args.source=="chatOnly"`; `swift build` clean), ios UIKit (`ChatViewController.close()` → `presentingViewController?.dismiss` for `source=="chatOnly"`; `swift build` clean), react-native (added public `onExit` to `FarmerChatCallbacks`; `AppNavigator.navigateChatCloseToHome` CHAT_ONLY fires `analytics.fireCallback('onExit')`; `tsc` clean), web (added public `onExit` + `analytics.exit()`; `FarmerChatRoot` onClose fires it in CHAT_ONLY; `tsc`+`vite build` clean). New `onExit` callback documented in docs/07.
+    - **Composer overlap (C)**: android-compose (`ChatScreen` hide `PrimaryInputButtons` when `textComposerActive`). ✅ N/A on android-views (full-screen overlay `fcOverlayRoot` covers the buttons) and iOS-UIKit (composer is a modal `UIAlertController`) and web (overlay covers via z-index, no visible overlap). **DONE 2026-07-27 (build/type-check-verified):** ios SwiftUI (`ChatView` gates `inputBar` on `!showTextInput`; `swift build` clean), react-native (`ChatScreen.tsx` gates `PrimaryInputButtons` on `!textInputVisible && !voiceInputVisible && !photoInputVisible`; `tsc` clean).
+    - The core `triggered_input_type` first-turn fix already covers android-views via shared core; iOS/RN/web build their query with a real conversation_id so it doesn't apply.
+    - **iOS SwiftUI RUNTIME-verified (2026-07-30, iPhone 17 sim, real dev)**: `ios/SampleApp` (source packages) launched `-fcChatOnly -fcAutoOpenChat` → guest `initialize_user 201 → new_conversation 200 → get_answer 200` (real armyworm answer rendered, `scratchpad/ios_chatonly2.png`); the input bar renders with no Photo/Speak/Type overlap (Fix C). Fix B (X→exit) remains build-verified only — no idb/XCUITest tap driver available to exercise the button.
+    - **Env-scoped conversation-id invalidation (D) — FIXED + iOS RUNTIME-verified (2026-07-30):** a stored `NEW_CONVERSATION_ID` is only valid on the backend that created it, so a `conv-*` id left over from a mock/other-env run made `get_answer` 500 with no self-recovery (this is what 500'd the very first iOS run above, on a stale `conv-1060`). Fix: at SDK-init the composition root records the current base URL under `fc_sdk_LAST_BASE_URL` and, if it differs from the stored value, drops `NEW_CONVERSATION_ID` so the next chat mints a fresh conversation. Applied to **all platforms**: android-core (`FarmerChatGraph` init block + `SdkPreferences.LAST_BASE_URL`), ios-core (`FarmerChat.init` + `PrefKey.lastBaseURL`), react-native (`FarmerChatSdk.ready()` hydrate + `StorageKeys.LAST_BASE_URL`), web (`createServices` + `PrefKeys.LAST_BASE_URL`). **iOS runtime proof** (iPhone 17 sim; foreign id `conv-FOREIGN-42` + `LAST_BASE_URL=http://localhost:8899/` seeded into the app's own container store, then launched against dev): init logged the base-URL mismatch and cleared the id → `ensureConversationId` saw `pending=nil` → `new_conversation 200 → get_answer 200 → follow_up_questions 200` (was 4×500 on the foreign id before the fix). A clean-slate dev run (no stale id) is likewise `new_conversation 200 → get_answer 200`. `swift build` clean after removing the temporary trace logs. android/rn/web carry the identical logic, re-compiled clean 2026-07-30 (`:farmerchat-core:compileDebugKotlin` BUILD SUCCESSFUL; rn `tsc --noEmit` clean; web `tsc --noEmit` + `vite build` clean). **Web + RN also RUNTIME-verified 2026-07-30** via Node harnesses that execute the actual fix code from source (esbuild-bundled): **web** runs `createServices({environment:'dev'})` against a localStorage-shaped store pre-seeded with `LAST_BASE_URL=http://localhost:8899/` + `NEW_CONVERSATION_ID=conv-STALE-web` → the id is dropped and `LAST_BASE_URL` becomes the dev base (`WEB-INVALIDATION-PASS`); a same-env second init keeps a fresh id (`WEB-CONTROL-PASS`, guards against false invalidation). **RN** runs the real `FarmerChatSdk.ready()` with a Map-backed mock `@react-native-async-storage/async-storage` (expo-* / react-native stubbed — they degrade gracefully, matching the optional-peer rule) pre-seeded with `conv-STALE-rn` + mock base → the id is cleared in both the in-memory cache and AsyncStorage and the base becomes dev (`RN-INVALIDATION-PASS` + `RN-CONTROL-PASS`). Only **android** (D) remains runtime-unverified-in-isolation (its CHAT_ONLY happy path was runtime-verified on the dev emulator 2026-07-27); the init-block logic is identical and compiles. NB: on the iOS **simulator**, external `xcrun simctl defaults write` writes a *global* prefs domain that cfprefsd shadows over the app's *container* store, so seeding the stale id that way produces a false negative (app reads global, writes container) — the faithful test seeds the container plist while the sim is shut down.
 
 - **web (real headless-browser E2E run, 2026-07-20)**: the `web/example` Vite app was driven end-to-end in **real headless Chromium (Playwright 1.61, chromium 149.0.7827.55)**, 37 screens/features screenshotted into `scratchpad/web-*.png` and each read back. Backend: **the local mock (`http://localhost:8899`) for ALL web paths** — dev cannot be used from a browser because the dev guest API key ships blank on web (`initialize_user` → 403, `get_labels` → 401 without it), so mock is the honest backend for the whole web run (docs/08 fallback rule; the mock already carries permissive CORS + OPTIONS handling). Verified at runtime against the mock: Splash (`web-01`), Language + select (`web-02/03`), EnterName + typed/save (`web-04/05`), Home feed with greeting/weather-chip/content+single+multi+SSFR cards (`web-06/06b`), Home Type overlay (`web-07`), **Photo overlay** via real `<input type=file>` upload showing the question composer (`web-08`), **Speak/voice overlay** via `--use-fake-device-for-media-stream` — "Listening…" + timer + record button rendered, MediaRecorder available headless (`web-09`), Chat **real AI answer** (markdown, #27 via mock, `web-10`), follow-ups #29 (`web-11`), **TTS Listen → playing/Pause** (synthesise #31 + HTMLAudioElement, `web-12`), share/download (`web-13`; `navigator.share` absent headless → canvas PNG download path + toast), **retry** (aborted request → inline error + failed-bubble Try again, `web-14`), Drawer with previous-questions populated for an authenticated user (`web-15`), AccountBenefits (`web-16`), Auth phone with India +91 + WhatsApp/SMS channels (`web-17`), **OTP `1234` → Verify → success** (`web-18`), AccountSuccess (`web-19`), Settings Day/Night/Auto + Log out (`web-20`), SettingsName (`web-21`), LanguageChooser (`web-22`), Help FAQ + **legal iframe modal** (`web-23/23b`), ChatHistory grouped list (`web-24`), **history thread** with query/response/voice-clip/image bubbles (`web-25`), Error/NoInternet via offline (`web-26`), LocationPrompt "Share Location" interstitial (`web-27`). Features: **inline embed** filling a sized host `<div>` on a wide viewport (C1, `web-28`); **blue-brand recolor** with computed `--fc-appbar` = `#1565C0` on Home + Language (theming, `web-29/30`); **CHAT_ONLY** lands in a fresh chat (C3, `web-31`); **stringOverrides** visibly change copy — app bar "AgriAssist", feed header "Your AgriAssist briefing", Language "Pick your language (host copy)" + "Continue with AgriAssist" (C5, `web-32/33`); **HOST_TOKEN** skips OTP and lands authenticated — drawer shows no Sign up, Settings shows Log out (C2, `web-34/35`); **all C4 semantic hooks fired** in-browser (onScreenView for every screen, onSessionStart, onChatOpened, onMessageSent, onAnswerReceived with a real message_id, onError for both API + network) alongside 32 distinct raw analytics events matching the app's names, captured from the console. **Four web-only field-name conformance bugs were found and fixed during the run** (mock/app source were correct; the web port read wrong names — now brought to parity, `tsc --noEmit` + `vite build` clean): (1) `ConversationListItem` read `question`/`title` → now `conversation_title` (history-list + drawer titles were blank); (2) `ConversationChatHistoryResponse` read `messages`/`results` → now also `data` (history threads rendered empty); (3) `FaqItem`/(4) `HelpLegal` read `url`/`terms_of_use` → now the API's `webview-url` and nested `{ "webview-url" }` objects under `terms-of-use`/`privacy-policy` (FAQ/legal links never opened). Remaining web runtime gaps: verified against mock only, not a live/prod backend (dev needs a provisioned guest key); Web OTP SMS autofill (`navigator.credentials` OTP) not exercised (no real SMS); real camera/mic hardware not used (fake device covers the recorder logic + the picker `<input>`, not physical capture); typeScale still scales only the base/em-relative sizes, not absolute-px component CSS (docs unchanged on this).
 - **web**: WhatsApp OTP-less token endpoint (#19 `verify_otp_less_android_sdk_token`) is implemented in the API client but has no UI caller — on web the WhatsApp channel only triggers `generate_otp` with `channel:["whatsapp"]` + manual code entry (docs/03: "channel buttons only").
@@ -90,6 +493,53 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 - **ios-core**: `RequestEnableGps` state exists but iOS has no in-app GPS-enable resolution (no Play Services equivalent); services-off maps to `error(.gpsUnavailable)` with a settings hint.
 - **ios-swiftui**: mark-viewed uses `onAppear` in the LazyVStack as the ≥50%-visible approximation; scroll-position restore after history prepend is approximate (load-earlier button rather than scroll-triggered prepend).
 - **ios-uikit (parity pass, 2026-07-20)**: brought the iOS-15-native path to app parity on the previously-reduced items and **runtime-verified on the iPhone 17 sim (iOS 26.1) against the local mock** (backend recorded per screenshot; mock chosen because it deterministically serves the SSFR feed, real #27 answers, OTP and grouped history that dev cannot). **Closed this pass**: (1) real slide-in **drawer** `FCUIDrawerViewController` (scrim + 300pt panel animating in from the left; header, active Home row, recent-8 typed rows + See all, C3-gated History/Language/Settings/Help, guest sign-up footer) replacing the action sheet — `ios-uikit-19-drawer.png`; (2) **SSFR card** `FCUISsfrCell` rendered above the feed, gated by `ssfr_enable` + `config.enableSsfr` — `ios-uikit-05-home.png`; (3) **`FCUILocationPromptHost`** overlay above the nav stack driven by `LocationPromptManager` (interstitial/permission/fetch/recovery/error), weather CTA now routes through it — `ios-uikit-25-location.png`; (4) **centralized error route** via an `ErrorNavigationManager` on `FarmerChatViewController` (splash-init + chatHistory now fire `navigateToError(fromScreen:retry:)` instead of ad-hoc `present`) — `ios-uikit-24-error.png`; (5) **C3 screen toggles** at the UIKit UI level (CHAT_ONLY `routeFromSplash`, `showDrawer` hides hamburger, `showSettings`/`showHistory` gate drawer rows, `enableSsfr` gates the SSFR card); (6) **C4 `openScreen`** consumed by `FarmerChatViewController.pendingScreenTarget`→`navigateDrawerRoute`; C2 host-token already gates the sign-up affordances via `isAuthenticated`. Blue-theme recolor also screenshot-verified (`ios-uikit-blue-home.png`). **Still simplified (below app fidelity, documented)**: Type/follow-up input is a UIAlertController text field (no bottom-sheet composer overlay); Home weather chip is a nav-bar temp/icon button (no full weather chip); onboarding Language has no legal-links footer/tagline; no clarification-specific chip title; no in-thread load-earlier affordance; voice-clip bubble lacks a progress bar; share only (no separate download-to-Photos); Chat has a close/back button rather than a hamburger→drawer. iOS 16+ hosts may still prefer FarmerChatSwiftUI (`FarmerChat.shared.present(from:)`). Screens NOT separately screenshotted on the UIKit path this pass (code present, reachable via the flow): EnterName, Auth phone/OTP, AccountBenefits/Success, SettingsName, in-chat voice/image/TTS/share/retry.
+- **Whole-suite audit (2026-07-31) — findings + fix ledger.** A five-area cross-platform audit (onboarding/auth, home-feed/content, chat-send, networking/analytics, settings/help/drawer) against the app source + docs. Networking invariants (priorities, retry set, backoff, 401 single-flight, headers, base URLs, prefs namespacing, dead-endpoint absence) verified CLEAN on all platforms. Confirmed divergences below (Android is the clean reference for nearly all); each value app-verified. **Status: ✅=fixed+built this pass, ⬜=pending (turnkey — app-correct value given).**
+  - **Chat send-path** (app: `PlantixRequest.kt`, `TextPromptRequest.kt`, `ChatViewModel.kt`):
+    - **[HIGH] Image query GPS wire keys** `lat`/`lng` (numeric) → must be **`latitude`/`longitude` (String)**; also add `triggered_input_type:"image"` + `retry`. ✅ web, ✅ react-native; ⬜ **iOS** (`ChatModels.swift` PlantixRequest CodingKeys `lat`/`lng`, populated `ChatViewModel.swift:~623`).
+    - **[MED] `triggered_input_type` values** — app canon: `text`/`voice`/`image`/`follow_up`/`read_full_advice`/`ssfr`/`weather` (wire field; analytics uses the same value under prop `click_type`). Fixed typed→text, voice→voice, read_full_advice, ssfr/weather where applicable: ✅ web (typed/voice/transcribe/read_full_advice), ✅ react-native (read_full_advice + ssfr/weather; text/voice/image/follow_up were already correct); ⬜ **iOS** (sends `keyboard`/`card`; also SSFR/weather ignored at `ChatViewModel.swift:~162`).
+    - **[LOW] `#27 message_id`** must be sent **`""`** (app hardcodes it; response id is authoritative). ✅ web, ✅ react-native; ⬜ **iOS** (`ChatViewModel.swift:~394` `UUID().uuidString`).
+    - **[LOW-MED] Image request** must also send `triggered_input_type:"image"` + `retry` (retry=true on image-retry). ✅ web/RN added the fields with `retry:false`; wiring `retry:true` on the retry invocation ⬜ all three (minor). ⬜ **iOS** whole item.
+  - **Home feed / pre-generated content** (app `HomeScreen.kt`):
+    - **[HIGH] `#26 ImageStatementResponse.follow_up_questions`** typed `string[]` but the wire sends **objects** `{follow_up_question_id, sequence, question}` (sort by sequence, map to strings) — breaks decode (iOS) / renders `[object Object]` (RN/web). ⬜ **iOS, react-native, web** (`HomeModels.swift:~188`, rn `types.ts:~622`, web `types.ts:~549`). (Same class as the #29/#32 fix already applied — mirror it.)
+    - **[HIGH] iOS SwiftUI select cards never render** — `HomeView.swift:~231-253` switches `type` on `"single_select"`/`"multi_select"`; real cards are `type=="question"` + `selection_type` `"single"`/`"multiple"` (UIKit `HomeCells.swift` is correct). ⬜ **ios-swiftui**.
+    - **[HIGH] iOS UIKit "Read full advice" swap missing entirely** — no read_full_advice affordance in the UIKit package. ⬜ **ios-uikit**.
+    - **[MED] Content-card tap `triggered_input_type`** `"card"` → **`"image_card"`/`"text_card"`** by section type. ✅ android-compose; ⬜ **ios-swiftui/uikit, react-native, web** (android-views already correct).
+    - **[MED] Nav question order** `title ?: question_text` → **`question_text ?: title`**. ✅ android-compose; ⬜ **react-native** (`HomeScreen.tsx:~363`). (iOS/web already correct.)
+    - **[MED] Weather CTA label** wrong key `"weather_advice_question"` → **`WHAT_IS_THE_PRESENT_WEATHER`**. ⬜ **ios-swiftui/uikit, web**. (android, RN correct.)
+    - **[MED] `WeatherResponse` fields** typed numeric → app sends **String** (verbatim; drop `Math.round`/`Double`). ⬜ **iOS, react-native, web**.
+    - **[MED] Read-full-advice `statement_id` + append-not-replace** — the query must carry `statement_id` and KEEP the pre-gen block (append). ⬜ **iOS, react-native, web** (the `triggered_input_type` value is fixed on web/RN; statement_id + append remain).
+    - **[LOW] On-card headline order** (cosmetic) `title`-first → `question_text`-first. ✅ android-compose; ⬜ others.
+    - **[LOW] iOS UIKit livestock→crop-endpoint mis-route** (`HomeViewController.swift:~364`); single-select sends option text not id. ⬜ ios-uikit.
+    - **[LOW] `statement_id` typed number + `typeof==='number'` gate** (app: Int OR String) — a string UUID skips pre-gen fetch/mark-viewed. ⬜ react-native, web.
+  - **Help / Settings / Language** (app `HelpSupportResponse.kt`, `SettingsViewModel.kt`, `LabelManager.kt`):
+    - **[HIGH] Help FAQ/legal dead wire models** — FAQ reads flat `url`, legal reads flat `terms_of_use`/`privacy_policy`; app returns **`webview-url`** (alt `webview_url`) + nested **`terms-of-use`/`privacy-policy`** objects each with `webview-url`. FAQ taps + legal links are dead. ⬜ **iOS (SwiftUI+UIKit via core `HelpModels.swift`), react-native** (`types.ts:~575`, `HelpScreen.tsx`). (Android + web already correct — copy web's shape.)
+    - **[MED] Settings→Language save doesn't persist `SELECTED_LANGUAGE_DISPLAY_NAME`** → drawer shows the OLD language. ⬜ **react-native** (`useSettings.ts:~109`), **web** (`useSettingsLanguage.ts:~97`). (Android, iOS correct.)
+    - **[MED] Help `theme` query param** wrong/missing (map appearance→light/dark/default). ⬜ android-compose (passes raw mode), react-native (null), web (omitted), iOS (nil). (android-views correct.)
+    - **[LOW] Label code not `.trim().lowercase()`d before `${key}_${lang}` lookup** → any casing/whitespace misses every localized key. ⬜ react-native, web, iOS. (Android correct.)
+    - **[LOW] Web select-language previews replace label map without committing code** (transient English revert); drop non-app `language_id` from save analytics. ⬜ web.
+    - **[LOW] `api/faqs` missing trailing slash** → redirect. ⬜ react-native, web.
+    - **[LOW] iOS drawer See-all no offline pre-check** (no reachability primitive in the iOS SDK at all). ⬜ ios. **[LOW] Android location no-network checked late.** ⬜ android.
+  - **Analytics** (app `OnboardingAnalyticsEvents.kt`/`GpsAnalyticsEvents.kt`/`AnalyticsScreens.kt` — names must match CHARACTER-FOR-CHARACTER; Android/RN/web conform):
+    - **[HIGH] iOS wrong/invented event names** (`AnalyticsDispatcher.swift`): `Weather_Clicked`→**Weather_Forecast_Viewed**, `Share_Response_Clicked`→**Answer_Share_Button_Clicked**, `Download_Response_Clicked`→**Answer_Save_Button_Clicked**, `Name_Updated`→**Name_Save_Click_Event**, `Name_Skipped`→**Name_Skip_Click_Event**, `Language_Selected`/`Language_Submitted`→**Save_Language_Click_Event**; invented `Follow_Up_Question_Clicked`/`Read_Full_Advice_Clicked`/`Card_Dismissed`/`GPS_Location_*` → mirror Android (or remove; GPS→app lowercase names). ⬜ **iOS**.
+    - **[MED] `screen_name` prop values** short tokens (`"SPLASH"`,`"HOME"`,`"CHAT"`) → app strings (`"Splash Screen"`,`"Dashboard Screen"`,`"Chat Screen"`, …). ⬜ **iOS** (`AnalyticsDispatcher.swift:~62`), **web** (`analytics.ts:~100`).
+    - **[MED] iOS force-update event casing** (`:57-58`, latent, no emitter). ⬜ iOS.
+    - **[LOW] RN HOST_TOKEN 401 ordering** — `tokenAuthenticator.ts:~51` runs SDK refresh before the HOST_TOKEN branch (iOS/web short-circuit HOST_TOKEN first). ⬜ react-native.
+  - **NOT a bug (verified faithful, do not "fix"):** web onboarding `accept_terms` failure→error-screen matches the app's `handleError`/`shouldNavigateToError` pattern; null-confidence transcription rejection (`(conf ?? 0) > 0.7`) is a documented stricter-than-app simplification; location fetch chain has no IP fallback (iOS matches).
+  - **FIXED + BUILD-VERIFIED (2026-07-31, done by hand after the parallel fix agents all failed on API-connection errors):**
+    - **iOS** (Core+SwiftUI+UIKit `swift build` all clean): chat-send image GPS `lat/lng`→`latitude/longitude` String + `triggered_input_type:"image"`; `message_id ""`; `triggered_input_type` typed→text / follow-up→follow_up / read_full_advice / weather / ssfr; **#26 follow-up objects** (new `HomeFollowUpQuestion` string-or-object decoder + sorted `[String]` computed prop); **WeatherResponse** temp/precip→String (+ SwiftUI/UIKit render); **SwiftUI select cards** discriminator (`type=="question"`+`selection_type`); content-card `image_card`/`text_card` (SwiftUI+UIKit); weather label `WHAT_IS_THE_PRESENT_WEATHER` (SwiftUI+UIKit); **Help FAQ/legal `webview-url`** (new decoders, computed `.url`/`.termsOfUse`/`.privacyPolicy`); **analytics** 9 event renames (Weather_Forecast_Viewed, Answer_Share/Save_Button_Clicked, Name_Save/Skip_Click_Event, Save_Language_Click_Event×2, Force_Update casing×2) + all `screen_name`→app strings; label code `.trim().lowercased()`; help `theme` from appearance.
+    - **web** (`tsc`+`vite build` clean): chat-send (image GPS String, message_id "", triggered_input_type text/voice/read_full_advice); **#26 follow-up objects**; content-card `image_card`/`text_card`.
+    - **react-native** (`tsc` clean): chat-send (image GPS String, message_id "", read_full_advice, SSFR/weather); **#26 follow-up objects**; nav-question `question_text`-first; **Help FAQ/legal `webview-url`**.
+    - **android-compose** (`compileDebugKotlin` clean): content-card `image_card`/`text_card`, nav-question order, headline order.
+  - **ALSO FIXED 2026-07-31 (continued):** **react-native** — content-card `image_card`/`text_card`, WeatherResponse String (+ render), Settings→Language **display-name persistence**, help `theme` from appearance, label `.trim().toLowerCase()`, `api/faqs/` slash, **HOST_TOKEN 401 ordering** (host `tokenProvider` short-circuits before Step-1 SDK refresh) — `tsc` clean. **web** — WeatherResponse String (+ render), weather label `WHAT_IS_THE_PRESENT_WEATHER`, display-name persistence (+ dropped non-app `language_id` from save analytics), help `theme`, label lowercasing, all `screen_name`→app strings, `api/faqs/` slash — `tsc`+`vite build` clean. **iOS** — read-full-advice `triggered_input_type` now `"read_full_advice"` (`swift build` clean).
+  - **STILL ⬜ (iOS-only remainder; each needs a new feature or app/Android semantic verification, not a mechanical fix):** UIKit read-full-advice affordance (new UI); read-full-advice `statement_id` + append-not-replace (`ChatMessage.AiResponse` doesn't carry the pre-gen `statement_id` — needs plumbing); GPS analytics names + `Card_Dismissed`/`Follow_Up_Question_Clicked` (the app defines neither `Card_Dismissed` nor `Follow_Up_Question_Clicked` as events and its GPS names are lowercase `location_*`/`Permission_*` — mapping the 3 iOS `GPS_Location_*` emission points to the right app events needs per-site semantic tracing); UIKit multi-select livestock→`update_user_profile`(`live_stock_details`) routing + single-select gender-id (no wired livestock core action; needs a new action + app verification of the gender value); image `retry:true`-on-retry wiring (all platforms — minor). RN/web/android are otherwise complete.
+- **Chat-history cross-platform audit + fix (2026-07-30).** A four-way audit (reference app + docs = ground truth, vs each SDK) found the list screen, server-driven grouping, and integer-`message_type_id` thread reconstruction faithful, but real bugs in reopening a past conversation — all confirmed against the app wire models (`ConversationChatHistoryResponse.kt` = `{conversation_id, data}` only; `ConversationListResponse.kt` `next` = a **URL string**). All fixed this pass; **Phase 1 (functional)** below is done + verified, **Phase 2 (guest gating)** is tracked as a separate follow-up.
+  - **(#32) thread pagination — iOS/RN/web only ever loaded page 1.** They derived `historyNextPage` from `next_page`/`total_pages`, which the #32 response never carries → always null → scroll-up/load-earlier never fired. The app pages by `data.isNotEmpty()` → `page+1` until an empty page. Fixed to base "more" on the **raw** response array length (not the mapped bubbles — a page can be all type-7/unknown): ios-core `ChatViewModel.loadChatHistory` (`response.messages.isEmpty ? nil : page+1`), rn `useChat.loadChatHistory` (`items.length > 0 ? page+1 : null`), web `useChat.loadChatHistory` (same). android already did this (unchanged — it's the correct reference). *(Web's prior E2E passed only because the mock faked `next_page`.)*
+  - **(#22) list pagination — web only stuck on page 1.** Web's `normalizeConversationList` accepted only a numeric `next_page`/`next`; the real `next` is a URL string. Rewrote it to mirror the app's `canLoadMore` priority (`has_more` → `next` URL non-blank → count/page math → `total_pages` → items-non-empty). **Runtime-verified**: 13/13 cases in a Node harness (`scratchpad/web_history_test.cjs`), incl. the URL-`next` case. RN/android already parsed the URL.
+  - **Web dropped historical follow-up chips.** #32 `questions` are objects `{follow_up_question_id, sequence, question}` but web typed them `string[]` and filtered `typeof q === 'string'` → all discarded. Fixed the type + mapper to read `q.question` (RN/iOS already did). Also fixed web `itemIcon` aliases (`audio/voice/image/statement`) and added list-append dedupe by `conversation_id`.
+  - **Hallucinated wire fields removed (rule §2).** web `ConversationListItem` had `question`/`title`/`created_at`/`[key:string]` and ios `ConversationListItem` had `question`/`title`/`created_at`/`updated_at`; the app model has only `conversation_id, conversation_title, message_type, grouping, created_on, content_provider_*`. Trimmed both; iOS `displayText` no longer prefers a non-existent `question` field (now `conversation_title`). tsc/build caught every downstream reference (Drawer, FarmerChatRoot).
+  - **iOS SwiftUI/UIKit prepend UX.** Fixing pagination exposed a scroll bug (loading older messages jumped to the newest). SwiftUI now scrolls to bottom only on a new **bottom** turn and pins the previously-top message after a prepend (dropped the 800 ms sleep hack); UIKit gained the missing **load-earlier** row (tap → next older page) + offset-preserving prepend.
+  - **Verification**: android-core `:farmerchat-core:compileDebugKotlin` clean; ios `swift build` clean on Core+SwiftUI+UIKit; rn `tsc` clean; web `tsc` + `vite build` clean + the 13/13 list-pagination unit harness. **Web data-layer E2E against the LIVE mock backend (2026-07-30, 13/13, `scratchpad/web_mock_e2e.cjs`)**: drove the real `normalizeConversationList` over actual mock HTTP — #22 page1→more / page2→stop (`has_more:false`) / cross-page dedupe; #32 type-7 `questions` are objects and the fix recovers the chips (with a regression assertion that the old `string[]` filter drops all), page1→`historyNextPage=2`, page2 empty→`null` (load-earlier terminates, no infinite loop). This required fixing the mock itself (`tools/mock-server/server.js`): `conversation_list` now serves two real pages with a URL-string `next` + `has_more` flip, and `conversation_chat_history` now honors `page` (page≥2 → empty `data`) instead of ignoring it and looping forever. Full UI-level browser automation (Playwright driving the rendered React through auth→drawer→history→thread scroll, incl. the guest sign-up-card gating render) was NOT run this pass — gating + rendering stay compile/inspection-verified. iOS thread pagination shares core logic mirrored from android but was not re-run on the sim this pass; UIKit load-earlier is **build-verified only** (no XCUITest tap driver). **NOT faithful-to-app but kept (minor):** SwiftUI/compose/rn/web show a "No chats yet" empty state on the full list that the app lacks (better UX, harmless).
+  - **Phase 2 — guest gating (DONE 2026-07-30, all platforms).** The app hard-gates history behind auth; guests get a "Sign up to save your questions" card. Now mirrored on every surface: android-compose (already correct, reference) + **android-views** (`JourneyController`: recent-chats section + See-all + silent-refresh + on-auth-flip all gated on `isAuthenticated && showHistory`), **ios-swiftui** (`DrawerView` recent section + History row + `openDrawer` silent refresh gated), **ios-uikit** (`DrawerLocationError` recent section + History row gated + the previously-missing on-auth `refresh` added), **react-native** (`DrawerContent` recent section gated + `ChatHistoryScreen` mount refresh auth-guarded), **web** (`Drawer` recent section + History nav gated, `ChatHistoryScreen` mount refresh guarded + guest sign-up card). Guests see the sign-up affordance and cannot reach the ChatHistory screen; **OTP-verified AND HOST_TOKEN users still see history** — HOST_TOKEN counts as authenticated on every platform (android + web both seed `OTP_VERIFIED=true` in their host-token path — web `SessionManager.seedHostToken` — so `isAuthenticated()` was already true for HOST_TOKEN, consistent with the web-34/35 E2E where a host-token session showed "Log out", no "Sign up"; ios `markHostAuthenticated`; rn `accessToken` present). The web change also added a redundant `authMode==='HOST_TOKEN' && accessToken` branch to `isAuthenticated()` as a safety net (harmless — it only widens the true-set for a case the `OTP_VERIFIED` seed already covers; verified no existing caller — Settings, EnterName, drawer, splash, home/location/auth — changes behavior for guest/OTP/HOST_TOKEN personas). Verified: android-views `:farmerchat-android-views:compileDebugKotlin` clean; ios `swift build` clean (SwiftUI+UIKit); rn `tsc` clean; web `tsc` + `vite build` clean. Minor edge (android-views): an authed user with `showHistory=false` sees neither history nor a sign-up card (they're already signed up) — harmless.
 - **ios-core (bug fix, 2026-07-20)**: `ConversationListItem` decoded `title`/`question` but the real API + app model (`ConversationListItem.kt`) field is `conversation_title` — history-list rows and drawer recent-8 titles were blank. Added the `conversation_title` CodingKey (+ non-empty `displayText` fallback). Fixes BOTH ios-swiftui and ios-uikit drawer + ChatHistory titles (screenshot-verified: `ios-uikit-19-drawer.png`, `ios-uikit-17-history.png`). (The web port had the same class of bug, fixed separately — see web debts.)
 - **ios-uikit**: SPM platform floor prevents FarmerChatUIKit (iOS 15) from depending on FarmerChatSwiftUI (iOS 16), so the "host SwiftUI flow via UIHostingController on iOS 16+" option lives in FarmerChatSwiftUI (`present(from:)`) rather than inside FarmerChatUIKit (docs/05 iOS entry).
 - **android (all)**: ✅ above means Kotlin compile + AAR/APK assembly passed (root CLAUDE.md §5 minimum, exceeded — full `assembleDebug` chain verified by the main session on 2026-07-17 after bumping compileSdk/targetSdk 35→36 repo-wide, required by androidx.activity 1.13 / compose BOM 2026.05; matches the production app's compileSdk 36). NOT yet runtime-tested on a device/emulator: no end-to-end API call, MediaRecorder capture, camera/FileProvider flow, fused-location fetch, or share/MediaStore save has been exercised.

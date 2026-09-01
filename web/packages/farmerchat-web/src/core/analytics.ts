@@ -97,24 +97,26 @@ export const Events = {
 } as const;
 
 /** Screen names used in Screen_Viewed / Screen_Exited props. */
+// App parity: `screen_name` values match `AnalyticsScreens.kt` exactly for the
+// screens the app defines; the few not in the app source use its readable style.
 export const Screens = {
-  SPLASH: 'SPLASH',
-  LANGUAGE: 'LANGUAGE',
-  ENTER_NAME: 'ENTER_NAME',
-  HOME: 'HOME',
-  CHAT: 'CHAT',
-  CHAT_HISTORY: 'CHAT_HISTORY',
-  AUTH: 'AUTH',
-  VERIFY_OTP: 'VERIFY_OTP',
-  ACCOUNT_BENEFITS: 'ACCOUNT_BENEFITS',
-  ACCOUNT_SUCCESS: 'ACCOUNT_SUCCESS',
-  SETTINGS: 'SETTINGS',
-  SETTINGS_NAME: 'SETTINGS_NAME',
-  LANGUAGE_CHOOSER: 'LANGUAGE_CHOOSER',
-  HELP: 'HELP',
-  ERROR: 'ERROR',
-  FULL_SCREEN_MESSAGE: 'FULL_SCREEN_MESSAGE',
-  LEGAL_CONTENT: 'LEGAL_CONTENT',
+  SPLASH: 'Splash Screen',
+  LANGUAGE: 'Select Language Screen',
+  ENTER_NAME: 'Enter Name Screen',
+  HOME: 'Dashboard Screen',
+  CHAT: 'Chat Screen',
+  CHAT_HISTORY: 'Recent Chats Screen',
+  AUTH: 'Login Screen',
+  VERIFY_OTP: 'Verify OTP Screen',
+  ACCOUNT_BENEFITS: 'Account Benefit Screen',
+  ACCOUNT_SUCCESS: 'Account Success Screen',
+  SETTINGS: 'Settings Screen',
+  SETTINGS_NAME: 'Settings Name Screen',
+  LANGUAGE_CHOOSER: 'Language Settings Screen',
+  HELP: 'Help & Support Screen',
+  ERROR: 'Error Screen',
+  FULL_SCREEN_MESSAGE: 'Full Screen Message',
+  LEGAL_CONTENT: 'Legal Content',
 } as const;
 
 export class Analytics {
@@ -173,5 +175,9 @@ export class Analytics {
 
   error(code: number | undefined, message: string): void {
     this.safe(this.callbacks.onError, code, message);
+  }
+
+  exit(): void {
+    this.safe(this.callbacks.onExit);
   }
 }

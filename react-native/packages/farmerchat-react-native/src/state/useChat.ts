@@ -362,7 +362,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       const result = await sdk.api.getAnswerForTextQuery({
         query: question,
         conversation_id: conversationId,
-        message_id: makeId('ref'),
+        // App parity: message_id is sent empty (""); the response id is authoritative.
+        message_id: '',
         statement_id: params.statementId ?? null,
         weather_cta_triggered: params.isWeatherAdviceCTA === true,
         triggered_input_type: params.triggeredInputType,
@@ -521,10 +522,14 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       const result = await sdk.api.imageAnalysis({
         conversation_id: conversationId,
         image: params.imageBase64,
+        // App parity (PlantixRequest.kt): triggered_input_type "image",
+        // latitude/longitude sent as STRINGs.
+        triggered_input_type: 'image',
         query: params.question.length > 0 ? params.question : null,
-        lat,
-        lng,
+        latitude: lat != null ? String(lat) : null,
+        longitude: lng != null ? String(lng) : null,
         image_name: `fc-image-${Date.now()}.jpg`,
+        retry: false,
       });
       if (!mounted.current) return;
 
@@ -742,13 +747,20 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         const items =
           result.data.data ?? result.data.messages ?? result.data.results ?? [];
         const { messages: pageMessages, latestFollowUps, clarification } =
-          mapHistoryItems(items);
-        const nextPage = resolveHistoryNextPage(result.data, page);
+          mapHistoryItems(items, page);
+        // The #32 response carries no pagination metadata (only
+        // {conversation_id, data}); the app pages by "did this page return any
+        // items" — page+1 until an empty page comes back. Base this on the RAW
+        // items, not the mapped bubbles: a page can hold only type-7 follow-up
+        // or unknown-type items that map to zero bubbles yet still advance.
+        const nextPage = items.length > 0 ? page + 1 : null;
         mutate((prev) => ({
           ...prev,
           // Pages arrive newest-first; older pages are prepended above the
           // current thread so the scroll position can be restored after prepend.
-          messages: isFirstPage ? pageMessages : [...pageMessages, ...prev.messages],
+          // Hard guard: duplicate ids break React list identity (and hard-crash the equivalent
+          // Compose LazyColumn), so never trust the wire to be unique.
+          messages: dedupeById(isFirstPage ? pageMessages : [...pageMessages, ...prev.messages]),
           suggestedQuestions: isFirstPage ? latestFollowUps : prev.suggestedQuestions,
           clarificationRequired: isFirstPage ? clarification : prev.clarificationRequired,
           isLoading: false,
@@ -824,7 +836,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             question: action.question,
             transcriptionId: action.transcriptionId,
             audioUri: action.audioUri,
-            triggeredInputType: action.audioUri ? 'voice' : 'text',
+            // App parity: weather-CTA / SSFR queries carry their own
+            // triggered_input_type (was always voice/text).
+            triggeredInputType: action.isWeatherAdviceCTA
+              ? 'weather'
+              : action.isSSFR
+                ? 'ssfr'
+                : action.audioUri
+                  ? 'voice'
+                  : 'text',
             isWeatherAdviceCTA: action.isWeatherAdviceCTA,
             isSSFR: action.isSSFR,
             ssfrCrop: action.ssfrCrop,
@@ -849,8 +869,11 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             };
           });
           void sendTextQuery({
+            // App parity: read-full-advice sends triggered_input_type
+            // "read_full_advice" (was "card"). (statement_id + append-not-replace
+            // remain — tracked in docs/04.)
             question: action.question,
-            triggeredInputType: action.triggerInputType ?? 'card',
+            triggeredInputType: 'read_full_advice',
           });
           break;
         case 'SendFollowUpQuestion':
@@ -957,26 +980,21 @@ function extractFollowUps(response: FollowUpQuestionsResponse): {
   return { questions, ids };
 }
 
-function resolveHistoryNextPage(
-  data: { next?: string | number | null; total_pages?: number | null; current_page?: number | null },
-  currentPage: number,
-): number | null {
-  if (data.next !== null && data.next !== undefined) {
-    if (typeof data.next === 'number') return data.next;
-    const match = /[?&]page=(\d+)/.exec(data.next);
-    return match && match[1] ? parseInt(match[1], 10) : currentPage + 1;
-  }
-  if (typeof data.total_pages === 'number' && currentPage < data.total_pages) {
-    return currentPage + 1;
-  }
-  return null;
-}
-
 /**
  * Maps history items (message_type_id: 1=query_text, 2=query_audio,
  * 3=response_text, 7=follow_up_questions, 11=input_image) to ChatMessages.
  */
-function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
+/** Keeps the first occurrence of each message id — a duplicate key crashes the Compose list. */
+function dedupeById<T extends { id: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+}
+
+// A query and its response SHARE one `message_id` (verified live 2026-09-01: a single turn
+// returns type 1, 3 and 7 all carrying the same id). Using it as the React list key collides two
+// rows — app parity (fc-compose ChatViewModel.kt:1027) keys on
+// message_id + message_type_id + page + index. `messageId` keeps the raw API id for TTS/follow-ups.
+function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1): {
   messages: ChatMessage[];
   latestFollowUps: string[] | null;
   clarification: boolean;
@@ -987,11 +1005,12 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
   let lastAiIndex = -1;
 
   items.forEach((item, index) => {
+    const uiId = `${item.message_id ?? makeId('hist')}_${item.message_type_id ?? 'x'}_${page}_${index}`;
     switch (item.message_type_id) {
       case 1: // query_text
         messages.push({
           kind: 'user',
-          id: item.message_id ?? makeId('hist-u') + index,
+          id: uiId,
           text: item.query_text ?? '',
           imageUri: null,
           audioUri: null,
@@ -1002,7 +1021,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 2: // query_audio
         messages.push({
           kind: 'user',
-          id: item.message_id ?? makeId('hist-a') + index,
+          id: uiId,
           text: item.heard_query_text ?? item.query_text ?? '',
           imageUri: null,
           audioUri: item.query_media_file_url ?? null,
@@ -1013,7 +1032,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 11: // input_image
         messages.push({
           kind: 'user',
-          id: item.message_id ?? makeId('hist-i') + index,
+          id: uiId,
           text: item.query_text ?? '',
           imageUri: item.query_media_file_url ?? null,
           audioUri: null,
@@ -1024,7 +1043,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 3: // response_text
         messages.push({
           kind: 'ai',
-          id: item.message_id ?? makeId('hist-r') + index,
+          id: uiId,
           text: item.response_text ?? '',
           followUpQuestions: null,
           isPreGenerated: false,

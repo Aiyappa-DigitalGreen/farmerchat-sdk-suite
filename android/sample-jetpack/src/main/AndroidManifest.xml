@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No permissions or SDK Activity declared here: the FarmerChat SDK ships
+         its own Activity + FileProvider and requests camera/mic/location at use.
+         The host only declares its own launcher Activity + Application. -->
+    <application
+        android:name=".GreenAcresApp"
+        android:allowBackup="true"
+        android:label="GreenAcres"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GreenAcres">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GreenAcres">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Component/inline demo (C1): FarmerChat embedded in a host screen. -->
+        <activity
+            android:name=".InlineActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GreenAcres" />
+    </application>
+
+</manifest>

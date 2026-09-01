@@ -41,7 +41,8 @@ export interface InitializeGuestUserResponse {
   access_token: string;
   refresh_token: string;
   user_id?: string | null;
-  show_crops_livestocks?: boolean | null;
+  /** Wire value is the *string* `"True"`/`"False"`, not a JSON bool. Coerce before testing. */
+  show_crops_livestocks?: boolean | string | null;
   country_code?: string | null;
   country?: string | null;
   state?: string | null;
@@ -254,6 +255,25 @@ export interface UpdateBuildVersionResponse {
 }
 
 // ---------------------------------------------------------------------------
+/**
+ * True for feed sections the SDK deliberately cannot render (third-party host widgets).
+ *
+ * `plotline_widget` sections carry only `type`/`unique_key`/`label` — no headline, image or
+ * statement id (verified live 2026-09-01: 14 of 21 prod sections were these). The app renders
+ * them with Plotline, but root CLAUDE.md §6 forbids Plotline inside SDK packages, so the SDK
+ * drops them rather than rendering blank cards.
+ */
+export function isHostOnlyWidget(section: { type?: string | null }): boolean {
+  return (section.type ?? '').toLowerCase() === 'plotline_widget';
+}
+
+/** Feed sections with host-unrenderable widgets removed. Use for rendering AND analytics. */
+export function renderableSections<T extends { type?: string | null }>(
+  sections: T[] | null | undefined,
+): T[] {
+  return (sections ?? []).filter((s) => !isHostOnlyWidget(s));
+}
+
 // #11 update_user_location
 // ---------------------------------------------------------------------------
 
@@ -357,8 +377,9 @@ export interface WeatherRequest {
 }
 
 export interface WeatherResponse {
-  current_temp?: number | null;
-  precipitation_probability?: number | null;
+  // App parity (WeatherResponse.kt): Strings, rendered verbatim (was number).
+  current_temp?: string | null;
+  precipitation_probability?: string | null;
   weather_icon?: string | null;
   message?: string | null;
 }
@@ -576,13 +597,23 @@ export interface FaqItem {
   id?: number | null;
   question?: string | null;
   title?: string | null;
-  url?: string | null;
+  // App parity (HelpSupportResponse.kt): FAQ link is `webview-url` (alt `webview_url`),
+  // not a flat `url`; `open-mode` controls presentation.
+  'webview-url'?: string | null;
+  webview_url?: string | null;
+  'open-mode'?: string | null;
   lang?: string | null;
 }
 
+export interface HelpLegalLink {
+  'webview-url'?: string | null;
+  webview_url?: string | null;
+}
+
 export interface HelpLegal {
-  terms_of_use?: string | null;
-  privacy_policy?: string | null;
+  // App parity: nested `terms-of-use` / `privacy-policy` objects, each with a webview-url.
+  'terms-of-use'?: HelpLegalLink | null;
+  'privacy-policy'?: HelpLegalLink | null;
 }
 
 export interface HelpSupportData {
@@ -621,7 +652,11 @@ export interface ImageStatementRequest {
 
 export interface ImageStatementResponse {
   short_answer?: string | null;
-  follow_up_questions?: string[] | null;
+  // App parity: #26 sends follow-up OBJECTS {follow_up_question_id, sequence, question};
+  // a bare string is tolerated. (Was `string[]`, which rendered [object Object].)
+  follow_up_questions?:
+    | Array<string | { follow_up_question_id?: string | null; sequence?: number | null; question?: string | null }>
+    | null;
   message_id?: string | null;
   conversation_id?: string | null;
   message?: string | null;
@@ -683,10 +718,15 @@ export interface PlantixRequest {
   conversation_id: string;
   /** base64 image */
   image: string;
+  /** App parity: defaults to "image" on the image path. */
+  triggered_input_type?: string;
   query?: string | null;
-  lat?: number | null;
-  lng?: number | null;
+  /** App `PlantixRequest.kt` sends latitude/longitude as STRINGs (not lat/lng numbers). */
+  latitude?: string | null;
+  longitude?: string | null;
   image_name: string;
+  /** True only when the user retries a failed image query. */
+  retry?: boolean;
 }
 
 export interface PlantixResponse {

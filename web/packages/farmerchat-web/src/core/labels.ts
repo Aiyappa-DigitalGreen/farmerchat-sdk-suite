@@ -35,7 +35,9 @@ export class LabelManager {
   }
 
   get languageCode(): string {
-    return this.langCode;
+    // App parity (LabelManager.kt): normalize before building `${key}_${lang}`.
+    const normalized = (this.langCode ?? '').trim().toLowerCase();
+    return normalized === '' ? 'en' : normalized;
   }
 
   setLanguageCode(code: string): void {

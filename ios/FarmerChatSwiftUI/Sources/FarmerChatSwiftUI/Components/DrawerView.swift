@@ -41,6 +41,10 @@ public struct FCDrawerView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         drawerRow(icon: "house.fill", title: fcLabel("drawer_home", "Home"), route: "home")
 
+                        // Recent-chats section: authenticated (OTP or HOST_TOKEN)
+                        // AND showHistory only — guests see the sign-up card
+                        // instead (parity with android-compose DrawerContent).
+                        if isAuthenticated && FarmerChat.shared.config.showHistory {
                         // Recent questions (max 8)
                         Text(fcLabel("drawer_recent", "Recent chats"))
                             .font(.system(size: 13, weight: .semibold))
@@ -96,18 +100,24 @@ public struct FCDrawerView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        } // end auth-gated recent-chats section
 
                         Divider().padding(.vertical, 8)
 
-                        // C3 toggles: hide History / Settings rows when disabled.
-                        if FarmerChat.shared.config.showHistory {
-                            drawerRow(icon: "clock.arrow.circlepath", title: fcLabel("drawer_history", "Recent Chats"), route: "chatHistory")
-                        }
+                        // History row: authenticated (OTP or HOST_TOKEN) AND
+                        // showHistory only. C3 showHistory toggle plus the auth
+                        // gate keeps guests out of ChatHistory via the drawer.
+                        // Order matches the app (components/drawer/DrawerContent.kt) and the
+                        // Android SDK: Language -> Settings -> Help, then the history row.
                         drawerRow(icon: "globe", title: currentLanguage.isEmpty ? fcLabel("drawer_language", "Language") : currentLanguage, route: "settings/language")
                         if FarmerChat.shared.config.showSettings {
                             drawerRow(icon: "gearshape.fill", title: fcLabel("drawer_settings", "Settings"), route: "settings")
                         }
                         drawerRow(icon: "questionmark.circle.fill", title: fcLabel("drawer_help", "Help"), route: "help")
+                        // History row: authenticated (OTP or HOST_TOKEN) AND showHistory only.
+                        if isAuthenticated && FarmerChat.shared.config.showHistory {
+                            drawerRow(icon: "clock.arrow.circlepath", title: fcLabel("drawer_history", "Recent Chats"), route: "chatHistory")
+                        }
                     }
                     .padding(.bottom, 20)
                 }

@@ -95,7 +95,15 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
           <Text style={[typography.titleLarge, { color: c.foregroundPrimary }]}>FarmerChat</Text>
         </View>
 
+        {/* Order matches the app (components/drawer/DrawerContent.kt) and the Android SDK:
+            Home -> Language -> Settings -> Help. */}
         <NavItem icon="home" text={label('drawer_home', 'Home')} route="home" activeMatch="Home" />
+        <NavItem
+          icon="language"
+          text={label('drawer_language', 'Language')}
+          route="settings/language"
+          activeMatch="SettingsLanguage"
+        />
         {showSettings ? (
           <NavItem
             icon="settings"
@@ -104,15 +112,9 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
             activeMatch="Settings"
           />
         ) : null}
-        <NavItem
-          icon="language"
-          text={label('drawer_language', 'Language')}
-          route="settings/language"
-          activeMatch="SettingsLanguage"
-        />
         <NavItem icon="help" text={label('drawer_help', 'Help')} route="help" activeMatch="Help" />
 
-        {showHistory ? (
+        {props.isAuthenticated && showHistory ? (
           <>
             <View style={[styles.divider, { backgroundColor: theme.divider }]} />
 

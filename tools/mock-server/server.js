@@ -682,51 +682,94 @@ function followUpQuestions() {
 
 function conversationList(page) {
   const p = page || 1;
+  // Two real pages so the SDK's list pagination is exercised end-to-end.
+  // `next` is a URL STRING (as the real backend sends it, NOT a numeric
+  // next_page) and `has_more` flips false on the last page.
+  const page1 = [
+    {
+      conversation_id: 'conv-001',
+      conversation_title: 'How do I protect my maize from armyworm?',
+      created_on: nowIso(),
+      message_type: 'query_text',
+      grouping: 'Today',
+      content_provider_logo: null,
+      content_provider_id: null,
+      content_provider_name: null,
+    },
+    {
+      conversation_id: 'conv-002',
+      conversation_title: 'Best fertilizer schedule for wheat',
+      created_on: new Date(Date.now() - 86400000).toISOString(),
+      message_type: 'query_text',
+      grouping: 'Yesterday',
+      content_provider_logo: null,
+      content_provider_id: null,
+      content_provider_name: null,
+    },
+    {
+      conversation_id: 'conv-003',
+      conversation_title: 'Why are my tomato leaves curling?',
+      created_on: new Date(Date.now() - 5 * 86400000).toISOString(),
+      message_type: 'query_audio',
+      grouping: 'This week',
+      content_provider_logo: null,
+      content_provider_id: null,
+      content_provider_name: null,
+    },
+  ];
+  const page2 = [
+    {
+      conversation_id: 'conv-004',
+      conversation_title: 'When should I sow mustard?',
+      created_on: new Date(Date.now() - 8 * 86400000).toISOString(),
+      message_type: 'query_text',
+      grouping: 'This week',
+      content_provider_logo: null,
+      content_provider_id: null,
+      content_provider_name: null,
+    },
+    {
+      conversation_id: 'conv-005',
+      conversation_title: 'Organic pest control options',
+      created_on: new Date(Date.now() - 20 * 86400000).toISOString(),
+      message_type: 'card',
+      grouping: 'Earlier',
+      content_provider_logo: null,
+      content_provider_id: null,
+      content_provider_name: null,
+    },
+  ];
+  if (p >= 2) {
+    return {
+      results: page2,
+      count: 5,
+      next: null,
+      previous: `${PUBLIC_BASE}/api/chat/conversation_list/?page=1`,
+      page: p,
+      page_size: 3,
+      total_pages: 2,
+      has_more: false,
+    };
+  }
   return {
-    results: [
-      {
-        conversation_id: 'conv-001',
-        conversation_title: 'How do I protect my maize from armyworm?',
-        created_on: nowIso(),
-        message_type: 'query_text',
-        grouping: 'Today',
-        content_provider_logo: null,
-        content_provider_id: null,
-        content_provider_name: null,
-      },
-      {
-        conversation_id: 'conv-002',
-        conversation_title: 'Best fertilizer schedule for wheat',
-        created_on: new Date(Date.now() - 86400000).toISOString(),
-        message_type: 'query_text',
-        grouping: 'Yesterday',
-        content_provider_logo: null,
-        content_provider_id: null,
-        content_provider_name: null,
-      },
-      {
-        conversation_id: 'conv-003',
-        conversation_title: 'Why are my tomato leaves curling?',
-        created_on: new Date(Date.now() - 5 * 86400000).toISOString(),
-        message_type: 'query_audio',
-        grouping: 'This week',
-        content_provider_logo: null,
-        content_provider_id: null,
-        content_provider_name: null,
-      },
-    ],
-    count: 3,
-    next: null,
+    results: page1,
+    count: 5,
+    next: `${PUBLIC_BASE}/api/chat/conversation_list/?page=2`,
     previous: null,
-    page: p,
-    page_size: 20,
-    total_pages: 1,
-    has_more: false,
+    page: 1,
+    page_size: 3,
+    total_pages: 2,
+    has_more: true,
   };
 }
 
-function conversationChatHistory(conversationId) {
+function conversationChatHistory(conversationId, page) {
   const cid = conversationId || 'conv-001';
+  // The #32 response carries no pagination metadata; the SDK pages by "did this
+  // page return items". Page 1 has the thread; later pages are empty so
+  // load-earlier terminates (matches the real backend, not the old always-full
+  // behavior that would loop forever).
+  if ((page || 1) > 1) return { conversation_id: cid, data: [] };
   return {
     conversation_id: cid,
     data: [
@@ -1168,7 +1211,7 @@ const routes = {
     section_message_id: uuid(),
   }),
   'GET /api/chat/conversation_chat_history/': (ctx) =>
-    conversationChatHistory(ctx.query.conversation_id),
+    conversationChatHistory(ctx.query.conversation_id, Number(ctx.query.page) || 1),
   'POST /api/chat/add_query_to_history/': () => ({
     message: {
       id: uuid(),

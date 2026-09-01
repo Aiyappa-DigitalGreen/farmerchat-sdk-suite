@@ -323,10 +323,12 @@ export function ChatScreen(props: { params: ChatRouteParams; onClose: () => void
         </button>
       ) : null}
 
-      {/* Follow-up input bar */}
-      <div className="fcsdk-chat-inputbar">
-        <PrimaryInputButtons onSelect={setOverlay} enableVoice={services.config.enableVoice} enableImages={services.config.enableImages} />
-      </div>
+      {/* Follow-up input bar — hidden while an input overlay (composer/voice/photo) is open. */}
+      {overlay === null ? (
+        <div className="fcsdk-chat-inputbar">
+          <PrimaryInputButtons onSelect={setOverlay} enableVoice={services.config.enableVoice} enableImages={services.config.enableImages} />
+        </div>
+      ) : null}
 
       {overlay === 'type' ? (
         <TextInputOverlay

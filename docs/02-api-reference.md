@@ -20,6 +20,11 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 |---|--------|------|---------|--------|--------------------|
 | 1 | POST | `api/user/initialize_user/` | Guest init (issues tokens) | Header `API-Key` | `InitializeGuestUserRequest` → `InitializeGuestUserResponse` |
 | 2 | GET | `api/language/v2/country_wise_supported_languages/` | Language list | `country_code`, `state`, `priority_view=true` | → `List<SupportedLanguageGroup>` |
+
+**Endpoint #2 param semantics (verified live 2026-09-01 on all five envs):**
+- `country_code` is **required and must be non-blank**. `?country_code=` → HTTP **400** `{"error": "Country code is required"}`; `?country_code=null` → HTTP 400 `{"error": "Country 'NULL' not found"}`. 400 is non-retryable per the retry table, so a blank value fails the screen silently.
+- `state` is a **ranking hint matched on the state display name, not the ISO code**, and never filters the set. For `country_code=IN` all of `KA`, `Karnataka`, `MH`, `Maharashtra`, `""` and `ZZZZ` return the same five languages — but the priority/expanded split differs: `state=Karnataka` → `priority_view=[Kannada, English (India), Hindi]`, whereas `state=KA` (a code) → `priority_view=[Hindi, English (India)]` with Kannada demoted to `expanded_view`. Pass the state **name** as returned by `initialize_user.state`, never a code.
+  - *Naming caveat*: the Android preference key is `USER_SELECTED_STATE_CODE` but it stores `initialize_user.state`, i.e. a name (iOS/web use `USER_STATE`). The key name is misleading; the stored shape is correct. Not renamed — it is a persisted key and would need a migration.
 | 3 | GET | `api/language/v2/get_labels/` | Server-driven UI labels | `language`(Int) | → `Map<String,String>` |
 | 4 | GET | `api/user/privacy_policy/` | Legal links | — | → `PrivacyPolicyResponse` |
 | 5 | GET | `api/geography/get_all_countries/` | Country list | — | → `List<CountryItem>` |
@@ -30,6 +35,13 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 | 10 | PATCH | `api/user/v2/update_build_version/` | Report build version | — | `UpdateBuildVersionRequest(user_id)` → resp |
 | 11 | POST | `api/user/update_user_location/` | Save GPS location | — | `UpdateLocationRequest` → `GetLocationResponse` |
 | 12 | GET | `api/images/v2/daily/` | Home feed sections | `user_device_time`, `user_id?` | → `HomeUdfResponse` (204 → empty) |
+
+**Endpoint #12 behaviour (verified live 2026-09-01, prod):**
+- The response **omits the `greeting` key entirely** when the feed is empty. UI that keys a loading skeleton off `greeting == null` will shimmer forever on a loaded-but-empty feed.
+- The feed is **gated on the user having a resolved location**. A guest with `country_code: null` gets HTTP **200** with `{"sections": [], "ssfr_enable": false}` and **no `greeting` key** — an empty feed, not an error. Once location resolves, the same call returns 21 sections plus `greeting`.
+- Location resolves via **either** path: passing `lat`/`long` to `initialize_user` (#1), **or** a later `update_user_location` (#11). The backend reverse-geocodes from coordinates alone — `{lat, long, user_id}` with no `country`/`level_2` is sufficient and returns a fully populated `user_profile`.
+- `user_device_time` is `HH:mm` (app: `SimpleDateFormat("HH:mm")`). Verified non-load-bearing: `HH:mm`, a full datetime, and any value all return the same feed. It does not gate content.
+- **`section.type` values seen in prod**: `image` (3), `plotline_widget` (14), `statement` (2), `question` (2). `plotline_widget` sections contain **only** `type`, `unique_key`, `label` — no `title`, `question_text`, `image_url` or `statement_id`. The app renders them via `PlotlineComposeWidget` (`ui/home/HomeScreen.kt:1091`) and excludes them from card analytics (`:792`). Root CLAUDE.md §6 forbids Plotline in SDK packages, so **the SDK must filter these out** — a catch-all render branch turns them into blank cards.
 | 13 | POST | `api/weather/v2/weather_forecast_lite/` | Weather chip | — | `{user_id}` → `WeatherResponse(current_temp, precipitation_probability, weather_icon)` |
 | 14 | POST | `api/user/update_crop_details/` | Save crops | — | `SetCultivatedCropsRequest(user_id, crop_details[])` → `CropResponse(message)` |
 | 15 | POST | `api/chat/new_conversation/` | New conversation | — | `NewConversationRequest(user_id, content_provider_id?)` → `NewConversationResponse(conversation_id, message, show_popup)` |
@@ -50,6 +62,10 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 | 30 | POST | `api/chat/follow_up_question_click/` | Track follow-up click | — | `{follow_up_question}` → `{message?}` |
 | 31 | POST | `api/chat/synthesise_audio/` | Server TTS | — | `SynthesiseAudioRequest(message_id, text, user_id)` → `SynthesiseAudioResponse(audio:url)` |
 | 32 | GET | `api/chat/conversation_chat_history/` | Thread history | `conversation_id`, `page` | → `ConversationChatHistoryResponse` |
+
+**Endpoint #32 behaviour (verified live 2026-09-01, prod):**
+- **A query and its response SHARE one `message_id`.** One turn returns three items — `message_type_id` 1 (query_text), 3 (response_text) and 7 (follow_up_questions) — all with the *same* `message_id`. `message_id` is therefore a **turn id, not a message id**: it is NOT unique per rendered bubble and must never be used alone as a list key. Compose throws `IllegalArgumentException: Key "…" was already used`; React corrupts list identity silently. Key on `message_id + message_type_id + page + index` (app: `fc-compose ChatViewModel.kt:1027`).
+- Out-of-range pages return HTTP **200** with `{"data": []}` (verified pages 2, 3 and 99 on a one-turn conversation), so `items.isNotEmpty() → page + 1` terminates correctly. The response carries no pagination metadata.
 | 33 | POST | `api/chat/add_query_to_history/` | MoEngage qapair insert | — | `followUpQuestionsRequestMoengage` → resp |
 | 34 | GET | `api/images/v2/user_question_count/` | Question count | — | → `UserQuestionCountResponse(total_questions_asked, bypass_interstitial)` |
 
@@ -63,6 +79,8 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 - **TextPromptResponse**: `error, message?, message_id?, query?, response?, resource_url?, translated_response?, follow_up_questions?(always null — fetched via #29), section_message_id?, actual_content_provider?, content_provider_logo?, hide_feedback_icons?, hide_follow_up_question?, hide_share_icon?, hide_tts_speaker?, hide_source?, points?, intent_classification_output{clarification_needed, concern, confidence, intent, rephrased_query, …}`.
 - **ConversationChatHistoryMessageItem**: `message_type_id` (1=query_text, 2=query_audio, 3=response_text, 7=follow_up_questions, 11=input_image), `message_type, message_id, message_input_time?, section_message_id?, query_text?, heard_query_text?, response_text?, questions[]?, query_media_file_url?, reaction?, response_media_file_url?, resource_id?, resource_url?, actual_content_provider?, content_provider_logo?, hide_source?, hide_tts_speaker?, clarification_required?`.
 - **InitializeGuestUserRequest**: `device_id, lat?, long?, accuracy?, utm_source?, utm_medium?, utm_campaign?, moengage_id?, google_advertise_id?`. **Response**: `access_token, refresh_token, user_id?, show_crops_livestocks, country_code?, country?, state?, dashboard?, created_now?, ip_location_fallback_time_limit, …`.
+  - **Verified live 2026-09-01 (prod)**: `show_crops_livestocks` is returned as the *string* `"True"`/`"False"`, not a JSON boolean. Gson coerces it on Android and iOS uses `@FlexibleBool`; TS wire types are declared `boolean | string | null`.
+  - **Verified live 2026-09-01 (prod)**: a fresh guest gets `country_code: null` / `state: null` when the backend cannot resolve the IP. Endpoint #2 rejects a blank `country_code` with **HTTP 400** `{"error": "Country code is required"}` (and `country_code=null` with `Country 'NULL' not found`), so callers MUST substitute a non-blank fallback — see `FarmerChatConfig.defaultCountryCode` / `defaultStateCode`.
 - **VerifyOtpResponse.preferred_language** (`PreferredLanguage`): `asr_bcp_code, asr_enabled, tts_bcp_code, tts_enabled, tts_voice_name, code, display_name, id, primary_speaking_countries, …`.
 - **SupportedLanguageGroup**: `display_name, flag, priority_view[], expanded_view[]`; `SupportedLanguage(id, name, code, bcpCode, latnCode, display_name, flag?, ttsVoiceName, asr_enabled, tts_enabled, country_phone_code)`.
 - **HomeUdfResponse**: `greeting?, sections:[SectionDto], ssfr_enable?`. `SectionDto(type?, id, image_url?, title?, question_text?, statement_id, badge{icon,count,show}?, cta{text,action}?, statement?, selection_type?, options[{id,text}]?, statement_type?, is_viewed?, meta{…}?, unique_key?/label?)`.

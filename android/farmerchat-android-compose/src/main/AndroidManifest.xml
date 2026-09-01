@@ -24,7 +24,7 @@
             tools:ignore="LockedOrientationActivity" />
 
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name="org.digitalgreen.farmerchat.sdk.compose.FarmerChatFileProvider"
             android:authorities="${applicationId}.fc_sdk_fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">

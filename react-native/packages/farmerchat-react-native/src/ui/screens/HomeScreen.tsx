@@ -50,6 +50,7 @@ import {
 import type { ChatRouteParams } from '../navigation/types';
 import { spacing, typography } from '../theme';
 import { Text } from 'react-native';
+import { renderableSections } from '../../core/types';
 
 type FeedRow =
   | { rowType: 'greeting' }
@@ -153,9 +154,17 @@ export function HomeScreen(props: {
       onAction({ type: 'ConsumeResult' });
       props.onNavigateToChat({
         source: 'home',
-        question: section.title ?? section.question_text ?? '',
+        // App parity: question_text first, then title.
+        question: section.question_text ?? section.title ?? '',
         preGeneratedAnswer: s.data.short_answer ?? undefined,
-        follow_up_questions: s.data.follow_up_questions ?? undefined,
+        // App parity: #26 follow-ups are objects — sort by sequence, map to strings.
+        follow_up_questions: (s.data.follow_up_questions ?? [])
+          .slice()
+          .sort((a, b) =>
+            typeof a === 'object' && a && typeof b === 'object' && b ? (a.sequence ?? 0) - (b.sequence ?? 0) : 0,
+          )
+          .map((q) => (typeof q === 'string' ? q : q?.question ?? ''))
+          .filter((q) => q.length > 0),
         homeStatementId: s.data.message_id ?? String(section.statement_id ?? ''),
         imageUri: section.image_url ?? undefined,
       });
@@ -252,9 +261,8 @@ export function HomeScreen(props: {
     const out: FeedRow[] = [{ rowType: 'greeting' }, { rowType: 'inputs' }];
     if (sdk.config.enableSsfr && feed?.ssfr_enable === true) out.push({ rowType: 'ssfr' });
     out.push({ rowType: 'feedHeader' });
-    for (const section of feed?.sections ?? []) {
+    for (const section of renderableSections(feed?.sections)) {
       if (state.dismissedCardIds.has(section.id)) continue;
-      if ((section.type ?? '').includes('plotline')) continue; // campaign surfaces omitted (docs/03)
       out.push({ rowType: 'section', section });
     }
     out.push({ rowType: 'footer' });
@@ -355,7 +363,9 @@ export function HomeScreen(props: {
             onAction({
               type: 'FetchImageStatement',
               statementId: section.statement_id,
-              triggeredInputType: 'card',
+              // App parity (HomeScreen.kt:580-584): image_card / text_card by section type.
+              triggeredInputType:
+                section.type === 'image' ? 'image_card' : section.type === 'statement' ? 'text_card' : 'card',
             });
           } else {
             props.onNavigateToChat({
@@ -373,16 +383,25 @@ export function HomeScreen(props: {
       case 'greeting':
         return (
           <View style={styles.greeting}>
-            {feed && feed.greeting ? (
+            {feed ? (
+              // The feed has loaded: show its greeting, or the label the app uses.
+              // `greeting` is ABSENT from the response whenever the feed is empty (no resolved
+              // location), so keying the skeleton off it alone shimmers forever. App parity:
+              // fc-compose HomeScreen.kt:892 reads this label and never renders the API greeting.
               <Text
                 style={[
                   typography.displaySmall,
                   { color: theme.brand.foregroundPrimary, textAlign: 'center' },
                 ]}
               >
-                {feed.greeting}
+                {feed.greeting?.trim() ||
+                  label(
+                    Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                    'Ask by Voice, Photo or Text',
+                  )}
               </Text>
             ) : (
+              // Still loading — skeleton is correct here.
               <View style={{ alignItems: 'center', gap: spacing.sm }}>
                 <SkeletonBlock width="70%" height={28} color="rgba(255,255,255,0.18)" />
                 <SkeletonBlock width="45%" height={28} color="rgba(255,255,255,0.18)" />
@@ -467,10 +486,8 @@ export function HomeScreen(props: {
   const weather = state.weatherState.kind === 'success' ? state.weatherState.data : null;
   const weatherLoading = state.weatherState.kind === 'loading';
   const isWidgetGpsLoading = props.locationPrompt.state.kind === 'FetchingLocation';
-  const weatherText =
-    weather?.current_temp !== null && weather?.current_temp !== undefined
-      ? `${Math.round(weather.current_temp)}°`
-      : '';
+  // App parity: current_temp is a String, rendered verbatim (was Math.round of a number).
+  const weatherText = weather?.current_temp ? `${weather.current_temp}°` : '';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.brand.surfacePrimary }]}>

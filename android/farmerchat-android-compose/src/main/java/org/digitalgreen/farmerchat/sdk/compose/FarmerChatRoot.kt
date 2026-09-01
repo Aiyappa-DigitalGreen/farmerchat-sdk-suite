@@ -52,6 +52,7 @@ import org.digitalgreen.farmerchat.sdk.compose.screens.SplashScreen
 import org.digitalgreen.farmerchat.sdk.compose.util.isNetworkAvailable
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
+import android.app.Activity
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget
@@ -109,12 +110,26 @@ fun FarmerChatRoot(
 
     fun navigateFromSplash() {
         // C3: CHAT_ONLY skips onboarding/home and lands directly in a fresh chat.
+        // Onboarding is normally where the guest session is established, so in
+        // CHAT_ONLY we must guest-init here (idempotent) before entering chat —
+        // otherwise the first authed call 401s ("Authorization credentials were
+        // not provided"). Best-effort: navigate even if init fails (chat shows
+        // its own retry); the splash stays up until this completes.
         if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
             graph.routeDecider.peekPendingTarget() == null
         ) {
-            navigateClearingStack(Destination.Chat(source = "chat_only"))
+            scope.launch {
+                // Guest session + conversation bootstrap (shared with android-views).
+                graph.ensureChatOnlySession()
+                navigateClearingStack(Destination.Chat(source = "chat_only"))
+            }
             return
         }
+        // If the language SCREEN was skipped (config.locale), run its API work headlessly
+        // before routing so Home opens with real server labels instead of English fallbacks.
+        // No-ops once labels exist, so a returning user routes immediately.
+        scope.launch {
+        graph.ensureSkippedOnboardingBootstrap()
         when (val route = graph.routeDecider.routeFromSplash()) {
             is SplashRoute.Language -> navigateClearingStack(Destination.Language)
             is SplashRoute.Screen -> {
@@ -152,6 +167,7 @@ fun FarmerChatRoot(
                     else -> navigateClearingStack(Destination.Home)
                 }
             }
+        }
         }
     }
 
@@ -385,9 +401,15 @@ fun FarmerChatRoot(
                         args = args,
                         openDrawer = openDrawer,
                         onClose = {
-                            navController.navigate(Destination.Home) {
-                                popUpTo<Destination.Home> { inclusive = false }
-                                launchSingleTop = true
+                            // CHAT_ONLY has no SDK Home to return to — close should exit
+                            // the SDK and hand control back to the host app.
+                            if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
+                                (context as? Activity)?.finish()
+                            } else {
+                                navController.navigate(Destination.Home) {
+                                    popUpTo<Destination.Home> { inclusive = false }
+                                    launchSingleTop = true
+                                }
                             }
                         }
                     )

@@ -69,11 +69,13 @@ export function HelpScreen(props: {
                 icon="help"
                 label={faq.question ?? faq.title ?? ''}
                 onPress={() => {
-                  if (!faq.url) return;
+                  // App parity: the FAQ link is `webview-url` (alt `webview_url`).
+                  const faqUrl = faq['webview-url'] ?? faq.webview_url;
+                  if (!faqUrl) return;
                   sdk.analytics.track(AnalyticsEvents.FAQ_CLICKED, {
                     question: faq.question ?? faq.title ?? '',
                   });
-                  props.onOpenUrl(faq.url, label('legal_faq', 'FAQ'));
+                  props.onOpenUrl(faqUrl, label('legal_faq', 'FAQ'));
                 }}
               />
             ))
@@ -85,7 +87,11 @@ export function HelpScreen(props: {
             icon="card"
             label={label('legal_terms', 'Terms of use')}
             onPress={() => {
-              const url = legal?.terms_of_use ?? 'https://digitalgreen.org/terms-of-use/';
+              // App parity: nested terms-of-use object with its own webview-url.
+              const url =
+                legal?.['terms-of-use']?.['webview-url'] ??
+                legal?.['terms-of-use']?.webview_url ??
+                'https://digitalgreen.org/terms-of-use/';
               props.onOpenUrl(url, label('legal_terms', 'Terms of use'));
             }}
           />
@@ -93,7 +99,10 @@ export function HelpScreen(props: {
             icon="info"
             label={label('legal_privacy', 'Privacy policy')}
             onPress={() => {
-              const url = legal?.privacy_policy ?? 'https://digitalgreen.org/privacy-policy/';
+              const url =
+                legal?.['privacy-policy']?.['webview-url'] ??
+                legal?.['privacy-policy']?.webview_url ??
+                'https://digitalgreen.org/privacy-policy/';
               props.onOpenUrl(url, label('legal_privacy', 'Privacy policy'));
             }}
           />

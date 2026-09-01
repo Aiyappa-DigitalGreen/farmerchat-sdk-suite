@@ -233,24 +233,35 @@ public struct PlantixRequest: Codable, Sendable {
     public var conversationId: String
     /// Base64-encoded image bytes.
     public var image: String
+    /// App parity: defaults to "image" on the image path.
+    public var triggeredInputType: String
     public var query: String?
-    public var lat: Double?
-    public var lng: Double?
+    /// App `PlantixRequest.kt` sends latitude/longitude as STRINGs (not lat/lng numbers).
+    public var latitude: String?
+    public var longitude: String?
     public var imageName: String
+    /// True only when the user retries a failed image query.
+    public var retry: Bool
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
-        case image, query, lat, lng
+        case image
+        case triggeredInputType = "triggered_input_type"
+        case query
+        case latitude, longitude
         case imageName = "image_name"
+        case retry
     }
 
-    public init(conversationId: String, image: String, query: String? = nil, lat: Double? = nil, lng: Double? = nil, imageName: String) {
+    public init(conversationId: String, image: String, triggeredInputType: String = "image", query: String? = nil, latitude: String? = nil, longitude: String? = nil, imageName: String, retry: Bool = false) {
         self.conversationId = conversationId
         self.image = image
+        self.triggeredInputType = triggeredInputType
         self.query = query
-        self.lat = lat
-        self.lng = lng
+        self.latitude = latitude
+        self.longitude = longitude
         self.imageName = imageName
+        self.retry = retry
     }
 }
 
@@ -339,28 +350,25 @@ public struct ConversationListItem: Codable, Sendable, Identifiable {
     @LossyOptional public var conversationId: FlexibleID?
     /// Real API field (`conversation_title`, per app `ConversationListItem.kt`).
     public var conversationTitle: String?
-    public var title: String?
-    public var question: String?
     public var messageType: String?
     public var grouping: String?
-    public var createdAt: String?
-    public var updatedAt: String?
+    public var createdOn: String?
 
     enum CodingKeys: String, CodingKey {
         case conversationId = "conversation_id"
         case conversationTitle = "conversation_title"
-        case title, question
         case messageType = "message_type"
         case grouping
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
+        case createdOn = "created_on"
     }
 
-    public var id: String { conversationId?.stringValue ?? (conversationTitle ?? title ?? UUID().uuidString) }
+    public var id: String { conversationId?.stringValue ?? (conversationTitle ?? UUID().uuidString) }
 
+    /// The app displays `conversation_title` (falling back to a "New
+    /// conversation" label in the UI layer). It never keys off a `question`
+    /// field — that field does not exist on this model in the app source.
     public var displayText: String {
-        let candidate = question ?? conversationTitle ?? title
-        if let candidate, !candidate.isEmpty { return candidate }
+        if let title = conversationTitle, !title.isEmpty { return title }
         return ""
     }
 }

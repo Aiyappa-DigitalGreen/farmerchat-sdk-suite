@@ -67,6 +67,7 @@ public final class OnboardingViewModel: ObservableObject {
     private var api: FarmerChatAPI { env.api }
     private var prefs: PreferenceStore { env.prefs }
     private var labels: LabelManager { env.labels }
+    private var config: FarmerChatConfig { env.config }
     private var selectDebounce: Task<Void, Never>?
 
     public init(env: FarmerChat = .shared) {
@@ -136,8 +137,22 @@ public final class OnboardingViewModel: ObservableObject {
         state.guestInitState = UiState.from(initResult, fallbackMessage: labels.label("error_generic", fallback: "Something went wrong. Please try again."))
         switch initResult {
         case .success(let response):
-            let countryCode = response.countryCode ?? prefs.string(.userCountryCode) ?? ""
-            let regionState = response.state ?? prefs.string(.userState) ?? ""
+            // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an unresolvable
+            // IP comes back with country_code == nil. Fall through to the persisted value,
+            // then to the host-configured default, never to "".
+            let countryCode = response.countryCode?.nonBlank
+                ?? prefs.string(.userCountryCode)?.nonBlank
+                ?? config.defaultCountryCode
+            let regionState = response.state?.nonBlank
+                ?? prefs.string(.userState)?.nonBlank
+                ?? config.defaultStateCode
+            // GUEST HOME FIX: endpoint #12 returns an EMPTY feed until the backend has a
+            // resolved location, and it resolves one ONLY from coordinates (a country name alone
+            // is rejected). A guest the backend cannot place by IP, who never reaches the GPS
+            // prompt, would otherwise land on a permanently blank home screen.
+            if (response.countryCode?.nonBlank) == nil {
+                await seedDefaultLocation()
+            }
             await fetchSupportedLanguages(countryCode: countryCode, state: regionState)
         case .error(let error):
             // App parity: guest-init failure routes to the error screen.
@@ -154,6 +169,33 @@ public final class OnboardingViewModel: ObservableObject {
         if case .success(let geo) = result, let location = geo.location {
             prefs.setDouble(location.lat, .latitude)
             prefs.setDouble(location.lng, .longitude)
+        }
+    }
+
+    /// Posts the configured default coordinates to endpoint #11 so a guest with no resolvable
+    /// location still gets a home feed. Best-effort — a failure just leaves the feed empty,
+    /// which is the pre-existing behaviour, so it never blocks onboarding.
+    private func seedDefaultLocation() async {
+        guard let userId = env.session.userId else { return }
+        let result = await api.updateUserLocation(
+            UpdateLocationRequest(
+                userId: userId,
+                lat: config.defaultLatitude,
+                long: config.defaultLongitude
+            )
+        )
+        // NOTE: the live #11 response nests everything under `user_profile`, which
+        // `GetLocationResponse` does not model (it exposes only the flat `country`/`state`
+        // fields). Persisting is best-effort — what actually matters here is that the CALL
+        // sets the location server-side, which is what unblocks the #12 feed. Tracked in
+        // docs/04 as a model gap.
+        if case .success(let response) = result {
+            if let code = response.country?.nonBlank {
+                prefs.setString(code, .userCountryCode)
+            }
+            if let state = response.state?.nonBlank {
+                prefs.setString(state, .userState)
+            }
         }
     }
 

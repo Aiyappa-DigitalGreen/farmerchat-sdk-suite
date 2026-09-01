@@ -36,7 +36,8 @@ export interface InitializeGuestUserResponse {
   access_token: string;
   refresh_token: string;
   user_id?: string | null;
-  show_crops_livestocks?: boolean | null;
+  /** Wire value is the *string* `"True"`/`"False"`, not a JSON bool. Coerce before testing. */
+  show_crops_livestocks?: boolean | string | null;
   country_code?: string | null;
   country?: string | null;
   state?: string | null;
@@ -253,6 +254,25 @@ export interface UpdateBuildVersionResponse {
 }
 
 // ---------------------------------------------------------------------------
+/**
+ * True for feed sections the SDK deliberately cannot render (third-party host widgets).
+ *
+ * `plotline_widget` sections carry only `type`/`unique_key`/`label` — no headline, image or
+ * statement id (verified live 2026-09-01: 14 of 21 prod sections were these). The app renders
+ * them with Plotline, but root CLAUDE.md §6 forbids Plotline inside SDK packages, so the SDK
+ * drops them rather than rendering blank cards.
+ */
+export function isHostOnlyWidget(section: { type?: string | null }): boolean {
+  return (section.type ?? '').toLowerCase() === 'plotline_widget';
+}
+
+/** Feed sections with host-unrenderable widgets removed. Use for rendering AND analytics. */
+export function renderableSections<T extends { type?: string | null }>(
+  sections: T[] | null | undefined,
+): T[] {
+  return (sections ?? []).filter((s) => !isHostOnlyWidget(s));
+}
+
 // #11 update_user_location
 // ---------------------------------------------------------------------------
 
@@ -332,8 +352,9 @@ export interface WeatherRequest {
 }
 
 export interface WeatherResponse {
-  current_temp?: number | null;
-  precipitation_probability?: number | null;
+  // App parity (WeatherResponse.kt): Strings, rendered verbatim (was number).
+  current_temp?: string | null;
+  precipitation_probability?: string | null;
   weather_icon?: string | null;
   [key: string]: unknown;
 }
@@ -458,13 +479,12 @@ export interface ConversationListItem {
   conversation_id?: string | null;
   /** The API's display text for a conversation (docs/02 / app ConversationListItem). */
   conversation_title?: string | null;
-  question?: string | null;
-  title?: string | null;
   message_type?: string | null;
   grouping?: string | null;
   created_on?: string | null;
-  created_at?: string | null;
-  [key: string]: unknown;
+  content_provider_logo?: string | null;
+  content_provider_id?: string | number | null;
+  content_provider_name?: string | null;
 }
 
 /** Custom deserializer target: the API returns either a bare array or a paginated object. */
@@ -549,7 +569,11 @@ export interface ImageStatementRequest {
 
 export interface ImageStatementResponse {
   short_answer?: string | null;
-  follow_up_questions?: string[] | null;
+  // App parity: #26 sends follow-up OBJECTS {follow_up_question_id, sequence, question};
+  // a bare string is tolerated. (Was `string[]`, which rendered [object Object].)
+  follow_up_questions?:
+    | Array<string | { follow_up_question_id?: string | null; sequence?: number | null; question?: string | null }>
+    | null;
   message_id?: string | null;
   conversation_id?: string | null;
   [key: string]: unknown;
@@ -611,10 +635,15 @@ export interface PlantixRequest {
   conversation_id: string;
   /** Base64-encoded image. */
   image: string;
+  /** App parity: `triggered_input_type` defaults to "image" on the image path. */
+  triggered_input_type?: string;
   query?: string | null;
-  lat?: number | null;
-  lng?: number | null;
+  /** App `PlantixRequest.kt` sends latitude/longitude as STRINGs (not lat/lng numbers). */
+  latitude?: string | null;
+  longitude?: string | null;
   image_name: string;
+  /** True only when the user taps retry on a failed image query. */
+  retry?: boolean;
 }
 
 export interface PlantixResponse {
@@ -676,7 +705,12 @@ export interface ConversationChatHistoryMessageItem {
   query_text?: string | null;
   heard_query_text?: string | null;
   response_text?: string | null;
-  questions?: string[] | null;
+  /**
+   * type-7 follow-up items. The app sends objects
+   * `{ follow_up_question_id, sequence, question }` (a plain string form is
+   * tolerated defensively).
+   */
+  questions?: Array<string | { follow_up_question_id?: string | null; sequence?: number | null; question?: string | null }> | null;
   query_media_file_url?: string | null;
   reaction?: number | null;
   response_media_file_url?: string | null;

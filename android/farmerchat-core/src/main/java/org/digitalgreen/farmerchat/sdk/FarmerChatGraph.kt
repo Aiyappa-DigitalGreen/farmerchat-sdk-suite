@@ -23,6 +23,9 @@ import org.digitalgreen.farmerchat.sdk.core.network.timeout.ApiPriorityHeaderInt
 import org.digitalgreen.farmerchat.sdk.core.network.timeout.PriorityRequestIdInterceptor
 import org.digitalgreen.farmerchat.sdk.core.network.timeout.TimeoutTypeInterceptor
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
+import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
+import kotlinx.coroutines.flow.first
 import org.digitalgreen.farmerchat.sdk.core.remote.ApiConstants
 import org.digitalgreen.farmerchat.sdk.core.remote.ApiServices
 import org.digitalgreen.farmerchat.sdk.core.remote.GoogleGeoApi
@@ -59,6 +62,7 @@ import org.digitalgreen.farmerchat.sdk.core.usecase.PhoneAuthUseCases
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateBuildVersionUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserLocationUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserNameUseCase
+import org.digitalgreen.farmerchat.sdk.core.model.SetPreferredLanguageRequest
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -80,6 +84,19 @@ class FarmerChatGraph internal constructor(
     val prefs: SdkPreferences = SdkPreferences(appContext)
     val tokenStore: TokenStore = PreferenceTokenStore(prefs)
     val deviceIdProvider: DeviceIdProvider = DeviceIdProvider(appContext, prefs)
+
+    init {
+        // Env-scoped cache invalidation: a conversation id is only valid on the
+        // backend that created it. If the effective base URL changed since the
+        // last init, drop the stored conversation id — otherwise the answer
+        // endpoint 500s on a stale/foreign id with no self-recovery.
+        val currentBase = config.resolvedBaseUrl
+        val lastBase = prefs.getString(SdkPreferences.Keys.LAST_BASE_URL, "")
+        if (lastBase.isNotBlank() && lastBase != currentBase) {
+            prefs.remove(SdkPreferences.Keys.NEW_CONVERSATION_ID)
+        }
+        prefs.putString(SdkPreferences.Keys.LAST_BASE_URL, currentBase)
+    }
     val labelManager: LabelManager = LabelManager(
         prefs = prefs,
         stringOverrides = config.stringOverrides,
@@ -225,7 +242,9 @@ class FarmerChatGraph internal constructor(
         historyUseCase = historyUseCase
     )
 
-    val routeDecider = RouteDecider(prefs)
+    // showNameScreen mirrors the app's `show_name_screen` RemoteConfig flag. When false,
+    // routeFromSplash() marks the profile step done and falls through to Home.
+    val routeDecider = RouteDecider(prefs) { config.showNameScreen }
 
     val locationPromptManager = LocationPromptManager(
         prefs = prefs,
@@ -267,7 +286,7 @@ class FarmerChatGraph internal constructor(
 
     fun onboardingViewModel() = OnboardingSharedViewModel(
         fetchGeoLocationUseCase, getSupportedLanguagesUseCase, getLanguageLabelsUseCase,
-        sessionManager, labelManager, prefs, analytics
+        sessionManager, labelManager, prefs, analytics, config, updateUserLocationUseCase
     )
 
     fun enterNameViewModel() = EnterNameViewModel(updateUserNameUseCase, prefs, analytics)
@@ -285,6 +304,92 @@ class FarmerChatGraph internal constructor(
     fun chatHistoryViewModel() = ChatHistoryViewModel(historyUseCase, prefs)
 
     fun settingsViewModel() = SettingsViewModel(
-        getSupportedLanguagesUseCase, getLanguageLabelsUseCase, labelManager, prefs, analytics
+        getSupportedLanguagesUseCase, getLanguageLabelsUseCase, labelManager, prefs, analytics, config
     )
+
+    /**
+     * CHAT_ONLY bootstrap. Onboarding + Home normally establish the guest session
+     * and create the conversation; CHAT_ONLY skips both, so do them here before
+     * entering chat — otherwise the first query is sent unauthenticated (401) or
+     * with an empty conversation_id (500). Idempotent + best-effort: callers should
+     * proceed to chat even if this throws (chat shows its own retry).
+     */
+    /**
+     * Completes onboarding's API work when the language SCREEN was skipped.
+     *
+     * `config.locale` sets LANGUAGE_DONE so routeFromSplash() goes straight past the language
+     * screen — but that screen is also what calls #3 `get_labels` and #6
+     * `set_preferred_language`. Skipped, a fresh install would run with no server labels (every
+     * string falling back to its hardcoded English) and a backend that never learned the user's
+     * language.
+     *
+     * This runs the same calls headlessly: guest init → #2 languages → resolve the configured
+     * code to its id → #3 labels → #6 preferred language. No UI, no change to the geolocation
+     * or session flow. Fully best-effort: any failure leaves the English fallbacks in place,
+     * which is exactly the pre-existing behaviour, so it can never block the splash.
+     *
+     * No-ops once labels exist, so it costs a returning user nothing.
+     */
+    suspend fun ensureSkippedOnboardingBootstrap() {
+        if (!prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)) return
+        if (labelManager.areLabelsLoaded()) return
+
+        val code = prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "")
+            .ifBlank { config.locale ?: config.languageCode ?: "en" }
+            .trim().lowercase()
+
+        if (!sessionManager.hasSession()) {
+            runCatching { sessionManager.initializeGuestUser() }
+        }
+
+        runCatching {
+            val country = prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
+                .ifBlank { config.defaultCountryCode }
+            val state = prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
+                .ifBlank { config.defaultStateCode }
+
+            val groups = getSupportedLanguagesUseCase.getSupportedLanguages(country, state).first()
+            if (groups !is ApiResult.Success) return@runCatching
+            val all = groups.data.flatMap { it.priorityView + it.expandedView }
+            val match = all.firstOrNull { it.code.equals(code, ignoreCase = true) }
+                ?: all.firstOrNull { it.code.equals("en", ignoreCase = true) }
+                ?: return@runCatching
+
+            val labels = getLanguageLabelsUseCase.getLanguageLabels(match.id).first()
+            if (labels is ApiResult.Success) {
+                labelManager.saveLabels(labels.data)
+                prefs.putInt(SdkPreferences.Keys.SELECTED_LANGUAGE_ID, match.id)
+                prefs.putString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, match.code)
+                match.displayName.takeIf { it.isNotBlank() }?.let {
+                    prefs.putString(SdkPreferences.Keys.SELECTED_LANGUAGE_DISPLAY_NAME, it)
+                }
+            }
+
+            val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
+            if (userId.isNotBlank()) {
+                getSupportedLanguagesUseCase.setPreferredLanguage(
+                    SetPreferredLanguageRequest(user_id = userId, language_id = match.id.toString())
+                ).first()
+            }
+        }
+    }
+
+    suspend fun ensureChatOnlySession() {
+        if (!sessionManager.hasSession()) {
+            runCatching { sessionManager.initializeGuestUser() }
+        }
+        if (prefs.getString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "").isBlank()) {
+            val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
+            if (userId.isNotBlank()) {
+                runCatching {
+                    val res = chatUseCase.newConversation(
+                        NewConversationRequest(user_id = userId, content_provider_id = null)
+                    ).first()
+                    if (res is ApiResult.Success) {
+                        prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, res.data.conversation_id)
+                    }
+                }
+            }
+        }
+    }
 }

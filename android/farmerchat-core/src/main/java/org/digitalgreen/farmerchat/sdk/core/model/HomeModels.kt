@@ -8,7 +8,18 @@ data class HomeUdfResponse(
     val greeting: String?,
     val sections: List<SectionDto>,
     val ssfr_enable: Boolean? = null
-)
+) {
+    /**
+     * Feed with host-unrenderable sections removed.
+     *
+     * `plotline_widget` sections carry only `type`/`unique_key`/`label` — no headline, image or
+     * statement id (verified live 2026-09-01: 14 of 21 prod sections were these). The app renders
+     * them with `PlotlineComposeWidget`, but root CLAUDE.md §6 forbids Plotline inside SDK
+     * packages, so the SDK must DROP them. Rendering them through a catch-all branch produces
+     * blank cards, which is what "nothing loads on home" looked like.
+     */
+    fun renderableSections(): List<SectionDto> = sections.filterNot { it.isHostOnlyWidget() }
+}
 
 data class SectionDto(
     val type: String?,
@@ -33,6 +44,12 @@ data class SectionDto(
     val label: String? = null
 ) {
     fun stableId(): String = (id ?: statement_id ?: title ?: "").toString()
+
+    /**
+     * True for sections the SDK deliberately cannot render (third-party host widgets).
+     * See [HomeUdfResponse.renderableSections].
+     */
+    fun isHostOnlyWidget(): Boolean = type?.lowercase() == "plotline_widget"
 }
 
 data class SectionMetaDto(

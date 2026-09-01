@@ -23,6 +23,13 @@ export interface SdkServices {
 export function createServices(config: FarmerChatConfig): SdkServices {
   const resolved = resolveConfig(config);
   const store = new SessionStore();
+  // Env-scoped cache invalidation: a conversation id is only valid on the
+  // backend that created it — drop it if the base URL changed since last init.
+  const lastBase = store.getString(PrefKeys.LAST_BASE_URL);
+  if (lastBase && lastBase !== resolved.baseUrl) {
+    store.remove(PrefKeys.NEW_CONVERSATION_ID);
+  }
+  store.setString(PrefKeys.LAST_BASE_URL, resolved.baseUrl);
   const labels = new LabelManager(store, {
     stringOverrides: resolved.stringOverrides,
     forcedLocale: resolved.locale,
@@ -38,7 +45,7 @@ export function createServices(config: FarmerChatConfig): SdkServices {
   });
   const api = new FarmerChatApi(http, resolved.guestApiKey, resolved.geoApiKey);
   const analytics = new Analytics(resolved.onEvent, resolved.callbacks);
-  const session = new SessionManager(store, api, analytics);
+  const session = new SessionManager(store, api, analytics, resolved.authMode);
 
   // Preselect language from config: skips the language screen when provided.
   if (resolved.languageCode && !store.getBool(PrefKeys.LANGUAGE_DONE, false)) {

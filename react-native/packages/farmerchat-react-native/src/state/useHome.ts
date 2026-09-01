@@ -17,6 +17,7 @@ import type {
   NewConversationResponse,
   WeatherResponse,
 } from '../core/types';
+import { renderableSections } from '../core/types';
 
 export type HomeAction =
   | {
@@ -109,10 +110,12 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
         const data: HomeUdfResponse = result.data ?? { sections: [] }; // 204 → empty
         sdk.store.setJson(StorageKeys.CACHED_HOME_FEED_RESPONSE, data);
         patch({ homeFeedState: UiStates.success(data) });
+        // App parity (HomeScreen.kt:792): plotline_widget sections are excluded from
+        // card-shown analytics and counts.
         sdk.analytics.track(AnalyticsEvents.DASHBOARD_VIEWED, {
-          section_count: data.sections.length,
+          section_count: renderableSections(data.sections).length,
         });
-        for (const section of data.sections) {
+        for (const section of renderableSections(data.sections)) {
           sdk.analytics.track(AnalyticsEvents.CARD_SHOWN, {
             section_id: section.id,
             section_type: section.type ?? 'unknown',

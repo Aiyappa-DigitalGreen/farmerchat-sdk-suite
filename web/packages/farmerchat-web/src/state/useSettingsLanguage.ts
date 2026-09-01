@@ -16,6 +16,7 @@ export interface LanguageSettingsState {
   expandedLanguages: boolean;
   selectedLanguageId: number | null;
   selectedLanguageCode: string | null;
+  selectedLanguageDisplayName: string | null;
   fetchingLabelsForId: number | null;
   isSubmitting: boolean;
   submitSuccess: boolean;
@@ -28,6 +29,7 @@ const initialState: LanguageSettingsState = {
   expandedLanguages: false,
   selectedLanguageId: null,
   selectedLanguageCode: null,
+  selectedLanguageDisplayName: null,
   fetchingLabelsForId: null,
   isSubmitting: false,
   submitSuccess: false,
@@ -51,17 +53,21 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
   }));
   const stateRef = useRef(state);
   stateRef.current = state;
-  const { api, session, store, labels, analytics } = services;
+  const { api, session, store, labels, analytics, config } = services;
 
   const patch = useCallback((p: Partial<LanguageSettingsState>) => setState((s) => ({ ...s, ...p })), []);
 
   const loadLanguages = useCallback(async () => {
     patch({ languageState: loading() });
-    const countryCode = store.getString(PrefKeys.USER_COUNTRY_CODE) ?? '';
-    const regionState = store.getString(PrefKeys.USER_STATE) ?? '';
+    // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
+    // empty whenever guest init never resolved one.
+    const countryCode =
+      store.getString(PrefKeys.USER_COUNTRY_CODE)?.trim() || config.defaultCountryCode;
+    const regionState =
+      store.getString(PrefKeys.USER_STATE)?.trim() || config.defaultStateCode;
     const res = await api.getSupportedLanguages(countryCode, regionState);
     patch({ languageState: toUiState(res) });
-  }, [api, patch, store]);
+  }, [api, config.defaultCountryCode, config.defaultStateCode, patch, store]);
 
   const selectLanguage = useCallback(
     async (language: SupportedLanguage) => {
@@ -73,6 +79,7 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
         patch({
           selectedLanguageId: language.id,
           selectedLanguageCode: language.code ?? null,
+          selectedLanguageDisplayName: language.display_name ?? null,
           fetchingLabelsForId: null,
         });
       } else {
@@ -97,8 +104,12 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
     if (res.ok) {
       store.setInt(PrefKeys.SELECTED_LANGUAGE_ID, s.selectedLanguageId);
       if (s.selectedLanguageCode) labels.setLanguageCode(s.selectedLanguageCode);
+      // App parity: persist the display name so the drawer's "Language: X" line
+      // updates (previously only id/code were saved → stale drawer).
+      if (s.selectedLanguageDisplayName) {
+        store.setString(PrefKeys.SELECTED_LANGUAGE_DISPLAY_NAME, s.selectedLanguageDisplayName);
+      }
       analytics.track(Events.SAVE_LANGUAGE_CLICK, {
-        language_id: s.selectedLanguageId,
         language_code: s.selectedLanguageCode ?? '',
       });
       patch({ isSubmitting: false, submitSuccess: true });

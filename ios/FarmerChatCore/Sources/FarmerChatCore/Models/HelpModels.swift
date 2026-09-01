@@ -17,24 +17,48 @@ public struct FaqItem: Codable, Sendable, Identifiable {
     @LossyOptional public var rawId: FlexibleID?
     public var title: String?
     public var question: String?
-    public var url: String?
+    // App parity (HelpSupportResponse.kt): the FAQ link is `webview-url`
+    // (alt `webview_url`), not a flat `url`. `open-mode` controls the presentation.
+    public var webviewUrl: String?
+    public var webviewUrlAlt: String?
+    public var openMode: String?
 
     enum CodingKeys: String, CodingKey {
         case rawId = "id"
-        case title, question, url
+        case title, question
+        case webviewUrl = "webview-url"
+        case webviewUrlAlt = "webview_url"
+        case openMode = "open-mode"
     }
 
+    /// The resolved FAQ link (consumers read this).
+    public var url: String? { webviewUrl ?? webviewUrlAlt }
     public var id: String { rawId?.stringValue ?? (url ?? UUID().uuidString) }
-
     public var displayTitle: String { title ?? question ?? "" }
 }
 
+/// App parity: legal entries are nested objects carrying their own `webview-url`.
+public struct HelpLegalLink: Codable, Sendable {
+    public var webviewUrl: String?
+    public var webviewUrlAlt: String?
+    enum CodingKeys: String, CodingKey {
+        case webviewUrl = "webview-url"
+        case webviewUrlAlt = "webview_url"
+    }
+    public var url: String? { webviewUrl ?? webviewUrlAlt }
+}
+
 public struct HelpLegal: Codable, Sendable {
-    public var termsOfUse: String?
-    public var privacyPolicy: String?
+    // App parity: nested `terms-of-use` / `privacy-policy` objects, each with a webview-url.
+    public var termsOfUseLink: HelpLegalLink?
+    public var privacyPolicyLink: HelpLegalLink?
 
     enum CodingKeys: String, CodingKey {
-        case termsOfUse = "terms_of_use"
-        case privacyPolicy = "privacy_policy"
+        case termsOfUseLink = "terms-of-use"
+        case privacyPolicyLink = "privacy-policy"
     }
+
+    /// Resolved legal URLs (consumers read these).
+    public var termsOfUse: String? { termsOfUseLink?.url }
+    public var privacyPolicy: String? { privacyPolicyLink?.url }
 }

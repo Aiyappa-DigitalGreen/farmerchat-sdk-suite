@@ -166,9 +166,10 @@ export class AppNavigator {
   /** Chat close (Home entry): popUpTo(Home){!inclusive} + singleTop. */
   navigateChatCloseToHome(): void {
     if (!this.navRef.isReady()) return;
-    // CHAT_ONLY (C3): there is no Home to return to — start a fresh chat.
+    // CHAT_ONLY (C3): there is no Home to return to — signal the host to
+    // exit/unmount the SDK (host wires config.onExit).
     if (this.sdk.config.mode === 'CHAT_ONLY') {
-      this.resetTo([{ name: 'Chat', params: { source: 'home' } satisfies ChatRouteParams }]);
+      this.sdk.analytics.fireCallback('onExit');
       return;
     }
     const state = this.navRef.getRootState();

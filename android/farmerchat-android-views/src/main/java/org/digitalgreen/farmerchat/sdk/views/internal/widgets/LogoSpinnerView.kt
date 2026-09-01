@@ -35,22 +35,49 @@ internal class LogoSpinnerView @JvmOverloads constructor(
         visibility = GONE
     }
 
+    private val box = FrameLayout(context)
+
     init {
-        orientation = VERTICAL
-        gravity = Gravity.CENTER
-        val box = FrameLayout(context)
-        box.addView(
-            ring,
-            FrameLayout.LayoutParams(55.dp(context), 55.dp(context), Gravity.CENTER)
-        )
-        box.addView(
-            logo,
-            FrameLayout.LayoutParams(32.dp(context), 32.dp(context), Gravity.CENTER)
-        )
-        addView(box, LayoutParams(55.dp(context), 55.dp(context)))
-        addView(label, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 12.dp(context)
-        })
+        box.addView(ring, FrameLayout.LayoutParams(0, 0, Gravity.CENTER))
+        box.addView(logo, FrameLayout.LayoutParams(0, 0, Gravity.CENTER))
+        addView(box)
+        addView(label)
+        applyLayout()
+    }
+
+    /**
+     * Horizontal = the app's in-thread "answer loading" style
+     * (`components/LogoSpinnerHorizontal.kt`): a compact 40dp ring with a 23dp logo and the
+     * label beside it, 12dp apart, left-aligned. Vertical (the default) is the app's
+     * full-screen loader: a 55dp ring with the label underneath.
+     *
+     * The chat thread uses horizontal; the language / home / history / full-screen chat
+     * loaders stay vertical.
+     */
+    var horizontal: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            applyLayout()
+        }
+
+    private fun applyLayout() {
+        val ringSize = if (horizontal) 40.dp(context) else 55.dp(context)
+        val logoSize = if (horizontal) 23.dp(context) else 32.dp(context)
+        val gap = 12.dp(context)
+
+        orientation = if (horizontal) HORIZONTAL else VERTICAL
+        gravity = if (horizontal) Gravity.CENTER_VERTICAL else Gravity.CENTER
+
+        ring.layoutParams = FrameLayout.LayoutParams(ringSize, ringSize, Gravity.CENTER)
+        logo.layoutParams = FrameLayout.LayoutParams(logoSize, logoSize, Gravity.CENTER)
+        box.layoutParams = LayoutParams(ringSize, ringSize)
+        label.gravity = if (horizontal) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+        label.layoutParams =
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                if (horizontal) marginStart = gap else topMargin = gap
+            }
+        requestLayout()
     }
 
     var text: CharSequence

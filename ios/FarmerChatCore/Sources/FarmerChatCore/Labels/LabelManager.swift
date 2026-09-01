@@ -57,7 +57,11 @@ public final class LabelManager: @unchecked Sendable {
 
     public var languageCode: String {
         lock.lock(); let forced = forcedLocale; lock.unlock()
-        return forced ?? prefs.string(.selectedLanguageCode) ?? "en"
+        // App parity (LabelManager.kt): normalize before building `${key}_${lang}`
+        // so a code like "EN" / " hi " still resolves its localized keys.
+        let code = forced ?? prefs.string(.selectedLanguageCode) ?? "en"
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? "en" : normalized
     }
 
     // MARK: - Resolution

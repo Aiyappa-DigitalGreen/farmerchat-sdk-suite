@@ -429,6 +429,10 @@ class ChatViewModel(
     ) {
         if (question.isBlank()) return
         if (_state.value.isLoading) return
+        // CHAT_ONLY (and any directly-entered empty chat) has no prior turn, so the
+        // first typed message is an INITIAL query, not a follow-up — sending it as
+        // "follow_up" with an empty conversation_id makes the backend 500.
+        val isFirstTurn = _state.value.messages.none { it is ChatMessage.UserMessage }
         if (followUpQuestionId != null) {
             scope.launch {
                 chatUseCase.trackFollowUpQuestionClick(followUpQuestionId).collect { }
@@ -453,6 +457,7 @@ class ChatViewModel(
 
         val followUpTriggeredType = when {
             transcriptionId != null -> "voice"
+            isFirstTurn -> "text"
             pendingSendQueryProperties?.isFollowupPrompt == true -> "follow_up"
             else -> "text"
         }
@@ -949,22 +954,30 @@ class ChatViewModel(
                         val mapped = mutableListOf<ChatMessage>()
                         var lastFollowUps: List<org.digitalgreen.farmerchat.sdk.core.model.ConversationChatHistoryQuestion>? = null
                         var clarification = false
-                        items.forEach { item ->
+                        // A query and its response SHARE one `message_id` (verified live
+                        // 2026-09-01: a single turn returns type 1, 3 and 7 all carrying the same
+                        // id). Using it as the list key produced duplicate LazyColumn keys and
+                        // crashed with IllegalArgumentException on every non-empty conversation.
+                        // App parity (fc-compose ChatViewModel.kt:1027): key on
+                        // message_id + message_type_id + index; `page` is added because the index
+                        // restarts per page. `messageId` keeps the raw API id for TTS/follow-ups.
+                        items.forEachIndexed { index, item ->
+                            val uiId = "${item.message_id}_${item.message_type_id}_${page}_$index"
                             when (item.message_type_id) {
                                 1 -> mapped += ChatMessage.UserMessage(
                                     text = item.query_text.orEmpty(),
                                     imageUri = item.query_media_file_url?.let(Uri::parse),
                                     userBubbleImageWideBanner = item.query_media_file_url != null,
-                                    id = item.message_id
+                                    id = uiId
                                 )
                                 2 -> mapped += ChatMessage.UserMessage(
                                     text = item.heard_query_text ?: item.query_text.orEmpty(),
                                     audioUri = item.query_media_file_url?.let(Uri::parse),
-                                    id = item.message_id
+                                    id = uiId
                                 )
                                 3 -> mapped += ChatMessage.AiResponse(
                                     text = item.response_text.orEmpty(),
-                                    id = item.message_id,
+                                    id = uiId,
                                     messageId = item.message_id
                                 )
                                 7 -> {
@@ -975,14 +988,17 @@ class ChatViewModel(
                                     text = item.query_text.orEmpty(),
                                     imageUri = item.query_media_file_url?.let(Uri::parse),
                                     userBubbleImageWideBanner = false,
-                                    id = item.message_id
+                                    id = uiId
                                 )
                             }
                         }
 
                         _state.update { current ->
-                            val newMessages = if (page == 1) mapped
-                            else mapped + current.messages // prepend older page
+                            // distinctBy is a hard guard: a duplicate id crashes LazyColumn and
+                            // takes the HOST app down with it, so never trust the wire here.
+                            val newMessages = (if (page == 1) mapped
+                            else mapped + current.messages) // prepend older page
+                                .distinctBy { it.id }
                             current.copy(
                                 messages = newMessages,
                                 isLoading = false,

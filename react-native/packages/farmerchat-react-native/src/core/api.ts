@@ -322,7 +322,7 @@ export class FarmerChatApi {
   }): Promise<ApiResult<M.HelpSupportResponse>> {
     return this.http.request<M.HelpSupportResponse>({
       method: 'GET',
-      path: 'api/faqs',
+      path: 'api/faqs/',
       apiName: 'faqs',
       query: {
         lang: params.lang,

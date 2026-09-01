@@ -22,6 +22,9 @@ import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.FetchGeoLocationUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.GetLanguageLabelsUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.GetSupportedLanguagesUseCase
+import org.digitalgreen.farmerchat.sdk.FarmerChatConfig
+import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserLocationUseCase
+import org.digitalgreen.farmerchat.sdk.core.model.UpdateLocationRequest
 
 /**
  * Shared onboarding state machine driving Splash + Language screens
@@ -39,7 +42,9 @@ class OnboardingSharedViewModel(
     private val sessionManager: SessionManager,
     private val labelManager: LabelManager,
     private val prefs: SdkPreferences,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    private val config: FarmerChatConfig,
+    private val updateUserLocationUseCase: UpdateUserLocationUseCase
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(OnboardingState())
@@ -108,10 +113,26 @@ class OnboardingSharedViewModel(
             when (val init = sessionManager.initializeGuestUser(lat, lng, accuracy)) {
                 is ApiResult.Success -> {
                     _state.update { it.copy(guestInitState = UiState.Success(init.data)) }
-                    val countryCode = init.data.country_code
+                    // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an
+                    // unresolvable IP comes back with country_code == null. Fall through to the
+                    // persisted value, then to the host-configured default, never to "".
+                    val countryCode = init.data.country_code?.takeIf { it.isNotBlank() }
                         ?: prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
-                    val stateName = init.data.state
+                            .takeIf { it.isNotBlank() }
+                        ?: config.defaultCountryCode
+                    val stateName = init.data.state?.takeIf { it.isNotBlank() }
                         ?: prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
+                            .takeIf { it.isNotBlank() }
+                        ?: config.defaultStateCode
+                    // GUEST HOME FIX: endpoint #12 returns an EMPTY feed until the backend has
+                    // a resolved location for this user, and it resolves one ONLY from
+                    // coordinates (verified live 2026-09-01: a country name alone is rejected).
+                    // A guest whose IP the backend cannot place — and who never reaches the GPS
+                    // prompt — would otherwise land on a permanently blank home screen.
+                    // Seeding #11 with the configured default region guarantees a populated feed.
+                    if (init.data.country_code.isNullOrBlank()) {
+                        seedDefaultLocation()
+                    }
                     fetchSupportedLanguages(countryCode, stateName)
                 }
                 is ApiResult.Error -> {
@@ -123,6 +144,33 @@ class OnboardingSharedViewModel(
                             errorFromScreen = action.fromScreen
                         )
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Posts the configured default coordinates to endpoint #11 so a guest with no resolvable
+     * location still gets a home feed. Best-effort: a failure just leaves the feed empty, which
+     * is the pre-existing behaviour, so it never blocks onboarding.
+     */
+    private suspend fun seedDefaultLocation() {
+        val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
+        if (userId.isBlank()) return
+        val result = updateUserLocationUseCase.updateUserLocation(
+            UpdateLocationRequest(
+                lat = config.defaultLatitude.toString(),
+                long = config.defaultLongitude.toString(),
+                user_id = userId
+            )
+        ).first()
+        if (result is ApiResult.Success) {
+            result.data.user_profile?.let { profile ->
+                profile.country_code?.takeIf { it.isNotBlank() }?.let {
+                    prefs.putString(SdkPreferences.Keys.USER_COUNTRY_CODE, it)
+                }
+                profile.geography_level2_name?.takeIf { it.isNotBlank() }?.let {
+                    prefs.putString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, it)
                 }
             }
         }

@@ -115,8 +115,13 @@ internal class ChatAdapter(
             is ChatRow.User -> bindUser(holder as UserHolder, row.message)
             is ChatRow.Ai -> bindAi(holder as AiHolder, row)
             is ChatRow.Loading -> {
-                (holder as LoadingHolder).binding.fcChatLoadingSpinner.text =
-                    callbacks.labelFor(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
+                // App parity (ChatLoadingContent.kt -> LogoSpinnerHorizontal): the in-thread
+                // answer loader is a compact horizontal spinner + label, not the tall
+                // full-screen stack.
+                (holder as LoadingHolder).binding.fcChatLoadingSpinner.apply {
+                    horizontal = true
+                    text = callbacks.labelFor(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
+                }
             }
             is ChatRow.InlineError -> bindError(holder as ErrorHolder, row)
         }

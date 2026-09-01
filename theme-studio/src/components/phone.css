@@ -1,0 +1,139 @@
+/* FarmerChat SDK preview — scoped, self-contained.
+ *
+ * This is a faithful re-render of the SDK's OWN rendered UI (not shadcn). It is
+ * driven entirely by the --fc-* custom properties set on .phone at runtime, and
+ * honors the SDK precedence rule: config knob ?? theme token ?? built-in default.
+ * Ported verbatim from the original theme-studio styles.css. Do NOT rebuild these
+ * surfaces from shadcn primitives — that would misrepresent what the SDK draws. */
+
+.phone {
+  --fc-appbar:#008236; --fc-onbrand:#fff; --fc-brand-dark:#08361B; --fc-accent:#00C950;
+  --fc-home-bg:#008236; --fc-light-bg:#ECECEE; --fc-reading:#fff; --fc-card:#fff; --fc-ink:#000; --fc-muted-c:#71717B;
+  --fc-bubble-user:#ECECEE; --fc-bubble-user-text:#000; --fc-ai-text:#000; --fc-error:#E5533D;
+  --fc-r-card:24px; --fc-r-btn:12px; --fc-r-input:12px; --fc-r-bubble:20px; --fc-msg-size:15px; --fc-scale:1;
+  --fc-fab-bg:#008236; --fc-fab-fg:#fff;
+  position:relative; width:100%; max-width:390px; margin:0 auto; height:680px; border-radius:34px;
+  border:10px solid #10231a; overflow:hidden; box-shadow:0 22px 55px rgba(0,0,0,.30);
+  display:flex; flex-direction:column; font-size:calc(1rem * var(--fc-scale)); background:#fff;
+  color:#000;
+}
+.phone * { box-sizing:border-box; }
+.fc-screen { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.fc-home, .fc-chat, .fc-light { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.fc-home { background:var(--fc-home-bg); }
+.fc-chat { background:var(--fc-reading); }
+.fc-light { background:var(--fc-light-bg); }
+
+.ic { display:inline-block; flex:none; vertical-align:middle;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center;
+  -webkit-mask-size:contain; mask-size:contain; }
+
+/* App bar (green + yellow glow + Green800 chips) */
+.fc-appbar { position:relative; background:var(--fc-appbar); flex:none; }
+.fc-glow-y { position:absolute; inset:0 0 auto 0; width:100%; height:82px; object-fit:cover; opacity:.9; pointer-events:none; }
+.fc-ab-inner { position:relative; display:flex; align-items:center; gap:10px; padding:14px 12px; }
+.fc-chip { width:42px; height:42px; border-radius:12px; background:var(--fc-brand-dark); display:flex; align-items:center; justify-content:center; flex:none; }
+.fc-chip-ph { width:42px; height:42px; flex:none; }
+.fc-ab-center { flex:1; display:flex; align-items:center; justify-content:center; }
+.fc-ab-title { color:var(--fc-onbrand); font-weight:700; font-size:calc(18px * var(--fc-scale)); }
+.fc-weather { height:42px; border-radius:16px; background:var(--fc-brand-dark); color:var(--fc-onbrand); display:flex; align-items:center; gap:5px; padding:0 12px; font-size:14px; font-weight:600; flex:none; }
+.fc-wimg { width:22px; height:22px; object-fit:contain; }
+
+.fc-body { flex:1; overflow-y:auto; padding:16px 14px; display:flex; flex-direction:column; gap:14px; }
+
+/* Home */
+.fc-greeting { color:var(--fc-onbrand); font-size:calc(24px * var(--fc-scale)); font-weight:700; text-align:center; }
+.fc-feedhead { color:var(--fc-onbrand); font-size:calc(18px * var(--fc-scale)); font-weight:700; text-align:center; opacity:.95; }
+.fc-card { background:var(--fc-card); color:var(--fc-ink); border-radius:var(--fc-r-card); padding:16px; box-shadow:0 8px 20px rgba(0,0,0,.12); display:flex; flex-direction:column; gap:10px; font-size:14px; }
+.fc-card-img { height:96px; border-radius:16px; background:color-mix(in srgb, var(--fc-accent) 20%, var(--fc-card)); display:flex; align-items:center; justify-content:center; font-size:40px; }
+.fc-card-txt b { font-size:16px; } .fc-card-txt p { margin:4px 0 10px; color:var(--fc-muted-c); font-size:13px; }
+.fc-options { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+.fc-opt { padding:8px 14px; border-radius:999px; border:1px solid rgba(128,128,128,.3); font-size:13px; }
+.fc-opt.sel { background:var(--fc-accent); color:#04240f; border-color:var(--fc-accent); font-weight:700; }
+
+/* Tiles (Photo/Speak/Type) */
+.fc-tiles { display:flex; gap:6px; padding:10px 12px; flex:none; }
+.fc-tiles--home { background:var(--fc-home-bg); }
+.fc-tiles--chat { background:var(--fc-reading); border-top:1px solid rgba(128,128,128,.15); }
+.fc-tile { flex:1; height:76px; border-radius:16px; background:var(--fc-brand-dark); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; font-size:12px; }
+.fc-tile span { color:var(--fc-onbrand); }
+
+/* Buttons */
+.fc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; border:none; border-radius:var(--fc-r-btn); background:var(--fc-brand-dark); color:var(--fc-onbrand); font:inherit; font-weight:700; font-size:15px; padding:14px 18px; cursor:pointer; }
+.fc-card .fc-btn { padding:11px 16px; }
+.fc-btn2 { width:100%; border:none; border-radius:var(--fc-r-btn); background:var(--fc-card); color:var(--fc-ink); font:inherit; font-weight:600; font-size:15px; padding:13px; cursor:pointer; }
+
+/* Onboarding (language / name / auth / settings body) */
+.fc-onboard { align-items:center; gap:12px; padding:32px 20px 0; overflow-y:auto; }
+.fc-center { justify-content:center; align-items:center; padding:24px; gap:16px; }
+.fc-logo-wrap { margin-top:6px; }
+.fc-h1 { color:var(--fc-ink); font-size:calc(24px * var(--fc-scale)); font-weight:700; text-align:center; }
+.fc-h1.left { text-align:left; width:100%; }
+.fc-sub { color:var(--fc-muted-c); font-size:14px; text-align:center; }
+.fc-sub.left { text-align:left; width:100%; } .fc-sub.center { text-align:center; width:100%; }
+.fc-radios { width:100%; display:flex; flex-direction:column; gap:6px; }
+.fc-radio { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-radius:var(--fc-r-btn); background:var(--fc-card); color:var(--fc-ink); font-size:16px; }
+.fc-radio.sel { background:color-mix(in srgb, var(--fc-accent) 16%, var(--fc-card)); }
+.fc-disc { width:20px; height:20px; border-radius:50%; background:#E4E4E7; }
+.fc-radio.sel .fc-disc { background:#fff; box-shadow:inset 0 0 0 2px var(--fc-accent); position:relative; }
+.fc-radio.sel .fc-disc::after { content:""; position:absolute; inset:5px; border-radius:50%; background:var(--fc-accent); }
+.fc-pill { padding:8px 18px; border-radius:999px; background:var(--fc-card); color:var(--fc-ink); font-size:14px; font-weight:600; }
+.fc-bottombar { margin-top:auto; width:calc(100% + 40px); margin-left:-20px; background:var(--fc-card); border-radius:20px 20px 0 0; padding:16px 20px 22px; display:flex; flex-direction:column; gap:12px; }
+.fc-tagline { color:var(--fc-muted-c); font-size:13px; text-align:center; }
+.fc-legal { color:var(--fc-muted-c); font-size:12px; text-align:center; } .fc-legal u { color:var(--fc-ink); }
+.fc-field { width:100%; padding:16px; border-radius:var(--fc-r-input); background:var(--fc-card); color:var(--fc-ink); border:1px solid rgba(128,128,128,.25); font-size:16px; display:flex; align-items:center; }
+.fc-caret { width:2px; height:18px; background:var(--fc-accent); margin-left:2px; animation:fc-blink 1s steps(2) infinite; }
+@keyframes fc-blink { 50% { opacity:0; } }
+
+/* Auth */
+.fc-otp { display:flex; gap:10px; width:100%; }
+.fc-otp span { flex:1; height:60px; border-radius:var(--fc-r-input); background:var(--fc-card); color:var(--fc-ink); border:1px solid rgba(128,128,128,.3); display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; }
+.fc-otp .cur { border:2px solid var(--fc-accent); }
+.fc-channels { display:flex; gap:10px; width:100%; }
+.fc-channel { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-radius:var(--fc-r-btn); border:1px solid rgba(128,128,128,.3); color:var(--fc-ink); font-size:14px; }
+.fc-channel.sel { border-color:var(--fc-accent); background:color-mix(in srgb, var(--fc-accent) 12%, transparent); }
+
+/* Chat */
+.fc-thread { flex:1; overflow-y:auto; padding:16px 14px; display:flex; flex-direction:column; gap:16px; background:var(--fc-reading); }
+.fc-bubble-user { align-self:flex-end; max-width:82%; background:var(--fc-bubble-user); color:var(--fc-bubble-user-text); border-radius:var(--fc-r-bubble) var(--fc-r-bubble) 4px var(--fc-r-bubble); padding:11px 14px; font-size:var(--fc-msg-size); line-height:1.45; }
+.fc-ai-row { max-width:96%; }
+.fc-ai-answer { color:var(--fc-ai-text); font-size:var(--fc-msg-size); line-height:1.55; }
+.fc-ai-answer ol { margin:8px 0; padding-left:20px; } .fc-ai-answer li { margin:3px 0; }
+.fc-source { display:block; margin-top:8px; font-size:calc(var(--fc-msg-size) - 3px); color:var(--fc-muted-c); }
+.fc-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.fc-actchip { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px; border-radius:999px; border:1px solid color-mix(in srgb, var(--fc-accent) 30%, transparent); background:var(--fc-card); color:var(--fc-ai-text); font-size:13px; font-weight:600; }
+.fc-related { margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+.fc-related-title { display:flex; align-items:center; gap:7px; font-size:15px; font-weight:700; color:var(--fc-muted-c); }
+.fc-related-dot { width:6px; height:6px; border-radius:50%; background:var(--fc-accent); }
+.fc-suggest { display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--fc-card); color:var(--fc-ai-text); border:1px solid color-mix(in srgb, var(--fc-accent) 35%, transparent); border-radius:var(--fc-r-input); padding:12px 14px; font-size:14px; }
+.fc-ask { width:30px; height:30px; border-radius:50%; background:color-mix(in srgb, var(--fc-accent) 16%, transparent); display:flex; align-items:center; justify-content:center; flex:none; }
+.fc-composer { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--fc-reading); border-top:1px solid rgba(128,128,128,.15); flex:none; }
+.fc-input-live { flex:1; border:1px solid rgba(128,128,128,.3); border-radius:var(--fc-r-input); background:var(--fc-card); color:var(--fc-ink); font:inherit; font-size:14px; padding:12px 14px; outline:none; }
+.fc-input-live::placeholder { color:var(--fc-muted-c); }
+.fc-send-btn { width:44px; height:44px; border-radius:var(--fc-r-btn); background:var(--fc-brand-dark); display:flex; align-items:center; justify-content:center; flex:none; }
+
+/* Settings */
+.fc-set-label { font-size:16px; font-weight:700; color:var(--fc-ink); }
+.fc-appearance { display:flex; gap:8px; }
+.fc-appbtn { flex:1; height:76px; border-radius:var(--fc-r-btn); background:var(--fc-card); color:var(--fc-ink); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; font-size:14px; border:1px solid rgba(128,128,128,.15); }
+.fc-appbtn.sel { background:color-mix(in srgb, var(--fc-accent) 16%, var(--fc-card)); border-color:var(--fc-accent); }
+.fc-hint { font-size:13px; color:var(--fc-muted-c); }
+.fc-listcard { display:flex; align-items:center; justify-content:space-between; background:var(--fc-card); color:var(--fc-ink); border-radius:16px; padding:14px 16px; font-size:15px; }
+.fc-listcard .fc-muted { color:var(--fc-muted-c); font-size:13px; margin-top:2px; }
+
+/* FAB (host launcher) */
+.fc-fab { position:absolute; right:16px; bottom:100px; height:56px; min-width:56px; border-radius:999px; border:none; cursor:pointer; background:var(--fc-fab-bg); color:var(--fc-fab-fg); display:inline-flex; align-items:center; gap:8px; padding:0 18px; font:inherit; font-weight:700; font-size:15px; box-shadow:0 8px 18px rgba(0,0,0,.35); }
+.fc-fab.round { width:56px; padding:0; justify-content:center; }
+
+/* Interactive affordances */
+.fc-btn, .fc-btn2, .fc-chip, .fc-weather, .fc-suggest, .fc-fab, .fc-pill, .fc-opt, .fc-radio, .fc-channel, .fc-tile, .fc-card[data-go], .fc-listcard[data-go], .fc-appbtn { cursor:pointer; }
+.fc-card[data-go]:active, .fc-radio:active, .fc-opt:active, .fc-suggest:active, .fc-tile:active { filter:brightness(.96); }
+
+/* Mobile: shrink the device frame so it fits a real phone viewport. */
+@media (max-width: 900px) {
+  .phone { width:min(340px, 100%); height:78vh; max-height:640px; border-width:8px; border-radius:26px; }
+}
+@media (max-width: 430px) {
+  .phone { width:100%; height:74vh; }
+  .fc-fab { bottom:88px; }
+}

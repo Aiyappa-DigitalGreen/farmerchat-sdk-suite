@@ -113,7 +113,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 journeyHost()?.openDrawer()
             } else {
                 graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
-                NavRoutes.navigateChatClose(findNavController())
+                // CHAT_ONLY has no SDK Home — close exits the SDK back to the host
+                // (parity with android-compose FarmerChatRoot).
+                if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
+                    requireActivity().finish()
+                } else {
+                    NavRoutes.navigateChatClose(findNavController())
+                }
             }
         }
         // C3: hide the drawer (menu) affordance when the drawer is disabled.

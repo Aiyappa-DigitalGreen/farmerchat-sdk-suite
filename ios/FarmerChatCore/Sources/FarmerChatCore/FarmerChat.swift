@@ -92,6 +92,16 @@ public final class FarmerChat: @unchecked Sendable {
         let prefs = PreferenceStore()
         self.tokenStore = tokenStore
         self.prefs = prefs
+
+        // Env-scoped cache invalidation: a conversation id is only valid on the
+        // backend that created it — drop the stored id if the base URL changed
+        // since last init (else the answer endpoint 500s on a stale/foreign id).
+        let currentBase = config.resolvedBaseURL.absoluteString
+        if let last = prefs.string(.lastBaseURL), !last.isEmpty, last != currentBase {
+            prefs.remove(.newConversationId)
+        }
+        prefs.setString(currentBase, .lastBaseURL)
+
         self.labels = LabelManager(prefs: prefs)
         self.deviceInfo = DeviceInfoProvider(deviceId: tokenStore.deviceId)
 

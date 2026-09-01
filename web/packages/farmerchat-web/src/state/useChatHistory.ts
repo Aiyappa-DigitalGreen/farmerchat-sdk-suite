@@ -18,6 +18,19 @@ export interface ChatHistoryUiState {
   query: string;
 }
 
+/** Dedupe appended pages by conversation_id (overlapping pages must not double rows). */
+function dedupeByConversationId(items: ConversationListItem[]): ConversationListItem[] {
+  const seen = new Set<string>();
+  const out: ConversationListItem[] = [];
+  for (const item of items) {
+    const id = item.conversation_id ?? '';
+    if (id !== '' && seen.has(id)) continue;
+    if (id !== '') seen.add(id);
+    out.push(item);
+  }
+  return out;
+}
+
 const initialState: ChatHistoryUiState = {
   items: [],
   isLoading: false,
@@ -67,7 +80,8 @@ export function useChatHistory(services: SdkServices): [ChatHistoryUiState, Chat
       pageRef.current = page;
       setState((s) => ({
         ...s,
-        items: page === 1 ? res.data.results : [...s.items, ...res.data.results],
+        items:
+          page === 1 ? res.data.results : dedupeByConversationId([...s.items, ...res.data.results]),
         isLoading: false,
         isLoadingMore: false,
         errorMessage: null,
@@ -94,7 +108,7 @@ export function useChatHistory(services: SdkServices): [ChatHistoryUiState, Chat
     if (!s.query.trim()) return s.items;
     const q = s.query.trim().toLowerCase();
     return s.items.filter((item) =>
-      (item.conversation_title ?? item.question ?? item.title ?? '').toLowerCase().includes(q),
+      (item.conversation_title ?? '').toLowerCase().includes(q),
     );
   }, []);
 

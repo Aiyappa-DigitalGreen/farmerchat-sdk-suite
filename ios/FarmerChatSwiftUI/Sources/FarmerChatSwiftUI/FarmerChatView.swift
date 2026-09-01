@@ -118,7 +118,11 @@ public struct FarmerChatView: View {
 
     private func openDrawer() {
         guard FarmerChat.shared.config.showDrawer else { return } // C3
-        chatHistoryVM.refreshSilently()
+        // Silent history refresh only for authenticated users (OTP or
+        // HOST_TOKEN); guests never trigger a history fetch (android parity).
+        if FarmerChat.shared.isAuthenticated {
+            chatHistoryVM.refreshSilently()
+        }
         router.isDrawerOpen = true
     }
 

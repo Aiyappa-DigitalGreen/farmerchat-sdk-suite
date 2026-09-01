@@ -82,6 +82,29 @@ class FarmerChatConfig private constructor(
     val appearance: FarmerChatAppearance,
     /** Preselect a language code; when it matches a supported language the language screen is skipped. */
     val languageCode: String?,
+    /**
+     * Country code used for the language list when `initialize_user` returns a null/blank
+     * `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
+     * Endpoint #2 rejects a blank `country_code` with HTTP 400, so this must never be empty.
+     */
+    val defaultCountryCode: String,
+    /** State/region paired with [defaultCountryCode] for the endpoint #2 `state` query param. */
+    val defaultStateCode: String,
+    /**
+     * Latitude/longitude representing [defaultCountryCode]/[defaultStateCode].
+     *
+     * Endpoint #12 (home feed) is gated on the backend having a resolved location, and the
+     * backend resolves it ONLY from coordinates — a country name alone is rejected (verified
+     * live 2026-09-01: `{user_id, country, level_2}` left the profile empty and the feed at 0
+     * sections, while `{user_id, lat, long}` produced 21). When guest init cannot resolve a
+     * location and the host has no GPS permission, the SDK posts these coordinates to #11 so a
+     * guest sees a populated home screen instead of a blank one.
+     *
+     * Set these to match [defaultCountryCode] when overriding it, or the feed will show advice
+     * for the wrong region.
+     */
+    val defaultLatitude: Double,
+    val defaultLongitude: Double,
     val enableVoice: Boolean,
     val enableImages: Boolean,
     val enableWeather: Boolean,
@@ -108,6 +131,15 @@ class FarmerChatConfig private constructor(
     val showSettings: Boolean,
     val showHistory: Boolean,
     val showDrawer: Boolean,
+    /**
+     * Whether onboarding shows the "What should we call you?" screen.
+     *
+     * Mirrors the app's `show_name_screen` RemoteConfig flag, which `RouteDecider` already
+     * models. Set false together with [locale] to land a fresh install straight on Home:
+     * `locale` clears the language gate, this clears the name gate, and `routeFromSplash()`
+     * then falls through to Home. Nothing about geolocation, guest init or the API flow changes.
+     */
+    val showNameScreen: Boolean,
     val enableSsfr: Boolean,
 
     // --- FAB customization (config-level defaults; per-instance params win) -
@@ -189,6 +221,10 @@ class FarmerChatConfig private constructor(
         private var guestApiKey: String? = null
         private var appearance: FarmerChatAppearance = FarmerChatAppearance.AUTO
         private var languageCode: String? = null
+        private var defaultCountryCode: String = DEFAULT_COUNTRY_CODE
+        private var defaultStateCode: String = DEFAULT_STATE_CODE
+        private var defaultLatitude: Double = DEFAULT_LATITUDE
+        private var defaultLongitude: Double = DEFAULT_LONGITUDE
         private var enableVoice: Boolean = true
         private var enableImages: Boolean = true
         private var enableWeather: Boolean = true
@@ -206,6 +242,7 @@ class FarmerChatConfig private constructor(
         private var showSettings: Boolean = true
         private var showHistory: Boolean = true
         private var showDrawer: Boolean = true
+        private var showNameScreen: Boolean = true
         private var enableSsfr: Boolean = true
 
         private var fabLabel: String? = null
@@ -234,6 +271,15 @@ class FarmerChatConfig private constructor(
         fun guestApiKey(key: String?) = apply { guestApiKey = key }
         fun appearance(mode: FarmerChatAppearance) = apply { appearance = mode }
         fun languageCode(code: String?) = apply { languageCode = code }
+        /** Fallback country for the language list when the backend cannot resolve one. Blank values are ignored. */
+        fun defaultCountryCode(code: String) = apply { if (code.isNotBlank()) defaultCountryCode = code }
+        /** Fallback state/region paired with [defaultCountryCode]. Blank values are ignored. */
+        fun defaultStateCode(code: String) = apply { if (code.isNotBlank()) defaultStateCode = code }
+        /** Coordinates representing the fallback region; used to seed #11 when no GPS is available. */
+        fun defaultLocation(lat: Double, long: Double) = apply {
+            defaultLatitude = lat
+            defaultLongitude = long
+        }
         fun enableVoice(enabled: Boolean) = apply { enableVoice = enabled }
         fun enableImages(enabled: Boolean) = apply { enableImages = enabled }
         fun enableWeather(enabled: Boolean) = apply { enableWeather = enabled }
@@ -254,6 +300,8 @@ class FarmerChatConfig private constructor(
         fun showSettings(show: Boolean) = apply { showSettings = show }
         fun showHistory(show: Boolean) = apply { showHistory = show }
         fun showDrawer(show: Boolean) = apply { showDrawer = show }
+        /** Show the onboarding name screen. False + [locale] lands a fresh install on Home. */
+        fun showNameScreen(show: Boolean) = apply { showNameScreen = show }
         fun enableSsfr(enabled: Boolean) = apply { enableSsfr = enabled }
 
         // FAB customization ----------------------------------------------
@@ -292,6 +340,10 @@ class FarmerChatConfig private constructor(
             guestApiKey = guestApiKey,
             appearance = appearance,
             languageCode = languageCode,
+            defaultCountryCode = defaultCountryCode,
+            defaultStateCode = defaultStateCode,
+            defaultLatitude = defaultLatitude,
+            defaultLongitude = defaultLongitude,
             enableVoice = enableVoice,
             enableImages = enableImages,
             enableWeather = enableWeather,
@@ -307,6 +359,7 @@ class FarmerChatConfig private constructor(
             showSettings = showSettings,
             showHistory = showHistory,
             showDrawer = showDrawer,
+            showNameScreen = showNameScreen,
             enableSsfr = enableSsfr,
             fabLabel = fabLabel,
             fabBackgroundColor = fabBackgroundColor,
@@ -326,6 +379,32 @@ class FarmerChatConfig private constructor(
     }
 
     companion object {
+        /**
+         * Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
+         * The endpoint 400s on a blank value, so a non-blank default is required.
+         */
+        const val DEFAULT_COUNTRY_CODE = "IN"
+
+        /**
+         * Fallback state/region paired with [DEFAULT_COUNTRY_CODE].
+         *
+         * Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only
+         * to rank languages — a code or an unknown value returns the same set in default order.
+         * Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in `priority_view`, while
+         * `state=KA` pushes it into `expanded_view` ("All languages").
+         */
+        const val DEFAULT_STATE_CODE = "Karnataka"
+
+        /**
+         * Coordinates representing [DEFAULT_COUNTRY_CODE]/[DEFAULT_STATE_CODE] (Bengaluru).
+         *
+         * Used to seed endpoint #11 when nothing else resolved a location, so the home feed is
+         * never empty. Verified live 2026-09-01: the backend accepts coordinates only — a
+         * country name alone leaves the profile (and the feed) empty.
+         */
+        const val DEFAULT_LATITUDE = 12.9716
+        const val DEFAULT_LONGITUDE = 77.5946
+
         @JvmStatic
         fun builder(environment: FarmerChatEnvironment): Builder = Builder(environment)
     }

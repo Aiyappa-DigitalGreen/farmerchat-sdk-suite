@@ -83,10 +83,12 @@ Embedding instead of launching an Activity:
 | Option | Default | Notes |
 |---|---|---|
 | `environment` | required | dev/stage/demo base `farmerchat.farmstack.co/mobile-app-*/`; prod `v2.api.farmer.chat`; eks `api.farmerchat.in` |
-| `geoApiKey` | null | Google Geolocation (`geolocate`, P1: 5 s / 1 retry). Without it, language detection falls back to guest-init IP data. |
+| `geoApiKey` | null | Google Geolocation (`geolocate`, P1: 5 s / 1 retry). Without it, language detection falls back to guest-init IP data. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
 | `guestApiKey` | built-in | `API-Key` header for `initialize_user` / `send_tokens`. |
 | `appearance` | AUTO | Day/Night/Auto; user can change it in Settings (persisted, survives logout). |
 | `languageCode` | null | Preselects a language; the language screen is skipped only once labels are confirmed for it. |
+| `defaultCountryCode` | `"IN"` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
+| `defaultStateCode` | `"Karnataka"` | State/region paired with `defaultCountryCode`. Endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages. |
 | `enableVoice` / `enableImages` / `enableWeather` | true | Hide the corresponding inputs/CTAs. |
 | `onEvent` | null | Receives every analytics event (same names/props as the production app). |
 | `onSessionExpired` | null | Both refresh and guest-token fallback failed. |
@@ -106,6 +108,28 @@ FarmerChat.setAnalyticsListener { name, properties ->
 ## Permissions
 
 The SDK manifests declare `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `ACCESS_COARSE/FINE_LOCATION`. Camera capture uses the system camera app via `FileProvider` (no CAMERA permission). Runtime prompts (mic, location) are requested in-flow with the app's deny-count + settings-dialog behavior. SMS Retriever and fused location come from optional Play Services; their absence never crashes — flows degrade to manual entry / error states.
+
+## Dropping the SDK into an existing app
+
+Verified against RationSmart (`cattle_feed.org`, XML/Fragments, minSdk 24, Java 8) with
+`farmerchat-android-views` resolved from `mavenLocal()`. Four host-side requirements:
+
+| Host requirement | Why |
+|---|---|
+| `compileOptions` / `kotlinOptions.jvmTarget` = **17** | The SDK's bytecode is JVM 17 and cannot be inlined into a 1.8 target. |
+| minSdk **26** — or keep a lower one with `<uses-sdk tools:overrideLibrary="org.digitalgreen.farmerchat.sdk.views, org.digitalgreen.farmerchat.sdk.core" />` | The SDK declares minSdk 26. With the override, gate every SDK touchpoint behind `Build.VERSION.SDK_INT >= 26` — including where the FAB is added, since XML inflation would construct it on older devices too. |
+| `packaging { resources { excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }` | The SDK pulls okhttp up (highest-wins), which collides with jspecify's OSGI entry. |
+| Merged manifest gains `RECORD_AUDIO`, `CAMERA`, `ACCESS_FINE/COARSE_LOCATION` | Play-listing-visible for the host app. |
+
+A host's Kotlin version does **not** have to match the SDK's: Kotlin 2.2.0 reads the
+SDK's 2.3.21 metadata without complaint.
+
+Host apps that use their own `FileProvider` are fine — the SDK declares its provider
+under its own class name (`…sdk.views.FarmerChatFileProvider` /
+`…sdk.compose.FarmerChatFileProvider`) so the manifest-merger keys don't collide.
+A library declaring `androidx.core.content.FileProvider` directly would fail every
+such host with "Attribute provider#androidx.core.content.FileProvider@authorities …
+is also present".
 
 ## Storage
 
@@ -130,10 +154,13 @@ cd android
 ./gradlew :farmerchat-android-compose:compileDebugKotlin
 ./gradlew :farmerchat-android-views:compileDebugKotlin
 ./gradlew :sample-compose:assembleDebug :sample-views:assembleDebug
+./gradlew :sample-jetpack:assembleDebug
 ./gradlew publishToMavenLocal      # com.digitalgreen:* 1.0.0
 ```
 
 `sample-compose` / `sample-views` are minimal hosts: initialize + analytics-listener logging + launch/openChat/logout buttons.
+
+`sample-jetpack` is the smallest end-to-end host: a mock "GreenAcres" dashboard whose only SDK touch-points are one `FarmerChat.initialize(...)` call and a `FarmerChatFab()` in the Scaffold. It runs in `CHAT_ONLY` mode so the FAB opens straight into the chat screen, and all branding lives in one file — `FarmerChatSetup.kt` (theme colors/radii, FAB label/colors, chat bubbles) — the single place to customize. It shows **both usage styles**: the FAB = full-screen launch (`FarmerChat.launch`), and `InlineActivity` (reached from the dashboard button) = **component/inline embedding** — `FarmerChatInline(Modifier…)` placed inside the host layout, so the SDK fills only its panel while host chrome stays visible.
 
 ## Verification status
 

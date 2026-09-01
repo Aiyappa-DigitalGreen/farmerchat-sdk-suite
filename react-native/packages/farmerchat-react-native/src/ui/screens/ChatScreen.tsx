@@ -430,7 +430,7 @@ export function ChatScreen(props: {
             visible={showScrollToBottom}
             onPress={() => listRef.current?.scrollToEnd({ animated: true })}
           />
-          {!state.isLoading ? (
+          {!state.isLoading && !textInputVisible && !voiceInputVisible && !photoInputVisible ? (
             <PrimaryInputButtons
               variant="chat"
               showPhoto={sdk.config.enableImages}
@@ -445,7 +445,11 @@ export function ChatScreen(props: {
 
       {shareCard.cardElement}
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* `undefined` on Android was a no-op, so the composer sat behind the IME exactly like the
+          android-compose imePadding() bug. 'height' is the Android counterpart of iOS 'padding'.
+          NOTE: this only works if the HOST activity uses windowSoftInputMode="adjustResize" —
+          documented in the react-native README. */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TextInputOverlay
           visible={textInputVisible}
           placeholder={label('chat_text_hint', 'Ask a follow-up question…')}

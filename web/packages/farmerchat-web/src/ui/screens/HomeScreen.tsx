@@ -17,6 +17,7 @@ import type { LocationPromptActions } from '../../state/useLocationPrompt';
 import { Events, Screens } from '../../core/analytics';
 import type { SectionDto, SectionOption } from '../../core/types';
 import type { ChatRouteParams } from '../router';
+import { renderableSections } from '../../core/types';
 
 type CardKind = 'content' | 'single' | 'multi';
 
@@ -62,7 +63,8 @@ export function HomeScreen(props: {
     services.analytics.track(Events.WEATHER_FORECAST_VIEWED, {});
     props.onOpenChat({
       source: 'home',
-      question: label('weather_advice_question', 'What does the weather mean for my farm today?'),
+      // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
+      question: label('WHAT_IS_THE_PRESENT_WEATHER', 'What is the present weather?'),
       isWeatherAdviceCTA: true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,12 +80,22 @@ export function HomeScreen(props: {
       services.analytics.track(Events.CARD_CLICKED, { statement_id: section.statement_id ?? '', title: section.title ?? '' });
       const question = section.question_text ?? section.title ?? '';
       if (section.statement_id != null) {
-        const statement = await homeActions.fetchImageStatement(section.statement_id, 'card');
+        // App parity (HomeScreen.kt:580-584): content-card tap sends image_card / text_card.
+        const triggerType =
+          section.type === 'image' ? 'image_card' : section.type === 'statement' ? 'text_card' : 'card';
+        const statement = await homeActions.fetchImageStatement(section.statement_id, triggerType);
         props.onOpenChat({
           source: 'home',
           question,
           preGeneratedAnswer: statement?.short_answer ?? undefined,
-          followUpQuestions: statement?.follow_up_questions ?? undefined,
+          // App parity: #26 follow-ups are objects — sort by sequence, map to strings.
+          followUpQuestions: (statement?.follow_up_questions ?? [])
+            .slice()
+            .sort((a, b) =>
+              typeof a === 'object' && a && typeof b === 'object' && b ? (a.sequence ?? 0) - (b.sequence ?? 0) : 0,
+            )
+            .map((q) => (typeof q === 'string' ? q : q?.question ?? ''))
+            .filter((q) => q.length > 0),
           homeStatementId: statement?.message_id ?? String(section.statement_id),
           imageUri: section.image_url ?? undefined,
         });
@@ -158,7 +170,7 @@ export function HomeScreen(props: {
         {services.config.enableWeather ? (
           <button type="button" className="fcsdk-weatherbtn" onClick={onWeatherClick} aria-label={label('weather_chip', 'Weather')}>
             <span aria-hidden>{weather?.weather_icon ? <img src={weather.weather_icon} alt="" style={{ width: 18, height: 18 }} /> : Icon.weatherDefault}</span>
-            {weather?.current_temp != null ? `${Math.round(weather.current_temp)}°` : label('weather_chip', 'Weather')}
+            {weather?.current_temp ? `${weather.current_temp}°` : label('weather_chip', 'Weather')}
           </button>
         ) : null}
       </div>
@@ -205,9 +217,8 @@ export function HomeScreen(props: {
 
             <div className="fcsdk-feedheader">{label('home_feed_header', 'For your farm today')}</div>
 
-            {(feed.data.sections ?? [])
+            {renderableSections(feed.data.sections)
               .filter((s) => !home.dismissedCardIds.has(s.id ?? String(s.statement_id ?? '')))
-              .filter((s) => (s.type ?? '') !== 'plotline_widget')
               .map((section, i) => {
                 const kind = cardKind(section);
                 const sectionId = section.id ?? String(section.statement_id ?? i);

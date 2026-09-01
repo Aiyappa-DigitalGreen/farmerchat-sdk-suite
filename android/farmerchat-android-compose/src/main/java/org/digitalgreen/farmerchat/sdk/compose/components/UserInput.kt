@@ -247,11 +247,15 @@ private fun UserInputButton(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         val density = LocalDensity.current
+        // NO colorFilter — app parity (fc-compose PrimaryInputButtons.kt). The
+        // fc_icon_camera / fc_icon_mic / fc_icon_keyboard vectors already carry their own
+        // fillColor (#00C950, same as the app's icon_camera / icon_mic / icon_keyboard);
+        // tinting them to foregroundSecondary flattened the Photo/Speak/Type icons to a
+        // single flat colour and was the visible difference from the original app.
         Image(
             painter = painterResource(id = iconRes),
             contentDescription = null,
-            modifier = Modifier.size(28.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(brandColor.foregroundSecondary)
+            modifier = Modifier.size(28.dp)
         )
 
         Text(

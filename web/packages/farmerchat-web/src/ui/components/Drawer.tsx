@@ -44,7 +44,9 @@ export function Drawer(props: {
 }) {
   const label = useLabel();
   const { services } = useSdk();
-  const showHistory = services.config.showHistory;
+  // Recent chats / History are auth-gated: guests never see history (mirrors the
+  // android-compose drawer, which renders the recent section only when authenticated).
+  const canShowHistory = services.config.showHistory && props.isAuthenticated;
   const showSettings = services.config.showSettings;
   if (!props.open) return null;
 
@@ -76,14 +78,16 @@ export function Drawer(props: {
           <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2 }}>{props.currentLanguage}</div>
         </div>
         <div className="fcsdk-scroll">
+          {/* Order matches the app (components/drawer/DrawerContent.kt) and the Android SDK:
+              Home -> Language -> Settings -> Help, with recent chats BELOW the divider. */}
           {navItem('home', '🏠', label('drawer_home', 'Home'))}
-          {showHistory ? navItem('chatHistory', Icon.chat, label('drawer_recent_chats', 'Recent Chats')) : null}
-          {showSettings ? navItem('settings', '⚙️', label('drawer_settings', 'Settings')) : null}
           {navItem('settings/language', '🌐', label('drawer_language', 'Language'))}
+          {showSettings ? navItem('settings', '⚙️', label('drawer_settings', 'Settings')) : null}
           {navItem('help', '❓', label('drawer_help', 'Help'))}
+          {canShowHistory ? navItem('chatHistory', Icon.chat, label('drawer_recent_chats', 'Recent Chats')) : null}
 
-          {showHistory ? <div className="fcsdk-drawer-section">{label('drawer_previous_questions', 'Previous questions')}</div> : null}
-          {!showHistory ? null : props.isLoadingHistory ? (
+          {canShowHistory ? <div className="fcsdk-drawer-section">{label('drawer_previous_questions', 'Previous questions')}</div> : null}
+          {!canShowHistory ? null : props.isLoadingHistory ? (
             <LogoSpinner />
           ) : props.historyErrorMessage ? (
             <div className="fcsdk-pad">
@@ -95,7 +99,7 @@ export function Drawer(props: {
               {props.previousQuestions.map((item, i) => (
                 <button key={item.conversation_id ?? i} type="button" className="fcsdk-drawer-q" onClick={() => props.onOpenQuestion(item)}>
                   <span aria-hidden>{questionIcon(item.message_type)}</span>
-                  <span className="fcsdk-qtext">{item.conversation_title ?? item.question ?? item.title ?? ''}</span>
+                  <span className="fcsdk-qtext">{item.conversation_title ?? ''}</span>
                 </button>
               ))}
               {props.previousQuestions.length > 0 ? (

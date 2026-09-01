@@ -61,6 +61,17 @@ public final class FarmerChatViewController: UINavigationController {
             }
             .store(in: &cancellables)
 
+        // On becoming authenticated (OTP verify / HOST_TOKEN), refresh the
+        // drawer's recent-chats so history appears without reopening the app —
+        // mirrors FarmerChatView's onAuthStateChanged refresh. Guests never
+        // trigger a fetch (the false branch is a no-op).
+        FarmerChat.shared.onAuthStateChanged
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isAuthenticated in
+                if isAuthenticated { self?.chatHistoryVM.refresh() }
+            }
+            .store(in: &cancellables)
+
         // Centralized error route: any screen firing errorNavigation surfaces
         // the full-screen error VC; Try again runs the stored retry action.
         errorNavigation.errorEvents

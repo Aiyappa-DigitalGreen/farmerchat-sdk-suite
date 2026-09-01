@@ -62,8 +62,8 @@ public struct FCWeatherButton: View {
                         Image(systemName: "cloud.sun.fill")
                             .foregroundColor(FCPrimitive.sky400)
                     }
-                    if let temp = weather.currentTemp {
-                        Text("\(Int(temp.rounded()))°")
+                    if let temp = weather.currentTemp, !temp.isEmpty {
+                        Text("\(temp)°")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(theme.content.foregroundPrimary)
                     }

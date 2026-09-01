@@ -36,47 +36,52 @@ public enum AnalyticsEvents {
     public static let newChatClickEvent = "New_Chat_Click_Event"
     public static let followUpQuestionClicked = "Follow_Up_Question_Clicked"
     public static let readFullAdviceClicked = "Read_Full_Advice_Clicked"
-    public static let shareResponseClicked = "Share_Response_Clicked"
-    public static let downloadResponseClicked = "Download_Response_Clicked"
+    // App parity: answer share/save events (were Share_/Download_Response_Clicked).
+    public static let shareResponseClicked = "Answer_Share_Button_Clicked"
+    public static let downloadResponseClicked = "Answer_Save_Button_Clicked"
 
-    // Settings / language
+    // Settings / language — app uses a single Save_Language_Click_Event.
     public static let settingsOptionSelected = "Settings_Option_Selected"
-    public static let languageSelected = "Language_Selected"
-    public static let languageSubmitted = "Language_Submitted"
-    public static let nameUpdated = "Name_Updated"
-    public static let nameSkipped = "Name_Skipped"
+    public static let languageSelected = "Save_Language_Click_Event"
+    public static let languageSubmitted = "Save_Language_Click_Event"
+    public static let nameUpdated = "Name_Save_Click_Event"
+    public static let nameSkipped = "Name_Skip_Click_Event"
 
     // Weather / GPS
-    public static let weatherClicked = "Weather_Clicked"
+    public static let weatherClicked = "Weather_Forecast_Viewed"
     public static let gpsFlowStep = "gps_flow_step"
+    // NOTE: these three do not match the app's lowercase GPS names
+    // (location_fetch_success/…) — tracked in docs/04 (semantics need mapping).
     public static let gpsLocationShared = "GPS_Location_Shared"
     public static let gpsLocationSkipped = "GPS_Location_Skipped"
     public static let gpsLocationFailed = "GPS_Location_Failed"
 
-    // Force-update / misc parity constants
-    public static let forceUpdatePopupUpdateClicked = "FORCE_UPDATE_POPUP_UPDATE_CLICKED"
-    public static let forceUpdatePopupCancelClicked = "FORCE_UPDATE_POPUP_CANCEL_CLICKED"
+    // Force-update / misc parity constants (app casing).
+    public static let forceUpdatePopupUpdateClicked = "Force_Update_Popup_Update_clicked"
+    public static let forceUpdatePopupCancelClicked = "Force_Update_Popup_Cancel_clicked"
 }
 
 /// Common screen names used for Screen_Viewed / Screen_Exited props.
 public enum ScreenNames {
-    public static let splash = "SPLASH"
-    public static let language = "LANGUAGE"
-    public static let enterName = "ENTER_NAME"
-    public static let auth = "AUTH"
-    public static let verifyOtp = "VERIFY_OTP"
-    public static let accountBenefits = "ACCOUNT_BENEFITS"
-    public static let accountSuccess = "ACCOUNT_SUCCESS"
-    public static let home = "HOME"
-    public static let chat = "CHAT"
-    public static let chatHistory = "CHAT_HISTORY"
-    public static let settings = "SETTINGS"
-    public static let settingsName = "SETTINGS_NAME"
-    public static let languageChooser = "LANGUAGE_CHOOSER"
-    public static let help = "HELP"
-    public static let error = "ERROR"
-    public static let fullScreenMessage = "FULL_SCREEN_MESSAGE"
-    public static let locationPrompt = "LOCATION_PROMPT"
+    // App parity: values match `AnalyticsScreens.kt` exactly for the screens the
+    // app defines; the few not in the app source use its human-readable style.
+    public static let splash = "Splash Screen"
+    public static let language = "Select Language Screen"
+    public static let enterName = "Enter Name Screen"
+    public static let auth = "Login Screen"
+    public static let verifyOtp = "Verify OTP Screen"
+    public static let accountBenefits = "Account Benefit Screen"
+    public static let accountSuccess = "Account Success Screen"
+    public static let home = "Dashboard Screen"
+    public static let chat = "Chat Screen"
+    public static let chatHistory = "Recent Chats Screen"
+    public static let settings = "Settings Screen"
+    public static let settingsName = "Settings Name Screen"
+    public static let languageChooser = "Language Settings Screen"
+    public static let help = "Help & Support Screen"
+    public static let error = "Error Screen"
+    public static let fullScreenMessage = "Full Screen Message"
+    public static let locationPrompt = "GPS Interstitial Screen"
 }
 
 /// Fan-out point for analytics. The SDK never embeds third-party analytics

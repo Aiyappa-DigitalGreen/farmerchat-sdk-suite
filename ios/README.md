@@ -70,10 +70,14 @@ import FarmerChatCore
 
 FarmerChat.initialize(config: FarmerChatConfig(
     environment: .prod,          // dev | stage | demo | prod | eks
-    geoApiKey: "…",              // optional: Google Geolocation (language auto-detect)
+    geoApiKey: "…",              // Google Geolocation. Also gates the HOME FEED: without it,
+                                 // location comes from backend IP only, and endpoint #12 returns
+                                 // an empty `sections` list until a location resolves.
     guestApiKey: "…",            // overrides built-in guest init API key
     appearance: .auto,           // day | night | auto
     languageCode: nil,           // preselect a language, skips language screen if valid
+    defaultCountryCode: "IN",    // fallback for the language list when initialize_user
+    defaultStateCode: "Karnataka", // returns no country_code (endpoint #2 400s on a blank one)
     enableVoice: true,
     enableImages: true,
     enableWeather: true,

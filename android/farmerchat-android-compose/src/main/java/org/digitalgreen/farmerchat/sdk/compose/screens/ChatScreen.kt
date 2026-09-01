@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -33,6 +34,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -155,6 +158,9 @@ fun ChatScreen(
     var openPhotoInput by remember { mutableStateOf<(() -> Unit)?>(null) }
     var closePhotoInput by remember { mutableStateOf<(() -> Unit)?>(null) }
     var photoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    // True while the text composer overlay is focused — hide the Photo/Speak/Type
+    // row so the composer doesn't overlap it.
+    var textComposerActive by remember { mutableStateOf(false) }
     var cameraTempUri by remember { mutableStateOf<Uri?>(null) }
     var permissionDialogType by remember { mutableStateOf<String?>(null) }
 
@@ -850,12 +856,27 @@ fun ChatScreen(
                 }
             }
 
-            // Bottom Photo/Speak/Type row (follow-up input entry points)
+            // Bottom Photo/Speak/Type row (follow-up input entry points).
+            //
+            // App parity (fc-compose ChatThreadContent.kt:151) — the app does NOT add/remove
+            // this row, it SLIDES it 150.dp down over 450ms whenever an answer is generating
+            // (`showInputButtons = !isLoading`) and slides it back when the answer lands.
+            // Hard-removing it made the chat input pop in and out, which is the difference from
+            // the original app. The composer rule below is an SDK addition (the text composer
+            // carries its own camera/mic, so the row is redundant while it is open) and is
+            // applied through the same slide rather than a removal.
+            val inputRowHidden = state.isLoading || textComposerActive
+            val inputRowOffset by animateDpAsState(
+                targetValue = if (inputRowHidden) 150.dp else 0.dp,
+                animationSpec = tween(durationMillis = 450),
+                label = "buttonSlide"
+            )
             PrimaryInputButtons(
                 type = PrimaryInputButtonsType.ChatScreen,
                 onPhotoClick = { openPhotoInput?.invoke() },
                 onSpeakClick = { requestMicThenOpenVoice() },
-                onTypeClick = { focusTextInput?.invoke() }
+                onTypeClick = { focusTextInput?.invoke() },
+                modifier = Modifier.offset(y = inputRowOffset)
             )
         }
 
@@ -877,6 +898,12 @@ fun ChatScreen(
 
         // ------------------------------------------------------------------ overlays
         TextInputOverlay(
+            // App parity (ChatInputOverlays.kt:49 / HomeScreen.kt:1276): the composer is
+            // bottom-aligned inside a fillMaxSize Box, so under edge-to-edge + adjustResize it
+            // sits at the RAW screen bottom — behind the IME. Without imePadding() the user
+            // cannot see what they are typing. navigationBarsPadding() keeps it clear of the
+            // gesture bar when the keyboard is closed.
+            modifier = Modifier.imePadding().navigationBarsPadding(),
             onSend = { text, imageUri ->
                 clearTextInput?.invoke()
                 photoUris = emptyList()
@@ -890,6 +917,7 @@ fun ChatScreen(
             onVoiceClick = { requestMicThenOpenVoice() },
             onFocusRequest = { requester -> focusTextInput = requester },
             onClearRequest = { clear -> clearTextInput = clear },
+            onFocusChange = { focused -> textComposerActive = focused },
             photoUris = photoUris,
             onRemovePhoto = { index ->
                 photoUris = photoUris.toMutableList().also { it.removeAt(index) }

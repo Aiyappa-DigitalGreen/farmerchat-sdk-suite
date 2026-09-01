@@ -74,6 +74,8 @@ class SdkPreferences(context: Context) {
 
         // ---- chat ----
         const val NEW_CONVERSATION_ID = "new_conversation_id"
+        /** Effective base URL of the last init — used to invalidate env-scoped cache. */
+        const val LAST_BASE_URL = "last_base_url"
         const val FIRST_QUERY_ASKED = "isFirstQueryAsked"
         const val CACHED_HOME_FEED_RESPONSE = "cached_home_feed_response"
 

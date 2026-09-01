@@ -120,10 +120,43 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
     }
     patch({ guestInitState: { status: 'success', data: init?.ok ? init.data : null } });
 
-    const countryCode = store.getString(PrefKeys.USER_COUNTRY_CODE) ?? '';
-    const regionState = store.getString(PrefKeys.USER_STATE) ?? '';
+    // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an unresolvable IP
+    // comes back with country_code == null (so nothing was persisted). Read the init response
+    // first, then the store, then the host-configured default — never ''.
+    const initData = init?.ok ? init.data : null;
+    const countryCode =
+      initData?.country_code?.trim() ||
+      store.getString(PrefKeys.USER_COUNTRY_CODE)?.trim() ||
+      config.defaultCountryCode;
+    const regionState =
+      initData?.state?.trim() ||
+      store.getString(PrefKeys.USER_STATE)?.trim() ||
+      config.defaultStateCode;
+    // GUEST HOME FIX: endpoint #12 returns an EMPTY feed until the backend has a resolved
+    // location, and it resolves one ONLY from coordinates (a country name alone is rejected,
+    // verified live 2026-09-01). Without this a guest the backend cannot place by IP lands on a
+    // permanently blank home screen. Best-effort — a failure just leaves the feed empty.
+    if (!initData?.country_code?.trim() && session.userId) {
+      await api.updateUserLocation({
+        user_id: session.userId,
+        lat: config.defaultLatitude,
+        long: config.defaultLongitude,
+      });
+    }
+
     await fetchSupportedLanguages(countryCode, regionState);
-  }, [api, config.geoApiKey, fetchSupportedLanguages, patch, session, store]);
+  }, [
+    api,
+    config.geoApiKey,
+    config.defaultCountryCode,
+    config.defaultStateCode,
+    config.defaultLatitude,
+    config.defaultLongitude,
+    fetchSupportedLanguages,
+    patch,
+    session,
+    store,
+  ]);
 
   /** SelectLanguage — per-row label fetch (debounced by the disabled row UI). */
   const selectLanguage = useCallback(

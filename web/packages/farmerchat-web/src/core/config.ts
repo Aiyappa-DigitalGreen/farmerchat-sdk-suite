@@ -28,6 +28,25 @@ export const GEOLOCATE_URL = 'https://www.googleapis.com/geolocation/v1/geolocat
  */
 export const DEFAULT_GUEST_API_KEY = '';
 
+/**
+ * Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
+ * The endpoint 400s on a blank value, so a non-empty default is required.
+ */
+export const DEFAULT_COUNTRY_CODE = 'IN';
+
+/**
+ * Fallback state/region paired with {@link DEFAULT_COUNTRY_CODE}.
+ *
+ * Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only to rank
+ * languages. Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in `priority_view`,
+ * while `state=KA` pushes it into `expanded_view` ("All languages").
+ */
+export const DEFAULT_STATE_CODE = 'Karnataka';
+
+/** Coordinates for {@link DEFAULT_COUNTRY_CODE}/{@link DEFAULT_STATE_CODE} (Bengaluru). */
+export const DEFAULT_LATITUDE = 12.9716;
+export const DEFAULT_LONGITUDE = 77.5946;
+
 export type FarmerChatEventListener = (name: string, props: Record<string, unknown>) => void;
 
 // ---------------------------------------------------------------------------
@@ -106,6 +125,11 @@ export interface FarmerChatCallbacks {
   onScreenView?: (name: string) => void;
   onError?: (code: number | undefined, message: string) => void;
   onSessionStart?: () => void;
+  /**
+   * Fired when the user closes the SDK from a surface with nowhere to go back to
+   * (e.g. CHAT_ONLY chat close). The host should unmount / hide the SDK.
+   */
+  onExit?: () => void;
 }
 
 export interface FarmerChatConfig extends FarmerChatCallbacks {
@@ -122,6 +146,27 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   appearance?: AppearanceMode;
   /** Preselect a language; skips the language screen when the code is valid. */
   languageCode?: string;
+  /**
+   * Country code used for the language list when `initialize_user` returns a null/blank
+   * `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
+   * Endpoint #2 rejects a blank `country_code` with HTTP 400, so this is never empty.
+   * @default 'IN'
+   */
+  defaultCountryCode?: string;
+  /**
+   * State/region paired with {@link defaultCountryCode} for the endpoint #2 `state` param.
+   * @default 'KA'
+   */
+  defaultStateCode?: string;
+  /**
+   * Coordinates for {@link defaultCountryCode}/{@link defaultStateCode} (Bengaluru, Karnataka).
+   *
+   * Endpoint #12 (home feed) is gated on the backend having a resolved location, and it resolves
+   * one ONLY from coordinates — a country name alone is rejected (verified live 2026-09-01).
+   * Seeding #11 with these keeps a guest's home screen populated instead of blank.
+   */
+  defaultLatitude?: number;
+  defaultLongitude?: number;
   enableVoice?: boolean;
   enableImages?: boolean;
   enableWeather?: boolean;
@@ -186,6 +231,10 @@ export interface ResolvedConfig {
   guestApiKey: string;
   appearance: AppearanceMode;
   languageCode?: string;
+  defaultCountryCode: string;
+  defaultStateCode: string;
+  defaultLatitude: number;
+  defaultLongitude: number;
   enableVoice: boolean;
   enableImages: boolean;
   enableWeather: boolean;
@@ -228,6 +277,10 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     guestApiKey: config.guestApiKey ?? DEFAULT_GUEST_API_KEY,
     appearance: config.appearance ?? 'auto',
     languageCode: config.languageCode,
+    defaultCountryCode: config.defaultCountryCode?.trim() || DEFAULT_COUNTRY_CODE,
+    defaultStateCode: config.defaultStateCode?.trim() || DEFAULT_STATE_CODE,
+    defaultLatitude: config.defaultLatitude ?? DEFAULT_LATITUDE,
+    defaultLongitude: config.defaultLongitude ?? DEFAULT_LONGITUDE,
     enableVoice: config.enableVoice ?? true,
     enableImages: config.enableImages ?? true,
     enableWeather: config.enableWeather ?? true,

@@ -17,6 +17,7 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.GetLanguageLabelsUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.GetSupportedLanguagesUseCase
+import org.digitalgreen.farmerchat.sdk.FarmerChatConfig
 
 /**
  * Settings → Language chooser state machine (port of the app's SettingsViewModel
@@ -27,7 +28,8 @@ class SettingsViewModel(
     private val getLanguageLabelsUseCase: GetLanguageLabelsUseCase,
     private val labelManager: LabelManager,
     private val prefs: SdkPreferences,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    private val config: FarmerChatConfig
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(LanguageSettingsState())
@@ -37,8 +39,12 @@ class SettingsViewModel(
 
     fun loadLanguages() {
         _state.update { it.copy(languageState = UiState.Loading) }
+        // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the pref is
+        // empty whenever guest init never resolved one.
         val countryCode = prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
+            .takeIf { it.isNotBlank() } ?: config.defaultCountryCode
         val stateName = prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
+            .takeIf { it.isNotBlank() } ?: config.defaultStateCode
         scope.launch {
             getSupportedLanguagesUseCase.getSupportedLanguages(countryCode, stateName)
                 .collect { result ->

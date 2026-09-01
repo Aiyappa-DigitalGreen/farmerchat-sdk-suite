@@ -49,22 +49,10 @@ export class TokenAuthenticator {
   }
 
   private async doAuthenticate(): Promise<string | null> {
-    // Step 1 — refresh token.
-    const refreshToken = this.store.refreshToken;
-    if (refreshToken) {
-      const refreshed = await this.postTokenEndpoint(
-        'api/user/get_new_access_token/',
-        { refresh_token: refreshToken },
-        null,
-      );
-      if (refreshed) {
-        this.store.saveTokens(refreshed.access_token, refreshed.refresh_token);
-        return refreshed.access_token;
-      }
-    }
-
-    // HOST_TOKEN mode (C2): ask the host for a fresh token instead of the
-    // guest send_tokens fallback; onSessionExpired if it can't provide one.
+    // HOST_TOKEN mode (C2): ask the host for a fresh token FIRST — the host owns
+    // identity, so never call the SDK's own get_new_access_token / guest
+    // send_tokens grants (parity with iOS/web, which short-circuit HOST_TOKEN
+    // before Step 1). onSessionExpired if the host can't provide one.
     if (this.config.authMode === 'HOST_TOKEN') {
       if (this.config.tokenProvider) {
         try {
@@ -79,6 +67,20 @@ export class TokenAuthenticator {
       }
       this.onSessionExpired();
       return null;
+    }
+
+    // Step 1 — refresh token.
+    const refreshToken = this.store.refreshToken;
+    if (refreshToken) {
+      const refreshed = await this.postTokenEndpoint(
+        'api/user/get_new_access_token/',
+        { refresh_token: refreshToken },
+        null,
+      );
+      if (refreshed) {
+        this.store.saveTokens(refreshed.access_token, refreshed.refresh_token);
+        return refreshed.access_token;
+      }
     }
 
     // Step 2 — guest send_tokens fallback with API-Key.

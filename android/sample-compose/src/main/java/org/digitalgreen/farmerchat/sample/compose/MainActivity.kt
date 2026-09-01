@@ -1,6 +1,5 @@
 package org.digitalgreen.farmerchat.sample.compose
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -59,10 +58,9 @@ class MainActivity : ComponentActivity() {
                         OutlinedButton(onClick = {
                             FarmerChat.openChat(this@MainActivity, question = "How do I protect my maize from armyworm?")
                         }) { Text("Open chat with a question") }
-                        OutlinedButton(onClick = {
-                            startActivity(Intent(this@MainActivity, InlineActivity::class.java))
-                        }) { Text("Embed inline (composable)") }
-                        OutlinedButton(onClick = { FarmerChat.logout() }) { Text("Logout") }
+                        // "Embed inline (composable)" and "Logout" are intentionally hidden:
+                        // the demo surface is Launch journey + Open chat + the FarmerChatFab.
+                        // InlineActivity still exists and is reachable directly for C1 testing.
                     }
                 }
             }

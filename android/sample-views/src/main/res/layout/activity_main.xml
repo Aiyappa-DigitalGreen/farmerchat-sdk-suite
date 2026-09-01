@@ -47,12 +47,19 @@
             android:layout_marginTop="8dp"
             android:text="Open chat with a question" />
 
+        <!--
+          "Embed inline (Fragment)" and "Logout" are intentionally hidden: the demo
+          surface is Launch journey + Open chat + FarmerChatFab. Kept with
+          visibility="gone" (rather than deleted) so MainActivity's findViewById
+          bindings stay valid and C1 inline embedding is still reachable in code.
+        -->
         <Button
             android:id="@+id/inlineButton"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:visibility="gone"
             android:text="Embed inline (Fragment)" />
 
         <Button
@@ -61,6 +68,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:visibility="gone"
             android:text="Logout" />
 
     </LinearLayout>

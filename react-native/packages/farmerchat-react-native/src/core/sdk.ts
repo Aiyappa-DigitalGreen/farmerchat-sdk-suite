@@ -72,6 +72,15 @@ export class FarmerChatSdk {
   ready(): Promise<void> {
     if (!this.hydratePromise) {
       this.hydratePromise = this.store.hydrate().then(async () => {
+        // Env-scoped cache invalidation: a conversation id is only valid on the
+        // backend that created it — drop it if the base URL changed since last init.
+        const currentBase = this.config.baseUrl;
+        const lastBase = this.store.getString(StorageKeys.LAST_BASE_URL);
+        if (lastBase && lastBase !== currentBase) {
+          this.store.remove(StorageKeys.NEW_CONVERSATION_ID);
+        }
+        this.store.set(StorageKeys.LAST_BASE_URL, currentBase);
+
         this.labels.restoreFromStore();
         this.applyConfigDefaults();
         // HOST_TOKEN mode (C2): seed host-supplied tokens before splash routing.

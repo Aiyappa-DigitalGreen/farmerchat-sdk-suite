@@ -44,6 +44,7 @@ public enum PrefKey: String, CaseIterable, Sendable {
 
     // Chat
     case newConversationId = "NEW_CONVERSATION_ID"
+    case lastBaseURL = "LAST_BASE_URL"
     case firstQueryAsked = "FIRST_QUERY_ASKED"
     case cachedHomeFeedResponse = "CACHED_HOME_FEED_RESPONSE"
 

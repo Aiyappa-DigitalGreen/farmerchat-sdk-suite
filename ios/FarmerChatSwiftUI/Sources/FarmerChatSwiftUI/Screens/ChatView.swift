@@ -27,6 +27,12 @@ struct ChatView: View {
     @State private var showGallery = false
     @State private var shareImage: UIImage?
     @State private var isLoadingMoreHistory = false
+    /// Tracks the newest message so auto-scroll-to-bottom fires only on new
+    /// turns, not when older history is prepended at the top.
+    @State private var lastBottomMessageId: String?
+    /// The message that was at the top before a "load earlier" fetch — pinned
+    /// back to the top after the older page is prepended to preserve position.
+    @State private var pendingScrollAnchorId: String?
 
     // Client-side answer-reveal bookkeeping (view-only; see FCAiAnswerText).
     // Ids whose reveal has finished. Fresh answers animate once; history +
@@ -41,7 +47,9 @@ struct ChatView: View {
             VStack(spacing: 0) {
                 appBar
                 threadBody
-                inputBar
+                // Hide the Photo/Speak/Type bar while the text composer is open
+                // (the composer overlays the bottom — avoids overlap).
+                if !showTextInput { inputBar }
             }
 
             if showTextInput {
@@ -139,8 +147,9 @@ struct ChatView: View {
                 .buttonStyle(.plain)
             } else {
                 Button {
-                    // popUpTo(Home){!inclusive}
-                    router.popToRoot()
+                    // CHAT_ONLY has no SDK Home — close exits the SDK to the host;
+                    // otherwise popUpTo(Home){!inclusive}.
+                    if args.source == "chatOnly" { exitSdk() } else { router.popToRoot() }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 17, weight: .semibold))
@@ -160,6 +169,17 @@ struct ChatView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 56)
+    }
+
+    /// CHAT_ONLY exit: dismiss the modally-presented SDK (present(from:)) back to
+    /// the host. No-op when embedded inline (host owns the surface).
+    private func exitSdk() {
+        var top = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.dismiss(animated: true)
     }
 
     // MARK: - Thread
@@ -240,13 +260,38 @@ struct ChatView: View {
                 .animation(.easeOut(duration: 0.35), value: lastAnswerRevealed)
             }
             .onChange(of: viewModel.state.messages.count) { _ in
-                if let last = viewModel.state.messages.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                if let anchor = pendingScrollAnchorId {
+                    // Older history was just prepended (load-earlier): keep the
+                    // user in place by pinning the previously-top message to the
+                    // top, rather than jumping to the newest message.
+                    pendingScrollAnchorId = nil
+                    isLoadingMoreHistory = false
+                    lastBottomMessageId = viewModel.state.messages.last?.id
+                    proxy.scrollTo(anchor, anchor: .top)
+                    return
+                }
+                // Content appended at the bottom (a new turn) → scroll to it.
+                // A prepend leaves `last` unchanged, so this won't fire for it.
+                let newLastId = viewModel.state.messages.last?.id
+                if newLastId != lastBottomMessageId {
+                    lastBottomMessageId = newLastId
+                    if let last = viewModel.state.messages.last {
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
                 }
             }
             .onChange(of: viewModel.state.isInitialHistoryLoaded) { loaded in
                 guard loaded, let last = viewModel.state.messages.last else { return }
+                lastBottomMessageId = last.id
                 proxy.scrollTo(last.id, anchor: .bottom)
+            }
+            .onChange(of: viewModel.state.errorMessage) { message in
+                // A failed "load earlier" won't change the message count, so
+                // clear the pending-load state here to avoid a stuck spinner.
+                if message != nil {
+                    isLoadingMoreHistory = false
+                    pendingScrollAnchorId = nil
+                }
             }
         }
     }
@@ -454,11 +499,10 @@ struct ChatView: View {
               let conversationId = args.conversationId,
               !isLoadingMoreHistory else { return }
         isLoadingMoreHistory = true
+        // Remember the current top message; the messages.count handler restores
+        // it to the top once the older page is prepended (position preserved).
+        pendingScrollAnchorId = viewModel.state.messages.first?.id
         viewModel.onAction(.loadChatHistory(conversationId: conversationId, page: next))
-        Task {
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            isLoadingMoreHistory = false
-        }
     }
 
     // MARK: - Listen / share / download

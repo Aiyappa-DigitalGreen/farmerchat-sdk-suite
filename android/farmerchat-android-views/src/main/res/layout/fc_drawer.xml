@@ -37,6 +37,33 @@
                 tools:text="Home" />
 
             <TextView
+                android:id="@+id/fcDrawerLanguageRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_language"
+                tools:text="Language: English" />
+
+            <TextView
+                android:id="@+id/fcDrawerSettingsRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_settings"
+                tools:text="Settings" />
+
+            <TextView
+                android:id="@+id/fcDrawerHelpRow"
+                style="@style/FcDrawerRow"
+                android:drawableStart="@drawable/fc_icon_help"
+                tools:text="Help &amp; Support" />
+
+            <!-- Divider sits AFTER the nav block and BEFORE recent chats, matching the app
+                 (components/drawer/DrawerContent.kt) and the SDK's own Compose drawer. -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="@color/fc_divider" />
+
+            <TextView
                 android:id="@+id/fcDrawerRecentTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -116,30 +143,6 @@
                 android:textColor="@color/fc_green700"
                 tools:text="See all" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="12dp"
-                android:background="@color/fc_divider" />
-
-            <TextView
-                android:id="@+id/fcDrawerSettingsRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_settings"
-                tools:text="Settings" />
-
-            <TextView
-                android:id="@+id/fcDrawerLanguageRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_language"
-                tools:text="Language: English" />
-
-            <TextView
-                android:id="@+id/fcDrawerHelpRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_help"
-                tools:text="Help &amp; Support" />
         </LinearLayout>
     </ScrollView>
 

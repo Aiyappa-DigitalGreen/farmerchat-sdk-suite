@@ -180,11 +180,15 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                     binding.fcHomeLoading.isVisible = false
                     binding.fcHomeError.isVisible = false
                     binding.fcHomeFeed.isVisible = true
+                    // renderStaticTexts() already seeded this TextView with the
+                    // GET_STARTED_BY_CLICKING... label, so a missing API greeting (the case on an
+                    // empty feed) leaves the label in place rather than blanking the header.
                     feed.data.greeting?.takeIf { it.isNotBlank() }?.let {
                         binding.fcHomeGreeting.text = it
                     }
                     adapter.submit(
-                        sections = feed.data.sections,
+                        // Drops plotline_widget (unrenderable in-SDK; would be blank cards).
+                        sections = feed.data.renderableSections(),
                         // C3: SSFR card gated by config.enableSsfr.
                         ssfrEnabled = feed.data.ssfr_enable == true && graph.config.enableSsfr,
                         dismissedIds = state.dismissedCardIds

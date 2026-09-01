@@ -56,11 +56,10 @@ export class LabelManager {
 
   private get languageCode(): string {
     // Forced locale (C5) wins over the stored/onboarding language.
-    return (
-      this.forcedLocale ??
-      this.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE) ??
-      'en'
-    );
+    const code = this.forcedLocale ?? this.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE) ?? 'en';
+    // App parity (LabelManager.kt): normalize before building `${key}_${lang}`.
+    const normalized = code.trim().toLowerCase();
+    return normalized === '' ? 'en' : normalized;
   }
 
   subscribe(listener: Listener): () => void {

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FarmerChat SDK — Theming &amp; Customization Overrides</title>
+<style>
+  :root {
+    --paper:#F4F7F2; --surface:#FFFFFF; --ink:#0F1A13; --muted:#55655B; --line:#DCE6DD;
+    --brand:#008236; --brand-bright:#00C950; --brand-deep:#05351C; --chip:#EAF3EC;
+    --warn:#8A5A00; --warn-bg:#FBF1DD; --warn-line:#EAD9A8;
+    --shadow:0 1px 2px rgba(15,26,19,.04), 0 8px 24px rgba(15,26,19,.06);
+    --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --maxw:1040px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0A110C; --surface:#111A13; --ink:#E9F1EB; --muted:#90A396; --line:#223129;
+      --brand:#34D26B; --brand-bright:#6EE79A; --brand-deep:#0B2015; --chip:#16241A;
+      --warn:#E8C879; --warn-bg:#211A0C; --warn-line:#3D3115;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{--paper:#F4F7F2;--surface:#FFFFFF;--ink:#0F1A13;--muted:#55655B;--line:#DCE6DD;--brand:#008236;--brand-bright:#00C950;--brand-deep:#05351C;--chip:#EAF3EC;--warn:#8A5A00;--warn-bg:#FBF1DD;--warn-line:#EAD9A8;}
+  :root[data-theme="dark"]{--paper:#0A110C;--surface:#111A13;--ink:#E9F1EB;--muted:#90A396;--line:#223129;--brand:#34D26B;--brand-bright:#6EE79A;--brand-deep:#0B2015;--chip:#16241A;--warn:#E8C879;--warn-bg:#211A0C;--warn-line:#3D3115;}
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--font-sans); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:0 24px; }
+  .eyebrow { font-family:var(--font-mono); font-size:.72rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--brand); margin:0 0 10px; }
+  h1,h2,h3 { text-wrap:balance; margin:0; }
+  a { color:var(--brand); }
+
+  .hero { padding:64px 0 32px; }
+  .mark { display:inline-flex; align-items:center; gap:12px; margin-bottom:22px; }
+  .mark svg { width:32px; height:32px; }
+  .mark span { font-family:var(--font-mono); font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .hero h1 { font-size:clamp(2rem,4.6vw,3rem); font-weight:800; letter-spacing:-.025em; line-height:1.05; }
+  .hero h1 em { font-style:normal; color:var(--brand); }
+  .lede { margin:18px 0 0; max-width:64ch; font-size:1.1rem; color:var(--muted); }
+
+  section { padding:34px 0; border-top:1px solid var(--line); }
+  section:first-of-type { border-top:none; }
+  .sec-head { margin-bottom:22px; }
+  .sec-head h2 { font-size:1.45rem; font-weight:750; letter-spacing:-.01em; }
+  .sec-head p { margin:8px 0 0; color:var(--muted); max-width:70ch; }
+  h3.sub { font-size:1.02rem; font-weight:700; margin:22px 0 10px; }
+
+  /* Precedence ladder */
+  .ladder { display:flex; flex-direction:column; gap:10px; }
+  .rung { display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); }
+  .rung .n { font-family:var(--font-mono); font-weight:700; color:var(--brand); min-width:26px; font-size:.95rem; }
+  .rung b { font-weight:700; }
+  .rung p { margin:2px 0 0; color:var(--muted); font-size:.9rem; }
+  .rung--win { border-color:color-mix(in srgb,var(--brand) 45%,var(--line)); background:color-mix(in srgb,var(--brand) 7%,var(--surface)); }
+  .ladder .arrow { text-align:center; color:var(--muted); font-size:.8rem; letter-spacing:.1em; }
+
+  /* Tables */
+  .tablecard { border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow); }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; min-width:560px; font-size:.9rem; }
+  caption { text-align:left; padding:13px 16px; font-weight:700; background:var(--chip); color:var(--ink); border-bottom:1px solid var(--line); }
+  th,td { text-align:left; padding:10px 16px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; background:var(--surface); }
+  tr:last-child td { border-bottom:none; }
+  td code, th code { font-family:var(--font-mono); font-size:.82rem; background:var(--chip); padding:2px 6px; border-radius:5px; color:var(--ink); white-space:nowrap; }
+  td.d { color:var(--muted); }
+
+  .pill { display:inline-block; font-family:var(--font-mono); font-size:.68rem; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:.04em; }
+  .pill--ok { background:var(--chip); color:var(--brand); border:1px solid color-mix(in srgb,var(--brand) 30%,var(--line)); }
+  .pill--part { background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-line); }
+  .pill--no { background:color-mix(in srgb,#c0392b 12%,var(--surface)); color:#c0392b; border:1px solid color-mix(in srgb,#c0392b 30%,var(--line)); }
+
+  .code { background:var(--brand-deep); color:#DCF3E4; border-radius:14px; padding:18px 20px; overflow-x:auto; box-shadow:var(--shadow); border:1px solid color-mix(in srgb,var(--brand) 30%,transparent); margin-top:6px; }
+  .code pre { margin:0; font-family:var(--font-mono); font-size:.82rem; line-height:1.65; }
+  .code .c { color:#86C79E; } .code .k { color:#7FE0A6; font-weight:600; } .code .s { color:#FFD79A; }
+
+  .note { border-left:3px solid var(--warn); background:var(--warn-bg); color:var(--ink); border-radius:0 10px 10px 0; padding:12px 16px; margin-top:14px; font-size:.9rem; }
+  .note b { color:var(--warn); }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+
+  footer { border-top:1px solid var(--line); margin-top:20px; padding:26px 0 56px; color:var(--muted); font-size:.85rem; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  footer .v { font-family:var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="mark">
+      <svg viewBox="0 0 130 130" aria-hidden="true" fill="var(--brand)">
+        <path d="M65 8c9 16 9 34 0 50-9-16-9-34 0-50zM65 122c-9-16-9-34 0-50 9 16 9 34 0 50zM8 65c16-9 34-9 50 0-16 9-34 9-50 0zM122 65c-16 9-34 9-50 0 16-9 34-9 50 0zM25 25c17 4 30 17 34 34-17-4-30-17-34-34zM105 105c-17-4-30-17-34-34 17 4 30 17 34 34zM105 25c-4 17-17 30-34 34 4-17 17-30 34-34zM25 105c4-17 17-30 34-34-4 17-17 30-34 34z"/>
+      </svg>
+      <span>FarmerChat&nbsp;SDK · Theming Guide · v1.0.0</span>
+    </div>
+    <h1>How host apps <em>override</em> the FarmerChat look — one config, every screen.</h1>
+    <p class="lede">The SDK ships a complete green-brand theme and recolors itself from a single <code>FarmerChatConfig</code>. This page documents every override layer that exists in the SDK <strong>today</strong>, the precedence rule that binds them, how each platform resolves them, and what is not yet overridable.</p>
+  </header>
+
+  <!-- 1. Precedence -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">The one rule</p>
+      <h2>Override resolution order</h2>
+      <p>Every visual value the SDK draws is resolved through the same ladder. The first layer that is set wins; anything left unset falls through to the next. This is why an unset override always yields the SDK's current default — overrides are purely additive.</p>
+    </div>
+    <div class="ladder">
+      <div class="rung rung--win"><span class="n">1</span><div><b>Per-instance parameter</b><p>Passed at a specific call site — e.g. <code>FarmerChatFab(icon=…, containerColor=…)</code>. Highest precedence; scoped to that one widget.</p></div></div>
+      <div class="arrow">↓ if not set</div>
+      <div class="rung"><span class="n">2</span><div><b>Config-level knob</b><p>Set once on <code>FarmerChatConfig</code> — the FAB defaults and the chat-UI knobs. Applies everywhere that widget/element appears.</p></div></div>
+      <div class="arrow">↓ if not set</div>
+      <div class="rung"><span class="n">3</span><div><b><code>FarmerChatTheme</code> token</b><p>The host brand theme on <code>FarmerChatConfig.theme</code> — brand colors, dark variants, corner radii, typography, logo. Recolors the whole journey.</p></div></div>
+      <div class="arrow">↓ if not set</div>
+      <div class="rung"><span class="n">4</span><div><b>Built-in FarmerChat green</b><p>The shipped default palette/shape/type. What every host sees before overriding anything.</p></div></div>
+    </div>
+    <p class="note"><b>Text is a separate track.</b> User-visible strings are not part of the color theme — they resolve through <code>stringOverrides</code> → server label <code>${key}_${lang}</code> → <code>${key}_en</code> → built-in English → raw key. See §5.</p>
+  </section>
+
+  <!-- 2. FarmerChatTheme -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Layer 3 · the base theme</p>
+      <h2>FarmerChatTheme — recolor the whole journey</h2>
+      <p>Supplied via <code>FarmerChatConfig.theme</code>. Every field is optional; an omitted field keeps the built-in green value. A single resolver per platform overlays these onto the internal token layer, so <em>every</em> screen recolors with zero per-screen edits.</p>
+    </div>
+
+    <h3 class="sub">Colors (each has an optional dark-mode counterpart)</h3>
+    <div class="tablecard scroll">
+      <table>
+        <caption>Light tokens — plus a parallel dark set (Android <code>*Night</code>, iOS/RN/Web <code>dark*</code> / <code>theme.dark</code>)</caption>
+        <thead><tr><th>Field</th><th>Controls</th><th>Unset → falls back to</th></tr></thead>
+        <tbody>
+          <tr><td><code>brandPrimary</code></td><td class="d">Primary brand surface (app bars, primary buttons, key accents)</td><td class="d">FarmerChat green</td></tr>
+          <tr><td><code>brandPrimaryDark</code></td><td class="d">Darker brand shade (pressed/secondary brand surfaces)</td><td class="d">derived from brandPrimary</td></tr>
+          <tr><td><code>brandAccent</code></td><td class="d">Accent (chevrons, active dots, spinner)</td><td class="d">green500</td></tr>
+          <tr><td><code>onBrand</code></td><td class="d">Foreground on brand surfaces (icon/text)</td><td class="d">auto-contrast from brandPrimary</td></tr>
+          <tr><td><code>background</code></td><td class="d">Screen background</td><td class="d">neutral surface</td></tr>
+          <tr><td><code>readingSurface</code></td><td class="d">Reading surfaces (message bubbles, cards)</td><td class="d">neutral reading tint</td></tr>
+          <tr><td><code>cardSurface</code></td><td class="d">Card / elevated surface</td><td class="d">neutral card</td></tr>
+          <tr><td><code>onBackground</code> / <code>onSurface</code></td><td class="d">Text on background / surface</td><td class="d">near-black / near-white by mode</td></tr>
+          <tr><td><code>error</code></td><td class="d">Error / failed states</td><td class="d">red500</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">Shape &amp; typography &amp; logo</h3>
+    <div class="tablecard scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Controls</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>cardCornerRadius</code></td><td class="d">Card corner radius</td><td class="d">dp / pt / px</td></tr>
+          <tr><td><code>buttonCornerRadius</code></td><td class="d">Button corner radius</td><td class="d"></td></tr>
+          <tr><td><code>inputCornerRadius</code></td><td class="d">Text-input corner radius</td><td class="d"></td></tr>
+          <tr><td><code>fontFamily</code> (Android) / <code>fontName</code> (iOS/RN/Web)</td><td class="d">Host font applied across the journey</td><td class="d">@FontRes / PostScript-or-family name</td></tr>
+          <tr><td><code>typeScale</code></td><td class="d">Global multiplier on text sizes</td><td class="d">e.g. <code>1.1</code> = +10%</td></tr>
+          <tr><td><code>logo</code></td><td class="d">Replaces the 6-petal FarmerChat mark</td><td class="d">@DrawableRes / <code>Image</code> / ImageSource / URL·ReactNode</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. Config knobs -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Layer 2 · config-level knobs</p>
+      <h2>Targeted overrides on FarmerChatConfig</h2>
+      <p>For hosts that want to nudge specific elements without supplying a full theme. All optional; each falls through to the theme token, then the built-in default.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="tablecard scroll">
+        <table>
+          <caption>Floating launcher (FAB)</caption>
+          <thead><tr><th>Field</th><th>Controls</th></tr></thead>
+          <tbody>
+            <tr><td><code>fabLabel</code></td><td class="d">Default label → renders an extended FAB (unset = round icon-only)</td></tr>
+            <tr><td><code>fabBackgroundColor</code></td><td class="d">Launcher background (→ theme brand)</td></tr>
+            <tr><td><code>fabContentColor</code></td><td class="d">Icon/label color (→ on-brand)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tablecard scroll">
+        <table>
+          <caption>Chat message UI</caption>
+          <thead><tr><th>Field</th><th>Controls</th></tr></thead>
+          <tbody>
+            <tr><td><code>userBubbleColor</code></td><td class="d">User bubble background</td></tr>
+            <tr><td><code>userBubbleTextColor</code></td><td class="d">User bubble text</td></tr>
+            <tr><td><code>aiBubbleTextColor</code></td><td class="d">AI answer text color</td></tr>
+            <tr><td><code>bubbleCornerRadius</code></td><td class="d">Bubble corner radius (sharp tail preserved)</td></tr>
+            <tr><td><code>messageFontSize</code> <span class="d">(Android <code>messageFontSizeSp</code>)</span></td><td class="d">Message body font size</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3 class="sub">Layer 1 · per-instance FAB overrides</h3>
+    <p class="d" style="font-size:.9rem;margin:0 0 6px;">The launcher also takes call-site params that beat the config defaults: <code>question</code>, <code>label</code>, a custom <code>icon</code> (Compose <code>ImageVector</code>, SwiftUI/UIKit SF Symbol <code>systemImage</code>, RN <code>ImageSource</code>, Web <code>ReactNode</code>), background/content color, and position (<code>position</code> / <code>bottomLeading</code>).</p>
+  </section>
+
+  <!-- 4. Per-platform resolution -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">How it lands</p>
+      <h2>One resolver per platform</h2>
+      <p>Each platform overlays the host overrides onto its internal token layer exactly once, at init/compose time — nothing is threaded screen-by-screen.</p>
+    </div>
+    <div class="tablecard scroll">
+      <table>
+        <thead><tr><th>Platform</th><th>Resolver</th><th>Overlays onto</th></tr></thead>
+        <tbody>
+          <tr><td>Android · Compose</td><td class="d"><code>HostTheme</code> / <code>Theme.kt</code> overlay</td><td class="d"><code>LocalBrandColors</code> / <code>LocalContentColors</code> / <code>LocalFcShapes</code> / <code>MaterialTheme</code></td></tr>
+          <tr><td>Android · Views</td><td class="d"><code>FcThemeInflaterFactory</code> + <code>FcRecolor</code> / <code>FcViewTheme</code></td><td class="d">Remaps brand token colors on every inflated view (chat knobs applied in <code>ChatAdapter</code>)</td></tr>
+          <tr><td>iOS · SwiftUI</td><td class="d"><code>FCTheme.applyHostOverrides</code></td><td class="d"><code>FCBrandColors</code> / <code>FCContentColors</code> / <code>FCShapes</code> (via <code>@Environment(\.fcTheme)</code>)</td></tr>
+          <tr><td>iOS · UIKit</td><td class="d"><code>FCUITheme</code> <code>hostColor</code> KeyPath resolver (Color→UIColor)</td><td class="d">Static theme accessors read by every cell/VC</td></tr>
+          <tr><td>React Native</td><td class="d"><code>resolveTheme()</code> in the SDK constructor</td><td class="d">Live bindings <code>dayTheme</code>/<code>nightTheme</code>/<code>radius</code>/<code>typography</code>/<code>brandLogo</code></td></tr>
+          <tr><td>Web</td><td class="d"><code>resolveThemeVars()</code> / <code>colorVars()</code></td><td class="d">Scoped <code>--fc-*</code> CSS custom properties on <code>.fcsdk-root</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 5. Strings + locale -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">The text track</p>
+      <h2>String &amp; locale overrides</h2>
+      <p>Copy is customized separately from colors — no dedicated "chatTitle/subtitle/hint" fields are needed because every visible string is a label key you can override.</p>
+    </div>
+    <div class="tablecard scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>stringOverrides</code></td><td class="d">Map of <code>labelKey → string</code>; highest precedence, wins over server + built-in labels. Change the app-bar title, feed header, input hint, follow-up header, CTAs, etc.</td></tr>
+          <tr><td><code>locale</code></td><td class="d">Force a language code regardless of device/onboarding; also preselects the language and skips the language screen.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6. Examples -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Put together</p>
+      <h2>Examples</h2>
+    </div>
+    <h3 class="sub">Android (Kotlin)</h3>
+    <div class="code"><pre>FarmerChat.<span class="k">initialize</span>(this,
+  FarmerChatConfig.<span class="k">builder</span>(FarmerChatEnvironment.PROD)
+    <span class="c">// Layer 3 — full brand theme</span>
+    .<span class="k">theme</span>(FarmerChatTheme.<span class="k">builder</span>()
+      .<span class="k">brandPrimary</span>(<span class="s">0xFF1565C0</span>.toInt())
+      .<span class="k">cardCornerRadius</span>(<span class="s">16</span>)
+      .<span class="k">fontFamily</span>(R.font.host_sans)
+      .<span class="k">logo</span>(R.drawable.host_logo)
+      .<span class="k">build</span>())
+    <span class="c">// Layer 2 — targeted knobs</span>
+    .<span class="k">fabLabel</span>(<span class="s">"Ask AI"</span>)
+    .<span class="k">userBubbleColor</span>(<span class="s">0xFF1565C0</span>.toInt())
+    .<span class="k">messageFontSizeSp</span>(<span class="s">15f</span>)
+    .<span class="k">stringOverrides</span>(mapOf(<span class="s">"fc_v2_app_label_app_name"</span> to <span class="s">"AgriAssist"</span>))
+    .<span class="k">build</span>())</pre></div>
+
+    <h3 class="sub">Web (TypeScript)</h3>
+    <div class="code"><pre>FarmerChat.<span class="k">initialize</span>({
+  environment: <span class="s">'prod'</span>,
+  theme: { colors: { brandPrimary: <span class="s">'#1565C0'</span> }, shape: { cardCornerRadius: <span class="s">16</span> } },
+  fabLabel: <span class="s">'Ask AI'</span>,
+  userBubbleColor: <span class="s">'#1565C0'</span>,
+  bubbleCornerRadius: <span class="s">20</span>,
+  messageFontSize: <span class="s">15</span>,
+  stringOverrides: { fc_v2_app_label_app_name: <span class="s">'AgriAssist'</span> },
+})</pre></div>
+  </section>
+
+  <!-- 7. Limitations -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Be honest about the edges</p>
+      <h2>What is &amp; isn't overridable today</h2>
+    </div>
+    <div class="tablecard scroll">
+      <table>
+        <thead><tr><th>Area</th><th>Status</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Brand colors + dark variants</td><td><span class="pill pill--ok">FULL</span></td><td class="d">All platforms, screenshot-verified, zero per-screen edits.</td></tr>
+          <tr><td>FAB + chat-bubble knobs</td><td><span class="pill pill--ok">FULL</span></td><td class="d">All platforms; build-verified (device runtime pass pending).</td></tr>
+          <tr><td>Shape radii — RN &amp; iOS</td><td><span class="pill pill--part">PARTIAL</span></td><td class="d">Radii baked into module-level <code>StyleSheet.create</code> / literal <code>.system(size:)</code> sites keep defaults; only render-time reads pick up the override.</td></tr>
+          <tr><td>Typography scaling — iOS</td><td><span class="pill pill--part">PARTIAL</span></td><td class="d"><code>typeScale</code>/<code>fontName</code> apply where the <code>theme.font(...)</code> helper is used; some literal <code>.font(.system(size:))</code> call sites are not swept.</td></tr>
+          <tr><td>Android Views accent glyphs</td><td><span class="pill pill--part">PARTIAL</span></td><td class="d">Brand surfaces recolor via the inflater factory; a few baked vector-drawable fills stay SDK-green (documented).</td></tr>
+          <tr><td><code>aiBubbleColor</code> · <code>aiAvatarEmoji</code> · <code>showUserAvatar</code></td><td><span class="pill pill--no">NOT SHIPPED</span></td><td class="d">Require net-new per-message UI (AI bubble container + avatars) that no platform renders today. Left out to avoid dead knobs; tracked in <code>docs/04-parity-matrix.md</code>. Re-add with UI on request.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>No-hallucination note.</b> Field names, resolvers, and statuses above are taken from the SDK source and <code>docs/03</code>/<code>docs/04</code> as of v1.0.0. If code and this page ever disagree, the code and those docs win.</p>
+  </section>
+
+  <footer>
+    <span>FarmerChat SDK — theming &amp; customization overrides. Green brand shown; fully re-themeable.</span>
+    <span class="v">v1.0.0 · Android · iOS · React Native · Web</span>
+  </footer>
+
+</div>
+</body>
+</html>

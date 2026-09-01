@@ -213,8 +213,8 @@ final class FCUIHomeViewController: UIViewController {
             applySnapshot(feed, state: state)
         }
 
-        if let weather = state.weatherState.value, let temp = weather.currentTemp {
-            navigationItem.rightBarButtonItem?.title = "\(Int(temp.rounded()))°"
+        if let weather = state.weatherState.value, let temp = weather.currentTemp, !temp.isEmpty {
+            navigationItem.rightBarButtonItem?.title = "\(temp)°"
         }
 
         if case .success(let voice) = state.voiceTranscribeState {
@@ -262,7 +262,8 @@ final class FCUIHomeViewController: UIViewController {
 
     private func weatherTapped() {
         FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
-        let question = fcuiLabel("weather_advice_question", "What does today's weather mean for my farm?")
+        // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
+        let question = fcuiLabel("WHAT_IS_THE_PRESENT_WEATHER", "What is the present weather?")
         // Route through the LocationPromptManager (interstitial → permission →
         // fetch), then open Chat once the location is known (app parity).
         guard let nav = navigationController as? FarmerChatViewController else {
@@ -334,9 +335,16 @@ final class FCUIHomeViewController: UIViewController {
             return
         }
         FarmerChat.shared.analytics.track(AnalyticsEvents.cardClicked, props: ["statement_id": statementId.stringValue])
+        // App parity (HomeScreen.kt:580-584): content-card tap sends image_card / text_card by type.
+        let triggerType: String
+        switch section.type?.lowercased() {
+        case "image": triggerType = "image_card"
+        case "statement": triggerType = "text_card"
+        default: triggerType = "card"
+        }
         Task { @MainActor in
             let result = await FarmerChat.shared.api.imageStatement(
-                ImageStatementRequest(statementId: statementId, triggeredInputType: "card")
+                ImageStatementRequest(statementId: statementId, triggeredInputType: triggerType)
             )
             if case .success(let response) = result {
                 self.openChat(FCUIChatArgs(

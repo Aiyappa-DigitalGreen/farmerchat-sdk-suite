@@ -159,7 +159,8 @@ public final class ChatViewModel: ObservableObject {
                     question,
                     transcriptionId: transcriptionId,
                     audioURL: audioURL,
-                    triggeredInputType: audioURL != nil ? "voice" : "keyboard",
+                    // App parity: weather-CTA / SSFR carry their own type; else voice/text (not "keyboard").
+                    triggeredInputType: isWeatherCTA ? "weather" : (isSSFR ? "ssfr" : (audioURL != nil ? "voice" : "text")),
                     weatherCtaTriggered: isWeatherCTA,
                     ssfrCrop: isSSFR ? ssfrCrop : nil,
                     originScreen: origin
@@ -177,7 +178,8 @@ public final class ChatViewModel: ObservableObject {
                     question,
                     transcriptionId: transcriptionId,
                     audioURL: audioURL,
-                    triggeredInputType: audioURL != nil ? "voice" : "keyboard",
+                    // App parity: keyboard follow-up sends "follow_up" (not "keyboard").
+                    triggeredInputType: audioURL != nil ? "voice" : "follow_up",
                     weatherCtaTriggered: false,
                     ssfrCrop: nil,
                     originScreen: ScreenNames.chat
@@ -307,7 +309,10 @@ public final class ChatViewModel: ObservableObject {
                 question,
                 transcriptionId: nil,
                 audioURL: nil,
-                triggeredInputType: triggerInputType ?? "card",
+                // App parity: read-full-advice sends "read_full_advice" (was "card").
+                // (statement_id + append-not-replace remain — AiResponse doesn't
+                // carry the pre-gen statement_id; tracked in docs/04.)
+                triggeredInputType: "read_full_advice",
                 weatherCtaTriggered: false,
                 ssfrCrop: nil,
                 statementId: nil,
@@ -391,7 +396,8 @@ public final class ChatViewModel: ObservableObject {
         let request = TextPromptRequest(
             query: question,
             conversationId: convId,
-            messageId: UUID().uuidString,
+            // App parity: message_id is sent empty (""); the response id is authoritative.
+            messageId: "",
             statementId: statementId,
             weatherCtaTriggered: weatherCtaTriggered,
             triggeredInputType: triggeredInputType,
@@ -623,10 +629,13 @@ public final class ChatViewModel: ObservableObject {
         let request = PlantixRequest(
             conversationId: convId,
             image: imageData.base64EncodedString(),
+            triggeredInputType: "image",
             query: question.isEmpty ? nil : question,
-            lat: env.prefs.double(.latitude),
-            lng: env.prefs.double(.longitude),
-            imageName: "fc_sdk_\(Int(Date().timeIntervalSince1970)).jpg"
+            // App parity: latitude/longitude sent as STRINGs.
+            latitude: env.prefs.double(.latitude).map { String($0) },
+            longitude: env.prefs.double(.longitude).map { String($0) },
+            imageName: "fc_sdk_\(Int(Date().timeIntervalSince1970)).jpg",
+            retry: false
         )
         let result = await env.api.imageAnalysis(request)
         switch result {
@@ -673,7 +682,7 @@ public final class ChatViewModel: ObservableObject {
         state.isLoading = false
         switch result {
         case .success(let response):
-            let mapped = Self.mapHistory(response.messages)
+            let mapped = Self.mapHistory(response.messages, page: page)
             if page == 1 {
                 state.messages = mapped
                 state.isInitialHistoryLoaded = true
@@ -681,7 +690,16 @@ public final class ChatViewModel: ObservableObject {
                 // Prepend older page above current thread.
                 state.messages = mapped + state.messages
             }
-            state.historyNextPage = response.nextPage
+            // Hard guard: duplicate ids break SwiftUI list identity (and hard-crash the
+            // equivalent Compose LazyColumn), so never trust the wire to be unique.
+            var seenIds = Set<String>()
+            state.messages = state.messages.filter { seenIds.insert($0.id).inserted }
+            // The #32 response carries no pagination metadata (only
+            // {conversation_id, data}); the app pages by "did this page return
+            // any items" — page+1 until an empty page comes back. Base this on
+            // the RAW items, not `mapped`: a page can hold only type-7 follow-up
+            // or unknown-type items that map to zero bubbles yet still advance.
+            state.historyNextPage = response.messages.isEmpty ? nil : page + 1
             state.chatResponseState = .success("")
             // Latest AI message's follow-ups become the suggestions.
             for entry in state.messages.reversed() {
@@ -703,10 +721,17 @@ public final class ChatViewModel: ObservableObject {
     /// Maps thread-history items to chat messages
     /// (message_type_id: 1=query_text, 2=query_audio, 3=response_text,
     /// 7=follow_up_questions, 11=input_image).
-    static func mapHistory(_ items: [ConversationChatHistoryMessageItem]) -> [ChatMessage] {
+    static func mapHistory(_ items: [ConversationChatHistoryMessageItem], page: Int = 1) -> [ChatMessage] {
         var result: [ChatMessage] = []
-        for item in items {
-            let idBase = item.messageId?.stringValue ?? UUID().uuidString
+        for (index, item) in items.enumerated() {
+            // A query and its response SHARE one `message_id` (verified live 2026-09-01: a single
+            // turn returns type 1, 3 and 7 all carrying the same id). Using it directly as the
+            // SwiftUI list identity collides two rows — app parity (fc-compose
+            // ChatViewModel.kt:1027) keys on message_id + message_type_id + index. `messageId`
+            // below keeps the raw API id for TTS/follow-ups.
+            let rawId = item.messageId?.stringValue ?? UUID().uuidString
+            let typeTag = item.messageTypeId.map(String.init) ?? "x"
+            let idBase = "\(rawId)_\(typeTag)_\(page)_\(index)"
             switch item.typeId {
             case .queryText:
                 result.append(.user(ChatMessage.UserMessage(

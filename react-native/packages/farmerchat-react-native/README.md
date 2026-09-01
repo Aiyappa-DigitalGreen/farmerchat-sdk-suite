@@ -115,10 +115,12 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `environment` | `'dev'\|'stage'\|'demo'\|'prod'\|'eks'` | — (required) | selects the backend base URL |
-| `geoApiKey` | `string` | – | Google Geolocation key for language auto-detect |
+| `geoApiKey` | `string` | – | Google Geolocation key for language auto-detect. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
 | `guestApiKey` | `string` | built-in | overrides the guest-init API key |
 | `appearance` | `'day'\|'night'\|'auto'` | `'auto'` | theme mode |
 | `languageCode` | `string` | – | preselect a language, skips the language screen |
+| `defaultCountryCode` | `string` | `'IN'` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
+| `defaultStateCode` | `string` | `'Karnataka'` | state/region paired with `defaultCountryCode`; endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages |
 | `enableVoice` | `boolean` | `true` | Speak input + Listen TTS |
 | `enableImages` | `boolean` | `true` | Photo queries |
 | `enableWeather` | `boolean` | `true` | weather chip + advice CTA |

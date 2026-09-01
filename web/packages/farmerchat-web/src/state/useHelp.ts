@@ -27,7 +27,10 @@ export function useHelp(services: SdkServices): [HelpState, HelpActions] {
     setState((s) => ({ ...s, helpState: loading() }));
     const lang = labels.languageCode || 'en';
     const country = store.getString(PrefKeys.USER_COUNTRY_CODE) ?? undefined;
-    const res = await api.getHelpSupport(lang, 5, undefined, country);
+    // App parity: FAQ `theme` derives from appearance (Day→light, Night→dark, Auto→default).
+    const mode = (store.getString(PrefKeys.APPEARANCE_MODE) ?? 'auto').toLowerCase();
+    const theme = mode === 'day' ? 'light' : mode === 'night' ? 'dark' : 'default';
+    const res = await api.getHelpSupport(lang, 5, theme, country);
     setState((s) => ({ ...s, helpState: toUiState(res) }));
   }, [api, labels, store]);
 

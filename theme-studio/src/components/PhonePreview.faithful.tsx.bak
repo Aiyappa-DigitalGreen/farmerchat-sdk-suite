@@ -1,0 +1,294 @@
+/* FarmerChat SDK preview — an interactive, simulated re-render of the SDK's own
+ * screens (NOT shadcn). Faithful to the RN 1:1 app port: Home on the green BRAND
+ * surface; onboarding/auth/settings on the light neutral surface; Chat on the
+ * white reading surface. Real SDK PNGs are tinted via CSS mask, exactly as the
+ * SDK tints its black+alpha assets at runtime. Honors precedence:
+ * chat knob ?? theme token ?? built-in default. */
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import type { ThemeState } from "@/lib/theme"
+import "./phone.css"
+
+export type Appearance = "day" | "night"
+export type Screen = "language" | "name" | "home" | "chat" | "auth" | "settings"
+
+export const SCREENS: [Screen, string][] = [
+  ["language", "Language"],
+  ["name", "Name"],
+  ["home", "Home"],
+  ["chat", "Chat"],
+  ["auth", "OTP"],
+  ["settings", "Settings"],
+]
+
+const LANGS = ["English", "हिन्दी", "தமிழ்", "తెలుగు"]
+const OPTS = ["1–2 acres", "3–5 acres", "5+ acres"]
+const AI_REPLIES = [
+  "Good question. A **soil test** first means you apply only what's needed — it saves cost and lifts yield.",
+  "Quick tip: split fertilizer into **2–3 doses** across the season so the crop takes up more of it.",
+  "For pests, describe the **leaf symptoms** — spots, curling, colour — and I can narrow down the cause.",
+  "Water early morning or evening to cut evaporation. Aim for **deep, less-frequent** irrigation.",
+]
+
+const ASSET: Record<string, string> = {
+  logo: "fc_logo_mark", menu: "fc_icon_menu", close: "fc_icon_close", back: "fc_icon_back",
+  camera: "fc_icon_camera", mic: "fc_icon_mic", keyboard: "fc_icon_keyboard", send: "fc_icon_send",
+  share: "fc_icon_share", save: "fc_icon_save", speaker: "fc_icon_speaker",
+  chevron: "fc_icon_chevron_right", chevronDown: "fc_icon_chevron_down",
+  day: "fc_icon_mode_day", night: "fc_icon_mode_night", auto: "fc_icon_mode_auto",
+  whatsapp: "fc_icon_whatsapp", sms: "fc_icon_sms",
+}
+
+interface Msg { role: "user" | "ai"; text: string; followups?: string[] }
+
+function num(v: number | "", d: number): number {
+  return v === "" || v == null || isNaN(v as number) ? d : Number(v)
+}
+function mdLite(t: string): string {
+  return String(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")
+}
+
+function phoneVars(state: ThemeState, appearance: Appearance): CSSProperties {
+  const c = state.colors, sh = state.shape, ch = state.chat, fb = state.fab
+  const dark = appearance === "night"
+  const v: Record<string, string | number> = {
+    "--fc-appbar": c.brandPrimary,
+    "--fc-onbrand": c.onBrand,
+    "--fc-brand-dark": c.brandPrimaryDark,
+    "--fc-accent": c.brandAccent,
+    "--fc-home-bg": c.brandPrimary,
+    "--fc-error": c.error,
+    "--fc-light-bg": dark ? "#18181B" : c.background,
+    "--fc-reading": dark ? "#18181B" : c.readingSurface,
+    "--fc-card": dark ? "#27272A" : c.cardSurface,
+    "--fc-ink": dark ? "#FFFFFF" : c.onBackground,
+    "--fc-muted-c": dark ? "#A1A1AA" : "#71717B",
+    "--fc-bubble-user": ch.userBubbleColor || (dark ? "#27272A" : "#ECECEE"),
+    "--fc-bubble-user-text": ch.userBubbleTextColor || (dark ? "#FFFFFF" : c.onBackground),
+    "--fc-ai-text": ch.aiBubbleTextColor || (dark ? "#FFFFFF" : c.onBackground),
+    "--fc-r-card": num(sh.cardCornerRadius, 24) + "px",
+    "--fc-r-btn": num(sh.buttonCornerRadius, 12) + "px",
+    "--fc-r-input": num(sh.inputCornerRadius, 12) + "px",
+    "--fc-r-bubble": num(ch.bubbleCornerRadius, 20) + "px",
+    "--fc-msg-size": num(ch.messageFontSize, 15) + "px",
+    "--fc-scale": state.typography.typeScale || 1,
+    "--fc-fab-bg": fb.fabBackgroundColor || c.brandPrimary,
+    "--fc-fab-fg": fb.fabContentColor || c.onBrand,
+  }
+  if (state.typography.fontFamily) v.fontFamily = `"${state.typography.fontFamily}", system-ui, sans-serif`
+  return v as CSSProperties
+}
+
+function Ic({ name, color = "var(--fc-ink)", size = 20 }: { name: string; color?: string; size?: number }) {
+  const u = `url(/assets/${ASSET[name]}.png)`
+  return <span className="ic" style={{ width: size, height: size, WebkitMaskImage: u, maskImage: u, background: color }} />
+}
+
+interface PreviewProps {
+  theme: ThemeState
+  appearance: Appearance
+  setAppearance: (a: Appearance) => void
+  screen: Screen
+  setScreen: (s: Screen) => void
+}
+
+export function PhonePreview({ theme, appearance, setAppearance, screen, setScreen }: PreviewProps) {
+  const [chatMsgs, setChatMsgs] = useState<Msg[]>([
+    { role: "user", text: "What's the best fertilizer for wheat this season?" },
+    { role: "ai", text: "For **wheat**, a balanced approach works well:\n1. Apply **DAP** at sowing for phosphorus.\n2. Top-dress **urea** in 2 splits.", followups: ["How much urea per acre?", "When should I irrigate?"] },
+  ])
+  const aiIdx = useRef(0)
+  const [langSel, setLangSel] = useState(0)
+  const [optSel, setOptSel] = useState(0)
+  const [chan, setChan] = useState(0)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [draft, setDraft] = useState("")
+  const threadRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
+  }, [chatMsgs, screen, composerOpen])
+
+  function navigate(to: Screen) {
+    if (to === "chat") setComposerOpen(false)
+    setScreen(to)
+  }
+  function sendChat(text?: string) {
+    const q = (text ?? draft).trim()
+    if (!q) return
+    aiIdx.current = (aiIdx.current + 1) % AI_REPLIES.length
+    setChatMsgs((m) => [...m, { role: "user", text: q }, { role: "ai", text: AI_REPLIES[aiIdx.current] }])
+    setDraft("")
+    if (screen !== "chat") { setComposerOpen(false); navigate("chat") }
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const AppBar = (opts: { left?: string; leftGo?: Screen; logo?: boolean; title?: string; weather?: boolean }) => (
+    <div className="fc-appbar">
+      <img className="fc-glow-y" src="/assets/fc_glow_yellow.png" alt="" />
+      <div className="fc-ab-inner">
+        {opts.left
+          ? <span className="fc-chip" onClick={opts.leftGo ? () => navigate(opts.leftGo!) : undefined}><Ic name={opts.left} color="var(--fc-onbrand)" size={20} /></span>
+          : <span className="fc-chip-ph" />}
+        <span className="fc-ab-center">
+          {opts.logo ? <Ic name="logo" color="var(--fc-onbrand)" size={34} />
+            : opts.title ? <span className="fc-ab-title">{opts.title}</span> : null}
+        </span>
+        {opts.weather
+          ? <span className="fc-weather" onClick={() => navigate("chat")}><img className="fc-wimg" src="/assets/fc_weather_sunclouds.png" alt="" />28°<Ic name="chevron" color="var(--fc-accent)" size={13} /></span>
+          : <span className="fc-chip-ph" />}
+      </div>
+    </div>
+  )
+
+  // NOTE: these are render *helpers* — call them as functions ({homeTiles()}),
+  // never mount them as elements (<HomeTiles/>). Defining a component inside the
+  // body and mounting it remounts the subtree every render, which would blow away
+  // focus in the composer <input> after each keystroke.
+  const homeTiles = (): ReactNode => (
+    <div className="fc-tiles fc-tiles--home" onClick={() => navigate("chat")}>
+      {(["camera", "mic", "keyboard"] as const).map((k, i) => (
+        <div className="fc-tile" key={k}><Ic name={k} color="var(--fc-accent)" size={26} /><span>{["Photo", "Speak", "Type"][i]}</span></div>
+      ))}
+    </div>
+  )
+  const chatBottom = (): ReactNode => composerOpen ? (
+    <div className="fc-composer">
+      <input ref={inputRef} className="fc-input-live" value={draft} placeholder="Type your question…" autoComplete="off"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); sendChat() } }} />
+      <span className="fc-send-btn" onClick={() => sendChat()}><Ic name="send" color="var(--fc-onbrand)" size={18} /></span>
+    </div>
+  ) : (
+    <div className="fc-tiles fc-tiles--chat">
+      <div className="fc-tile" onClick={() => sendChat("📷  (photo) What is this spot on my tomato leaf?")}><Ic name="camera" color="var(--fc-accent)" size={26} /><span>Photo</span></div>
+      <div className="fc-tile" onClick={() => sendChat("🎤  (voice) How do I control stem borer in paddy?")}><Ic name="mic" color="var(--fc-accent)" size={26} /><span>Speak</span></div>
+      <div className="fc-tile" onClick={() => { setComposerOpen(true); setTimeout(() => inputRef.current?.focus(), 0) }}><Ic name="keyboard" color="var(--fc-accent)" size={26} /><span>Type</span></div>
+    </div>
+  )
+
+  const bubble = (m: Msg): ReactNode => m.role === "user" ? (
+    <div className="fc-bubble-user" dangerouslySetInnerHTML={{ __html: mdLite(m.text) }} />
+  ) : (
+    <>
+      <div className="fc-ai-row"><div className="fc-ai-answer">
+        <span dangerouslySetInnerHTML={{ __html: mdLite(m.text) }} />
+        <div className="fc-source">Source: FarmerChat Knowledge Base</div>
+        <div className="fc-actions">
+          <span className="fc-actchip"><Ic name="share" color="var(--fc-accent)" size={15} />Share</span>
+          <span className="fc-actchip"><Ic name="save" color="var(--fc-accent)" size={15} />Save</span>
+          <span className="fc-actchip"><Ic name="speaker" color="var(--fc-accent)" size={15} />Listen</span>
+        </div>
+      </div></div>
+      {m.followups?.length ? (
+        <div className="fc-related">
+          <div className="fc-related-title"><span className="fc-related-dot" />Related questions</div>
+          {m.followups.map((q) => (
+            <div className="fc-suggest" key={q} onClick={() => sendChat(q)}><span>{q}</span><span className="fc-ask"><Ic name="send" color="var(--fc-accent)" size={14} /></span></div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  )
+
+  let body: React.ReactNode = null
+  if (screen === "language") body = (
+    <div className="fc-light fc-onboard">
+      <div className="fc-logo-wrap"><Ic name="logo" color="var(--fc-ink)" size={44} /></div>
+      <div className="fc-h1">Choose your language</div><div className="fc-sub">You can change this later</div>
+      <div className="fc-radios">
+        {LANGS.map((l, i) => (
+          <div className={"fc-radio" + (i === langSel ? " sel" : "")} key={l} onClick={() => setLangSel(i)}><span>{l}</span><span className="fc-disc" /></div>
+        ))}
+      </div>
+      <div className="fc-pill">All languages</div>
+      <div className="fc-bottombar">
+        <div className="fc-tagline">Practical advice for your crops and animals</div>
+        <button className="fc-btn" onClick={() => navigate("name")}>Start using FarmerChat<Ic name="chevron" color="var(--fc-accent)" size={18} /></button>
+        <div className="fc-legal">By continuing you agree to our <u>Terms of use</u> · <u>Privacy policy</u></div>
+      </div>
+    </div>
+  )
+  else if (screen === "name") body = (
+    <div className="fc-light fc-center">
+      <div className="fc-logo-wrap"><Ic name="logo" color="var(--fc-ink)" size={56} /></div>
+      <div className="fc-h1">What should we call you?</div><div className="fc-sub">We will use this to make FarmerChat personal to you</div>
+      <div className="fc-field">Ravi Kumar<span className="fc-caret" /></div>
+      <button className="fc-btn" onClick={() => navigate("home")}>Save name<Ic name="chevron" color="var(--fc-accent)" size={18} /></button>
+      <button className="fc-btn2" onClick={() => navigate("home")}>Skip for now</button>
+    </div>
+  )
+  else if (screen === "home") body = (
+    <div className="fc-home">
+      {AppBar({ left: "menu", weather: true })}
+      <div className="fc-body">
+        <div className="fc-greeting">Good morning, Ravi</div>
+        <div className="fc-feedhead">For your farm today</div>
+        <div className="fc-card" data-go="chat" onClick={() => navigate("chat")}>
+          <div className="fc-card-img">🌾</div>
+          <div className="fc-card-txt"><b>Wheat sowing window</b><p>Sow between Nov 1–15 for the best yield in your region.</p>
+            <button className="fc-btn" onClick={(e) => { e.stopPropagation(); navigate("chat") }}>Start chat<Ic name="chevron" color="var(--fc-accent)" size={16} /></button></div>
+        </div>
+        <div className="fc-card"><b>How many acres do you farm?</b>
+          <div className="fc-options">{OPTS.map((o, i) => (<span className={"fc-opt" + (i === optSel ? " sel" : "")} key={o} onClick={() => setOptSel(i)}>{o}</span>))}</div>
+        </div>
+      </div>
+      {homeTiles()}
+    </div>
+  )
+  else if (screen === "chat") body = (
+    <div className="fc-chat">
+      {AppBar({ left: "close", leftGo: "home", logo: true })}
+      <div className="fc-thread" ref={threadRef}>{chatMsgs.map((m, i) => <Fragment key={i}>{bubble(m)}</Fragment>)}</div>
+      {chatBottom()}
+    </div>
+  )
+  else if (screen === "auth") body = (
+    <div className="fc-light">
+      {AppBar({ left: "close", leftGo: "home" })}
+      <div className="fc-body">
+        <div className="fc-h1 left">Enter the 4-digit code</div>
+        <div className="fc-sub left">Code sent to +91 98765 43210{chan === 0 ? " (WhatsApp)" : " (SMS)"}</div>
+        <div className="fc-otp"><span>1</span><span>2</span><span>3</span><span className="cur" /></div>
+        <div className="fc-channels">
+          <span className={"fc-channel" + (chan === 0 ? " sel" : "")} onClick={() => setChan(0)}><Ic name="whatsapp" color="var(--fc-ink)" size={16} />WhatsApp</span>
+          <span className={"fc-channel" + (chan === 1 ? " sel" : "")} onClick={() => setChan(1)}><Ic name="sms" color="var(--fc-ink)" size={16} />SMS</span>
+        </div>
+        <button className="fc-btn" onClick={() => navigate("home")}>Verify</button>
+        <div className="fc-sub center">Resend code in 2:58</div>
+      </div>
+    </div>
+  )
+  else if (screen === "settings") body = (
+    <div className="fc-light">
+      {AppBar({ left: "menu", title: "Settings" })}
+      <div className="fc-body">
+        <div className="fc-set-label">Appearance</div>
+        <div className="fc-appearance">
+          {([["day", "Day"], ["night", "Night"], ["auto", "Auto"]] as const).map(([k, l]) => {
+            const sel = k === appearance
+            return <div className={"fc-appbtn" + (sel ? " sel" : "")} key={k} onClick={() => setAppearance(k === "night" ? "night" : "day")}><Ic name={k} color={sel ? "var(--fc-accent)" : "var(--fc-ink)"} size={26} /><span>{l}</span></div>
+          })}
+        </div>
+        <div className="fc-hint">FarmerChat adjusts to your phone settings</div>
+        <div className="fc-set-label">Account details</div>
+        <div className="fc-listcard" data-go="name" onClick={() => navigate("name")}><div><div>Your name</div><div className="fc-muted">Ravi Kumar</div></div><Ic name="chevron" color="var(--fc-muted-c)" size={18} /></div>
+        <div className="fc-listcard" data-go="language" onClick={() => navigate("language")}><div><div>Language</div><div className="fc-muted">{LANGS[langSel]}</div></div><Ic name="chevron" color="var(--fc-muted-c)" size={18} /></div>
+        <button className="fc-btn2" onClick={() => navigate("language")}>Logout</button>
+      </div>
+    </div>
+  )
+
+  const fb = theme.fab
+  return (
+    <div className="phone" style={phoneVars(theme, appearance)}>
+      <div className="fc-screen">{body}</div>
+      {screen === "home" && (
+        <button className={"fc-fab" + (fb.fabLabel ? "" : " round")} onClick={() => navigate("chat")}>
+          <span><Ic name="logo" color="var(--fc-fab-fg)" size={26} /></span>
+          {fb.fabLabel ? <span>{fb.fabLabel}</span> : null}
+        </button>
+      )}
+    </div>
+  )
+}

@@ -24,6 +24,7 @@ struct FCUIChatArgs {
 /// retry, Listen TTS, voice clips, image queries, history pagination.
 final class FCUIChatViewController: UIViewController {
     private enum Row: Hashable {
+        case loadEarlier
         case message(String) // ChatMessage.id
         case followUp(String)
         case inlineError(String)
@@ -42,6 +43,11 @@ final class FCUIChatViewController: UIViewController {
     private let inputBar = UIStackView()
     private let askButton = UIButton(type: .system)
     private var didInitialize = false
+    // History pagination: track the previous thread shape so a prepended older
+    // page (load-earlier) preserves scroll position instead of jumping to the
+    // newest message.
+    private var prevMessageCount = 0
+    private var prevLastMessageId: String?
 
     init(args: FCUIChatArgs) {
         self.args = args
@@ -89,7 +95,10 @@ final class FCUIChatViewController: UIViewController {
     }
 
     private func close() {
-        if args.source == "history" {
+        if args.source == "chatOnly" {
+            // CHAT_ONLY has no SDK Home — exit the SDK back to the host.
+            (navigationController ?? self).presentingViewController?.dismiss(animated: true)
+        } else if args.source == "history" {
             navigationController?.popViewController(animated: true)
         } else {
             // popUpTo(Home){!inclusive}
@@ -180,9 +189,21 @@ final class FCUIChatViewController: UIViewController {
             cell.configure(message: message)
             cell.onRetry = { self?.viewModel.onAction(.retryLastRequest) }
         }
+        // "Load earlier messages" affordance at the top of a history thread —
+        // tapping it (handled in didSelectItemAt) loads the next older page.
+        let loadEarlierCell = UICollectionView.CellRegistration<UICollectionViewListCell, Void> { [weak self] cell, _, _ in
+            var content = cell.defaultContentConfiguration()
+            content.text = FarmerChat.shared.labels.label("load_earlier", fallback: "Load earlier messages")
+            content.textProperties.alignment = .center
+            content.textProperties.font = .systemFont(ofSize: 14, weight: .semibold)
+            content.textProperties.color = self?.view.tintColor ?? .tintColor
+            cell.contentConfiguration = content
+        }
 
         dataSource = UICollectionViewDiffableDataSource<Int, Row>(collectionView: collectionView) { collectionView, indexPath, row in
             switch row {
+            case .loadEarlier:
+                return collectionView.dequeueConfiguredReusableCell(using: loadEarlierCell, for: indexPath, item: ())
             case .message(let id):
                 return collectionView.dequeueConfiguredReusableCell(using: bubbleCell, for: indexPath, item: id)
             case .followUp(let question):
@@ -191,6 +212,7 @@ final class FCUIChatViewController: UIViewController {
                 return collectionView.dequeueConfiguredReusableCell(using: errorCell, for: indexPath, item: message)
             }
         }
+        collectionView.delegate = self
     }
 
     private func buildInputBar() {
@@ -246,8 +268,22 @@ final class FCUIChatViewController: UIViewController {
 
     private func render(_ state: ChatState) {
         messagesById = Dictionary(uniqueKeysWithValues: state.messages.map { ($0.id, $0) })
+
+        // Classify this render against the previous one so a prepended older
+        // page keeps the user in place, while a new bottom turn scrolls down.
+        let newCount = state.messages.count
+        let newLastId = state.messages.last?.id
+        let isPrepend = newLastId != nil && newLastId == prevLastMessageId && newCount > prevMessageCount
+        let isNewBottom = newLastId != prevLastMessageId
+        let beforeOffsetY = collectionView.contentOffset.y
+        let beforeHeight = collectionView.contentSize.height
+
         var snapshot = NSDiffableDataSourceSnapshot<Int, Row>()
         snapshot.appendSections([0])
+        // Load-earlier affordance pinned to the top of the thread.
+        if state.historyNextPage != nil {
+            snapshot.appendItems([.loadEarlier])
+        }
         snapshot.appendItems(state.messages.map { .message($0.id) })
         if let errorMessage = state.errorMessage, !state.messages.isEmpty {
             snapshot.appendItems([.inlineError(errorMessage)])
@@ -255,9 +291,20 @@ final class FCUIChatViewController: UIViewController {
         if let suggestions = state.suggestedQuestions, !suggestions.isEmpty, !state.isLoading {
             snapshot.appendItems(suggestions.map { .followUp($0) })
         }
-        dataSource.apply(snapshot, animatingDifferences: true) { [weak self] in
-            self?.scrollToBottom()
+        dataSource.apply(snapshot, animatingDifferences: !isPrepend) { [weak self] in
+            guard let self else { return }
+            if isPrepend {
+                // Keep the previously-visible content in place after inserting
+                // older messages above it (no maintainVisibleContentPosition on
+                // UICollectionView, so adjust the offset by the height delta).
+                let delta = self.collectionView.contentSize.height - beforeHeight
+                self.collectionView.contentOffset.y = beforeOffsetY + delta
+            } else if isNewBottom {
+                self.scrollToBottom()
+            }
         }
+        prevMessageCount = newCount
+        prevLastMessageId = newLastId
 
         inputBar.alpha = state.isLoading ? 0.5 : 1
         inputBar.isUserInteractionEnabled = !state.isLoading
@@ -272,6 +319,12 @@ final class FCUIChatViewController: UIViewController {
         let count = collectionView.numberOfItems(inSection: 0)
         guard count > 0 else { return }
         collectionView.scrollToItem(at: IndexPath(item: count - 1, section: 0), at: .bottom, animated: true)
+    }
+
+    private func loadMoreHistory() {
+        guard let next = viewModel.state.historyNextPage,
+              let conversationId = args.conversationId else { return }
+        viewModel.onAction(.loadChatHistory(conversationId: conversationId, page: next))
     }
 
     // MARK: - Actions
@@ -393,6 +446,15 @@ enum FCUIShareCardRenderer {
                 in: CGRect(x: padding, y: padding + 70, width: width - padding * 2, height: textRect.height),
                 withAttributes: [.font: font, .foregroundColor: UIColor.white]
             )
+        }
+    }
+}
+
+extension FCUIChatViewController: UICollectionViewDelegate {
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        collectionView.deselectItem(at: indexPath, animated: false)
+        if case .loadEarlier = dataSource.itemIdentifier(for: indexPath) {
+            loadMoreHistory()
         }
     }
 }

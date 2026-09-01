@@ -13,6 +13,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.isVisible
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
@@ -62,6 +65,7 @@ internal class InputOverlaysController(
     private val micPermissionLauncher: ActivityResultLauncher<String>
 
     init {
+        applyImeInsets()
         val registry = fragment.requireActivity().activityResultRegistry
         val owner = fragment.viewLifecycleOwner
         val keyPrefix = "fc_sdk_input_${fragment.id}_${fragment.javaClass.simpleName}"
@@ -139,6 +143,32 @@ internal class InputOverlaysController(
         binding.fcPhotoTitle.text = label(Labels.PHOTOS, "Photos")
         binding.fcPhotoCameraLabel.text = label(Labels.CAMERA, "Camera")
         binding.fcPhotoGalleryLabel.text = label(Labels.GALLERY, "Gallery")
+    }
+
+    /**
+     * Lifts the text/voice panels above the on-screen keyboard.
+     *
+     * The panels are `layout_gravity="bottom"` inside a `match_parent` FrameLayout, and the SDK
+     * theme draws edge-to-edge (transparent status/navigation bars). Under that setup
+     * `windowSoftInputMode="adjustResize"` does NOT shrink the overlay, so the composer stayed
+     * pinned to the RAW screen bottom — behind the IME, which is why the typed text was not
+     * visible. This is the Views counterpart of `Modifier.imePadding()` in the Compose flavour.
+     *
+     * Padding (not margin) so the panel background still extends behind the keyboard, and
+     * `navigationBars` is used when the IME is closed so the panel clears the gesture bar.
+     */
+    private fun applyImeInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.fcOverlayRoot) { view, insets ->
+            // Read from the ROOT window insets, not the dispatched ones: the overlay is a
+            // sibling of a `fitsSystemWindows="true"` LinearLayout in fc_fragment_chat.xml, and
+            // a sibling that consumes insets first would leave this callback seeing 0.
+            val source = ViewCompat.getRootWindowInsets(view) ?: insets
+            val ime = source.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBar = source.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            view.updatePadding(bottom = maxOf(ime, navBar))
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.fcOverlayRoot)
     }
 
     val isVisible: Boolean get() = binding.fcOverlayRoot.isVisible

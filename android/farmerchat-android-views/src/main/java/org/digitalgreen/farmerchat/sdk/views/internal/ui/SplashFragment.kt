@@ -63,9 +63,15 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
             if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
                 graph.routeDecider.peekPendingTarget() == null
             ) {
+                // Guest session + conversation bootstrap (shared with android-compose).
+                graph.ensureChatOnlySession()
                 NavRoutes.navigateChatOnly(nav)
                 return@launch
             }
+            // If the language SCREEN was skipped (config.locale), run its API work headlessly
+            // first so Home opens with real server labels instead of English fallbacks.
+            graph.ensureSkippedOnboardingBootstrap()
+
             NavRoutes.navigateFromSplash(nav, graph.routeDecider.routeFromSplash()) { _ ->
                 graph.locationPromptManager.triggerFromCampaign(
                     org.digitalgreen.farmerchat.sdk.core.ui.location.LocationCampaignConfig(

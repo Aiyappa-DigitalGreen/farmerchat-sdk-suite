@@ -9,6 +9,7 @@ import { getOrCreateDeviceId } from './device';
 import type { ApiResult } from './http';
 import type { InitializeGuestUserResponse, VerifyOtpResponse } from './types';
 import type { Analytics } from './analytics';
+import type { AuthMode } from './config';
 
 export type AuthStateListener = (isAuthenticated: boolean) => void;
 
@@ -21,6 +22,7 @@ export class SessionManager {
     private store: SessionStore,
     private api: FarmerChatApi,
     private analytics?: Analytics,
+    private authMode: AuthMode = 'SDK_OTP',
   ) {}
 
   private fireSessionStart(): void {
@@ -63,9 +65,19 @@ export class SessionManager {
     return this.store.getString(PrefKeys.ACCESS_TOKEN) !== null;
   }
 
-  /** True only after OTP verification (entering a name does not authenticate). */
+  /**
+   * True when the user has a real (non-guest) identity:
+   * - SDK_OTP: after OTP verification (entering a name does not authenticate).
+   * - HOST_TOKEN: the host owns identity, so a present access token means
+   *   authenticated. Gate on `authMode` — SDK_OTP guests also carry an access
+   *   token (from guest init), so token-presence alone must NOT authenticate them.
+   */
   isAuthenticated(): boolean {
-    return this.store.getBool(PrefKeys.OTP_VERIFIED, false);
+    if (this.store.getBool(PrefKeys.OTP_VERIFIED, false)) return true;
+    if (this.authMode === 'HOST_TOKEN' && this.store.getString(PrefKeys.ACCESS_TOKEN) !== null) {
+      return true;
+    }
+    return false;
   }
 
   onAuthStateChanged(listener: AuthStateListener): () => void {

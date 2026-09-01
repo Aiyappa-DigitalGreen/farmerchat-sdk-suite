@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
@@ -358,7 +360,9 @@ fun HomeScreen(
         if (s is UiState.Success && section != null) {
             pendingCardSection = null
             vm.onAction(HomeAction.ConsumeResult)
-            val question = section.title ?: section.question_text.orEmpty()
+            // App parity: the query carried into Chat is question_text first,
+            // then title (app HomeScreen.kt:549 `question_text ?: title`).
+            val question = section.question_text ?: section.title.orEmpty()
             onNavigateToChat(
                 Destination.Chat(
                     question = question,
@@ -484,7 +488,10 @@ fun HomeScreen(
 
                 homeFeedState is UiState.Success -> {
                     val feed = homeFeedState.data
-                    val visibleSections = feed.sections.filter {
+                    // renderableSections() drops plotline_widget entries, which carry no
+                    // headline/image/statement_id — the catch-all branch below would render each
+                    // as a blank ContentCard (14 of 21 prod sections on 2026-09-01).
+                    val visibleSections = feed.renderableSections().filter {
                         it.stableId() !in homeState.dismissedCardIds
                     }
 
@@ -495,8 +502,19 @@ fun HomeScreen(
                     ) {
                         // Greeting
                         item(key = "greeting") {
+                            // `greeting` is ABSENT from the #12 response whenever the feed is
+                            // empty (no resolved location), so keying the skeleton off it alone
+                            // shimmers forever on a loaded-but-empty feed. App parity:
+                            // fc-compose HomeScreen.kt:892 renders this label and never uses the
+                            // API greeting at all. Here we prefer the API greeting when present
+                            // and fall back to the label — never a permanent skeleton.
+                            val greetingText = feed.greeting?.takeIf { it.isNotBlank() }
+                                ?: label(
+                                    Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                                    "Ask by Voice, Photo or Text"
+                                ).takeIf { it.isNotBlank() }
                             Crossfade(
-                                targetState = feed.greeting,
+                                targetState = greetingText,
                                 label = "greetingCrossfade"
                             ) { greeting ->
                                 if (greeting != null) {
@@ -589,7 +607,13 @@ fun HomeScreen(
                                             HomeAction.FetchImageStatement(
                                                 statementId = (section.statement_id ?: section.id)
                                                     ?.toString().orEmpty(),
-                                                triggered_input_type = "card"
+                                                // App parity (HomeScreen.kt:580-584): content-card
+                                                // tap sends image_card / text_card by section type.
+                                                triggered_input_type = when (section.type?.lowercase()) {
+                                                    "image" -> "image_card"
+                                                    "statement" -> "text_card"
+                                                    else -> "card"
+                                                }
                                             )
                                         )
                                     },
@@ -654,6 +678,9 @@ fun HomeScreen(
 
         // ------------------------------------------------------------------ overlays
         TextInputOverlay(
+            // App parity (HomeScreen.kt:1276) — see the note in ChatScreen: without imePadding()
+            // the composer hides behind the keyboard.
+            modifier = Modifier.imePadding().navigationBarsPadding(),
             onSend = { text, imageUri -> sendMessage(text, imageUri) },
             onPhotoClick = { openPhotoInput?.invoke() },
             onVoiceClick = { requestMicThenOpenVoice() },
@@ -760,7 +787,7 @@ private fun HomeFeedSection(
             }
 
             ContentCard(
-                headline = section.title ?: section.question_text.orEmpty(),
+                headline = section.question_text ?: section.title.orEmpty(),
                 imageUrl = section.image_url,
                 viewCount = section.badge?.takeIf { it.show == true }?.count,
                 personalizationLabel = section.meta?.asset_name,

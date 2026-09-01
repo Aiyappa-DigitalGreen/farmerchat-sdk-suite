@@ -42,6 +42,7 @@ export const PrefKeys = {
   GPS_LOCATION_SHARED: 'GPS_LOCATION_SHARED',
   // chat
   NEW_CONVERSATION_ID: 'NEW_CONVERSATION_ID',
+  LAST_BASE_URL: 'LAST_BASE_URL',
   FIRST_QUERY_ASKED: 'FIRST_QUERY_ASKED',
   CACHED_HOME_FEED_RESPONSE: 'CACHED_HOME_FEED_RESPONSE',
   // permissions (web keeps deny/attempt counters for parity)

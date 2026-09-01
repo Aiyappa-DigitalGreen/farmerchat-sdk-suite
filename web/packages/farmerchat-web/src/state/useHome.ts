@@ -17,6 +17,7 @@ import type {
 import { UiState, idle, loading, success } from './uiState';
 import { toUiState, userDeviceTime } from './helpers';
 import { Events } from '../core/analytics';
+import { renderableSections } from '../core/types';
 
 export interface HomeState {
   homeFeedState: UiState<HomeUdfResponse>;
@@ -72,7 +73,8 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
         const data: HomeUdfResponse = res.data ?? { greeting: null, sections: [], ssfr_enable: false };
         store.setJson(PrefKeys.CACHED_HOME_FEED_RESPONSE, data);
         patch({ homeFeedState: success(data) });
-        analytics.track(Events.DASHBOARD_VIEWED, { section_count: data.sections?.length ?? 0 });
+        // App parity (HomeScreen.kt:792): plotline_widget sections are excluded from counts.
+        analytics.track(Events.DASHBOARD_VIEWED, { section_count: renderableSections(data.sections).length });
       } else {
         patch({ homeFeedState: toUiState(res) });
       }

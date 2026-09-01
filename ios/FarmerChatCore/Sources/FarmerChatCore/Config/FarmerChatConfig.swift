@@ -68,6 +68,25 @@ public struct FarmerChatConfig: Sendable {
         return environment.baseURL
     }
 
+    /// Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
+    /// The endpoint 400s on a blank value, so a non-empty default is required.
+    public static let defaultCountryCodeFallback = "IN"
+
+    /// Fallback state/region paired with `defaultCountryCodeFallback`.
+    ///
+    /// Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only to
+    /// rank languages. Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in
+    /// `priority_view`, while `state=KA` pushes it into `expanded_view` ("All languages").
+    public static let defaultStateCodeFallback = "Karnataka"
+
+    /// Coordinates representing the fallback region (Bengaluru, Karnataka).
+    ///
+    /// Endpoint #12 (home feed) is gated on the backend having a resolved location, and it
+    /// resolves one ONLY from coordinates — a country name alone is rejected (verified live
+    /// 2026-09-01). Seeding #11 with these keeps a guest's home screen populated.
+    public static let defaultLatitudeFallback = 12.9716
+    public static let defaultLongitudeFallback = 77.5946
+
     public var environment: FarmerChatEnvironment
     /// Optional custom base URL. When set (non-empty) it OVERRIDES `environment`'s
     /// base URL for the API + token clients — lets a host point the SDK at its own
@@ -84,6 +103,16 @@ public struct FarmerChatConfig: Sendable {
     /// Preselect a language; skips the language screen when it resolves to a
     /// supported language.
     public var languageCode: String?
+    /// Country code used for the language list when `initialize_user` returns a null/blank
+    /// `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
+    /// Endpoint #2 rejects a blank `country_code` with HTTP 400, so this must never be empty.
+    public var defaultCountryCode: String
+    /// State/region paired with `defaultCountryCode` for the endpoint #2 `state` query param.
+    public var defaultStateCode: String
+    /// Coordinates for `defaultCountryCode`/`defaultStateCode`, used to seed endpoint #11 when
+    /// nothing else resolved a location so the home feed is never empty.
+    public var defaultLatitude: Double
+    public var defaultLongitude: Double
     public var enableVoice: Bool
     public var enableImages: Bool
     public var enableWeather: Bool
@@ -150,6 +179,10 @@ public struct FarmerChatConfig: Sendable {
         appearance: FarmerChatAppearance = .auto,
         theme: FarmerChatTheme? = nil,
         languageCode: String? = nil,
+        defaultCountryCode: String = FarmerChatConfig.defaultCountryCodeFallback,
+        defaultStateCode: String = FarmerChatConfig.defaultStateCodeFallback,
+        defaultLatitude: Double = FarmerChatConfig.defaultLatitudeFallback,
+        defaultLongitude: Double = FarmerChatConfig.defaultLongitudeFallback,
         enableVoice: Bool = true,
         enableImages: Bool = true,
         enableWeather: Bool = true,
@@ -188,6 +221,12 @@ public struct FarmerChatConfig: Sendable {
         self.appearance = appearance
         self.theme = theme
         self.languageCode = languageCode
+        self.defaultCountryCode = defaultCountryCode.isEmpty
+            ? FarmerChatConfig.defaultCountryCodeFallback : defaultCountryCode
+        self.defaultStateCode = defaultStateCode.isEmpty
+            ? FarmerChatConfig.defaultStateCodeFallback : defaultStateCode
+        self.defaultLatitude = defaultLatitude
+        self.defaultLongitude = defaultLongitude
         self.enableVoice = enableVoice
         self.enableImages = enableImages
         self.enableWeather = enableWeather

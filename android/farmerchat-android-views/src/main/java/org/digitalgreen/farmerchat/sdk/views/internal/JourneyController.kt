@@ -85,6 +85,25 @@ internal class JourneyController(
 
     private fun label(key: String, fallback: String) = graph.labelManager.getLabel(key, fallback)
 
+    /**
+     * Recent-chats shows only when the knob is on AND the user is authenticated
+     * (compose Drawer.kt: `isAuthenticated && showHistory`). HOST_TOKEN users are
+     * authenticated (OTP_VERIFIED seeded), so they see history like OTP users.
+     */
+    private fun isHistorySectionEnabled() =
+        graph.config.showHistory && graph.sessionManager.isAuthenticated.value
+
+    /** Hide every recent-chats view — used for guests and when showHistory is off. */
+    private fun hideHistorySection() {
+        val d = binding.fcDrawer
+        d.fcDrawerRecentTitle.isVisible = false
+        d.fcDrawerRecentList.isVisible = false
+        d.fcDrawerHistoryLoading.isVisible = false
+        d.fcDrawerHistoryError.isVisible = false
+        d.fcDrawerNoChats.isVisible = false
+        d.fcDrawerSeeAll.isVisible = false
+    }
+
     private fun setupDrawer() {
         val d = binding.fcDrawer
         d.fcDrawerRecentList.layoutManager = LinearLayoutManager(activity)
@@ -93,13 +112,11 @@ internal class JourneyController(
         // C3: hide the Settings row / history section when toggled off; lock the
         // drawer permanently closed when the whole drawer is disabled.
         d.fcDrawerSettingsRow.isVisible = graph.config.showSettings
-        if (!graph.config.showHistory) {
-            d.fcDrawerRecentTitle.isVisible = false
-            d.fcDrawerRecentList.isVisible = false
-            d.fcDrawerHistoryLoading.isVisible = false
-            d.fcDrawerHistoryError.isVisible = false
-            d.fcDrawerNoChats.isVisible = false
-            d.fcDrawerSeeAll.isVisible = false
+        // Recent-chats gates on showHistory AND authentication (compose parity —
+        // Drawer.kt: `isAuthenticated && showHistory`). Guests see the sign-up card
+        // instead. Hidden initially; the state collector + auth observer toggle it.
+        if (!isHistorySectionEnabled()) {
+            hideHistorySection()
         }
         if (!graph.config.showDrawer) {
             binding.fcDrawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
@@ -143,14 +160,25 @@ internal class JourneyController(
         binding.fcDrawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: android.view.View) {
                 refreshDrawerTexts()
-                chatHistoryVm.refreshSilently()
+                // Compose parity (Drawer.kt): the silent refresh fires only for
+                // authenticated users. Guests never trigger a history fetch.
+                if (graph.sessionManager.isAuthenticated.value) {
+                    chatHistoryVm.refreshSilently()
+                }
             }
         })
 
         lifecycleOwner.lifecycleScope.launch {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 chatHistoryVm.state.collect { state ->
-                    if (!graph.config.showHistory) return@collect  // C3: history section hidden
+                    // Guard first: hide the whole section unless showHistory AND
+                    // authenticated, so a stale state emission can't re-show it.
+                    if (!isHistorySectionEnabled()) {
+                        hideHistorySection()
+                        return@collect
+                    }
+                    d.fcDrawerRecentTitle.isVisible = true
+                    d.fcDrawerRecentList.isVisible = true
                     drawerAdapter.submit(chatHistoryVm.recentDrawerQuestions())
                     d.fcDrawerHistoryLoading.isVisible = state.isLoading && state.items.isEmpty()
                     val hasError = state.errorMessage != null && state.items.isEmpty()
@@ -289,7 +317,14 @@ internal class JourneyController(
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 graph.sessionManager.isAuthenticated.collect { authenticated ->
                     binding.fcDrawer.fcDrawerSignUpSection.isVisible = !authenticated
-                    if (authenticated) chatHistoryVm.refreshSilently()
+                    if (authenticated) {
+                        // Newly authenticated (OTP or HOST_TOKEN): pull history; the
+                        // state collector then reveals the recent-chats section.
+                        chatHistoryVm.refreshSilently()
+                    } else {
+                        // Logged out / guest: never show recent chats (compose parity).
+                        hideHistorySection()
+                    }
                 }
             }
         }

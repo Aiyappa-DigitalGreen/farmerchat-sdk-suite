@@ -83,9 +83,13 @@ public final class SettingsViewModel: ObservableObject {
         guard !state.languageState.isLoading else { return }
         state.languageState = .loading
         Task {
+            // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the
+            // preference is empty whenever guest init never resolved one.
             let result = await env.api.countryWiseSupportedLanguages(
-                countryCode: env.prefs.string(.userCountryCode),
-                state: env.prefs.string(.userState)
+                countryCode: env.prefs.string(.userCountryCode)?.nonBlank
+                    ?? env.config.defaultCountryCode,
+                state: env.prefs.string(.userState)?.nonBlank
+                    ?? env.config.defaultStateCode
             )
             switch result {
             case .success(let groups):

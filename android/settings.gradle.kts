@@ -31,5 +31,7 @@ include(":farmerchat-android-views")
 // project(...)-based samples (visual/dev iteration):
 include(":sample-compose")
 include(":sample-views")
+// minimal "host app" sample: dependency + FarmerChatFab → chat, one customization file:
+include(":sample-jetpack")
 // coordinate-based consumer (distribution proof — depends on the SDK via mavenLocal):
 include(":sample-consumer")

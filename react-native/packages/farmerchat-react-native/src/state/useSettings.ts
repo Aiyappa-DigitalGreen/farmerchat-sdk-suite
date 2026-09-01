@@ -42,7 +42,7 @@ const initialLanguageSettingsState: LanguageSettingsState = {
 export interface UseLanguageSettingsResult {
   state: LanguageSettingsState;
   loadLanguages: () => void;
-  selectLanguage: (id: number, code: string) => void;
+  selectLanguage: (id: number, code: string, displayName?: string) => void;
   submitLanguage: () => void;
   consumeLanguageResult: () => void;
   toggleExpanded: () => void;
@@ -74,8 +74,12 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
 
   const loadLanguages = useCallback(() => {
     patch({ languageState: UiStates.loading() });
-    const countryCode = sdk.store.getString(StorageKeys.USER_COUNTRY_CODE) ?? 'IN';
-    const stateName = sdk.store.getString(StorageKeys.USER_STATE);
+    // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
+    // empty whenever guest init never resolved one.
+    const countryCode =
+      sdk.store.getString(StorageKeys.USER_COUNTRY_CODE)?.trim() || sdk.config.defaultCountryCode;
+    const stateName =
+      sdk.store.getString(StorageKeys.USER_STATE)?.trim() || sdk.config.defaultStateCode;
     void sdk.api.getSupportedLanguages(countryCode, stateName).then((result) => {
       if (!mounted.current) return;
       patch({
@@ -85,7 +89,7 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
   }, [patch, sdk]);
 
   const selectLanguage = useCallback(
-    (id: number, code: string) => {
+    (id: number, code: string, displayName?: string) => {
       patch({
         selectedLanguageId: id,
         selectedLanguageCode: code,
@@ -97,6 +101,9 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
         if (result.ok) {
           sdk.store.set(StorageKeys.SELECTED_LANGUAGE_ID, id);
           sdk.store.set(StorageKeys.SELECTED_LANGUAGE_CODE, code);
+          // App parity: persist the display name so the drawer's "Language: X"
+          // line updates (previously only id/code were saved → stale drawer).
+          if (displayName) sdk.store.set(StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME, displayName);
           sdk.labels.setLabels(result.data);
           patch({ fetchingLabelsForId: null });
         } else {
@@ -177,8 +184,11 @@ export function useHelp(sdk: FarmerChatSdk): UseHelpResult {
     setHelpState(UiStates.loading());
     const lang = sdk.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE) ?? 'en';
     const country = sdk.store.getString(StorageKeys.USER_COUNTRY_CODE);
+    // App parity: FAQ `theme` derives from appearance (Day→light, Night→dark, Auto→default).
+    const mode = (sdk.store.getString(StorageKeys.APPEARANCE_MODE) ?? 'auto').toLowerCase();
+    const theme = mode === 'day' ? 'light' : mode === 'night' ? 'dark' : 'default';
     void sdk.api
-      .getHelpSupport({ lang, limit: 5, theme: null, country })
+      .getHelpSupport({ lang, limit: 5, theme, country })
       .then((result) => {
         if (!mounted.current) return;
         if (result.ok && result.data.data) {

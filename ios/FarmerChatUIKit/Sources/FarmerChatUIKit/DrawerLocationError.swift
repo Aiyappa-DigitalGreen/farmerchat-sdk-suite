@@ -75,16 +75,28 @@ final class FCUIDrawerViewController: UIViewController {
 
         buildPanel()
 
-        chatHistoryVM.$recentQuestions
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildRecent() }
-            .store(in: &cancellables)
-        chatHistoryVM.$historyErrorMessage
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.rebuildRecent() }
-            .store(in: &cancellables)
+        // Recent-chats live updates + silent refresh only for authenticated
+        // users (OTP or HOST_TOKEN) with showHistory on. Guests get the sign-up
+        // footer and never trigger a history fetch (android-compose parity).
+        if showRecentChats {
+            chatHistoryVM.$recentQuestions
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.rebuildRecent() }
+                .store(in: &cancellables)
+            chatHistoryVM.$historyErrorMessage
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.rebuildRecent() }
+                .store(in: &cancellables)
 
-        chatHistoryVM.refreshSilently()
+            chatHistoryVM.refreshSilently()
+        }
+    }
+
+    /// Recent-chats section + History row gate: authenticated (OTP or
+    /// HOST_TOKEN) AND showHistory. Mirrors `isAuthenticated && showHistory`
+    /// in android-compose DrawerContent.
+    private var showRecentChats: Bool {
+        FarmerChat.shared.isAuthenticated && FarmerChat.shared.config.showHistory
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -182,16 +194,20 @@ final class FCUIDrawerViewController: UIViewController {
         // Rows
         stack.addArrangedSubview(navRow(icon: "house.fill", title: fcuiLabel("drawer_home", "Home"), route: "home"))
 
-        stack.addArrangedSubview(sectionHeader(fcuiLabel("drawer_recent", "Recent chats")))
-        recentContainer.axis = .vertical
-        recentContainer.spacing = 2
-        stack.addArrangedSubview(recentContainer)
-        rebuildRecent()
+        // Recent-chats section only for authenticated users with showHistory on.
+        if showRecentChats {
+            stack.addArrangedSubview(sectionHeader(fcuiLabel("drawer_recent", "Recent chats")))
+            recentContainer.axis = .vertical
+            recentContainer.spacing = 2
+            stack.addArrangedSubview(recentContainer)
+            rebuildRecent()
+        }
 
         stack.addArrangedSubview(divider())
 
-        // C3 toggles: hide History / Settings when disabled.
-        if FarmerChat.shared.config.showHistory {
+        // History row: authenticated (OTP or HOST_TOKEN) AND showHistory only —
+        // keeps guests out of ChatHistory via the drawer. Settings row stays C3.
+        if showRecentChats {
             stack.addArrangedSubview(navRow(icon: "clock.arrow.circlepath", title: fcuiLabel("drawer_history", "Recent Chats"), route: "chatHistory"))
         }
         let lang = settingsVM.currentLanguageDisplay

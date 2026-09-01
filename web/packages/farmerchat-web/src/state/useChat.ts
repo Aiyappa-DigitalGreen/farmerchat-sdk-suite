@@ -259,7 +259,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       });
 
       analytics.track(Events.SEND_QUERY_INITIATED, {
-        triggered_input_type: props.triggeredInputType ?? 'keyboard',
+        triggered_input_type: props.triggeredInputType ?? 'text',
       });
       analytics.messageSent(question);
 
@@ -267,10 +267,12 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       const request: TextPromptRequest = {
         query: question,
         conversation_id: conversationId,
-        message_id: nextLocalId('msg'),
+        // App parity: TextPromptRequest.message_id is sent empty ("") — the
+        // response message_id is authoritative for follow-ups/TTS.
+        message_id: '',
         statement_id: props.statementId ?? null,
         weather_cta_triggered: props.isWeatherAdviceCTA ?? false,
-        triggered_input_type: props.triggeredInputType ?? 'keyboard',
+        triggered_input_type: props.triggeredInputType ?? 'text',
         ssfr_crop: props.isSSFR ? (props.ssfrCrop ?? null) : null,
         use_entity_extraction: true,
         transcription_id: opts.transcriptionId ?? null,
@@ -350,7 +352,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
         properties: {
-          triggeredInputType: opts.triggeredInputType ?? (opts.audioUri ? 'mic' : 'keyboard'),
+          triggeredInputType: opts.triggeredInputType ?? (opts.audioUri ? 'voice' : 'text'),
           isWeatherAdviceCTA: opts.isWeatherAdviceCTA ?? false,
           isSSFR: opts.isSSFR ?? false,
           ssfrCrop: opts.ssfrCrop ?? null,
@@ -400,7 +402,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         query: recording.base64,
         message_reference_id: nextLocalId('voice'),
         input_audio_encoding_format: recording.format,
-        triggered_input_type: 'mic',
+        triggered_input_type: 'voice',
         editable_transcription: 'True',
       });
       // Accept only if !error && confidence > 0.7 && text not blank (docs/02).
@@ -414,7 +416,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         await runTextQuery(res.data.heard_input_query!.trim(), {
           transcriptionId: res.data.transcription_id ?? null,
           audioUri: recording.objectUrl,
-          properties: { triggeredInputType: 'mic' },
+          properties: { triggeredInputType: 'voice' },
         });
       } else {
         analytics.track(Events.TRANSCRIPTION_FAILED, {
@@ -484,10 +486,14 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       const res = await api.imageAnalysis({
         conversation_id: conversationId,
         image: base64,
+        // App parity (PlantixRequest.kt): triggered_input_type "image",
+        // latitude/longitude as STRINGs (the store already holds strings).
+        triggered_input_type: 'image',
         query: question || null,
-        lat: lat ? Number(lat) : null,
-        lng: lng ? Number(lng) : null,
+        latitude: lat ?? null,
+        longitude: lng ?? null,
         image_name: `fc_web_${Date.now()}.jpg`,
+        retry: false,
       });
 
       if (!res.ok || res.data.error || !res.data.response) {
@@ -544,7 +550,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       // Remove the pre-generated pair and re-ask for the full advice.
       setState((s) => ({ ...s, messages: s.messages.filter((m) => !(m.kind === 'ai' && m.isPreGenerated)) }));
       await runTextQuery(question, {
-        properties: { triggeredInputType: triggerInputType ?? 'card' },
+        // App parity: the read-full-advice query's triggered_input_type is
+        // "read_full_advice" (was "card"). (statement_id + append-not-replace
+        // remain — tracked in docs/04.)
+        properties: { triggeredInputType: 'read_full_advice' },
         reuseUserMessageId: stateRef.current.messages.find((m) => m.kind === 'user')?.id,
       });
       patch({ readFullAdviceRequestedForMessageId: null });
@@ -575,14 +584,20 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         return;
       }
       const items = res.data.data ?? res.data.messages ?? res.data.results ?? [];
-      const { messages, trailingQuestions, clarification } = mapHistoryItems(items);
+      const { messages, trailingQuestions, clarification } = mapHistoryItems(items, page);
       setState((s) => ({
         ...s,
         // Older pages are prepended above the existing thread.
-        messages: page === 1 ? messages : [...messages, ...s.messages],
+        // Hard guard: duplicate ids break React list identity (and hard-crash the equivalent
+        // Compose LazyColumn), so never trust the wire to be unique.
+        messages: dedupeById(page === 1 ? messages : [...messages, ...s.messages]),
         suggestedQuestions: page === 1 ? trailingQuestions : s.suggestedQuestions,
         clarificationRequired: page === 1 ? clarification : s.clarificationRequired,
-        historyNextPage: res.data.next_page ?? null,
+        // The #32 response carries no pagination metadata (only
+        // {conversation_id, data}); the app pages by "did this page return any
+        // items" — page+1 until an empty page comes back. Base this on the RAW
+        // items, not the mapped bubbles (a page can be all type-7/unknown).
+        historyNextPage: items.length > 0 ? page + 1 : null,
         isInitialHistoryLoaded: page === 1 ? true : s.isInitialHistoryLoaded,
         isLoading: false,
         isLoadingMoreHistory: false,
@@ -720,7 +735,17 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 // 3=response_text, 7=follow_up_questions, 11=input_image (docs/02).
 // ---------------------------------------------------------------------------
 
-function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
+/** Keeps the first occurrence of each message id — a duplicate key breaks list identity. */
+function dedupeById<T extends { id: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+}
+
+// A query and its response SHARE one `message_id` (verified live 2026-09-01: a single turn returns
+// type 1, 3 and 7 all carrying the same id). Using it as the React key collides two rows — app
+// parity (fc-compose ChatViewModel.kt:1027) keys on message_id + message_type_id + page + index.
+// `messageId` keeps the raw API id for TTS/follow-ups.
+function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1): {
   messages: ChatMessage[];
   trailingQuestions: string[] | null;
   clarification: boolean;
@@ -729,13 +754,14 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
   let trailingQuestions: string[] | null = null;
   let clarification = false;
 
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const typeId = item.message_type_id ?? typeIdFromName(item.message_type);
+    const uiId = `${item.message_id ?? nextLocalId('hist')}_${typeId ?? 'x'}_${page}_${index}`;
     switch (typeId) {
       case 1:
         messages.push({
           kind: 'user',
-          id: item.message_id ?? nextLocalId('user'),
+          id: uiId,
           text: item.query_text ?? '',
           isFailed: false,
         });
@@ -744,7 +770,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 2:
         messages.push({
           kind: 'user',
-          id: item.message_id ?? nextLocalId('user'),
+          id: uiId,
           text: item.heard_query_text ?? item.query_text ?? '',
           audioUri: item.query_media_file_url ?? undefined,
           isFailed: false,
@@ -754,7 +780,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 11:
         messages.push({
           kind: 'user',
-          id: item.message_id ?? nextLocalId('user'),
+          id: uiId,
           text: item.query_text ?? '',
           imageUri: item.query_media_file_url ?? undefined,
           userBubbleImageWideBanner: true,
@@ -765,7 +791,7 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
       case 3:
         messages.push({
           kind: 'ai',
-          id: item.message_id ?? nextLocalId('ai'),
+          id: uiId,
           text: item.response_text ?? '',
           isPreGenerated: false,
           messageId: item.message_id ?? undefined,
@@ -777,7 +803,13 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[]): {
         trailingQuestions = null;
         break;
       case 7: {
-        const qs = (item.questions ?? []).filter((q): q is string => typeof q === 'string');
+        // The app sends type-7 questions as objects
+        // `{ follow_up_question_id, sequence, question }`; tolerate a plain
+        // string form too. Typing them as `string[]` previously discarded
+        // every historical follow-up chip against the real backend.
+        const qs = (item.questions ?? [])
+          .map((q) => (typeof q === 'string' ? q : (q?.question ?? '')))
+          .filter((q): q is string => q.length > 0);
         // Attach to the previous AI response; keep as trailing suggestions too.
         for (let i = messages.length - 1; i >= 0; i--) {
           const m = messages[i]!;

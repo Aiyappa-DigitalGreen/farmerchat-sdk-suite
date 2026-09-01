@@ -28,11 +28,11 @@ struct HostHomeView: View {
                         showSwiftUIFlow = true
                     }
                 }
+                // "Log out" is intentionally hidden: the demo surface is the launch
+                // entry points above plus the FAB. FarmerChat.shared.logout() remains
+                // public API and is unaffected.
                 Section("Session") {
                     LabeledContent("Authenticated", value: isAuthenticated ? "Yes" : "No")
-                    Button("Log out", role: .destructive) {
-                        Task { await FarmerChat.shared.logout() }
-                    }
                 }
             }
             .navigationTitle("FarmerChat SDK Demo")

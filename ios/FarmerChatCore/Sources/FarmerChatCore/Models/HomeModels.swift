@@ -17,9 +17,23 @@ public struct HomeUdfResponse: Codable, Sendable {
         self.sections = sections
         self.ssfrEnable = ssfrEnable
     }
+
+    /// Feed with host-unrenderable sections removed.
+    ///
+    /// `plotline_widget` sections carry only `type`/`unique_key`/`label` — no headline, image or
+    /// statement id (verified live 2026-09-01: 14 of 21 prod sections were these). The app renders
+    /// them with `PlotlineComposeWidget`, but root CLAUDE.md §6 forbids Plotline inside SDK
+    /// packages, so the SDK DROPS them rather than rendering blank cards.
+    public func renderableSections() -> [SectionDto] {
+        (sections ?? []).filter { !$0.isHostOnlyWidget }
+    }
 }
 
 public struct SectionDto: Codable, Sendable, Identifiable {
+    /// True for sections the SDK deliberately cannot render (third-party host widgets).
+    /// See `HomeUdfResponse.renderableSections()`.
+    public var isHostOnlyWidget: Bool { type?.lowercased() == "plotline_widget" }
+
     public var type: String?
     @LossyOptional public var rawId: FlexibleID?
     public var imageUrl: String?
@@ -98,8 +112,9 @@ public struct WeatherRequest: Codable, Sendable {
 }
 
 public struct WeatherResponse: Codable, Sendable {
-    @LossyOptional public var currentTemp: Double?
-    @LossyOptional public var precipitationProbability: Double?
+    // App parity (WeatherResponse.kt): these are Strings, rendered verbatim.
+    @LossyOptional public var currentTemp: String?
+    @LossyOptional public var precipitationProbability: String?
     public var weatherIcon: String?
     public var message: String?
 
@@ -183,9 +198,37 @@ public struct ImageStatementRequest: Codable, Sendable {
     }
 }
 
+/// A #26 follow-up item. The wire sends objects
+/// `{follow_up_question_id, sequence, question}`; a bare string is tolerated.
+public struct HomeFollowUpQuestion: Codable, Sendable {
+    public let text: String
+    public let sequence: Int?
+
+    enum CodingKeys: String, CodingKey { case question, sequence }
+
+    public init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(), let s = try? single.decode(String.self) {
+            text = s
+            sequence = nil
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = (try? c.decode(String.self, forKey: .question)) ?? ""
+        sequence = try? c.decode(Int.self, forKey: .sequence)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(text, forKey: .question)
+        try c.encodeIfPresent(sequence, forKey: .sequence)
+    }
+}
+
 public struct ImageStatementResponse: Codable, Sendable {
     public var shortAnswer: String?
-    public var followUpQuestions: [String]?
+    /// Raw #26 follow-up items (string OR {question, sequence} object). The old
+    /// `[String]` typing threw typeMismatch on the object form and broke decode.
+    public var followUpQuestionsRaw: [HomeFollowUpQuestion]?
     @LossyOptional public var messageId: FlexibleID?
     @LossyOptional public var conversationId: FlexibleID?
     public var error: Bool?
@@ -193,9 +236,15 @@ public struct ImageStatementResponse: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case shortAnswer = "short_answer"
-        case followUpQuestions = "follow_up_questions"
+        case followUpQuestionsRaw = "follow_up_questions"
         case messageId = "message_id"
         case conversationId = "conversation_id"
         case error, message
+    }
+
+    /// Display strings, sorted by `sequence` (app parity).
+    public var followUpQuestions: [String]? {
+        guard let raw = followUpQuestionsRaw else { return nil }
+        return raw.sorted { ($0.sequence ?? 0) < ($1.sequence ?? 0) }.map { $0.text }.filter { !$0.isEmpty }
     }
 }

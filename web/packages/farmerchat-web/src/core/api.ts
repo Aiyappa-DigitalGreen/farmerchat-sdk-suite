@@ -225,7 +225,7 @@ export class FarmerChatApi {
       priority: 'P2',
     });
     if (!res.ok) return res;
-    return { ok: true, data: normalizeConversationList(res.data), status: res.status };
+    return { ok: true, data: normalizeConversationList(res.data, page), status: res.status };
   }
 
   // --- #23 logout --------------------------------------------------------------------
@@ -239,7 +239,7 @@ export class FarmerChatApi {
   getHelpSupport(lang: string, limit = 5, theme?: string, country?: string): Promise<ApiResult<HelpSupportResponse>> {
     return this.http.request({
       method: 'GET',
-      path: 'api/faqs',
+      path: 'api/faqs/',
       query: { lang, limit, ...(theme ? { theme } : {}), ...(country ? { country } : {}) },
       priority: 'P2',
     });
@@ -311,18 +311,38 @@ export class FarmerChatApi {
   }
 }
 
-/** Endpoint #22 returns either a bare array or a paginated object. */
-export function normalizeConversationList(raw: unknown): ConversationListResponse {
+/**
+ * Endpoint #22 returns either a bare array or a paginated object. `next_page`
+ * is a "there is another page" signal (the caller tracks its own page counter):
+ * non-null when more pages exist, null otherwise. The has-more decision mirrors
+ * the app's `ConversationListResponse.canLoadMore` priority exactly —
+ * `has_more` → `next` (a URL STRING, not a number) → count/page math →
+ * `total_pages` → items-non-empty. The previous code only accepted a numeric
+ * `next_page`/`next`, which the real backend never sends (its `next` is a URL),
+ * so the web list never paginated past page 1.
+ */
+export function normalizeConversationList(raw: unknown, currentPage = 1): ConversationListResponse {
+  const more = currentPage + 1;
   if (Array.isArray(raw)) {
-    return { results: raw as ConversationListItem[], next_page: null };
+    const results = raw as ConversationListItem[];
+    return { results, next_page: results.length > 0 ? more : null };
   }
   if (typeof raw === 'object' && raw !== null) {
     const obj = raw as Record<string, unknown>;
-    const results = (obj.results ?? obj.conversations ?? obj.data ?? []) as ConversationListItem[];
-    const nextPage =
-      typeof obj.next_page === 'number' ? obj.next_page : typeof obj.next === 'number' ? obj.next : null;
+    const list = (Array.isArray(obj.results) ? obj.results : []) as ConversationListItem[];
     const count = typeof obj.count === 'number' ? obj.count : null;
-    return { results: Array.isArray(results) ? results : [], next_page: nextPage, count };
+    const nextPage: number | null = (() => {
+      if (typeof obj.has_more === 'boolean') return obj.has_more ? more : null;
+      if (typeof obj.next === 'string') return obj.next.trim() !== '' ? more : null;
+      if (typeof obj.next === 'number') return more; // defensive: some backends send a page number
+      if (count !== null) {
+        const pageSize = typeof obj.page_size === 'number' && obj.page_size > 0 ? obj.page_size : 20;
+        return currentPage < Math.ceil(count / pageSize) ? more : null;
+      }
+      if (typeof obj.total_pages === 'number') return currentPage < obj.total_pages ? more : null;
+      return list.length > 0 ? more : null;
+    })();
+    return { results: list, next_page: nextPage, count };
   }
   return { results: [], next_page: null };
 }

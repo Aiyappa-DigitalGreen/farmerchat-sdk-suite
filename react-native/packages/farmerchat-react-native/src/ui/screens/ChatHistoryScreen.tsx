@@ -47,7 +47,9 @@ export function ChatHistoryScreen(props: {
 
   useEffect(() => {
     sdk.analytics.trackScreenView('Chat History Screen');
-    history.refresh();
+    // History gates behind authentication (mirrors android-compose): guests
+    // never load chat history — only OTP-verified or HOST_TOKEN users do.
+    if (sdk.session.isAuthenticated) history.refresh();
     return () => sdk.analytics.trackScreenExit('Chat History Screen');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

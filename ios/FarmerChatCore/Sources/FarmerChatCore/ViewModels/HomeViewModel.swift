@@ -35,7 +35,9 @@ public struct HomeState: Sendable {
     /// Sections after dismissal filtering.
     public func visibleSections() -> [SectionDto] {
         guard case .success(let feed) = homeFeedState else { return [] }
-        return (feed.sections ?? []).filter { !dismissedCardIds.contains($0.id) }
+        // renderableSections() drops plotline_widget entries, which carry no headline/image/
+        // statement id and would otherwise render as blank cards.
+        return feed.renderableSections().filter { !dismissedCardIds.contains($0.id) }
     }
 }
 
@@ -111,9 +113,11 @@ public final class HomeViewModel: ObservableObject {
             state.homeFeedState = .success(feed)
             saveFeedToCache(feed)
             env.analytics.track(AnalyticsEvents.dashboardViewed, props: [
-                "sections": String(feed.sections?.count ?? 0)
+                "sections": String(feed.renderableSections().count)
             ])
-            for section in feed.sections ?? [] {
+            // App parity (HomeScreen.kt:792): plotline_widget sections are excluded from
+            // card-shown analytics.
+            for section in feed.renderableSections() {
                 env.analytics.track(AnalyticsEvents.cardShown, props: [
                     "section_id": section.id,
                     "type": section.type ?? ""

@@ -19,7 +19,10 @@ public final class HelpViewModel: ObservableObject {
         Task {
             let lang = env.prefs.string(.selectedLanguageCode) ?? "en"
             let country = env.prefs.string(.userCountryCode)
-            let result = await env.api.faqs(lang: lang, limit: 5, theme: nil, country: country)
+            // App parity: FAQ `theme` derives from appearance (Day→light, Night→dark, Auto→default).
+            let mode = env.appearance.rawValue.lowercased()
+            let theme = mode == "day" ? "light" : (mode == "night" ? "dark" : "default")
+            let result = await env.api.faqs(lang: lang, limit: 5, theme: theme, country: country)
             helpState = UiState.from(
                 result,
                 fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again.")

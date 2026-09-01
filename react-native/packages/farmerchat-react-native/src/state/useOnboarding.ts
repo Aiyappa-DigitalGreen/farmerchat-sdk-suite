@@ -131,11 +131,41 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
 
   const bootstrapLanguages = useCallback(
     async (fromScreen: string) => {
-      // Guest init first — issues tokens + a country hint.
+      // Geolocate FIRST (P1, best-effort), then pass the coords into guest init — app parity
+      // (fc-compose OnboardingSharedViewModel) and parity with android/ios/web.
+      //
+      // Order is load-bearing, not cosmetic: `initialize_user` resolves country/state from the
+      // coords when present and only falls back to IP geolocation otherwise. Verified live
+      // 2026-09-01 — guest init WITH lat/long returns `country_code: IN, state: Karnataka` and a
+      // 21-section home feed; WITHOUT them on an unresolvable IP it returns `country_code: null`
+      // and `daily/` comes back `{"sections": []}`. `ensureGuestSession` no-ops once a session
+      // exists, so a late geolocate can never repair the first (and only) guest init.
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let accuracy: number | null = null;
+      if (sdk.config.geoApiKey) {
+        patch({ geoState: UiStates.loading() });
+        const geo = await sdk.api.geolocate();
+        if (geo.ok) {
+          patch({ geoState: UiStates.success(geo.data) });
+          lat = geo.data.location.lat;
+          lng = geo.data.location.lng;
+          accuracy = geo.data.accuracy ?? null;
+          sdk.store.set(StorageKeys.FARMER_APP_LATITUDE, lat);
+          sdk.store.set(StorageKeys.FARMER_APP_LONGITUDE, lng);
+        } else {
+          patch({ geoState: UiStates.error(geo.message ?? 'geo failed', geo.code, true) });
+        }
+      }
+
       patch({ guestInitState: UiStates.loading() });
-      const init = await sdk.session.ensureGuestSession();
-      let countryCode = sdk.store.getString(StorageKeys.USER_COUNTRY_CODE) ?? 'IN';
-      let stateName = sdk.store.getString(StorageKeys.USER_STATE);
+      const init = await sdk.session.ensureGuestSession({ lat, long: lng, accuracy });
+      // Endpoint #2 400s on a blank `country_code`. Store first, then the host-configured
+      // default; the init response overrides both below when it actually resolved one.
+      let countryCode =
+        sdk.store.getString(StorageKeys.USER_COUNTRY_CODE)?.trim() || sdk.config.defaultCountryCode;
+      let stateName =
+        sdk.store.getString(StorageKeys.USER_STATE)?.trim() || sdk.config.defaultStateCode;
       if (init && !init.ok) {
         patch({ guestInitState: UiStates.fromResult(init, 'Could not start session') });
         fail(fromScreen, init.isNetworkError || init.isTimeout, init.message);
@@ -143,23 +173,24 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
       }
       if (init && init.ok) {
         patch({ guestInitState: UiStates.success(init.data) });
-        if (init.data.country_code) countryCode = init.data.country_code;
-        if (init.data.state) stateName = init.data.state;
+        if (init.data.country_code?.trim()) countryCode = init.data.country_code;
+        if (init.data.state?.trim()) stateName = init.data.state;
       } else {
         patch({ guestInitState: UiStates.idle() });
       }
 
-      // Geolocate fallback (P1) when configured — best-effort only.
-      if (sdk.config.geoApiKey) {
-        patch({ geoState: UiStates.loading() });
-        const geo = await sdk.api.geolocate();
-        if (geo.ok) {
-          patch({ geoState: UiStates.success(geo.data) });
-          sdk.store.set(StorageKeys.FARMER_APP_LATITUDE, geo.data.location.lat);
-          sdk.store.set(StorageKeys.FARMER_APP_LONGITUDE, geo.data.location.lng);
-        } else {
-          patch({ geoState: UiStates.error(geo.message ?? 'geo failed', geo.code, true) });
-        }
+      // GUEST HOME FIX: endpoint #12 returns an EMPTY feed until the backend has a resolved
+      // location, and it resolves one ONLY from coordinates (a country name alone is rejected,
+      // verified live 2026-09-01). Without this a guest the backend cannot place by IP lands on
+      // a permanently blank home screen. Best-effort — a failure just leaves the feed empty.
+      const resolvedCountry = init?.ok ? init.data.country_code?.trim() : null;
+      const seedUserId = sdk.store.getString(StorageKeys.USER_ID);
+      if (!resolvedCountry && seedUserId) {
+        await sdk.api.updateUserLocation({
+          user_id: seedUserId,
+          lat: sdk.config.defaultLatitude,
+          long: sdk.config.defaultLongitude,
+        });
       }
 
       await fetchSupportedLanguages(countryCode, stateName);
