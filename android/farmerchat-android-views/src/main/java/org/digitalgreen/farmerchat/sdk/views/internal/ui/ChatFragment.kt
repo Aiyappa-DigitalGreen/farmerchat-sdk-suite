@@ -109,8 +109,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             if (isHistoryEntry) R.drawable.fc_ic_menu else R.drawable.fc_ic_close
         )
         binding.fcChatAppBar.fcAppBarLeft.setOnClickListener {
-            if (isHistoryEntry) {
+            if (isHistoryEntry && graph.config.showDrawer) {
                 journeyHost()?.openDrawer()
+            } else if (isHistoryEntry) {
+                // Drawer off (CHAT_ONLY): openDrawer() is a no-op, so this would strand the
+                // user in a thread opened from history. Step back to the history list, or exit
+                // if there is nothing to pop.
+                if (!findNavController().popBackStack()) requireActivity().finish()
             } else {
                 graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
                 // CHAT_ONLY has no SDK Home — close exits the SDK back to the host
@@ -122,9 +127,14 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 }
             }
         }
-        // C3: hide the drawer (menu) affordance when the drawer is disabled.
+        // C3: with the drawer on, the left slot is the menu affordance and hides with it.
+        // With the drawer OFF it must stay visible as a plain back control, otherwise a thread
+        // opened from history has no way out.
         if (isHistoryEntry) {
-            binding.fcChatAppBar.fcAppBarLeft.isVisible = graph.config.showDrawer
+            binding.fcChatAppBar.fcAppBarLeft.isVisible = true
+            if (!graph.config.showDrawer) {
+                binding.fcChatAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_ic_back)
+            }
         }
         setUpAppBarActions()
 

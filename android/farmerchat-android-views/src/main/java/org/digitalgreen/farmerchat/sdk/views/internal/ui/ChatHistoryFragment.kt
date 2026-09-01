@@ -22,6 +22,7 @@ import org.digitalgreen.farmerchat.sdk.views.internal.BaseFragment
 import org.digitalgreen.farmerchat.sdk.views.internal.NavRoutes
 import org.digitalgreen.farmerchat.sdk.views.internal.activityCoreVm
 import org.digitalgreen.farmerchat.sdk.views.internal.journeyHost
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 
 /** Chat history — grouped, paginated conversation list (doc 01 §3.9). */
 internal class ChatHistoryFragment : BaseFragment(R.layout.fc_fragment_chat_history) {
@@ -43,7 +44,18 @@ internal class ChatHistoryFragment : BaseFragment(R.layout.fc_fragment_chat_hist
         binding = FcFragmentChatHistoryBinding.bind(view)
 
         binding.fcHistoryAppBar.fcAppBarTitle.text = label(Labels.RECENT_CHATS, "Recent Chats")
-        binding.fcHistoryAppBar.fcAppBarLeft.setOnClickListener { journeyHost()?.openDrawer() }
+        // With the drawer off (CHAT_ONLY) openDrawer() is a no-op and the user would be
+        // stranded on this screen — fall back to a plain back navigation.
+        binding.fcHistoryAppBar.fcAppBarLeft.setOnClickListener {
+            if (FarmerChat.requireGraph().config.showDrawer) {
+                journeyHost()?.openDrawer()
+            } else if (!findNavController().popBackStack()) {
+                NavRoutes.navigateHomeOrChat(findNavController())
+            }
+        }
+        if (!FarmerChat.requireGraph().config.showDrawer) {
+            binding.fcHistoryAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_ic_back)
+        }
         binding.fcHistoryRetry.text = label(Labels.TRY_AGAIN, "Try again")
         binding.fcHistoryRetry.setOnClickListener { vm.refresh() }
         binding.fcHistoryLoading.text = label(Labels.LOADING_CHATS, "Loading chats...")

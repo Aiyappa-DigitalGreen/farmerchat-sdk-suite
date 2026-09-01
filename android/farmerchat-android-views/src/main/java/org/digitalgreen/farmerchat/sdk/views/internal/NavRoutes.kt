@@ -7,6 +7,8 @@ import androidx.navigation.NavOptions
 import org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget
 import org.digitalgreen.farmerchat.sdk.core.navigation.SplashRoute
 import org.digitalgreen.farmerchat.sdk.views.R
+import org.digitalgreen.farmerchat.sdk.FarmerChat
+import org.digitalgreen.farmerchat.sdk.FarmerChatMode
 
 /** Navigation helpers implementing the app's popUpTo back-stack semantics (doc 01 §2). */
 internal object NavRoutes {
@@ -33,6 +35,30 @@ internal object NavRoutes {
             chatArgs(source = "chat_only"),
             clearStackOptions(navController)
         )
+    }
+
+    /**
+     * Where a secondary screen (language chooser, chat history) returns to.
+     *
+     * Normally Home. In CHAT_ONLY there IS no Home — it is deliberately hidden — so returning
+     * there would dump the user on a dashboard the host switched off. Goes back to the chat
+     * instead, which is the only surface CHAT_ONLY exposes.
+     *
+     * Home is hidden, never removed: flip the mode back to FULL_JOURNEY and this returns to
+     * Home exactly as before.
+     */
+    fun navigateHomeOrChat(navController: NavController) {
+        if (FarmerChat.requireGraph().config.mode == FarmerChatMode.CHAT_ONLY) {
+            navController.navigate(
+                R.id.fc_dest_chat,
+                chatArgs(source = "chat_only"),
+                clearStackOptions(navController)
+            )
+        } else {
+            navController.navigate(
+                R.id.fc_dest_home, null, clearStackOptions(navController)
+            )
+        }
     }
 
     /** Drawer routes: popUpTo(startDestinationId), singleTop. */

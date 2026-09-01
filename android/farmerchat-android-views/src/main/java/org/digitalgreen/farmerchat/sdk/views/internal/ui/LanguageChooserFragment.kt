@@ -20,6 +20,7 @@ import org.digitalgreen.farmerchat.sdk.views.internal.coreVm
 import org.digitalgreen.farmerchat.sdk.views.internal.journeyHost
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 
 /** Settings → Language chooser (doc 01 §3.13). */
 internal class LanguageChooserFragment : BaseFragment(R.layout.fc_fragment_language_chooser) {
@@ -39,7 +40,18 @@ internal class LanguageChooserFragment : BaseFragment(R.layout.fc_fragment_langu
         binding = FcFragmentLanguageChooserBinding.bind(view)
 
         binding.fcChooserAppBar.fcAppBarTitle.text = label(Labels.CHOOSE_YOUR_LANGUAGE, "Choose your language")
-        binding.fcChooserAppBar.fcAppBarLeft.setOnClickListener { journeyHost()?.openDrawer() }
+        // With the drawer off (CHAT_ONLY) openDrawer() is a no-op, which would strand the user
+        // on the language screen — fall back to a plain back navigation.
+        binding.fcChooserAppBar.fcAppBarLeft.setOnClickListener {
+            if (FarmerChat.requireGraph().config.showDrawer) {
+                journeyHost()?.openDrawer()
+            } else if (!findNavController().popBackStack()) {
+                NavRoutes.navigateHomeOrChat(findNavController())
+            }
+        }
+        if (!FarmerChat.requireGraph().config.showDrawer) {
+            binding.fcChooserAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_ic_back)
+        }
         binding.fcChooserSave.text = label(Labels.SAVE_LANGUAGE, "Save language")
         binding.fcChooserLoading.text = label(Labels.LOADING_LANGUAGES, "Loading languages...")
 
@@ -71,9 +83,8 @@ internal class LanguageChooserFragment : BaseFragment(R.layout.fc_fragment_langu
             // Label-fetch / list failure → Home popUpTo(Home) (doc 01 §2).
             if (state.languageState is UiState.Error && !navigated) {
                 navigated = true
-                findNavController().navigate(
-                    R.id.fc_dest_home, null, NavRoutes.drawerOptions(findNavController())
-                )
+                // CHAT_ONLY hides Home, so navigateHomeOrChat returns to the chat instead.
+                NavRoutes.navigateHomeOrChat(findNavController())
                 return@collectWhenStarted
             }
 
@@ -108,8 +119,8 @@ internal class LanguageChooserFragment : BaseFragment(R.layout.fc_fragment_langu
                 viewLifecycleOwner.lifecycleScope.launch {
                     delay(500L)
                     if (isAdded) {
-                        val nav = findNavController()
-                        nav.navigate(R.id.fc_dest_home, null, NavRoutes.clearStackOptions(nav))
+                        // CHAT_ONLY hides Home — return to the chat with the new language.
+                        NavRoutes.navigateHomeOrChat(findNavController())
                     }
                 }
             }
