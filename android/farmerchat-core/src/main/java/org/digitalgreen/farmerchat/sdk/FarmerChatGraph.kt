@@ -332,6 +332,19 @@ class FarmerChatGraph internal constructor(
      */
     suspend fun ensureSkippedOnboardingBootstrap() {
         if (!prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)) return
+        ensureLabelsLoaded()
+    }
+
+    /**
+     * Fetches server labels (and sets the preferred language) when no onboarding screen has
+     * done it. Shared by the skipped-onboarding path and CHAT_ONLY — CHAT_ONLY never shows the
+     * language screen either, so without this the chat runs entirely on hardcoded English
+     * fallbacks and the backend never learns the user's language.
+     *
+     * Best-effort and idempotent: no-ops once labels exist, and any failure leaves the English
+     * fallbacks in place, which is the pre-existing behaviour.
+     */
+    private suspend fun ensureLabelsLoaded() {
         if (labelManager.areLabelsLoaded()) return
 
         val code = prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "")
@@ -378,6 +391,9 @@ class FarmerChatGraph internal constructor(
         if (!sessionManager.hasSession()) {
             runCatching { sessionManager.initializeGuestUser() }
         }
+        // CHAT_ONLY skips the language screen, which is the only other caller of #3
+        // get_labels — without this the chat UI would render hardcoded English fallbacks.
+        ensureLabelsLoaded()
         if (prefs.getString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "").isBlank()) {
             val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
             if (userId.isNotBlank()) {
