@@ -109,6 +109,38 @@ FarmerChat.setAnalyticsListener { name, properties ->
 
 The SDK manifests declare `INTERNET`, `ACCESS_NETWORK_STATE`, `RECORD_AUDIO`, `ACCESS_COARSE/FINE_LOCATION`. Camera capture uses the system camera app via `FileProvider` (no CAMERA permission). Runtime prompts (mic, location) are requested in-flow with the app's deny-count + settings-dialog behavior. SMS Retriever and fused location come from optional Play Services; their absence never crashes — flows degrade to manual entry / error states.
 
+## Size
+
+| Artifact | AAR |
+|---|---|
+| `farmerchat-core` | 1.88 MB |
+| `farmerchat-android-views` | 0.85 MB |
+| `farmerchat-android-compose` | 1.46 MB |
+
+You ship core + **one** UI flavour: **2.73 MB** (views) or **3.34 MB** (compose).
+
+Roughly 1.0 MB of core is `assets/` — farmer illustrations in four country packs
+(`ke`, `et`, `in`, `ng`, ~370 KB each), chosen at runtime from `USER_COUNTRY_CODE`.
+
+**Single-country hosts can drop the packs they will never show:**
+
+```kotlin
+android {
+    androidResources {
+        ignoreAssetsPattern = "!ke:!et:!ng"   // India-only build, saves ~1.1 MB
+    }
+}
+```
+
+This is safe: the SDK resolves illustrations against the packs actually present in
+the APK, not the compile-time list, so a stripped build falls back to a bundled
+illustration instead of showing a broken image.
+
+Two further wins are host-side and not enabled here: `isMinifyEnabled = true` plus
+`isShrinkResources = true` on your release build. Measured against RationSmart the
+SDK added 3.47 MB to an **unminified debug** APK; with R8 the code portion shrinks
+substantially.
+
 ## Dropping the SDK into an existing app
 
 Verified against RationSmart (`cattle_feed.org`, XML/Fragments, minSdk 24, Java 8) with

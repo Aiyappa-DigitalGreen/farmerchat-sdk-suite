@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.rememberAsyncImagePainter
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.core.labels.LabelManager
@@ -28,19 +29,38 @@ object CountryImageAssets {
 
     const val LOOKING_AT_CAMERA = "farmer_looking_at_camera"
     const val LOOKING_AT_PHONE = "farmer_looking_at_phone"
-    const val LOOKING_AT_PHONE_SQUARE = "farmer_looking_at_phone_square"
     const val LOOKING_AT_SKY = "farmer_looking_at_sky"
 
     private val SUPPORTED_COUNTRIES = setOf("ke", "et", "ng", "in")
     private const val FALLBACK_COUNTRY = "ke"
 
-    private fun folderFor(countryCode: String): String {
+    /**
+     * Country packs actually present in the APK.
+     *
+     * The SDK bundles ke/et/ng/in, but a single-country host can drop the rest to save ~370 KB
+     * each (see android/README.md — `androidResources { ignoreAssetsPattern }`). Resolving
+     * against what SHIPPED rather than the compile-time list means a stripped build degrades to
+     * a bundled illustration instead of a broken image. Computed once per process.
+     */
+    private var bundled: Set<String>? = null
+
+    private fun bundledCountries(context: Context): Set<String> = bundled ?: runCatching {
+        val root = context.assets.list("")?.toSet().orEmpty()
+        SUPPORTED_COUNTRIES.filter { it in root }.toSet()
+    }.getOrDefault(SUPPORTED_COUNTRIES).also { bundled = it }
+
+    private fun folderFor(context: Context, countryCode: String): String {
         val code = countryCode.lowercase()
-        return if (code in SUPPORTED_COUNTRIES) code else FALLBACK_COUNTRY
+        val present = bundledCountries(context)
+        return when {
+            code in present -> code
+            FALLBACK_COUNTRY in present -> FALLBACK_COUNTRY
+            else -> present.firstOrNull() ?: FALLBACK_COUNTRY
+        }
     }
 
-    fun assetUri(countryCode: String, imageName: String): Uri {
-        val folder = folderFor(countryCode)
+    fun assetUri(context: Context, countryCode: String, imageName: String): Uri {
+        val folder = folderFor(context, countryCode)
         return Uri.parse("file:///android_asset/$folder/$imageName.webp")
     }
 }
@@ -52,11 +72,12 @@ object CountryImageAssets {
 @Composable
 fun rememberCountryFarmerPainter(imageName: String): Painter {
     val prefs = FarmerChat.requireGraph().prefs
+    val appContext = LocalContext.current.applicationContext
     val countryCode = remember {
         prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "").trim().ifBlank { "ke" }
     }
     val uri = remember(countryCode, imageName) {
-        CountryImageAssets.assetUri(countryCode, imageName)
+        CountryImageAssets.assetUri(appContext, countryCode, imageName)
     }
     return rememberAsyncImagePainter(uri)
 }
