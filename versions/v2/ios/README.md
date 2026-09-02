@@ -159,6 +159,9 @@ FarmerChatConfig(
     showSettings: true, showHistory: true, showDrawer: true,
     enableWeather: true, enableSsfr: true,
 
+    // 2.0.0 agentic streaming chat (#27a) — default false keeps 1.0.0 chat
+    enableAgenticChat: true,
+
     // C5 host strings + forced locale
     stringOverrides: ["chat_title": "Ask AgroBot"],   // host wins over server
     locale: "hi",                                     // force language
@@ -230,7 +233,8 @@ feature (with a toast), they don't crash.
   `min(500·2^n, 3000)` ms.
 - 401 → actor-based single-flight refresh (`get_new_access_token`) with guest
   `send_tokens` fallback (API-Key), skip-list for auth endpoints, loop guard 2.
-- Chat replies are synchronous JSON — no streaming/SSE/WebSocket.
+- Chat replies are synchronous JSON — no streaming/SSE/WebSocket **on the 1.0.0
+  path (#27)**. 2.0.0 adds the opt-in agentic stream (#27a); see below.
 
 ## Voice pipeline
 
@@ -239,6 +243,90 @@ Record m4a/AAC (44.1 kHz mono) via `AVAudioRecorder` → base64 →
 `!error && confidence_score > 0.7 && text not blank` → `get_answer_for_text_query`.
 Listen (TTS) uses `synthesise_audio` → AVPlayer.
 
+## Agentic streaming chat (2.0.0, opt-in)
+
+`enableAgenticChat` defaults to **false**: a host that does nothing keeps the
+1.0.0 synchronous #27 contract unchanged. When true, **text** queries stream
+endpoint **#27a** `api/chat/get_answer_for_text_query_agentic/` (voice
+transcription and image analysis stay synchronous, as on Android).
+
+```swift
+FarmerChatConfig(environment: .prod, enableAgenticChat: true)
+```
+
+### Transport (verified live 2026-09-02 on dev/stage/prod)
+
+- The request sends `Accept: application/json` — the backend **406s**
+  `Accept: text/event-stream`. The response is `text/event-stream`, chunked.
+- The stream runs on a **dedicated `URLSession` with no read/resource timeout**
+  (`AgenticChatDataSource.noTimeoutInterval`) and never goes through the
+  `ApiPriority` path. Note a `URLRequest.timeoutInterval` *overrides* the session
+  configuration, so the streaming request carries no priority deadline either
+  (and no `X-Timeout` / `X-Request-ID`, matching Android's agentic client).
+- `Authorization: Bearer`, `Build-Version`, `Device-Info` and the 401 refresh
+  (skip-list + loop guard 2, shared single-flight `TokenRefresher`) behave exactly
+  as on every other call.
+
+### Events and API
+
+`FarmerChatAPI.streamAnswerForTextQueryAgentic(_:)` returns an
+`AsyncThrowingStream<AgenticEvent, Error>` with six cases (`toolCall`,
+`toolResult`, `textDelta`, `metadata`, `done`, `failure`). Transport failures are
+delivered as `.failure` and then the stream finishes; only cancellation throws, so
+a consumer that left the screen writes no stale error.
+
+Finalization routes the terminal `metadata` event back through the *same*
+handler the synchronous #27 response uses — its payload is field-compatible with
+`TextPromptResponse` — so the C4 callbacks, TTS gating and follow-ups (#29) are
+shared, not reimplemented. Four-way finalize: `done` present → complete answer
+(not interrupted, even if the transport dropped after); error + partial text →
+interrupted with the partial kept; clean EOF with partial text → **not**
+interrupted (some backends stream deltas with no terminal event); nothing → error.
+
+### ⚠ Wire framing is NOT verified against a live stream
+
+The endpoint opens but has never been observed emitting an event (a guest receives
+0 bytes on all three environments — `docs/05-open-questions.md`). The reader is
+therefore deliberately permissive, exactly like Android's: it accepts both
+`data:`-prefixed SSE (blank line ends an event, CRLF tolerated, `:` keep-alives
+ignored) and bare NDJSON, resolves the type from an `event:` line else a
+`type`/`event` field, matches types case/separator-insensitively
+(`TOOL_CALL == tool_call == toolCall`), and reads every documented field alias.
+Because the wire cannot be exercised, the mapping, the framing state machine, the
+sanitizer and the no-timeout request are pinned by **45 unit tests**
+(`AgenticStreamTests`).
+
+`sanitizeAgenticStreamText` strips the control tokens the stream carries but the
+clean `metadata.response` does not (`<<commodities:chickpea>>`, a
+```` ```followups ``` ```` block) *including* a half-arrived `<<` or an unterminated
+fence — without it the farmer watches raw tokens type themselves into the answer.
+
+### Streaming UI (`FarmerChatSwiftUI`)
+
+Live text with no typewriter animation, a tool-progress spinner (min 700 ms dwell
+per status so back-to-back tool events are not collapsed), a 4 s "Paused,
+resuming…" stall hint that clears on the next delta, and `FCStreamErrorCard`
+whose copy depends on both the error kind and whether partial text exists.
+
+### Alignment surfaces
+
+`TextPromptResponse.alignments` carries a server-driven prompt answered by tapping
+a chip (`AlignmentSurface` / `AlignmentChip` / `AlignmentKind`, 7 kinds). An
+**exclusive** surface (clarify / confirm / escalate / gps-prompt / upload-photo)
+arrives with `response` EMPTY on purpose — its prompt is `alignments.message`, and
+it replaces the answer; escalate gets an urgent tint. An **additive** one
+(gender-select / commodity-confirm) renders below a real answer.
+
+> The Core model is named `AlignmentSurface`, not `Alignment` as on Android:
+> `SwiftUI.Alignment` owns that name, and a public `Alignment` in Core would make
+> every `Alignment` reference ambiguous in host files importing both modules. The
+> wire key is still `alignments`.
+
+Known iOS-only gaps for 2.0.0: the streaming/alignment UI exists in
+`FarmerChatSwiftUI` only (`FarmerChatUIKit` still renders 1.0.0 chat), and
+`alignmentSelectedValues` is never populated (faithful to Android core, so a
+tapped chip is not highlighted on either platform).
+
 ## Verification status
 
 Commands run on macOS (Xcode toolchain), 2026-07-16:
@@ -246,6 +334,20 @@ Commands run on macOS (Xcode toolchain), 2026-07-16:
 ```
 cd ios/FarmerChatCore   && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator   # Build complete
 cd ios/FarmerChatCore   && swift test    # 10/10 tests pass (macOS host run)
+
+2.0.0 agentic work re-run on 2026-09-02 (paths under `versions/v2/ios/`):
+
+```
+cd versions/v2/ios/FarmerChatCore    && swift build                                   # Build complete
+cd versions/v2/ios/FarmerChatCore    && swift test                                    # 57/57 tests pass (45 new agentic + 12 pre-existing)
+cd versions/v2/ios/FarmerChatCore    && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator   # Build complete
+cd versions/v2/ios/FarmerChatSwiftUI && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios16.0-simulator   # Build complete
+cd versions/v2/ios/FarmerChatUIKit   && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator   # Build complete
+```
+
+The agentic stream itself is **not** verified end-to-end: it has never been
+observed emitting a byte (see above), so no run in this environment could
+exercise it.
 cd ios/FarmerChatSwiftUI && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios16.0-simulator # Build complete
 cd ios/FarmerChatUIKit  && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator  # Build complete
 ```

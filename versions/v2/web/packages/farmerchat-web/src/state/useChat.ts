@@ -10,11 +10,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
-import type { ConversationChatHistoryMessageItem, TextPromptRequest } from '../core/types';
+import type {
+  AlignmentChip,
+  ConversationChatHistoryMessageItem,
+  TextPromptRequest,
+  TextPromptResponse,
+} from '../core/types';
 import { UiState, idle, loading, success, failure } from './uiState';
 import { blobToBase64, nextLocalId } from './helpers';
 import { Events } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
+import { sanitizeAgenticStreamText } from '../core/agentic';
+import { isAbortError } from '../core/agenticStream';
+import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
+import { alignmentKindFromType, isAdditiveAlignment } from '../core/alignment';
+import type { AlignmentKind } from '../core/alignment';
 
 // ---------------------------------------------------------------------------
 // Messages
@@ -42,6 +52,50 @@ export interface AiResponse {
   hideTtsSpeaker?: boolean;
   hideFollowUpQuestion?: boolean;
   actualContentProvider?: string | null;
+
+  // ---- agentic streaming (SDK 2.0.0, endpoint #27a). All optional and all falsy by default,
+  // so a synchronous #27 answer is indistinguishable from 1.0.0. ----
+  /** True while the agentic stream is in progress; suppresses the action buttons. */
+  isStreaming?: boolean;
+  /** Transient tool progress label (e.g. "Checking weather forecast") shown while streaming. */
+  streamingStatus?: string | null;
+  /** True when this answer came from the agentic endpoint (also disables the typewriter reveal). */
+  isAgentic?: boolean;
+  /**
+   * Terminal outcome of an agentic stream that did NOT complete normally. When true the answer
+   * renders with an inline error card and a retry action; `text` may still hold a preserved
+   * partial answer, or be empty if the stream broke at the start. Always false for a normally
+   * finalized answer.
+   */
+  isInterrupted?: boolean;
+  /** Why the stream ended early; only meaningful when `isInterrupted`. */
+  streamErrorKind?: StreamErrorKind | null;
+
+  // ---- alignment surfaces (2.0.0) ----
+  /**
+   * Non-null when this response is an alignment surface (clarify / confirm / escalate or a
+   * capability prompt) rather than a normal answer. Drives chip rendering and the urgent
+   * (escalate) treatment in place of the usual action row.
+   */
+  alignmentKind?: AlignmentKind | null;
+  /** Quick-reply chips: label is shown, value is sent on tap. */
+  alignmentChips?: AlignmentChip[] | null;
+  /**
+   * The surface's own prompt message. For an EXCLUSIVE surface the prompt already lives in `text`
+   * (it replaced the answer), so this stays null. For an ADDITIVE surface it carries the nudge
+   * rendered below the real answer.
+   */
+  alignmentMessage?: string | null;
+  /**
+   * Chip values already tapped on this surface. Present for parity with Android, where nothing
+   * writes it either — a tap sends a follow-up, which supersedes the surface.
+   */
+  alignmentSelectedValues?: string[];
+  /**
+   * The query that triggered this surface. Kept so a capability chip (e.g. "Share my location")
+   * can re-send the user's real question once the capability is satisfied.
+   */
+  alignmentOriginalQuery?: string | null;
 }
 
 export interface LoadingPlaceholder {
@@ -139,6 +193,36 @@ export interface ChatActions {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimum on-screen time per tool status, so back-to-back tool events (latency 0) are not
+ * collapsed by React's state batching into just the last one. Parity with Android's
+ * `TOOL_STATUS_MIN_DWELL_MS`.
+ */
+const TOOL_STATUS_MIN_DWELL_MS = 700;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
+
+/**
+ * Everything the shared answer path needs that is not on the wire response. Both the synchronous
+ * #27 reply and the agentic `metadata` event settle through it, so analytics, TTS gating,
+ * follow-ups (#29) and alignment handling exist once.
+ */
+interface AnswerContext {
+  /** Loading placeholder (or live streaming bubble) to replace. */
+  placeholderId: string;
+  /** User bubble to flag on failure. */
+  userMsgId: string;
+  conversationId: string;
+  triggeredInputType: string;
+  /**
+   * Local id for the settled AI bubble. The agentic path passes its stream id so the streaming
+   * bubble becomes the final answer in place, with no remove/insert flicker.
+   */
+  aiMessageLocalId?: string;
+  /** True when the answer arrived over the agentic stream (#27a). */
+  isAgentic?: boolean;
+}
+
 export function useChat(services: SdkServices): [ChatState, ChatActions] {
   const [state, setState] = useState<ChatState>(initialState);
   const stateRef = useRef(state);
@@ -149,16 +233,21 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
   const conversationIdRef = useRef<string | null>(null);
   const lastRequestRef = useRef<(() => Promise<void>) | null>(null);
   const ttsSecondsStartedRef = useRef(0);
+  /** In-flight agentic stream (#27a). Aborted on unmount, on retry and on clearMessages. */
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const patch = useCallback((p: Partial<ChatState>) => setState((s) => ({ ...s, ...p })), []);
 
-  // Release the TTS player when unmounting (ON_STOP / onDispose parity).
+  // Release the TTS player when unmounting (ON_STOP / onDispose parity), and abort any live
+  // agentic stream — leaving the chat must close the request, not keep reading it.
   useEffect(() => {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
     };
   }, []);
 
@@ -214,7 +303,312 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
   );
 
   // -------------------------------------------------------------------------
-  // Core text-query pipeline (#27)
+  // Shared answer settling (#27 reply AND #27a `metadata` — field-compatible payloads)
+  // -------------------------------------------------------------------------
+
+  /** Flags the user bubble, drops the placeholder and surfaces the inline error + retry. */
+  const failAnswer = useCallback(
+    (ctx: AnswerContext, message: string, code?: number, isNetwork = false) => {
+      setState((s) => ({
+        ...s,
+        messages: s.messages
+          .filter((m) => m.id !== ctx.placeholderId)
+          .map((m) => (m.id === ctx.userMsgId && m.kind === 'user' ? { ...m, isFailed: true } : m)),
+        isLoading: false,
+        errorMessage: message,
+        failedMessageId: ctx.userMsgId,
+        chatResponseState: failure(message, code, isNetwork),
+      }));
+      analytics.error(code, message);
+    },
+    [analytics],
+  );
+
+  const markFirstQueryAsked = useCallback(() => {
+    if (!store.getBool(PrefKeys.FIRST_QUERY_ASKED, false)) {
+      store.setBool(PrefKeys.FIRST_QUERY_ASKED, true);
+      analytics.track(Events.FIRST_QUERY_ASKED, {});
+    }
+  }, [analytics, store]);
+
+  /**
+   * Settles a successful text-prompt response. Shared by #27 and the agentic `metadata` event —
+   * the streamed payload is field-compatible, so analytics, TTS gating, follow-ups and the
+   * alignment surfaces are implemented once, not twice.
+   */
+  const applyTextPromptResponse = useCallback(
+    (data: TextPromptResponse, ctx: AnswerContext) => {
+      const alignmentKind = alignmentKindFromType(data.alignments?.type);
+      const isExclusive = alignmentKind != null && !isAdditiveAlignment(alignmentKind);
+      // An EXCLUSIVE alignment surface arrives with an empty `response` ON PURPOSE: its prompt IS
+      // the message. Fall back to alignments.message so it is not mistaken for an empty answer
+      // and turned into an error.
+      const answerText =
+        (data.response ?? '').trim().length > 0
+          ? (data.response as string)
+          : isExclusive
+            ? (data.alignments?.message ?? '')
+            : '';
+
+      if (data.error || answerText.trim().length === 0) {
+        failAnswer(
+          ctx,
+          data.message ?? labels.getLabel('chat_generic_error', 'Something went wrong. Please try again.'),
+        );
+        return;
+      }
+
+      markFirstQueryAsked();
+      const aiId = ctx.aiMessageLocalId ?? nextLocalId('ai');
+      const aiMsg: AiResponse = {
+        kind: 'ai',
+        id: aiId,
+        text: answerText,
+        isPreGenerated: false,
+        messageId: data.message_id ?? undefined,
+        hideShareIcon: data.hide_share_icon ?? false,
+        hideTtsSpeaker: data.hide_tts_speaker ?? false,
+        hideFollowUpQuestion: data.hide_follow_up_question ?? false,
+        actualContentProvider: data.actual_content_provider ?? null,
+        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
+        isAgentic: ctx.isAgentic ?? false,
+        // 2.0.0: an alignment surface asks the user to clarify/confirm instead of (or alongside)
+        // answering. Exclusive surfaces replace the answer, additive ones sit below it.
+        alignmentKind,
+        alignmentChips: data.alignments?.chips ?? null,
+        alignmentMessage: alignmentKind != null && isAdditiveAlignment(alignmentKind) ? (data.alignments?.message ?? null) : null,
+        alignmentSelectedValues: [],
+        alignmentOriginalQuery: data.alignments?.original_query ?? null,
+      };
+      setState((s) => ({
+        ...s,
+        messages: s.messages.filter((m) => m.id !== ctx.placeholderId && m.id !== aiId).concat(aiMsg),
+        isLoading: false,
+        errorMessage: null,
+        failedMessageId: null,
+        chatResponseState: success(answerText),
+        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
+      }));
+
+      analytics.track(Events.SEND_QUERY, {
+        triggered_input_type: ctx.triggeredInputType,
+        conversation_id: ctx.conversationId,
+        message_id: data.message_id ?? '',
+      });
+      analytics.answerReceived(data.message_id ?? '');
+
+      // Real follow-ups always come from endpoint #29.
+      if (data.message_id && !(data.hide_follow_up_question ?? false)) {
+        void fetchFollowUps(data.message_id, aiId);
+      }
+    },
+    [analytics, failAnswer, fetchFollowUps, labels, markFirstQueryAsked],
+  );
+
+  // -------------------------------------------------------------------------
+  // Agentic streaming (#27a, SDK 2.0.0 — gated on config.enableAgenticChat)
+  // -------------------------------------------------------------------------
+
+  /** Replaces the loading placeholder / prior streaming bubble with the in-progress answer. */
+  const updateStreamingResponse = useCallback((streamId: string, text: string, status: string | null) => {
+    setState((s) => {
+      const streaming: AiResponse = {
+        kind: 'ai',
+        id: streamId,
+        text,
+        followUpQuestions: [],
+        isPreGenerated: false,
+        isStreaming: true,
+        streamingStatus: status,
+        isAgentic: true,
+      };
+      const idx = s.messages.findIndex((m) => m.id === streamId);
+      let messages: ChatMessage[];
+      if (idx >= 0) {
+        messages = s.messages.slice();
+        messages[idx] = streaming;
+      } else {
+        const last = s.messages[s.messages.length - 1];
+        const base = last && last.kind === 'loading' ? s.messages.slice(0, -1) : s.messages;
+        messages = base.concat(streaming);
+      }
+      return { ...s, messages, isLoading: true, errorMessage: null, failedMessageId: null };
+    });
+  }, []);
+
+  /** Settles a streamed answer that finished without a `metadata` event. */
+  const finalizeAgenticAnswer = useCallback(
+    (streamId: string, text: string, followUps: string[] | undefined) => {
+      markFirstQueryAsked();
+      setState((s) => {
+        const settled: AiResponse = {
+          kind: 'ai',
+          id: streamId,
+          text,
+          followUpQuestions: followUps,
+          isPreGenerated: false,
+          isAgentic: true,
+        };
+        const idx = s.messages.findIndex((m) => m.id === streamId);
+        let messages: ChatMessage[];
+        if (idx >= 0) {
+          messages = s.messages.slice();
+          messages[idx] = settled;
+        } else {
+          messages = s.messages.filter((m) => m.kind !== 'loading').concat(settled);
+        }
+        return {
+          ...s,
+          messages,
+          isLoading: false,
+          errorMessage: null,
+          failedMessageId: null,
+          chatResponseState: success(text),
+          suggestedQuestions: followUps ?? null,
+          suggestedQuestionIds: null,
+        };
+      });
+    },
+    [markFirstQueryAsked],
+  );
+
+  /** Settles a stream that ended early; `text` may hold a preserved partial answer. */
+  const interruptAgentic = useCallback(
+    (streamId: string, text: string, kind: StreamErrorKind) => {
+      const message = labels.getLabel('chat_generic_error', 'Something went wrong. Please try again.');
+      setState((s) => {
+        const settled: AiResponse = {
+          kind: 'ai',
+          id: streamId,
+          text,
+          isPreGenerated: false,
+          isAgentic: true,
+          isInterrupted: true,
+          streamErrorKind: kind,
+        };
+        const idx = s.messages.findIndex((m) => m.id === streamId);
+        let messages: ChatMessage[];
+        if (idx >= 0) {
+          messages = s.messages.slice();
+          messages[idx] = settled;
+        } else {
+          messages = s.messages.filter((m) => m.kind !== 'loading').concat(settled);
+        }
+        return {
+          ...s,
+          messages,
+          isLoading: false,
+          // Deliberately NOT set: the interrupted bubble renders its own StreamErrorCard with
+          // retry, and `errorMessage` would stack a second, duplicate error block below it.
+          errorMessage: null,
+          chatResponseState: failure(message, undefined, kind === 'NETWORK'),
+        };
+      });
+      analytics.error(undefined, message);
+    },
+    [analytics, labels],
+  );
+
+  /**
+   * Consumes the agentic stream. Faithful port of Android's `streamAgenticAnswer`.
+   *
+   * Accumulates `text_delta`s into the answer bubble for live typing, surfaces tool status labels
+   * while tools run, and finalizes on `metadata` through {@link applyTextPromptResponse}. If the
+   * stream ends without one, falls back to `done`, then to the accumulated text.
+   */
+  const streamAgenticAnswer = useCallback(
+    async (request: TextPromptRequest, ctx: AnswerContext) => {
+      // Reuse the placeholder's id as the stream id so the loading bubble becomes the answer
+      // bubble in place, with no remove/insert flicker.
+      const streamId = ctx.placeholderId;
+      // A retry (or a fast second send) must not leave the previous stream writing into state.
+      streamAbortRef.current?.abort();
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
+
+      let accumulated = '';
+      let finalized = false;
+      // Captured but NOT finalized on arrival: a `metadata` normally follows `done` and is richer
+      // (message_id, follow-up ids), so it wins. `done` is only a fallback.
+      let pendingDone: AgenticDoneEvent | null = null;
+
+      // Single exit for every "no terminal metadata" outcome — clean EOF, a failure event, or a
+      // thrown error. Runs at most once (guarded + latches `finalized`).
+      const finalizeStreamOrFail = (errorKind?: StreamErrorKind) => {
+        // An aborted stream settles NOTHING: the reader ends the iteration silently on abort (it
+        // does not throw), so without this guard a clean-EOF finalize would run and a superseded
+        // stream could write a stale answer — or an error card — over the live one. This is the
+        // web equivalent of Android rethrowing CancellationException.
+        if (finalized || controller.signal.aborted) return;
+        finalized = true;
+        const fallbackText = sanitizeAgenticStreamText(accumulated);
+        const doneAnswer = (pendingDone?.answer ?? '').trim();
+        if (pendingDone && (doneAnswer.length > 0 || fallbackText.length > 0)) {
+          // A `done` means the model actually finished → a complete answer, not an interruption,
+          // even if the transport dropped right after.
+          finalizeAgenticAnswer(
+            streamId,
+            doneAnswer.length > 0 ? doneAnswer : fallbackText,
+            pendingDone.followUps.length > 0 ? pendingDone.followUps : undefined,
+          );
+        } else if (errorKind && fallbackText.length > 0) {
+          // Genuine error after some text arrived: keep the partial and mark it interrupted so
+          // the UI can offer retry.
+          interruptAgentic(streamId, fallbackText, errorKind);
+        } else if (fallbackText.length > 0) {
+          // Clean EOF with partial text and no terminal event: some backends stream deltas
+          // without a done/metadata. Treat it as the complete answer — flagging it interrupted
+          // would make every normal answer on such a backend look broken.
+          finalizeAgenticAnswer(streamId, fallbackText, undefined);
+        } else {
+          // Nothing usable arrived.
+          interruptAgentic(streamId, '', errorKind ?? 'UNKNOWN');
+        }
+      };
+
+      try {
+        for await (const event of api.streamAnswerForTextQueryAgentic(request, controller.signal)) {
+          if (event.type === 'tool_call' || event.type === 'tool_result') {
+            if ((event.statusText ?? '').trim().length > 0) {
+              updateStreamingResponse(streamId, sanitizeAgenticStreamText(accumulated), event.statusText);
+              await sleep(TOOL_STATUS_MIN_DWELL_MS);
+            }
+          } else if (event.type === 'text_delta') {
+            accumulated += event.delta;
+            // Text is flowing; clear any transient tool status.
+            updateStreamingResponse(streamId, sanitizeAgenticStreamText(accumulated), null);
+          } else if (event.type === 'metadata') {
+            finalized = true;
+            // `metadata` carries a TextPromptResponse — the same shape #27 returns — so finalize
+            // through the shared path and inherit its analytics, TTS gating and follow-ups.
+            applyTextPromptResponse(event.response, { ...ctx, aiMessageLocalId: streamId, isAgentic: true });
+            return;
+          } else if (event.type === 'done') {
+            // Fallback terminal: remember it, let a following `metadata` win.
+            pendingDone = event;
+          } else {
+            // Failure. Don't discard a completed `done`: if it arrived before the failure the
+            // answer is still finalized from it.
+            finalizeStreamOrFail(event.kind);
+            return;
+          }
+        }
+        // Clean EOF with no terminal metadata: no transport error was observed.
+        finalizeStreamOrFail();
+      } catch (err) {
+        // Chat left / stream aborted: never write a stale error card (Android rethrows
+        // CancellationException for exactly this reason).
+        if (isAbortError(err, controller.signal)) return;
+        finalizeStreamOrFail('NETWORK');
+      } finally {
+        if (streamAbortRef.current === controller) streamAbortRef.current = null;
+      }
+    },
+    [api, applyTextPromptResponse, finalizeAgenticAnswer, interruptAgentic, updateStreamingResponse],
+  );
+
+  // -------------------------------------------------------------------------
+  // Core text-query pipeline (#27, or #27a when enableAgenticChat)
   // -------------------------------------------------------------------------
 
   const runTextQuery = useCallback(
@@ -282,64 +676,27 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       lastRequestRef.current = () =>
         runTextQuery(question, { ...opts, retry: true, reuseUserMessageId: userMsgId });
 
-      const res = await api.getAnswerForTextQuery(request);
+      const ctx: AnswerContext = {
+        placeholderId,
+        userMsgId,
+        conversationId,
+        triggeredInputType: request.triggered_input_type,
+      };
 
-      if (!res.ok || res.data.error || !res.data.response) {
-        const message = !res.ok
-          ? res.message
-          : (res.data.message ?? labels.getLabel('chat_generic_error', 'Something went wrong. Please try again.'));
-        setState((s) => ({
-          ...s,
-          messages: s.messages
-            .filter((m) => m.id !== placeholderId)
-            .map((m) => (m.id === userMsgId && m.kind === 'user' ? { ...m, isFailed: true } : m)),
-          isLoading: false,
-          errorMessage: message,
-          failedMessageId: userMsgId,
-          chatResponseState: failure(message, res.ok ? undefined : res.code, !res.ok && (res.isNetworkError || res.isTimeout)),
-        }));
-        analytics.error(res.ok ? undefined : res.code, message);
+      if (services.config.enableAgenticChat) {
+        // 2.0.0 opt-in: streams #27a instead of one synchronous #27 reply.
+        await streamAgenticAnswer(request, ctx);
         return;
       }
 
-      const data = res.data;
-      const aiId = nextLocalId('ai');
-      const aiMsg: AiResponse = {
-        kind: 'ai',
-        id: aiId,
-        text: data.response ?? '',
-        isPreGenerated: false,
-        messageId: data.message_id ?? undefined,
-        hideShareIcon: data.hide_share_icon ?? false,
-        hideTtsSpeaker: data.hide_tts_speaker ?? false,
-        hideFollowUpQuestion: data.hide_follow_up_question ?? false,
-        actualContentProvider: data.actual_content_provider ?? null,
-        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
-      };
-      setState((s) => ({
-        ...s,
-        messages: s.messages.filter((m) => m.id !== placeholderId).concat(aiMsg),
-        isLoading: false,
-        chatResponseState: success(data.response ?? ''),
-        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
-      }));
-
-      analytics.track(Events.SEND_QUERY, {
-        triggered_input_type: request.triggered_input_type,
-        conversation_id: conversationId,
-        message_id: data.message_id ?? '',
-      });
-      analytics.answerReceived(data.message_id ?? '');
-      if (!store.getBool(PrefKeys.FIRST_QUERY_ASKED, false)) {
-        store.setBool(PrefKeys.FIRST_QUERY_ASKED, true);
-        analytics.track(Events.FIRST_QUERY_ASKED, {});
+      const res = await api.getAnswerForTextQuery(request);
+      if (!res.ok) {
+        failAnswer(ctx, res.message, res.code, res.isNetworkError || res.isTimeout);
+        return;
       }
-
-      if (data.message_id && !(data.hide_follow_up_question ?? false)) {
-        void fetchFollowUps(data.message_id, aiId);
-      }
+      applyTextPromptResponse(res.data, ctx);
     },
-    [analytics, api, ensureConversationId, fetchFollowUps, labels, store],
+    [analytics, api, applyTextPromptResponse, ensureConversationId, failAnswer, services.config, streamAgenticAnswer],
   );
 
   // -------------------------------------------------------------------------
@@ -625,6 +982,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       audioRef.current.pause();
       audioRef.current = null;
     }
+    // A live agentic stream would keep writing into a thread the user has left.
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
     conversationIdRef.current = null;
     lastRequestRef.current = null;
     setState(initialState);

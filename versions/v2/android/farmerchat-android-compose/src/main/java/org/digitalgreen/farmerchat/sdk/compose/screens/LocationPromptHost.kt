@@ -41,6 +41,9 @@ import org.digitalgreen.farmerchat.sdk.compose.util.CountryImageAssets
 import org.digitalgreen.farmerchat.sdk.compose.util.isNetworkAvailable
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.util.rememberCountryFarmerPainter
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationErrorType
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptManager
@@ -209,8 +212,25 @@ fun LocationPromptHost(
         }
 
         is LocationPromptState.Recovery -> {
+            // App parity (LocationPromptHost.kt:133 / v2 delta): the recovery sheet's two exits
+            // are tracked. Both cancel paths (scrim/back dismiss, "Continue without location")
+            // fire CANCELED; only one of them can run per sheet, so this does not double-count.
+            // "Turn on in settings" fires CLICKED. Same screen/permission_type/attempt shape the
+            // rest of the location events use.
+            val analytics = FarmerChat.requireGraph().analytics
+            val recoveryProps = mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.GPS,
+                AnalyticsProps.PERMISSION_TYPE to "Location",
+                AnalyticsProps.ATTEMPT to 1
+            )
             ModalBottomSheet(
-                onDismissRequest = { manager.dismiss() }
+                onDismissRequest = {
+                    analytics.track(
+                        AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CANCELED,
+                        recoveryProps
+                    )
+                    manager.dismiss()
+                }
             ) {
                 Column(
                     modifier = Modifier
@@ -232,6 +252,10 @@ fun LocationPromptHost(
                     PrimaryButton(
                         label = label(Labels.TURN_ON_IN_SETTINGS, "Turn on in settings"),
                         onClick = {
+                            analytics.track(
+                                AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CLICKED,
+                                recoveryProps
+                            )
                             org.digitalgreen.farmerchat.sdk.compose.components.openAppSettings(context)
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -239,7 +263,13 @@ fun LocationPromptHost(
                     )
                     SecondaryButton(
                         label = label(Labels.CONTINUE_WITHOUT_LOCATION, "Continue without location"),
-                        onClick = { manager.onSkipClicked() },
+                        onClick = {
+                            analytics.track(
+                                AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CANCELED,
+                                recoveryProps
+                            )
+                            manager.onSkipClicked()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 10.dp, bottom = 16.dp)

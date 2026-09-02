@@ -5,7 +5,13 @@ package org.digitalgreen.farmerchat.sdk.core.ui.location
 enum class LocationTriggerSource {
     Weather,
     LocalContext,
-    Campaign
+    Campaign,
+    /**
+     * 2.0.0: the Settings "My Farm" row. Distinct from [LocalContext] because Settings is an
+     * explicit, user-initiated change rather than an in-flow nudge — so it skips the
+     * interstitial and reports its own analytics origin.
+     */
+    Settings
 }
 
 data class LocationCampaignConfig(

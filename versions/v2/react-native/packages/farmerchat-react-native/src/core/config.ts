@@ -164,6 +164,18 @@ export interface FarmerChatConfig {
   showHistory?: boolean;
   /** Show the hamburger/drawer chrome at all. Default true. */
   showDrawer?: boolean;
+  /**
+   * Opt in to agentic (v2) streaming chat — endpoint #27a
+   * `api/chat/get_answer_for_text_query_agentic/`, streamed as `text/event-stream`.
+   *
+   * **Default false**, so a host that does nothing keeps 1.0.0 behaviour: one synchronous #27
+   * reply. When true the chat screen streams the answer live, shows tool progress, and can
+   * surface an interrupted-stream retry card.
+   *
+   * Alignment surfaces (clarify / confirm / escalate chips) are NOT gated on this flag — they
+   * arrive on the synchronous #27 response too.
+   */
+  enableAgenticChat?: boolean;
 
   /** FAB default label; omitted → round icon-only FAB (per-instance `label` wins). */
   fabLabel?: string;
@@ -231,6 +243,7 @@ export interface ResolvedFarmerChatConfig {
   showSettings: boolean;
   showHistory: boolean;
   showDrawer: boolean;
+  enableAgenticChat: boolean;
   fabLabel: string | null;
   fabBackgroundColor: string | null;
   fabContentColor: string | null;
@@ -284,6 +297,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     showSettings: config.showSettings ?? true,
     showHistory: config.showHistory ?? true,
     showDrawer: config.showDrawer ?? true,
+    // 2.0.0 opt-in; false keeps the synchronous #27 path (root CLAUDE.md §3 no-regression).
+    enableAgenticChat: config.enableAgenticChat ?? false,
     fabLabel: config.fabLabel ?? null,
     fabBackgroundColor: config.fabBackgroundColor ?? null,
     fabContentColor: config.fabContentColor ?? null,

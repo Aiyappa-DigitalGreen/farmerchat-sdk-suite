@@ -88,6 +88,15 @@ sealed class ChatMessage {
         val alignmentOriginalQuery: String? = null
     ) : ChatMessage()
 
+    /**
+     * The farmer's resolved location, shown in the thread in place of a text bubble once a
+     * GPS_PROMPT alignment chip has been satisfied (2.0.0). Rendered by `LocationChatBubble`.
+     */
+    data class LocationMessage(
+        val address: String,
+        override val id: String = java.util.UUID.randomUUID().toString()
+    ) : ChatMessage()
+
     /** Placeholder shown while waiting for the AI response. */
     data class LoadingPlaceholder(
         override val id: String = java.util.UUID.randomUUID().toString()

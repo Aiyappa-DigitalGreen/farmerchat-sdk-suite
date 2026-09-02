@@ -34,13 +34,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import org.digitalgreen.farmerchat.sdk.FarmerChat
+import org.digitalgreen.farmerchat.sdk.compose.R
+import org.digitalgreen.farmerchat.sdk.compose.components.Glow
+import org.digitalgreen.farmerchat.sdk.compose.components.GlowType
 import org.digitalgreen.farmerchat.sdk.compose.components.HomeAppBar
+import org.digitalgreen.farmerchat.sdk.compose.components.InputComposer
+import org.digitalgreen.farmerchat.sdk.compose.components.LocationButton
+import org.digitalgreen.farmerchat.sdk.compose.components.LocationButtonState
+import org.digitalgreen.farmerchat.sdk.compose.components.SectionHeader
+import org.digitalgreen.farmerchat.sdk.compose.components.Sunbeams
+import org.digitalgreen.farmerchat.sdk.compose.components.composerBarHeight
 import org.digitalgreen.farmerchat.sdk.compose.components.ContentCard
 import org.digitalgreen.farmerchat.sdk.compose.components.FeedFooter
 import org.digitalgreen.farmerchat.sdk.compose.components.FeedHeader
@@ -79,7 +101,10 @@ import org.digitalgreen.farmerchat.sdk.core.model.UserNameRequest
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.home.HomeAction
 import org.digitalgreen.farmerchat.sdk.core.ui.home.isAcceptedTranscription
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptManager
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 import org.digitalgreen.farmerchat.sdk.core.ui.name.UserNameAction
 import java.io.File
 import java.text.SimpleDateFormat
@@ -108,6 +133,14 @@ fun HomeScreen(
     val vmProfile = rememberCoreViewModel("homeProfile") { graph.enterNameViewModel() }
     val homeState by vm.state.collectAsState()
     val locationState by graph.locationPromptManager.state.collectAsState()
+
+    // 2.0.0 composer/agentic Home. The app gates this on two independent Firebase Remote
+    // Config flags (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()`
+    // for the visual theme + card-tap API routing). The SDK carries no Remote Config and
+    // exposes exactly one host-set switch, so both collapse onto `enableAgenticChat`. Read
+    // once — SDK config is immutable after initialize(), so the app's post-fetch re-read
+    // (`OnboardingRemoteConfig.refresh()` on every feed state change) has no analogue here.
+    val isComposerUi = graph.config.enableAgenticChat
 
     val userId = remember { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
     val isAuthenticated = remember {
@@ -296,6 +329,32 @@ fun HomeScreen(
         }
     }
 
+    // App parity (HomeScreen.kt:270): refresh the feed once when location is successfully
+    // updated while we are already on Home. Keyed on the success signals only (not a
+    // state -> Idle transition, which also fires on dismiss/deny) so a backed-out prompt
+    // does not trigger a wasted reload:
+    //   • LocationUpdatedFromWidget       → campaign flow
+    //   • Continue(LocalContext, fetched) → the Home location pill's own flow
+    LaunchedEffect(Unit) {
+        graph.locationPromptManager.events.collect { event ->
+            val isWidgetUpdate = event is LocationPromptEvent.LocationUpdatedFromWidget
+            val isLocalContextSuccess = event is LocationPromptEvent.Continue &&
+                event.source == LocationTriggerSource.LocalContext &&
+                event.reason == "location_fetched"
+            if (isWidgetUpdate || isLocalContextSuccess) {
+                val deviceTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
+                vm.onAction(
+                    HomeAction.LoadHome(
+                        context = context,
+                        userDeviceTime = deviceTime,
+                        userId = if (isAuthenticated) userId else null,
+                        skipLoadingCheck = true
+                    )
+                )
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose { graph.analytics.trackScreenExit(AnalyticsScreens.HOME) }
     }
@@ -423,11 +482,64 @@ fun HomeScreen(
     val weatherState = homeState.weatherState
     val isWidgetGpsLoading = locationState is LocationPromptState.FetchingLocation
 
+    // App parity (HomeScreen.kt:976): in agentic mode the app surface is the grey reading
+    // surface and the green lives only in the gradient band below, which bleeds down behind
+    // the header and first card. Non-agentic keeps the v1 green base untouched.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(brand.surfacePrimary)
+            .background(if (isComposerUi) colors.surfacePrimary else brand.surfacePrimary)
     ) {
+        if (isComposerUi) {
+            // Fixed green→transparent vertical gradient fading into the grey surface (Figma 1.2
+            // Home). Solid green to ~58.8% of a band ~36.6% of the screen tall, transparent by
+            // its bottom. It sits BEHIND the list and fades out over ~215dp of scroll so it does
+            // not linger once scrolled. Sunbeams sway inside it; the yellow glow sits top-centre.
+            val configuration = LocalConfiguration.current
+            val density = LocalDensity.current
+            val fadeEndDp = (configuration.screenHeightDp * 0.366f).dp
+            val fadeEndPx = with(density) { fadeEndDp.toPx() }
+            val gradientFadePx = with(density) { 215.dp.toPx() }
+            val gradientAlpha by remember {
+                derivedStateOf {
+                    if (listState.firstVisibleItemIndex > 0) 0f
+                    else (1f - listState.firstVisibleItemScrollOffset / gradientFadePx)
+                        .coerceIn(0f, 1f)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fadeEndDp)
+                    .graphicsLayer { alpha = gradientAlpha }
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0f to brand.surfacePrimary,
+                                0.588f to brand.surfacePrimary,
+                                1f to brand.surfacePrimary.copy(alpha = 0f),
+                            ),
+                            startY = 0f,
+                            endY = fadeEndPx,
+                        )
+                    )
+            ) {
+                Sunbeams(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .align(Alignment.TopCenter),
+                    visibleProvider = { gradientAlpha },
+                )
+                Glow(
+                    type = GlowType.Yellow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(148.dp)
+                        .align(Alignment.TopCenter)
+                )
+            }
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             HomeAppBar(
                 openDrawer = {
@@ -440,7 +552,10 @@ fun HomeScreen(
                 weatherIconUrl = (weatherState as? UiState.Success)?.data?.weather_icon,
                 showWeather = graph.config.enableWeather &&
                     (weatherState is UiState.Success || weatherState is UiState.Loading),
-                onWeatherClick = { onWeatherClick() }
+                onWeatherClick = { onWeatherClick() },
+                // Transparent in agentic mode — the green (and the glow) come from the
+                // gradient band drawn behind the whole top section.
+                showBackground = !isComposerUi
             )
 
             when {
@@ -498,10 +613,70 @@ fun HomeScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(bottom = 24.dp)
+                        // App parity (HomeScreen.kt:886): reserve the floating composer's height
+                        // so the last feed card is not hidden behind it. composerBarHeight already
+                        // folds in max(navBar, 20), so it REPLACES the nav-bar inset, not stacks.
+                        contentPadding = PaddingValues(
+                            bottom = if (isComposerUi) composerBarHeight(floating = true) else 24.dp
+                        )
                     ) {
-                        // Greeting
+                        // Greeting (1.0.0) / agentic top section (2.0.0)
                         item(key = "greeting") {
+                          if (isComposerUi) {
+                            // App parity (HomeScreen.kt:1042): centred logo mark + leaf-flanked
+                            // "For your farm today" + the location pill (Figma 1.2 Home). It is
+                            // the list's FIRST item so its buttons stay tappable, but it is
+                            // PINNED and FADED as the list scrolls so cards rise and draw over it
+                            // instead of it scrolling away:
+                            //   • translationY = firstVisibleItemScrollOffset → counters the scroll
+                            //   • alpha fades over ~90dp
+                            //   • zIndex(-1) forces later card items to draw on top
+                            //   • the pin is released once invisible (a > 0f) so faded controls
+                            //     do not eat taps meant for cards risen to the top strip
+                            // SDK deviation: the app pins the app bar inside this same block. Here
+                            // the app bar sits in a Column ABOVE the list (it must survive the
+                            // loading and error branches, which render no list at all), so it is
+                            // already fixed and only this block is pinned.
+                            val headerDensity = LocalDensity.current
+                            val headerFadePx = with(headerDensity) { 90.dp.toPx() }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .zIndex(-1f)
+                                    .graphicsLayer {
+                                        val idx = listState.firstVisibleItemIndex
+                                        val off = listState.firstVisibleItemScrollOffset
+                                        val a = if (idx > 0) 0f
+                                        else (1f - off / headerFadePx).coerceIn(0f, 1f)
+                                        alpha = a
+                                        translationY =
+                                            if (idx == 0 && a > 0f) off.toFloat() else 0f
+                                    }
+                                    .padding(top = 2.dp, bottom = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.fc_logo_mark),
+                                    contentDescription = null,
+                                    colorFilter = ColorFilter.tint(brand.foregroundPrimary),
+                                    modifier = Modifier.size(42.dp)
+                                )
+                                SectionHeader(
+                                    title = label(
+                                        Labels.FOR_YOUR_FARM_TODAY,
+                                        "For your farm today"
+                                    ),
+                                    titleColor = brand.foregroundPrimary,
+                                    verticalPadding = 0.dp,
+                                )
+                                HomeLocationPill(
+                                    manager = graph.locationPromptManager,
+                                    locationState = locationState,
+                                    prefs = graph.prefs
+                                )
+                            }
+                          } else {
                             // `greeting` is ABSENT from the #12 response whenever the feed is
                             // empty (no resolved location), so keying the skeleton off it alone
                             // shimmers forever on a loaded-but-empty feed. App parity:
@@ -531,20 +706,27 @@ fun HomeScreen(
                                     GreetingSkeleton()
                                 }
                             }
+                          }
                         }
 
-                        // Sticky Photo / Speak / Type
+                        // Sticky Photo / Speak / Type.
+                        // App parity (HomeScreen.kt:1184): the slot is kept but rendered empty in
+                        // agentic mode — the floating composer replaces these buttons.
                         stickyHeader(key = "inputButtons") {
-                            PrimaryInputButtons(
-                                type = PrimaryInputButtonsType.HomeScreen,
-                                onPhotoClick = { openPhotoInput?.invoke() },
-                                onSpeakClick = { requestMicThenOpenVoice() },
-                                onTypeClick = {
-                                    openTextInput?.invoke()
-                                    focusTextInput?.invoke()
-                                },
-                                isSticky = isInputSticky
-                            )
+                            if (!isComposerUi) {
+                                PrimaryInputButtons(
+                                    type = PrimaryInputButtonsType.HomeScreen,
+                                    onPhotoClick = { openPhotoInput?.invoke() },
+                                    onSpeakClick = { requestMicThenOpenVoice() },
+                                    onTypeClick = {
+                                        openTextInput?.invoke()
+                                        focusTextInput?.invoke()
+                                    },
+                                    isSticky = isInputSticky
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(0.dp))
+                            }
                         }
 
                         // SSFR card (C3: gated by config.enableSsfr)
@@ -580,8 +762,15 @@ fun HomeScreen(
                             }
                         }
 
-                        item(key = "feedHeader") {
-                            FeedHeader(title = label(Labels.FOR_YOUR_FARM_TODAY, "For your farm today"))
+                        // App parity (HomeScreen.kt:1308): agentic mode already shows
+                        // "For your farm today" as the top-of-feed SectionHeader under the app
+                        // bar, so the in-feed FeedHeader is skipped to avoid a duplicate title.
+                        if (!isComposerUi) {
+                            item(key = "feedHeader") {
+                                FeedHeader(
+                                    title = label(Labels.FOR_YOUR_FARM_TODAY, "For your farm today")
+                                )
+                            }
                         }
 
                         // Feed sections
@@ -593,7 +782,7 @@ fun HomeScreen(
                                     userId = userId,
                                     isFetchingStatement = pendingCardSection?.stableId() == section.stableId() &&
                                         homeState.imageStatementState is UiState.Loading,
-                                    onCardClick = {
+                                    onCardClick = onCardClick@{
                                         graph.analytics.track(
                                             AnalyticsEvents.CARD_CLICKED,
                                             mapOf(
@@ -602,6 +791,35 @@ fun HomeScreen(
                                                     (section.statement_id ?: section.id)?.toString()
                                             )
                                         )
+                                        // App parity (HomeScreen.kt:633): with agentic chat on,
+                                        // the card tap SKIPS the pre-generated-answer API (#13
+                                        // FetchImageStatement) and sends the card question into
+                                        // chat as a normal text query, for both image and
+                                        // statement cards.
+                                        //
+                                        // SDK deviation: the app also forwards the card image url
+                                        // so chat can show it as a display-only banner on the user
+                                        // bubble. Destination.Chat has no display-only image
+                                        // field — its `imageUri` routes the query through image
+                                        // analysis, which is exactly what this path must avoid —
+                                        // so the banner is dropped. Likewise the app's
+                                        // `cardTriggerType` (triggered_input_type / click_type)
+                                        // has no carrier on Destination.Chat and is dropped.
+                                        if (isComposerUi) {
+                                            val question = section.question_text
+                                                ?: section.title.orEmpty()
+                                            if (question.isNotBlank()) {
+                                                onNavigateToChat(
+                                                    Destination.Chat(
+                                                        question = question,
+                                                        homeStatementId =
+                                                            (section.statement_id ?: section.id)
+                                                                ?.toString()
+                                                    )
+                                                )
+                                            }
+                                            return@onCardClick
+                                        }
                                         pendingCardSection = section
                                         vm.onAction(
                                             HomeAction.FetchImageStatement(
@@ -677,20 +895,81 @@ fun HomeScreen(
         }
 
         // ------------------------------------------------------------------ overlays
-        TextInputOverlay(
-            // App parity (HomeScreen.kt:1276) — see the note in ChatScreen: without imePadding()
-            // the composer hides behind the keyboard.
-            modifier = Modifier.imePadding().navigationBarsPadding(),
-            onSend = { text, imageUri -> sendMessage(text, imageUri) },
-            onPhotoClick = { openPhotoInput?.invoke() },
-            onVoiceClick = { requestMicThenOpenVoice() },
-            onFocusRequest = { requester -> focusTextInput = requester; openTextInput = requester },
-            onClearRequest = { clear -> clearTextInput = clear },
-            photoUris = photoUris,
-            onRemovePhoto = { index ->
-                photoUris = photoUris.toMutableList().also { it.removeAt(index) }
-            }
-        )
+        if (isComposerUi) {
+            // App parity (HomeScreen.kt:1590): persistent floating composer (camera / text
+            // field / mic|send) replacing BOTH the sticky PrimaryInputButtons and the text
+            // overlay. Floating mode consumes nav + IME insets internally, so this takes a
+            // plain Modifier — imePadding()/navigationBarsPadding() here would double the
+            // bottom inset and float the pill too high. isAnchored keeps it always visible.
+            InputComposer(
+                floating = true,
+                isAnchored = true,
+                showAura = true,
+                surfaceColor = brand.surfacePrimary,
+                placeholder = label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."),
+                photoUris = photoUris,
+                onRemovePhoto = { index ->
+                    photoUris = photoUris.toMutableList().also { it.removeAt(index) }
+                },
+                // With the buttons gone this is the only focus entry point left, so it takes
+                // over both refs the legacy Type button drove.
+                onFocusRequest = { requester ->
+                    focusTextInput = requester
+                    openTextInput = requester
+                },
+                onClearRequest = { clear -> clearTextInput = clear },
+                onPhotoClick = {
+                    // Camera is only offered when no image is attached; same guard and same
+                    // CHAT_ICON_CLICKED (Image) event as the legacy Photo button.
+                    if (photoUris.isEmpty()) {
+                        graph.analytics.track(
+                            AnalyticsEvents.CHAT_ICON_CLICKED,
+                            mapOf(
+                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                                AnalyticsProps.ICON_TYPE to "Image"
+                            )
+                        )
+                        openPhotoInput?.invoke()
+                    }
+                },
+                // Delegates to the same helper the legacy Speak button used, so the mic
+                // permission guard and its events are not duplicated here.
+                onVoiceClick = { requestMicThenOpenVoice() },
+                // Tapping the field to type is the composer's equivalent of the legacy Type
+                // button, so CHAT_ICON_CLICKED (Text) fires on focus gain — a reliable tap
+                // signal, since the field's own gesture would starve a parent click handler.
+                onFocusChange = { focused ->
+                    if (focused) {
+                        graph.analytics.track(
+                            AnalyticsEvents.CHAT_ICON_CLICKED,
+                            mapOf(
+                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                                AnalyticsProps.ICON_TYPE to "Text"
+                            )
+                        )
+                    }
+                },
+                onSend = { query -> sendMessage(query, photoUris.firstOrNull()) }
+            )
+        } else {
+            TextInputOverlay(
+                // App parity (HomeScreen.kt:1276) — see the note in ChatScreen: without
+                // imePadding() the composer hides behind the keyboard.
+                modifier = Modifier.imePadding().navigationBarsPadding(),
+                onSend = { text, imageUri -> sendMessage(text, imageUri) },
+                onPhotoClick = { openPhotoInput?.invoke() },
+                onVoiceClick = { requestMicThenOpenVoice() },
+                onFocusRequest = { requester ->
+                    focusTextInput = requester
+                    openTextInput = requester
+                },
+                onClearRequest = { clear -> clearTextInput = clear },
+                photoUris = photoUris,
+                onRemovePhoto = { index ->
+                    photoUris = photoUris.toMutableList().also { it.removeAt(index) }
+                }
+            )
+        }
 
         VoiceInput(
             onAudioRecorded = { file -> onVoiceAudioRecorded(file) },
@@ -723,6 +1002,119 @@ fun HomeScreen(
             onDismiss = { toast.dismiss() }
         )
     }
+}
+
+/**
+ * Location 2.0 pill (app parity: HomeScreen.kt:1789 `HomeLocationPill`). Real acquisition,
+ * driven by the shared [LocationPromptManager] singleton — the same state machine the weather
+ * button uses. Only reacts to states this pill itself raised (`source == LocalContext`) so the
+ * weather flow does not visually hijack it.
+ *
+ * SDK adaptation of three app-only manager helpers, all derived here without touching core:
+ *  • `isLocationEnabledOnce()`      → [LocationPromptManager.hasStoredLocation]
+ *  • `hasCurrentLocationPermission()` → a live [ContextCompat] check in this layer
+ *  • `isBlockedByPermission()`      → `PERMISSION_DENY_COUNT >= 2 && !hasPermission`
+ *  • `getApproxLocationName()`      → `APPROX_LOCATION_NAME`, which core already writes from
+ *    the #16 response's `display_address`. The app's separate never-overwritten
+ *    IP_APPROX_LOCATION_NAME key does not exist in the SDK, so there is one name, not two.
+ */
+@Composable
+private fun HomeLocationPill(
+    manager: LocationPromptManager,
+    locationState: LocationPromptState,
+    prefs: SdkPreferences
+) {
+    val context = LocalContext.current
+
+    // Permission is changed in system Settings, so re-check on every resume. hasStoredLocation()
+    // alone only means "a GPS fix was ever saved" — it stays true after the permission is
+    // revoked, so it must be paired with a live check or the pill keeps showing a stale exact
+    // location.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumeTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val hasPermission = remember(resumeTick, locationState) {
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+    val hasExactLocation = remember(resumeTick, locationState) {
+        manager.hasStoredLocation() && hasPermission
+    }
+
+    val isLocationButtonFlowActive = when (val st = locationState) {
+        is LocationPromptState.Interstitial -> st.source == LocationTriggerSource.LocalContext
+        is LocationPromptState.RequestPermission -> st.source == LocationTriggerSource.LocalContext
+        is LocationPromptState.RequestEnableGps -> st.source == LocationTriggerSource.LocalContext
+        is LocationPromptState.FetchingLocation -> st.source == LocationTriggerSource.LocalContext
+        is LocationPromptState.Recovery -> st.source == LocationTriggerSource.LocalContext
+        else -> false
+    }
+
+    // Permission-blocked is persistent (denyCount >= 2 && !hasPermission) rather than tied to
+    // LocationPromptState.Recovery, so dismissing the "We need your location" sheet does not
+    // make the pill fall back to approximate text while the permission is still blocked.
+    val isLocationButtonBlocked = remember(resumeTick, locationState) {
+        prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) >= 2 && !hasPermission
+    }
+
+    // Only show the "Getting your location" spinner once permission is granted and acquisition
+    // has actually started — not while the OS permission dialog is still up, which reads as
+    // "started too early".
+    val isLocationButtonSearching = when (val st = locationState) {
+        is LocationPromptState.RequestEnableGps -> st.source == LocationTriggerSource.LocalContext
+        is LocationPromptState.FetchingLocation -> st.source == LocationTriggerSource.LocalContext
+        else -> false
+    }
+
+    // Derived fresh every recomposition (cheap prefs read) rather than cached, so a permission
+    // revocation is picked up immediately via resumeTick above.
+    val locationPlaceName = prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "")
+
+    var showLocationSuccess by remember { mutableStateOf(false) }
+    var wasLocationButtonFlowActive by remember { mutableStateOf(false) }
+    LaunchedEffect(locationState) {
+        if (wasLocationButtonFlowActive &&
+            locationState == LocationPromptState.Idle &&
+            manager.hasStoredLocation()
+        ) {
+            // Flow just completed successfully — hold the checkmark briefly.
+            showLocationSuccess = true
+            delay(1500)
+            showLocationSuccess = false
+        }
+        wasLocationButtonFlowActive = isLocationButtonFlowActive
+    }
+
+    val locationButtonState = when {
+        isLocationButtonBlocked -> LocationButtonState.Blocked
+        isLocationButtonSearching -> LocationButtonState.Searching
+        showLocationSuccess -> LocationButtonState.Success
+        hasExactLocation || locationPlaceName.isNotBlank() -> LocationButtonState.Located
+        else -> LocationButtonState.Invite
+    }
+
+    LocationButton(
+        state = locationButtonState,
+        placeName = locationPlaceName,
+        onClick = {
+            // Re-run the flow rather than jumping straight to Settings — with denyCount >= 2
+            // and no permission, the manager lands on Recovery, which is what shows the
+            // "We need your location" sheet (with its own "Turn on in Settings" button) again.
+            if (manager.state.value == LocationPromptState.Idle) {
+                manager.triggerFromLocalContext()
+            }
+        }
+    )
 }
 
 /** One feed section rendered per type (image/statement, single/multi question). */

@@ -93,6 +93,10 @@ import org.digitalgreen.farmerchat.sdk.compose.components.PrimaryInputButtonsTyp
 import org.digitalgreen.farmerchat.sdk.compose.components.ScrollIndicator
 import org.digitalgreen.farmerchat.sdk.compose.components.SecondaryButton
 import org.digitalgreen.farmerchat.sdk.compose.components.SuggestedCard
+import org.digitalgreen.farmerchat.sdk.compose.components.Chip
+import org.digitalgreen.farmerchat.sdk.compose.components.ChipType
+import org.digitalgreen.farmerchat.sdk.compose.components.InputComposer
+import org.digitalgreen.farmerchat.sdk.compose.components.composerBarHeight
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInputOverlay
 import org.digitalgreen.farmerchat.sdk.compose.components.ThinkingIndicator
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
@@ -123,6 +127,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import org.digitalgreen.farmerchat.sdk.compose.components.AlignmentSurface
+import org.digitalgreen.farmerchat.sdk.compose.components.LocationChatBubble
 
 /**
  * Chat thread (doc 01 §3.8). Handles all entry modes (history, pre-generated,
@@ -153,6 +158,13 @@ fun ChatScreen(
     val state by vm.state.collectAsState()
 
     val isHistoryEntry = args.source == "history"
+
+    // 2.0.0 composer UI. The app gates this on its own Firebase Remote Config flag
+    // (`OnboardingRemoteConfig.getComposerUiEnabled()`), which is separate from the agentic
+    // API flag. The SDK carries no Remote Config, and exposes exactly one host-set switch, so
+    // both app flags collapse onto `enableAgenticChat` (see versions/v2/README.md). Read once —
+    // SDK config is immutable after initialize(), so the app's post-fetch re-read has no analogue.
+    val isComposerUi = graph.config.enableAgenticChat
 
     // ------------------------------------------------------------------ audio playback (voice bubbles + TTS)
     val voicePlayback = remember { AudioPlayback() }
@@ -655,8 +667,12 @@ fun ChatScreen(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
+                            // App parity (ChatThreadContent.kt:100): the composer UI reserves
+                            // composerBarHeight(floating) at the bottom so the last bubble is not
+                            // hidden behind the floating pill; the legacy input keeps 24.dp.
                             contentPadding = PaddingValues(
-                                start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp
+                                start = 16.dp, end = 16.dp, top = 16.dp,
+                                bottom = if (isComposerUi) composerBarHeight(floating = true) else 24.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -677,6 +693,23 @@ fun ChatScreen(
 
                             state.messages.forEachIndexed { index, message ->
                                 when (message) {
+                                    // 2.0.0: the farmer's resolved location, standing in for the
+                                    // text bubble they would otherwise have sent. Right-aligned
+                                    // because it is their reply to a GPS_PROMPT chip.
+                                    is ChatMessage.LocationMessage -> {
+                                        item(key = "loc_${message.id}") {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.CenterEnd
+                                            ) {
+                                                LocationChatBubble(
+                                                    address = message.address,
+                                                    label = label(Labels.YOUR_LOCATION, "Your location:")
+                                                )
+                                            }
+                                        }
+                                    }
+
                                     is ChatMessage.UserMessage -> {
                                         item(key = "msg_${message.id}") {
                                             Box(
@@ -902,7 +935,11 @@ fun ChatScreen(
                                                                     } else {
                                                                         vm.onAction(ChatAction.SynthesiseAudio)
                                                                     }
-                                                                }
+                                                                },
+                                                                // App parity
+                                                                // (ChatThreadContent.kt:515).
+                                                                useChips = message.isAgentic &&
+                                                                    !message.isPreGenerated
                                                             )
                                                         }
                                                     }
@@ -965,7 +1002,10 @@ fun ChatScreen(
                                                 questions = followUps,
                                                 onQuestionClick = { qIndex, question ->
                                                     onFollowUpClicked(question, qIndex)
-                                                }
+                                                },
+                                                useChips = lastAiMessage?.isAgentic == true &&
+                                                    lastAiMessage.isPreGenerated != true,
+                                                clarificationRequired = state.clarificationRequired
                                             )
                                         }
                                     }
@@ -1002,19 +1042,24 @@ fun ChatScreen(
             // the original app. The composer rule below is an SDK addition (the text composer
             // carries its own camera/mic, so the row is redundant while it is open) and is
             // applied through the same slide rather than a removal.
-            val inputRowHidden = state.isLoading || textComposerActive
-            val inputRowOffset by animateDpAsState(
-                targetValue = if (inputRowHidden) 150.dp else 0.dp,
-                animationSpec = tween(durationMillis = 450),
-                label = "buttonSlide"
-            )
-            PrimaryInputButtons(
-                type = PrimaryInputButtonsType.ChatScreen,
-                onPhotoClick = { openPhotoInput?.invoke() },
-                onSpeakClick = { requestMicThenOpenVoice() },
-                onTypeClick = { focusTextInput?.invoke() },
-                modifier = Modifier.offset(y = inputRowOffset)
-            )
+            //
+            // App parity (ChatThreadContent.kt:243 / ChatErrorContent.kt:101): the composer UI
+            // drops this row entirely — the InputComposer below already carries camera and mic.
+            if (!isComposerUi) {
+                val inputRowHidden = state.isLoading || textComposerActive
+                val inputRowOffset by animateDpAsState(
+                    targetValue = if (inputRowHidden) 150.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 450),
+                    label = "buttonSlide"
+                )
+                PrimaryInputButtons(
+                    type = PrimaryInputButtonsType.ChatScreen,
+                    onPhotoClick = { openPhotoInput?.invoke() },
+                    onSpeakClick = { requestMicThenOpenVoice() },
+                    onTypeClick = { focusTextInput?.invoke() },
+                    modifier = Modifier.offset(y = inputRowOffset)
+                )
+            }
         }
 
         // Invisible ShareCard rendered off-screen and captured for share/download.
@@ -1034,32 +1079,64 @@ fun ChatScreen(
         }
 
         // ------------------------------------------------------------------ overlays
-        TextInputOverlay(
-            // App parity (ChatInputOverlays.kt:49 / HomeScreen.kt:1276): the composer is
-            // bottom-aligned inside a fillMaxSize Box, so under edge-to-edge + adjustResize it
-            // sits at the RAW screen bottom — behind the IME. Without imePadding() the user
-            // cannot see what they are typing. navigationBarsPadding() keeps it clear of the
-            // gesture bar when the keyboard is closed.
-            modifier = Modifier.imePadding().navigationBarsPadding(),
-            onSend = { text, imageUri ->
-                clearTextInput?.invoke()
-                photoUris = emptyList()
-                if (imageUri != null) {
-                    vm.onAction(ChatAction.SendQuestionWithImage(question = text, imageUri = imageUri))
-                } else if (text.isNotBlank()) {
-                    vm.onAction(ChatAction.SendFollowUpQuestion(question = text))
-                }
-            },
-            onPhotoClick = { openPhotoInput?.invoke() },
-            onVoiceClick = { requestMicThenOpenVoice() },
-            onFocusRequest = { requester -> focusTextInput = requester },
-            onClearRequest = { clear -> clearTextInput = clear },
-            onFocusChange = { focused -> textComposerActive = focused },
-            photoUris = photoUris,
-            onRemovePhoto = { index ->
-                photoUris = photoUris.toMutableList().also { it.removeAt(index) }
+        // Send is identical on both input surfaces, so it is defined once.
+        val sendFromComposer: (String, Uri?) -> Unit = { text, imageUri ->
+            clearTextInput?.invoke()
+            photoUris = emptyList()
+            if (imageUri != null) {
+                vm.onAction(ChatAction.SendQuestionWithImage(question = text, imageUri = imageUri))
+            } else if (text.isNotBlank()) {
+                vm.onAction(ChatAction.SendFollowUpQuestion(question = text))
             }
-        )
+        }
+        if (isComposerUi) {
+            // App parity (ChatInputOverlays.kt:57): anchored/compact composer. Floating mode
+            // consumes nav + IME insets internally, so this takes a plain Modifier — adding
+            // imePadding()/navigationBarsPadding() here would double the bottom inset and float
+            // the pill too high. No idle aura in chat (Home-only cue); brand-green sheet.
+            InputComposer(
+                floating = true,
+                isAnchored = true,
+                compact = true,
+                // Slides off-screen while an answer is generating, then back — the same
+                // visibility rhythm PrimaryInputButtons has in the legacy layout.
+                visible = !(isThread && state.isLoading),
+                showAura = false,
+                surfaceColor = brand.surfacePrimary,
+                fadeColor = colors.surfaceReadingPrimary,
+                photoUris = photoUris,
+                onRemovePhoto = { index ->
+                    photoUris = photoUris.toMutableList().also { it.removeAt(index) }
+                },
+                onFocusRequest = { requester -> focusTextInput = requester },
+                onClearRequest = { clear -> clearTextInput = clear },
+                onFocusChange = { focused -> textComposerActive = focused },
+                onPhotoClick = { openPhotoInput?.invoke() },
+                onVoiceClick = { requestMicThenOpenVoice() },
+                // InputComposer's onSend is (String) -> Unit; the single attached image, if
+                // any, comes from photoUris — matching the Home composer.
+                onSend = { query -> sendFromComposer(query, photoUris.firstOrNull()) }
+            )
+        } else {
+            TextInputOverlay(
+                // App parity (ChatInputOverlays.kt:49 / HomeScreen.kt:1276): the composer is
+                // bottom-aligned inside a fillMaxSize Box, so under edge-to-edge + adjustResize it
+                // sits at the RAW screen bottom — behind the IME. Without imePadding() the user
+                // cannot see what they are typing. navigationBarsPadding() keeps it clear of the
+                // gesture bar when the keyboard is closed.
+                modifier = Modifier.imePadding().navigationBarsPadding(),
+                onSend = sendFromComposer,
+                onPhotoClick = { openPhotoInput?.invoke() },
+                onVoiceClick = { requestMicThenOpenVoice() },
+                onFocusRequest = { requester -> focusTextInput = requester },
+                onClearRequest = { clear -> clearTextInput = clear },
+                onFocusChange = { focused -> textComposerActive = focused },
+                photoUris = photoUris,
+                onRemovePhoto = { index ->
+                    photoUris = photoUris.toMutableList().also { it.removeAt(index) }
+                }
+            )
+        }
 
         VoiceInput(
             onAudioRecorded = { file ->
@@ -1130,7 +1207,11 @@ private fun InlineErrorContent(
 private fun FollowUpSection(
     title: String,
     questions: List<String>,
-    onQuestionClick: (index: Int, question: String) -> Unit
+    onQuestionClick: (index: Int, question: String) -> Unit,
+    /** Agentic answers render follow-ups as numbered chips instead of suggestion cards. */
+    useChips: Boolean = false,
+    /** Clarify moments get the green Agentic chip accent; related questions the neutral one. */
+    clarificationRequired: Boolean = false
 ) {
     val colors = LocalContentColors.current
     val brand = LocalBrandColors.current
@@ -1153,10 +1234,20 @@ private fun FollowUpSection(
             )
         }
         questions.forEachIndexed { qIndex, question ->
-            SuggestedCard(
-                text = question,
-                onClick = { onQuestionClick(qIndex, question) }
-            )
+            // App parity (ChatResponseActions.kt:212).
+            if (useChips) {
+                Chip(
+                    label = question,
+                    onClick = { onQuestionClick(qIndex, question) },
+                    type = if (clarificationRequired) ChipType.Agentic else ChipType.Suggested,
+                    number = qIndex + 1
+                )
+            } else {
+                SuggestedCard(
+                    text = question,
+                    onClick = { onQuestionClick(qIndex, question) }
+                )
+            }
         }
     }
 }
@@ -1169,8 +1260,55 @@ private fun ChatResponseActions(
     isAudioPlaying: Boolean,
     onShare: () -> Unit,
     onDownload: () -> Unit,
-    onListen: () -> Unit
+    onListen: () -> Unit,
+    /** Agentic answers get the compact Share + Listen row under an "AI may be wrong" note. */
+    useChips: Boolean = false
 ) {
+    val colors = LocalContentColors.current
+    // App parity (ChatResponseActions.kt:85): the agentic answer drops Save and the divider,
+    // keeps Share then Listen, and puts the accuracy note above the row.
+    if (useChips) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.fc_icon_info),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(colors.buttonPrimaryAccent),
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = label(
+                        Labels.AI_MAY_BE_WRONG_PLEASE_DOUBLE_CHECK,
+                        "AI may be wrong. Please double-check."
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.foregroundSecondary
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChatActionChip(
+                    iconRes = R.drawable.fc_icon_share,
+                    text = label(Labels.SHARE_DOWNLOAD, "Share"),
+                    onClick = onShare
+                )
+                if (isTtsEnabled) {
+                    ChatActionChip(
+                        iconRes = null,
+                        imageVector = if (isAudioPlaying) Icons.Filled.Pause else Icons.Filled.VolumeUp,
+                        text = label(Labels.LISTEN, "Listen"),
+                        isLoading = isLoadingAudio,
+                        onClick = onListen
+                    )
+                }
+            }
+        }
+        return
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ChatActionChip(
             iconRes = R.drawable.fc_icon_share,

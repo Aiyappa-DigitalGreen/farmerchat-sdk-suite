@@ -328,6 +328,68 @@ const css = `
 .fcsdk-action-chip:hover { color: var(--fc-brand); border-color: var(--fc-brand-bright); }
 .fcsdk-root[data-fc-theme="night"] .fcsdk-action-chip:hover { color: var(--fc-chip-text); }
 .fcsdk-clarification { font-size: 13px; color: var(--fc-text-muted); font-style: italic; margin-top: 8px; }
+
+/* --- agentic streaming (2.0.0) -------------------------------------------------------------- */
+/* Live tool progress / stall hint under a streaming answer. */
+.fcsdk-stream-progress {
+  align-self: flex-start; display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; color: var(--fc-text-muted);
+}
+.fcsdk-stream-progress-spinner { width: 18px; height: 18px; border-width: 2.5px; }
+.fcsdk-stream-progress-label { font-size: 13.5px; font-weight: 600; }
+
+/* Terminal state of a stream that ended without a complete answer. */
+.fcsdk-stream-error {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-top: 16px; padding: 16px; border-radius: var(--fc-radius);
+  /* Fallbacks first: color-mix() is unsupported on older browsers. */
+  background: var(--fc-surface); border: 1px solid var(--fc-border);
+  background: color-mix(in srgb, var(--fc-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fc-danger) 16%, transparent);
+}
+.fcsdk-stream-error-head { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--fc-text); }
+.fcsdk-stream-error-icon { font-size: 17px; line-height: 1; flex-shrink: 0; }
+.fcsdk-stream-error-retry { width: 100%; }
+
+/* Alignment surfaces: clarify / confirm / escalate / capability prompts. */
+.fcsdk-alignment { display: flex; flex-direction: column; gap: 12px; }
+.fcsdk-alignment--escalate {
+  padding: 16px; border-radius: var(--fc-radius);
+  background: var(--fc-surface); border: 1px solid var(--fc-border);
+  background: color-mix(in srgb, var(--fc-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fc-danger) 16%, transparent);
+}
+.fcsdk-alignment-message { font-size: 15.5px; line-height: 1.45; color: var(--fc-text); }
+.fcsdk-alignment-heading { font-size: 15px; font-weight: 700; color: var(--fc-text); }
+.fcsdk-alignment-chips { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.fcsdk-alignment-chip {
+  display: inline-flex; align-items: center; gap: 10px; text-align: left; max-width: 100%;
+  min-height: 44px; padding: 10px 14px;
+  border: 1.5px solid var(--fc-border); border-radius: var(--fc-radius);
+  background: var(--fc-chip); color: var(--fc-chip-text);
+  font-size: 14px; font-weight: 600; line-height: 1.35;
+  transition: border-color 0.15s ease, transform 0.06s ease;
+}
+.fcsdk-alignment-chip-index {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  background: var(--fc-surface); color: var(--fc-text-muted); font-size: 11.5px; font-weight: 700;
+}
+.fcsdk-alignment-chip--accent { border-color: var(--fc-brand-bright); }
+.fcsdk-alignment-chip--escalate { border-color: var(--fc-danger); }
+.fcsdk-alignment-chip--selected { background: var(--fc-brand); color: #fff; border-color: var(--fc-brand); }
+.fcsdk-alignment-chip--selected .fcsdk-alignment-chip-index { background: rgba(255,255,255,0.22); color: #fff; }
+.fcsdk-alignment-chip:hover:not(:disabled) { border-color: var(--fc-brand-bright); }
+.fcsdk-alignment-chip:active:not(:disabled) { transform: scale(0.99); }
+.fcsdk-alignment-chip:disabled { cursor: default; }
+.fcsdk-alignment-hatch {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--fc-text-muted);
+}
+.fcsdk-alignment-hatch-action {
+  border: none; background: none; padding: 0;
+  color: var(--fc-brand-bright); font-size: 12.5px; font-weight: 700; text-decoration: underline;
+}
 .fcsdk-chat-inputbar { padding: 10px 12px; border-top: 1px solid var(--fc-border); background: var(--fc-bg); }
 .fcsdk-scrolldown { position: absolute; right: 16px; bottom: 84px; width: 40px; height: 40px; border-radius: 50%;
   border: 1px solid var(--fc-border); background: var(--fc-card); color: var(--fc-text); font-size: 17px; z-index: 20;

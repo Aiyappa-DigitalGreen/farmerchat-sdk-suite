@@ -323,27 +323,65 @@ struct ChatView: View {
             FCUserChatBubble(message: user, playback: playback)
         case .aiResponse(let ai):
             let isLastAi = ai.id == lastAiMessage?.id
-            // Only fresh answers animate: newest AI message, not from history,
-            // not pre-generated, and not already revealed once.
-            let shouldAnimate = isLastAi && !isHistoryEntry && !ai.isPreGenerated && !revealedIds.contains(ai.id)
-            FCAiResponseBubble(
-                message: ai,
-                showActions: isLastAi && !ai.isPreGenerated,
-                isTtsEnabled: viewModel.state.isTtsEnabled,
-                isSynthesising: viewModel.state.isLoadingSynthesiseAudio,
-                isAudioPlaying: viewModel.state.isAudioPlaying,
-                animate: shouldAnimate,
-                onListen: listenTapped,
-                onShare: { share(ai) },
-                onDownload: { download(ai) },
-                onReadFullAdvice: ai.isPreGenerated ? {
-                    viewModel.onAction(.replacePreGeneratedWithQuestion(question: args.question ?? "", triggerInputType: "card"))
-                } : nil,
-                onRevealComplete: { revealedIds.insert(ai.id) }
-            )
+            // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the
+            // answer, its action row and its related-questions section. An ADDITIVE one falls
+            // through to the normal answer branch and renders below it as a nudge.
+            if let kind = ai.alignmentKind, !kind.isAdditive {
+                FCAlignmentSurface(
+                    kind: kind,
+                    // The prompt IS the message for an exclusive surface (see
+                    // ChatViewModel.handleTextPromptSuccess).
+                    message: ai.text,
+                    chips: ai.alignmentChips ?? [],
+                    selectedValues: ai.alignmentSelectedValues,
+                    isLoading: viewModel.state.isLoading,
+                    isLatest: isLastAi,
+                    onChipTap: { chip in sendAlignmentChip(chip) },
+                    onTypeInstead: { showTextInput = true }
+                )
+            } else {
+                // Only fresh answers animate: newest AI message, not from history,
+                // not pre-generated, and not already revealed once. A finalized agentic answer
+                // never animates — it already typed itself once as it streamed (deviation from
+                // Compose, which re-types the `metadata` answer under a fresh message id).
+                let shouldAnimate = isLastAi && !isHistoryEntry && !ai.isPreGenerated
+                    && !ai.isAgentic && !revealedIds.contains(ai.id)
+                FCAiResponseBubble(
+                    message: ai,
+                    showActions: isLastAi && !ai.isPreGenerated,
+                    isTtsEnabled: viewModel.state.isTtsEnabled,
+                    isSynthesising: viewModel.state.isLoadingSynthesiseAudio,
+                    isAudioPlaying: viewModel.state.isAudioPlaying,
+                    animate: shouldAnimate,
+                    onListen: listenTapped,
+                    onShare: { share(ai) },
+                    onDownload: { download(ai) },
+                    onReadFullAdvice: ai.isPreGenerated ? {
+                        viewModel.onAction(.replacePreGeneratedWithQuestion(question: args.question ?? "", triggerInputType: "card"))
+                    } : nil,
+                    onRevealComplete: { revealedIds.insert(ai.id) },
+                    isLatest: isLastAi,
+                    isBusy: viewModel.state.isLoading,
+                    onRetryStream: { viewModel.onAction(.retryLastRequest) },
+                    onAlignmentChipTap: { chip in sendAlignmentChip(chip) }
+                )
+            }
         case .loadingPlaceholder:
             FCChatLoadingBubble()
         }
+    }
+
+    /// An alignment chip tap sends the chip's `value` (falling back to its label) as a follow-up —
+    /// the same action a related-question tap uses, exactly as Compose does.
+    private func sendAlignmentChip(_ chip: AlignmentChip) {
+        let question = chip.submittedQuery
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        viewModel.onAction(.sendFollowUpQuestion(
+            question: question,
+            followUpQuestionId: nil,
+            transcriptionId: nil,
+            audioURL: nil
+        ))
     }
 
     private func chatError(_ message: String) -> some View {

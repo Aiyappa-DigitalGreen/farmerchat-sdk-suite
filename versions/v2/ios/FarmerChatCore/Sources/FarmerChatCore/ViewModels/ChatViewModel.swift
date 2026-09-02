@@ -1,6 +1,44 @@
 import Foundation
 import Combine
 
+// MARK: - Agentic stream text sanitizing (2.0.0)
+
+private let fcControlTokenRegex = try? NSRegularExpression(pattern: "<<[^>]*>>")
+private let fcFollowupsBlockRegex = try? NSRegularExpression(pattern: "```followups[\\s\\S]*?```")
+
+/// Minimum on-screen time per tool status, so back-to-back tool events (latency 0) are not
+/// collapsed by `@Published` coalescing into just the last one.
+let fcToolStatusMinDwellNanoseconds: UInt64 = 700_000_000
+
+/// Strips agentic control tokens that trail the streamed text but are absent from the clean
+/// `metadata.response` — e.g. `<<commodities:chickpea>>` and a ```` ```followups ... ``` ```` block.
+/// Without this the farmer watches raw control tokens type themselves into the answer.
+///
+/// Also cuts a still-streaming, not-yet-terminated token: mid-stream the text may end in a partial
+/// `<<comm` or an unclosed fence, which must not be shown either.
+///
+/// Internal (not private) so it can be unit-tested — the live stream cannot be exercised yet.
+func sanitizeAgenticStreamText(_ raw: String) -> String {
+    var text = raw
+    for regex in [fcFollowupsBlockRegex, fcControlTokenRegex] {
+        guard let regex else { continue }
+        text = regex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: NSRange(text.startIndex..<text.endIndex, in: text),
+            withTemplate: ""
+        )
+    }
+    if let fence = text.range(of: "```followups") {
+        text = String(text[text.startIndex..<fence.lowerBound])
+    }
+    if let token = text.range(of: "<<") {
+        text = String(text[text.startIndex..<token.lowerBound])
+    }
+    while let last = text.last, last.isWhitespace { text.removeLast() }
+    return text
+}
+
 // MARK: - Message model (port of chat/udf ChatMessage)
 
 public enum ChatMessage: Identifiable, Sendable, Equatable {
@@ -41,18 +79,78 @@ public enum ChatMessage: Identifiable, Sendable, Equatable {
         /// Server message id (used for TTS + follow-up fetch).
         public var messageId: String?
 
+        // ---- agentic streaming (SDK 2.0.0, endpoint #27a). All default to the 1.0.0 behaviour,
+        // so a synchronous answer is indistinguishable from before. ----
+
+        /// True while the agentic stream is in progress; suppresses the action buttons.
+        public var isStreaming: Bool
+        /// Transient tool progress label (e.g. "Checking weather forecast") shown while streaming.
+        public var streamingStatus: String?
+        /// True when this answer came from the agentic endpoint. Also suppresses the typewriter
+        /// reveal on a finalized streamed answer (the text already typed itself once).
+        public var isAgentic: Bool
+        /// Terminal outcome of an agentic stream that did NOT complete normally. When true the
+        /// answer renders with an inline error and a retry action; ``text`` may still hold a
+        /// preserved partial answer, or be blank if the stream broke at the start. Always false
+        /// for a normally finalized answer.
+        public var isInterrupted: Bool
+        /// Why the stream ended early; only meaningful when ``isInterrupted``.
+        public var streamErrorKind: StreamErrorKind?
+
+        // ---- alignment surfaces (2.0.0) ----
+
+        /// Non-nil when this response is an alignment surface (clarify / confirm / escalate or a
+        /// capability prompt) rather than a normal answer. Drives the chip rendering and the
+        /// urgent (escalate) treatment in place of the usual action row.
+        public var alignmentKind: AlignmentKind?
+        /// Quick-reply chips: label is shown, value is sent on tap.
+        public var alignmentChips: [AlignmentChip]?
+        /// The surface's own prompt message. For an EXCLUSIVE surface the prompt already lives in
+        /// ``text`` (it replaced the answer), so this stays nil. For an ADDITIVE surface
+        /// (``AlignmentKind/isAdditive``) ``text`` holds the real answer and this carries the
+        /// nudge rendered below it.
+        public var alignmentMessage: String?
+        /// Chip values already tapped on this surface. Present for parity with the Android state
+        /// model, which likewise never populates it — chip taps send a follow-up instead, so the
+        /// picked chip is not highlighted on either platform.
+        public var alignmentSelectedValues: [String]
+        /// The query that triggered this surface. Kept so a capability chip (e.g. "Share my
+        /// location") can re-send the user's real question once the capability is satisfied,
+        /// rather than sending the chip label as if it were the question.
+        public var alignmentOriginalQuery: String?
+
         public init(
             text: String,
             followUpQuestions: [String]? = nil,
             id: String = UUID().uuidString,
             isPreGenerated: Bool = false,
-            messageId: String? = nil
+            messageId: String? = nil,
+            isStreaming: Bool = false,
+            streamingStatus: String? = nil,
+            isAgentic: Bool = false,
+            isInterrupted: Bool = false,
+            streamErrorKind: StreamErrorKind? = nil,
+            alignmentKind: AlignmentKind? = nil,
+            alignmentChips: [AlignmentChip]? = nil,
+            alignmentMessage: String? = nil,
+            alignmentSelectedValues: [String] = [],
+            alignmentOriginalQuery: String? = nil
         ) {
             self.text = text
             self.followUpQuestions = followUpQuestions
             self.id = id
             self.isPreGenerated = isPreGenerated
             self.messageId = messageId
+            self.isStreaming = isStreaming
+            self.streamingStatus = streamingStatus
+            self.isAgentic = isAgentic
+            self.isInterrupted = isInterrupted
+            self.streamErrorKind = streamErrorKind
+            self.alignmentKind = alignmentKind
+            self.alignmentChips = alignmentChips
+            self.alignmentMessage = alignmentMessage
+            self.alignmentSelectedValues = alignmentSelectedValues
+            self.alignmentOriginalQuery = alignmentOriginalQuery
         }
     }
 
@@ -414,29 +512,29 @@ public final class ChatViewModel: ObservableObject {
             env.analytics.track(AnalyticsEvents.firstQueryAsked)
         }
 
+        // 2.0.0 opt-in: stream #27a instead of one synchronous #27 reply. Text path only —
+        // image analysis (#28) and voice transcription (#16) stay synchronous, matching Android's
+        // `fetchTextPromptResponse`.
+        if env.config.enableAgenticChat {
+            await streamAgenticAnswer(
+                request: request,
+                placeholderId: placeholderId,
+                retry: { [weak self] in
+                    await self?.sendQuestionInternal(
+                        question, transcriptionId: transcriptionId, audioURL: audioURL,
+                        triggeredInputType: triggeredInputType, weatherCtaTriggered: weatherCtaTriggered,
+                        ssfrCrop: ssfrCrop, statementId: statementId,
+                        replaceExistingUserBubble: true, isRetry: true
+                    )
+                }
+            )
+            return
+        }
+
         let result = await env.api.getAnswerForTextQuery(request)
         switch result {
-        case .success(let response) where response.error != true && (response.response ?? response.translatedResponse) != nil:
-            let text = response.translatedResponse ?? response.response ?? ""
-            state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
-            let aiId = UUID().uuidString
-            state.messages.append(.aiResponse(ChatMessage.AiResponse(
-                text: text,
-                id: aiId,
-                messageId: response.messageId?.stringValue
-            )))
-            state.chatResponseState = .success(text)
-            state.failedMessageId = nil
-            lastRequest = nil
-            if let mid = response.messageId?.stringValue {
-                env.config.onAnswerReceived?(mid) // C4 semantic callback
-            }
-            if response.hideTtsSpeaker == true { state.isTtsEnabled = false }
-            // Real follow-ups always come from endpoint #29.
-            if response.hideFollowUpQuestion != true, let messageId = response.messageId?.stringValue {
-                await fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId)
-            }
         case .success(let response):
+            if await handleTextPromptSuccess(response, placeholderId: placeholderId) { break }
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
@@ -470,6 +568,262 @@ public final class ChatViewModel: ObservableObject {
                 }
             )
         }
+    }
+
+    /// Shared terminal handling for a #27 answer — and for the agentic stream's terminal
+    /// `metadata` event, whose payload is field-compatible with `TextPromptResponse`. One path
+    /// means the C4 callbacks, TTS gating and follow-ups (#29) are shared with the synchronous
+    /// path rather than reimplemented for streaming.
+    ///
+    /// Returns false when the payload is an error or carries no answer at all, so the caller runs
+    /// its own failure treatment (a failed user bubble on the synchronous path, an interrupted
+    /// stream bubble on the agentic one).
+    private func handleTextPromptSuccess(
+        _ response: TextPromptResponse,
+        placeholderId: String,
+        streamId: String? = nil,
+        isAgentic: Bool = false
+    ) async -> Bool {
+        let alignmentKind = AlignmentKind.fromType(response.alignments?.type)
+        var text = response.translatedResponse ?? response.response ?? ""
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let alignmentKind, !alignmentKind.isAdditive {
+            // An EXCLUSIVE alignment surface arrives with `response` EMPTY on purpose: its prompt
+            // IS `alignments.message`. Falling through to the failure path here would show the
+            // farmer an error instead of the question they are being asked.
+            text = response.alignments?.message ?? ""
+        }
+        guard response.error != true,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
+        if let streamId {
+            // Drop the streaming bubble; `metadata` is the authoritative, clean answer.
+            state.messages.removeAll { $0.id == "ai_\(streamId)" }
+        }
+        let aiId = UUID().uuidString
+        state.messages.append(.aiResponse(ChatMessage.AiResponse(
+            text: text,
+            id: aiId,
+            messageId: response.messageId?.stringValue,
+            isAgentic: isAgentic,
+            // 2.0.0: an alignment surface asks the user to clarify/confirm instead of (or
+            // alongside) answering. Exclusive surfaces replace the answer, additive ones sit
+            // below it — see AlignmentKind.
+            alignmentKind: alignmentKind,
+            alignmentChips: response.alignments?.chips,
+            alignmentMessage: alignmentKind?.isAdditive == true ? response.alignments?.message : nil,
+            alignmentOriginalQuery: response.alignments?.originalQuery
+        )))
+        state.chatResponseState = .success(text)
+        state.failedMessageId = nil
+        lastRequest = nil
+        if let mid = response.messageId?.stringValue {
+            env.config.onAnswerReceived?(mid) // C4 semantic callback
+        }
+        if response.hideTtsSpeaker == true { state.isTtsEnabled = false }
+        // Real follow-ups always come from endpoint #29.
+        if response.hideFollowUpQuestion != true, let messageId = response.messageId?.stringValue {
+            await fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId)
+        }
+        return true
+    }
+
+    // MARK: - Agentic streaming (#27a, 2.0.0)
+
+    /// Consumes the agentic stream (#27a — gated on `FarmerChatConfig.enableAgenticChat`).
+    /// Faithful port of Android's `streamAgenticAnswer`, itself a port of the app's
+    /// `consumeAgenticStream` (fc-compose-agentic @ c0524dd6, ChatViewModel.kt:1444).
+    ///
+    /// Accumulates `text_delta`s into the answer bubble for live typing, surfaces tool status
+    /// labels while tools run, and finalizes on `metadata`. If the stream ends without one, falls
+    /// back to `done`, then to the accumulated text.
+    private func streamAgenticAnswer(
+        request: TextPromptRequest,
+        placeholderId: String,
+        retry: @escaping @MainActor () async -> Void
+    ) async {
+        // Reuse the placeholder's id as the stream id so the loading bubble becomes the answer
+        // bubble in place, with no remove/insert flicker.
+        let streamId = placeholderId
+        var builder = ""
+        var finalized = false
+        // Captured but NOT finalized on arrival: a `metadata` normally follows `done` and is
+        // richer (message_id, follow-up ids), so it wins. `done` is only a fallback.
+        var pendingDone: (answer: String?, followUps: [String])?
+
+        // Single exit for every "no terminal metadata" outcome — clean EOF, a failure event, or a
+        // thrown error. Runs at most once (guarded + latches `finalized`).
+        func finalizeStreamOrFail(_ errorKind: StreamErrorKind? = nil) {
+            if finalized { return }
+            finalized = true
+            let fallbackText = sanitizeAgenticStreamText(builder)
+            let doneAnswer = pendingDone?.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if let done = pendingDone, !doneAnswer.isEmpty || !fallbackText.isEmpty {
+                // A `done` means the model actually finished → a complete answer, not an
+                // interruption, even if the transport dropped right after.
+                finalizeAgenticAnswer(
+                    text: doneAnswer.isEmpty ? fallbackText : (done.answer ?? fallbackText),
+                    followUps: done.followUps.isEmpty ? nil : done.followUps,
+                    streamId: streamId
+                )
+            } else if let errorKind, !fallbackText.isEmpty {
+                // Genuine error after some text arrived: keep the partial and mark it interrupted
+                // so the UI can offer retry.
+                interruptAgentic(streamId: streamId, text: fallbackText, kind: errorKind, retry: retry)
+            } else if !fallbackText.isEmpty {
+                // Clean EOF with partial text and no terminal event: some backends stream deltas
+                // without a done/metadata. Treat it as the complete answer — flagging it
+                // interrupted would make every normal answer on such a backend look broken.
+                finalizeAgenticAnswer(text: fallbackText, followUps: nil, streamId: streamId)
+            } else {
+                // Nothing usable arrived.
+                interruptAgentic(
+                    streamId: streamId, text: "", kind: errorKind ?? .unknown, retry: retry
+                )
+            }
+        }
+
+        do {
+            for try await event in env.api.streamAnswerForTextQueryAgentic(request) {
+                switch event {
+                case .toolCall(_, let statusText), .toolResult(_, let statusText):
+                    guard let statusText,
+                          !statusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        break
+                    }
+                    updateStreamingResponse(
+                        streamId: streamId,
+                        text: sanitizeAgenticStreamText(builder),
+                        status: statusText
+                    )
+                    // Minimum dwell so back-to-back tool events are not collapsed into the last.
+                    try? await Task.sleep(nanoseconds: fcToolStatusMinDwellNanoseconds)
+
+                case .textDelta(let delta):
+                    builder += delta
+                    // Text is flowing; clear any transient tool status.
+                    updateStreamingResponse(
+                        streamId: streamId,
+                        text: sanitizeAgenticStreamText(builder),
+                        status: nil
+                    )
+
+                case .metadata(let response):
+                    finalized = true
+                    // `metadata` carries a TextPromptResponse — the same shape #27 returns — so
+                    // finalize through the shared path and inherit its callbacks, TTS gating and
+                    // follow-up handling for free.
+                    let handled = await handleTextPromptSuccess(
+                        response, placeholderId: placeholderId, streamId: streamId, isAgentic: true
+                    )
+                    if !handled {
+                        // An error/blank terminal payload: keep whatever streamed and offer retry.
+                        interruptAgentic(
+                            streamId: streamId,
+                            text: sanitizeAgenticStreamText(builder),
+                            kind: .server,
+                            retry: retry
+                        )
+                    }
+
+                // Fallback terminal: remember it, let a following `metadata` win.
+                case .done(let answer, let followUps):
+                    pendingDone = (answer, followUps)
+
+                // Don't discard a completed `done`: if it arrived before the failure the answer is
+                // still finalized from it.
+                case .failure(_, let kind):
+                    finalizeStreamOrFail(kind)
+                }
+            }
+            // Clean EOF with no terminal metadata: no transport error was observed.
+            finalizeStreamOrFail()
+        } catch is CancellationError {
+            // Screen left / task cancelled: leave the thread alone, don't write a stale error card.
+            return
+        } catch {
+            finalizeStreamOrFail(.network)
+        }
+    }
+
+    /// Swaps the streamed answer into the slot the loading placeholder occupies (both share the
+    /// stream id), so the bubble grows in place instead of being removed and re-appended.
+    private func upsertStreamMessage(_ ai: ChatMessage.AiResponse) {
+        if let index = state.messages.firstIndex(where: { $0.id == "ai_\(ai.id)" }) {
+            state.messages[index] = .aiResponse(ai)
+            return
+        }
+        if let index = state.messages.firstIndex(where: { $0.id == "loading_\(ai.id)" }) {
+            state.messages[index] = .aiResponse(ai)
+            return
+        }
+        state.messages.removeAll {
+            if case .loadingPlaceholder = $0 { return true }
+            return false
+        }
+        state.messages.append(.aiResponse(ai))
+    }
+
+    /// Replaces the loading placeholder / prior streaming bubble with the in-progress answer.
+    private func updateStreamingResponse(streamId: String, text: String, status: String?) {
+        upsertStreamMessage(ChatMessage.AiResponse(
+            text: text,
+            id: streamId,
+            isStreaming: true,
+            streamingStatus: status,
+            isAgentic: true
+        ))
+        state.isLoading = true
+        state.errorMessage = nil
+        state.failedMessageId = nil
+    }
+
+    /// Settles a streamed answer that finished without a `metadata` event.
+    private func finalizeAgenticAnswer(text: String, followUps: [String]?, streamId: String) {
+        upsertStreamMessage(ChatMessage.AiResponse(
+            text: text,
+            followUpQuestions: followUps,
+            id: streamId,
+            isAgentic: true
+        ))
+        state.isLoading = false
+        state.errorMessage = nil
+        state.failedMessageId = nil
+        state.chatResponseState = .success(text)
+        state.suggestedQuestions = followUps
+        state.suggestedQuestionIds = nil
+        lastRequest = nil
+    }
+
+    /// Settles a stream that ended early; `text` may hold a preserved partial answer.
+    private func interruptAgentic(
+        streamId: String,
+        text: String,
+        kind: StreamErrorKind,
+        retry: @escaping @MainActor () async -> Void
+    ) {
+        upsertStreamMessage(ChatMessage.AiResponse(
+            text: text,
+            id: streamId,
+            isAgentic: true,
+            isInterrupted: true,
+            streamErrorKind: kind
+        ))
+        let message = env.labels.label(
+            AgenticLabels.failedToGetResponse,
+            fallback: AgenticLabels.failedToGetResponseFallback
+        )
+        state.isLoading = false
+        // Deliberately NOT `state.errorMessage` (Android does set it): ChatView renders an inline
+        // error banner from that field whenever the thread is non-empty, which would duplicate the
+        // in-bubble StreamErrorCard. The card owns the message and the retry action instead.
+        state.chatResponseState = .error(message: message, code: nil, isNetworkError: kind == .network)
+        env.config.onError?(nil, message) // C4 semantic callback (all fail paths)
+        // The card's "Try again" dispatches .retryLastRequest, which only fires `lastRequest`.
+        lastRequest = retry
     }
 
     private func failCurrent(placeholderId: String, userMessageId: String, message: String, retry: @escaping @MainActor () async -> Void) {

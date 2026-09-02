@@ -17,6 +17,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
@@ -35,6 +36,15 @@ import {
 import { PrimaryButton, ScrollToBottomButton } from '../components/Buttons';
 import { SuggestedCard } from '../components/Cards';
 import { AiAnswerBlock, ThinkingIndicator } from '../components/AiAnswer';
+import {
+  AlignmentSurface,
+  StreamErrorCard,
+  StreamStallHint,
+} from '../components/AgenticSurfaces';
+import { Labels } from '../../core/labels';
+import { StreamErrorKinds } from '../../core/agenticModels';
+import { isAdditiveAlignment } from '../../core/types';
+import type { AlignmentChip } from '../../core/types';
 import { LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
 import {
   fileUriToBase64,
@@ -295,6 +305,33 @@ export function ChatScreen(props: {
         const shouldAnimate =
           isLast && !isHistoryEntry && !item.isPreGenerated && !revealedIds.has(item.id);
         const revealed = revealedIds.has(item.id);
+        const alignmentKind = item.alignmentKind ?? null;
+        // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the answer,
+        // its action row and its related-questions section. An ADDITIVE one falls through to the
+        // normal answer branch and renders below it as a nudge (see AiBubble).
+        if (alignmentKind !== null && !isAdditiveAlignment(alignmentKind)) {
+          return (
+            <View style={styles.aiRow}>
+              <AlignmentSurface
+                kind={alignmentKind}
+                message={item.text}
+                chips={item.alignmentChips ?? []}
+                selectedValues={item.alignmentSelectedValues ?? []}
+                isLoading={state.isLoading}
+                isLatest={isLast}
+                onChipPress={(chip) =>
+                  onAction({
+                    type: 'SelectAlignmentChip',
+                    messageId: item.id,
+                    chip,
+                    kind: alignmentKind,
+                  })
+                }
+                onTypeInstead={() => setTextInputVisible(true)}
+              />
+            </View>
+          );
+        }
         return (
           <AiBubble
             message={item}
@@ -320,6 +357,18 @@ export function ChatScreen(props: {
                 : undefined
             }
             onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
+            onAlignmentChipPress={(chip) =>
+              alignmentKind !== null
+                ? onAction({
+                    type: 'SelectAlignmentChip',
+                    messageId: item.id,
+                    chip,
+                    kind: alignmentKind,
+                  })
+                : undefined
+            }
+            isThreadLoading={state.isLoading}
+            onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
           />
         );
       }
@@ -417,7 +466,10 @@ export function ChatScreen(props: {
               <ThreadFooter
                 suggestedQuestions={state.suggestedQuestions}
                 clarificationRequired={state.clarificationRequired}
-                errorMessage={state.errorMessage}
+                // An interrupted agentic stream renders its own inline StreamErrorCard (with
+                // kind- and partial-aware copy) on the answer bubble; showing the footer error
+                // too would give the farmer two retry buttons for one failure.
+                errorMessage={lastAi?.isInterrupted === true ? null : state.errorMessage}
                 isLoading={state.isLoading}
                 revealed={lastAi == null || revealedIds.has(lastAi.id)}
                 askLabel={label('fc_v2_app_label_ask', 'Ask')}
@@ -548,15 +600,37 @@ function AiBubble(props: {
   onDownload: () => void;
   onReadFullAdvice?: () => void;
   onFollowUp: (question: string) => void;
+  // ---- agentic (2.0.0) ----
+  /** Tapped chip on an ADDITIVE alignment surface rendered below this answer. */
+  onAlignmentChipPress?: (chip: AlignmentChip) => void;
+  /** ChatState.isLoading — locks alignment chips while another query is in flight. */
+  isThreadLoading?: boolean;
+  /** Retry after an interrupted stream. */
+  onRetryStream?: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   const label = useLabel();
   const cfg = useSdk().config;
   const { message } = props;
-  // Action row appears only once the answer has finished revealing.
-  const showActions = props.isLast && props.revealed;
+  const isStreaming = message.isStreaming === true;
+  const isInterrupted = message.isInterrupted === true;
+  // While a stream is live the answer grows in place, so reserve a screen's height to pin the
+  // question at the top instead of letting the list clamp it downward as text arrives. Also held
+  // for the interrupted state so the error card sits near the top. Port of the Compose
+  // `streamReserve` (Modifier.heightIn(min = screenHeightDp)).
+  const windowHeight = useWindowDimensions().height;
+  const streamReserve =
+    props.isLast && (isStreaming || isInterrupted) ? { minHeight: windowHeight } : null;
+  const additiveAlignmentKind =
+    message.alignmentKind != null && isAdditiveAlignment(message.alignmentKind)
+      ? message.alignmentKind
+      : null;
+  // Action row appears only once the answer has finished revealing — and never while a stream is
+  // still running or after it broke. (AiAnswerBlock reports "revealed" immediately when
+  // animate=false, which is every delta of a stream, so `revealed` alone is not enough.)
+  const showActions = props.isLast && props.revealed && !isStreaming && !isInterrupted;
   return (
-    <View style={styles.aiRow}>
+    <View style={[styles.aiRow, streamReserve]}>
       {props.clarificationRequired ? (
         <View
           style={[
@@ -575,7 +649,9 @@ function AiBubble(props: {
       <View style={styles.aiBubble}>
         <AiAnswerBlock
           text={message.text}
-          animate={props.animate}
+          // A streaming answer must NEVER run the typewriter reveal — the text is already
+          // arriving a token at a time, and animating it again double-types it.
+          animate={props.animate && !isStreaming}
           color={cfg.aiBubbleTextColor ?? theme.bubbleAiText}
           fontSize={cfg.messageFontSize ?? undefined}
           onRevealComplete={props.onRevealComplete}
@@ -585,7 +661,58 @@ function AiBubble(props: {
             {label('chat_source', 'Source: {name}', { name: message.contentProvider })}
           </Text>
         ) : null}
+
+        {/* Tool progress, or the initial "getting your answer" state before any text arrives. */}
+        {isStreaming &&
+        (message.text.length === 0 ||
+          (message.streamingStatus != null && message.streamingStatus.trim().length > 0)) ? (
+          <View style={styles.streamStatus}>
+            <LogoSpinner
+              message={
+                message.streamingStatus != null && message.streamingStatus.trim().length > 0
+                  ? message.streamingStatus
+                  : label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')
+              }
+            />
+          </View>
+        ) : null}
+
+        {/* Text is flowing but has stalled with no tool status: a transient client-side hint,
+            NOT a failure. Keyed on text length so the next delta clears it automatically. */}
+        {isStreaming &&
+        message.text.length > 0 &&
+        (message.streamingStatus == null || message.streamingStatus.trim().length === 0) ? (
+          <View style={styles.streamStatus}>
+            <StreamStallHint messageId={message.id} textLength={message.text.length} />
+          </View>
+        ) : null}
       </View>
+
+      {/* ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
+          Single-tap; the answer above keeps its own action row. */}
+      {additiveAlignmentKind !== null ? (
+        <AlignmentSurface
+          kind={additiveAlignmentKind}
+          message={message.alignmentMessage ?? ''}
+          chips={message.alignmentChips ?? []}
+          selectedValues={message.alignmentSelectedValues ?? []}
+          isLoading={props.isThreadLoading === true}
+          isLatest={props.isLast}
+          additive
+          onChipPress={(chip) => props.onAlignmentChipPress?.(chip)}
+        />
+      ) : null}
+
+      {/* Interrupted terminal state: keep any partial answer above and offer retry. Only the
+          latest answer shows the card — an older failed question keeps its partial text but
+          drops the retry action. */}
+      {isInterrupted && props.isLast ? (
+        <StreamErrorCard
+          errorKind={message.streamErrorKind ?? StreamErrorKinds.UNKNOWN}
+          hasPartial={message.text.trim().length > 0}
+          onRetry={() => props.onRetryStream?.()}
+        />
+      ) : null}
       {showActions ? (
         <FadeIn style={styles.aiActions}>
           {message.isPreGenerated && props.onReadFullAdvice ? (
@@ -779,6 +906,7 @@ const styles = StyleSheet.create({
   aiBubble: { width: '100%', paddingRight: spacing.xs },
   aiActions: { gap: spacing.md, width: '100%' },
   actionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  streamStatus: { marginTop: spacing.sm },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',

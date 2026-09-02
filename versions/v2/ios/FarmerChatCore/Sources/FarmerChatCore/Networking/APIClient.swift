@@ -222,4 +222,30 @@ final class APIClient: @unchecked Sendable {
     func encodeBody<Body: Encodable>(_ body: Body, apiName: String) -> Data? {
         try? encoder.encode(body)
     }
+
+    /// Builds the POST request for a **streaming** endpoint (#27a, 2.0.0).
+    ///
+    /// Deliberately NOT built on `buildRequest`: that stamps
+    /// `request.timeoutInterval = priority.timeoutSeconds`, and a `URLRequest` timeout **overrides**
+    /// the session configuration — so a P3 request would cap an agentic stream at 30 s no matter
+    /// how the streaming session is configured. The `X-Timeout` / `X-Request-ID` priority headers
+    /// are omitted for the same reason (Android's agentic client skips those interceptors too).
+    ///
+    /// Auth-relevant headers are identical to every other call; `Authorization` is added by the
+    /// caller's refresh loop.
+    func streamingRequest(path: String, body: Data?) -> URLRequest? {
+        guard let url = URL(string: path, relativeTo: baseURL) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = HTTPMethod.post.rawValue
+        // Effectively no timeout — see AgenticChatDataSource.noTimeoutInterval.
+        request.timeoutInterval = AgenticChatDataSource.noTimeoutInterval
+        // MUST NOT be text/event-stream: the backend 406s that (verified live 2026-09-02). The
+        // streaming view sets its own response Content-Type regardless.
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(FarmerChatSDK.buildVersionHeader, forHTTPHeaderField: "Build-Version")
+        request.setValue(deviceInfo.deviceInfoHeaderValue(), forHTTPHeaderField: "Device-Info")
+        request.httpBody = body
+        return request
+    }
 }

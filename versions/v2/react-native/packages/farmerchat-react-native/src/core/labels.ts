@@ -239,6 +239,26 @@ export const Labels = {
   SSFR_MAIZE: 'fc_v2_app_label_ssfr_maize',
   SSFR_WHEAT_QUESTION: 'fc_v2_app_label_ssfr_wheat_question',
   SSFR_MAIZE_QUESTION: 'fc_v2_app_label_ssfr_maize_question',
+
+  // ---- agentic streaming (2.0.0) ----
+  /** "Connection stopped. Your partial answer is saved." */
+  CONNECTION_STOPPED_PARTIAL_SAVED: 'fc_v2_app_label_connection_stopped_partial_saved',
+  /** "Paused, resuming…" — transient stall hint while a stream is mid-answer. */
+  RESPONSE_PAUSED_RESUMING: 'fc_v2_app_label_response_paused_resuming',
+
+  // ---- alignment surfaces (2.0.0) ----
+  /** "Share location" — GPS_PROMPT heading. */
+  SHARE_LOCATION_TITLE: 'fc_v2_app_label_share_location_title',
+  /** "Add one clear photo" — UPLOAD_PHOTO heading. */
+  ADD_ONE_CLEAR_PHOTO: 'fc_v2_app_label_add_one_clear_photo',
+  /** "Please Confirm" — CONFIRM heading. */
+  PLEASE_CONFIRM: 'fc_v2_app_label_please_confirm',
+  /** "Choose one" — CLARIFY heading. */
+  CHOOSE_ONE: 'fc_v2_app_label_choose_one',
+  /** "Don't see your option?" — escape-hatch hint. */
+  DONT_SEE_YOUR_OPTION: 'fc_v2_app_label_dont_see_your_option',
+  /** "Type or say it." — escape-hatch action. */
+  TYPE_OR_SAY_IT: 'fc_v2_app_label_type_or_say_it',
 } as const;
 
 export type LabelKey = (typeof Labels)[keyof typeof Labels];

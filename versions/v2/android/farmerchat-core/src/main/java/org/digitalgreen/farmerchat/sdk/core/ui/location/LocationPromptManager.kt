@@ -94,6 +94,18 @@ class LocationPromptManager(
         _state.value = LocationPromptState.Interstitial(LocationTriggerSource.LocalContext)
     }
 
+    /**
+     * 2.0.0: the Settings "My Farm" row.
+     *
+     * Goes straight to the permission request rather than through the interstitial: the farmer
+     * has already navigated to Settings and tapped a location row, so the interstitial would be
+     * asking them to opt into something they just explicitly chose.
+     */
+    fun triggerFromSettings() {
+        analytics.track(AnalyticsEvents.LOCATION_PERMISSION_PROMPT_TRIGGERED)
+        _state.value = LocationPromptState.RequestPermission(LocationTriggerSource.Settings, null)
+    }
+
     // ------------------------------------------------------------------ interstitial actions
 
     /** Interstitial "Turn location on now" / Recovery "Turn on in settings". */

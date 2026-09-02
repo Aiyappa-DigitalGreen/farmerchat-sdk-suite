@@ -10,6 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabel, useSdk } from '../context';
 import { Icon, LogoSpinner, Toast } from '../components/common';
 import { AiAnswerBlock, ThinkingIndicator } from '../components/AiAnswerBlock';
+import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
+import { isAdditiveAlignment } from '../../core/alignment';
 import { TextInputOverlay, VoiceInputOverlay, PhotoInputOverlay, PrimaryInputButtons, VoiceClip, InputKind } from '../components/inputs';
 import { shareAnswerCard, downloadAnswerCard } from '../components/shareCard';
 import { useChat, AiResponse, UserMessage } from '../../state/useChat';
@@ -123,6 +125,15 @@ export function ChatScreen(props: { params: ChatRouteParams; onClose: () => void
     if (distanceFromBottom < 320) el.scrollTop = el.scrollHeight;
   }, [revealedIds]);
 
+  // While an agentic answer streams, its bubble grows without the message COUNT changing, so the
+  // effect above never fires. Track the streamed text length and keep the tail in view (still
+  // respecting a user who has scrolled up to read).
+  let streamingTextLength = -1;
+  for (const m of chat.messages) if (m.kind === 'ai' && m.isStreaming) streamingTextLength = m.text.length;
+  useEffect(() => {
+    if (streamingTextLength >= 0) revealScrollToBottom();
+  }, [streamingTextLength, revealScrollToBottom]);
+
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -201,12 +212,40 @@ export function ChatScreen(props: { params: ChatRouteParams; onClose: () => void
               return <UserBubble key={msg.id} message={msg} onRetry={chat.failedMessageId === msg.id ? () => void actions.retryLastRequest() : undefined} />;
             }
             const ai = msg;
+            const isLastAi = ai.id === lastAiId;
             // Only the newest, fresh answer animates: not history, not
             // pre-generated, and only until it has revealed once. Everything
             // else short-circuits `revealed` to true and shows at once.
-            const shouldAnimate = ai.id === lastAiId && !isHistoryEntry && !ai.isPreGenerated && !revealedIds.has(ai.id);
+            // An AGENTIC answer never animates: the text already arrived a token at a time, and
+            // animating it again would re-type an answer the user just watched appear.
+            const shouldAnimate =
+              isLastAi && !isHistoryEntry && !ai.isPreGenerated && !ai.isAgentic && !revealedIds.has(ai.id);
             const revealed = !shouldAnimate || revealedIds.has(ai.id);
             const followUps = ai.followUpQuestions ?? [];
+
+            // 2.0.0 alignment surfaces. An EXCLUSIVE surface owns the message area: it replaces
+            // the answer, its action row and its related-questions section. An ADDITIVE one falls
+            // through to the normal answer branch and renders below it as a nudge.
+            const alignmentKind = ai.alignmentKind ?? null;
+            if (alignmentKind && !isAdditiveAlignment(alignmentKind)) {
+              return (
+                <div key={ai.id} className="fcsdk-bubble-ai">
+                  <AlignmentSurface
+                    kind={alignmentKind}
+                    message={ai.text}
+                    chips={ai.alignmentChips ?? []}
+                    selectedValues={ai.alignmentSelectedValues ?? []}
+                    isLoading={chat.isLoading}
+                    isLatest={isLastAi}
+                    onChipClick={(chip) =>
+                      void actions.sendFollowUpQuestion((chip.value || chip.label || '').trim())
+                    }
+                    onTypeInstead={() => setOverlay('type')}
+                  />
+                </div>
+              );
+            }
+
             return (
               <div key={ai.id} className="fcsdk-bubble-ai">
                 <AiAnswerBlock
@@ -215,11 +254,42 @@ export function ChatScreen(props: { params: ChatRouteParams; onClose: () => void
                   onRevealComplete={() => markRevealed(ai.id)}
                   onRevealProgress={revealScrollToBottom}
                 />
+                {/* Tool progress / "getting your answer" / 4 s stall hint while streaming. */}
+                {ai.isStreaming ? <StreamProgress text={ai.text} status={ai.streamingStatus} /> : null}
+                {/* ADDITIVE surface: a nudge below the real answer (gender-select /
+                    commodity-confirm). The answer above keeps its own action row. */}
+                {alignmentKind && isAdditiveAlignment(alignmentKind) ? (
+                  <AlignmentSurface
+                    kind={alignmentKind}
+                    message={ai.alignmentMessage ?? ''}
+                    chips={ai.alignmentChips ?? []}
+                    selectedValues={ai.alignmentSelectedValues ?? []}
+                    isLoading={chat.isLoading}
+                    isLatest={isLastAi}
+                    onChipClick={(chip) =>
+                      void actions.sendFollowUpQuestion((chip.value || chip.label || '').trim())
+                    }
+                  />
+                ) : null}
+                {/* Interrupted terminal state: keep any partial answer above and offer retry.
+                    Only the latest answer shows the card — an older failed question keeps its
+                    partial text but drops the retry action. */}
+                {ai.isInterrupted && isLastAi ? (
+                  <StreamErrorCard
+                    errorKind={ai.streamErrorKind ?? 'UNKNOWN'}
+                    hasPartial={ai.text.trim().length > 0}
+                    onRetry={() => {
+                      actions.clearError();
+                      void actions.retryLastRequest();
+                    }}
+                  />
+                ) : null}
                 {ai.clarificationRequired ? (
                   <div className="fcsdk-clarification">{label('chat_clarification', 'I need a bit more detail to answer well.')}</div>
                 ) : null}
-                {/* Action row + follow-ups fade in only AFTER the reveal completes. */}
-                {revealed ? (
+                {/* Action row + follow-ups fade in only AFTER the reveal completes — and never
+                    while the answer is still streaming or was interrupted. */}
+                {revealed && !ai.isStreaming && !ai.isInterrupted ? (
                   ai.isPreGenerated ? (
                     <div className="fcsdk-response-actions fcsdk-fade-in">
                       <button
@@ -260,7 +330,7 @@ export function ChatScreen(props: { params: ChatRouteParams; onClose: () => void
                     </div>
                   )
                 ) : null}
-                {revealed && followUps.length > 0 && !ai.hideFollowUpQuestion ? (
+                {revealed && !ai.isStreaming && followUps.length > 0 && !ai.hideFollowUpQuestion ? (
                   <div className="fcsdk-followups fcsdk-fade-in">
                     <div className="fcsdk-followups-title">
                       <span className="fcsdk-followups-dot" aria-hidden />

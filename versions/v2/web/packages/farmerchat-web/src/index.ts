@@ -35,6 +35,19 @@ export type {
 } from './core/config';
 export { BASE_URLS } from './core/config';
 export type { ApiResult, ApiPriority } from './core/http';
+// 2.0.0 agentic chat (endpoint #27a) — opt in with `enableAgenticChat`.
+export type {
+  AgenticEvent,
+  AgenticToolCallEvent,
+  AgenticToolResultEvent,
+  AgenticTextDeltaEvent,
+  AgenticMetadataEvent,
+  AgenticDoneEvent,
+  AgenticFailureEvent,
+  StreamErrorKind,
+} from './core/agentic';
+export type { AlignmentKind } from './core/alignment';
+export type { Alignment, AlignmentChip } from './core/types';
 export type { UiState } from './state/uiState';
 export { Events as FarmerChatEvents, Screens as FarmerChatScreens } from './core/analytics';
 export type { SdkServices } from './core/services';

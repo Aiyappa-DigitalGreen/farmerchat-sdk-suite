@@ -40,6 +40,20 @@ export { AnalyticsEvents, ScreenNames } from './core/analytics';
 export { dayTheme, nightTheme } from './ui/theme';
 export type { FarmerChatTheme as FarmerChatResolvedTheme } from './ui/theme';
 
+// Agentic streaming (2.0.0, endpoint #27a) — event model for hosts that inspect the stream.
+// `enableAgenticChat` on FarmerChatConfig is what turns it on; it defaults to false.
+export { StreamErrorKinds, sanitizeAgenticStreamText } from './core/agenticModels';
+export type {
+  AgenticEvent,
+  AgenticDoneEvent,
+  AgenticFailureEvent,
+  AgenticMetadataEvent,
+  AgenticTextDeltaEvent,
+  AgenticToolCallEvent,
+  AgenticToolResultEvent,
+  StreamErrorKind,
+} from './core/agenticModels';
+
 // Core result envelopes (useful for hosts extending the SDK)
 export type { ApiResult, UiState } from './core/apiResult';
 

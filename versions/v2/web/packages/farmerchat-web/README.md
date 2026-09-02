@@ -83,6 +83,7 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `enableVoice` | `boolean` | `true` | Speak input + voice-clip playback (needs MediaRecorder). |
 | `enableImages` | `boolean` | `true` | Photo input + image analysis queries. |
 | `enableWeather` | `boolean` | `true` | Weather chip on Home + weather advice CTA. |
+| `enableAgenticChat` | `boolean` | `false` | **2.0.0 preview.** Streams text answers from endpoint #27a instead of the synchronous #27 reply (see Agentic chat). Leave it off for 1.0.0 behaviour. |
 | `theme` | `FarmerChatTheme` | — | Host palette/shape/typography/logo override (see Theming). |
 | `authMode` | `'SDK_OTP' \| 'HOST_TOKEN'` | `'SDK_OTP'` | `HOST_TOKEN` trusts host tokens and skips the phone/OTP UI. |
 | `accessToken` / `refreshToken` | `string` | — | HOST_TOKEN seed tokens. |
@@ -171,9 +172,62 @@ never collides with host keys. Logout clears everything except the appearance
 preference. When `localStorage` is unavailable the SDK degrades to in-memory
 storage (session-only).
 
+## Agentic chat (2.0.0 preview, opt-in)
+
+```tsx
+<FarmerChat config={{ /* … */ enableAgenticChat: true }} />
+```
+
+With the flag on, a text question goes to endpoint #27a
+(`api/chat/get_answer_for_text_query_agentic/`) and the answer streams in:
+
+- the loading bubble becomes the answer bubble in place and grows as `text_delta`
+  events arrive — **no typewriter animation**, the text is already arriving a token
+  at a time;
+- tool progress (`tool_call` / `tool_result`) shows as an inline status label, each
+  held on screen for at least 700 ms so back-to-back tools are not collapsed;
+- after 4 s with no new text and no tool status, a transient "Paused, resuming…"
+  hint appears and clears on the next delta (client-side only — not a failure);
+- the terminal `metadata` event carries the same payload shape as #27, so it settles
+  through exactly the same code path: analytics, TTS gating, follow-ups (#29) and the
+  alignment surfaces are shared, not reimplemented;
+- if the stream ends without `metadata`, a `done` event finalizes the answer; a clean
+  EOF with partial text is also treated as a complete answer; a transport error with
+  partial text keeps the partial and shows an inline error card with **Try again**;
+  nothing at all shows that card with no partial text;
+- leaving the chat aborts the request (`AbortController`), and an aborted stream never
+  writes an error card.
+
+Transport notes: the request is a `fetch` POST read through
+`response.body.getReader()` (not `EventSource`, which cannot POST, cannot set headers
+and would force the `Accept: text/event-stream` the backend answers with **406**). It
+carries `Accept: application/json`, has **no** timeout — an agentic answer streams for
+as long as the agent works — and keeps the single-flight 401 refresh. The reader accepts
+both `data:`-framed SSE and bare NDJSON, and buffers partial lines, so a JSON object
+split across two network chunks is parsed correctly.
+
+`TextPromptResponse.alignments` (also served by the synchronous #27 path) can replace
+the answer with a chip prompt: `alignment-clarify` / `-confirm` / `-escalate`,
+`gps-prompt`, `upload-photo` (exclusive — the surface *is* the message, and `response`
+arrives empty on purpose), plus `gender-select` / `commodity-confirm` (additive — they
+render below a real answer). Tapping a chip sends its `value` as a follow-up.
+
+⚠ The #27a wire framing is not yet confirmed against a live stream (a guest receives
+0 bytes on dev/stage/prod; agentic answers appear to be gated on an OTP-verified user),
+which is why the reader is permissive and why this is a preview flag.
+
 ## Build
 
 ```bash
-npm run typecheck   # tsc --noEmit (strict)
-npm run build       # vite library build (ESM + CJS) + .d.ts
+npm run typecheck        # tsc --noEmit (strict)
+npm run build            # vite library build (ESM + CJS) + .d.ts
+npm run typecheck:test   # tsc -p tsconfig.test.json (src + test/)
+npm test                 # agentic parser + byte-level stream tests (plain Node, no framework)
 ```
+
+`npm test` runs the agentic parser / framing / sanitizer / alignment tests plus the
+byte-level `readAgenticStream` tests (split JSON objects, a multi-byte character split
+across two reads, failure and abort mapping) on Node's native TypeScript support — this
+package intentionally has **no test framework**, so the suite is a plain assertion
+script that exits non-zero on failure. `test/ts-extension-hook.mjs` is a short
+`node:module` resolve hook that lets Node load the extensionless imports inside `src/`.

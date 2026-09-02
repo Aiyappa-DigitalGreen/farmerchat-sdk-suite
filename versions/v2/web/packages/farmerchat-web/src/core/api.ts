@@ -5,6 +5,8 @@
 
 import { HttpClient, ApiResult } from './http';
 import { GEOLOCATE_URL } from './config';
+import { isAbortError, readAgenticStream, thrownMessage } from './agenticStream';
+import type { AgenticEvent } from './agentic';
 import type {
   AcceptPPandTCRequest,
   AcceptPPandTCResponse,
@@ -259,6 +261,35 @@ export class FarmerChatApi {
 
   getAnswerForTextQuery(body: TextPromptRequest): Promise<ApiResult<TextPromptResponse>> {
     return this.http.request({ method: 'POST', path: 'api/chat/get_answer_for_text_query/', body, priority: 'P3' });
+  }
+
+  /**
+   * #27a agentic text query — streams the answer as {@link AgenticEvent}s (**SDK 2.0.0**, only
+   * used when `enableAgenticChat` is on; #27 above stays the default).
+   *
+   * Never rejects and never throws: a transport failure or a non-2xx arrives as a `failure` event
+   * so the consumer has exactly one code path. A caller abort ends the iteration silently.
+   */
+  async *streamAnswerForTextQueryAgentic(
+    body: TextPromptRequest,
+    signal: AbortSignal,
+  ): AsyncGenerator<AgenticEvent> {
+    let response: Response;
+    try {
+      response = await this.http.openStream(
+        {
+          path: 'api/chat/get_answer_for_text_query_agentic/',
+          body,
+          apiName: 'get_answer_for_text_query_agentic',
+        },
+        signal,
+      );
+    } catch (err) {
+      if (isAbortError(err, signal)) return;
+      yield { type: 'failure', message: thrownMessage(err), kind: 'NETWORK' };
+      return;
+    }
+    yield* readAgenticStream(response, signal);
   }
 
   imageAnalysis(body: PlantixRequest): Promise<ApiResult<PlantixResponse>> {

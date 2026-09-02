@@ -587,8 +587,105 @@ Two deliberate SDK adaptations, both required by root CLAUDE.md §6:
 Ten new labels added across this and the previous slice, **all verified present on endpoint #3**
 with matching English fallbacks. Two drawables copied (`fc_ellipse_icon`, `fc_leaf`).
 
-**Still to do for 2.0.0:** confirm the wire framing with the backend, port the streaming UI to
-android-views, then to iOS, React Native and Web, and verify on a device.
+### 2.0.0 status after the parallel build-out (2026-09-02)
+
+Five agents built the four platforms concurrently. Everything below lives in `versions/v2/` only;
+the v1 trees are byte-clean.
+
+| Piece | android core | android compose | android views | ios | react-native | web |
+|---|---|---|---|---|---|---|
+| Agentic transport (#27a, SSE) | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
+| `AgenticEvent` + payload aliases | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
+| No-timeout stream client | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
+| `enableAgenticChat` (default false) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Stream consumer + 4-way finalize | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
+| `sanitizeAgenticStreamText` | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
+| Live streaming UI (no typewriter) | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
+| Tool progress + 4 s stall hint | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
+| `StreamErrorCard` + retry | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
+| `alignments` model + `AlignmentKind` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AlignmentSurface` UI + chips | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
+| `InputComposer` wired into screens | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
+| Home agentic layout | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
+| `LocationChatBubble` | n/a | ✅ | 🟡 plain bubble | ⛔ | ⛔ | ⛔ |
+| `TermsOfUseDialog` wired | n/a | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ |
+| Settings "My Farm" rows | n/a | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ |
+| iOS UIKit 2.0.0 UI | — | — | — | ⛔ | — | — |
+
+### Three defects the parallel build found in my own core
+
+Independent implementers reading the same contract caught what a single pass missed. Each was
+verified before fixing, and each is fixed in **core**, so every flavour inherits it:
+
+1. **`alignmentSelectedValues` was never written.** Declared, read by two UI flavours, populated by
+   nothing — so the entire selected/locked chip treatment was dead code everywhere. The field had a
+   `= emptyList()` default, so every read compiled and always took the "nothing selected" branch;
+   `assembleDebug` passed on both flavours. Core now records a pick on chip tap, matched strictly
+   against that surface's own chips so a farmer-typed follow-up cannot mark a chip chosen.
+   Guarded by 3 new tests. Reported independently by the views, RN and web agents.
+2. **Two error UIs at once.** `interruptAgentic` set `isInterrupted` on the message *and*
+   `state.errorMessage`, so the UI rendered `StreamErrorCard` **plus** a generic inline error —
+   two messages, two "Try again" buttons. Core no longer sets `errorMessage`; the card owns it.
+   Reported independently by the views, iOS, RN and web agents.
+3. **The typewriter replayed a streamed answer.** The `metadata` path minted a fresh message id, so
+   the settled answer was absent from the reveal-once set and Compose re-typed text the farmer had
+   just watched arrive token by token. `handleTextPromptResult` now accepts a `reuseId`; the
+   agentic path passes its stream id. Reported independently by the iOS and RN agents.
+
+### Test coverage (the wire cannot be exercised, so tests are the only guard)
+
+| Platform | Tests |
+|---|---|
+| android | **31** unit tests (parser 14, sanitizer 9, AlignmentKind 5, alignment pick 3) |
+| ios | **57** (`swift test`), incl. no-timeout session assertions |
+| web | **85** assertions on Node's native TS; includes a JSON object split one byte per chunk and a cut inside a 3-byte Devanagari sequence |
+| react-native | **46** assertions, run out-of-tree — the package has no test runner and none was added |
+
+### Platform transport notes worth knowing
+
+- **web** uses `fetch` + `getReader()`, *not* `EventSource` — EventSource cannot POST or set
+  headers and forces the `Accept` value the backend 406s. Two-stage buffering: one streaming
+  `TextDecoder` for split multi-byte characters, plus a line buffer that retains the trailing
+  fragment.
+- **react-native** uses `XMLHttpRequest` incremental mode; RN's `fetch` has no `response.body` at
+  all. Honest caveat from that agent: `responseText` accumulates the whole response in memory, and
+  any buffering interposer (Flipper's network plugin, a buffering proxy) collapses it to a single
+  chunk so the answer appears at the end — events still parse correctly.
+- **ios** sets a 7-day session timeout and deliberately does **not** build on `buildRequest`,
+  because a `URLRequest.timeoutInterval` overrides the session config and would have capped the
+  stream at the P3 deadline of 30 s.
+- `X-Timeout` / `X-Request-ID` are **not** sent on the stream on any platform, matching Android's
+  agentic client, which omits the priority interceptors. Root CLAUDE.md §3 lists `X-Timeout` as a
+  header invariant — this is a deliberate, recorded exception: advertising a timeout on a request
+  that has none would be a lie.
+
+### Naming deviation (iOS)
+
+iOS names the model `AlignmentSurface`, not `Alignment` — `SwiftUI.Alignment` owns that name and a
+public `Alignment` in Core made `FarmerChatFabButton` ambiguous for any host importing both
+modules. The wire key is still `alignments`.
+
+**Still to do for 2.0.0:**
+1. **Confirm the wire framing with the backend.** Still the biggest risk: the endpoint emits 0
+   bytes to a guest on all three environments, so no platform's reader has ever seen a real event.
+   Four questions are listed in docs/05.
+2. **No device or browser run anywhere.** Everything is build- and test-verified only.
+3. `TermsOfUseDialog` and the Settings "My Farm" rows are unwired on every platform — core now has
+   `HomeAction.AcceptTerms` / `FetchPrivacyPolicy` / `HomeState.farmerchatTermsOfUse`,
+   `LocationTriggerSource.Settings` / `triggerFromSettings()` and the 8 verified labels, so the
+   blockers are gone and only the UI wiring remains.
+4. `chip.action == "select"` device-capability flows (camera / location) are unwired on all
+   platforms — chips uniformly send value-or-label as a follow-up.
+5. android-views has no `LocationChatBubble` port; it shows the address in the ordinary user bubble.
+6. iOS UIKit still renders the 1.0.0 chat.
+7. `InputComposer` and the Home agentic layout are android-compose only.
+8. Two labels remain absent from the server —
+   `fc_v2_app_label_response_paused_resuming` and
+   `fc_v2_app_label_connection_stopped_partial_saved` — so those two strings fall back to English
+   on every platform until the backend adds them. Every other label used by v2 was verified
+   present on endpoint #3 before use.
+9. iOS, react-native and web still carry the **pre-existing v1 label-key mismatch**, so their UI
+   does not localize at all. That is unrelated to v2 and unchanged by it.
 
 ## Known intentional gaps (docs/03 adaptation table)
 - Play in-app update/review: all platforms ⛔ (host concern).

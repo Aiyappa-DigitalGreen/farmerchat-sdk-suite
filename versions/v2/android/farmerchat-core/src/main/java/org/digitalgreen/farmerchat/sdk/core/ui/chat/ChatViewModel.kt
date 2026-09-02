@@ -118,6 +118,12 @@ class ChatViewModel(
             is ChatAction.ReplacePreGeneratedWithQuestion ->
                 replacePreGeneratedWithQuestion(action.question, action.triggerInputType)
             is ChatAction.SendFollowUpQuestion -> {
+                // If this question came from an alignment surface's chip, record it on that
+                // message. Without this `alignmentSelectedValues` stays empty forever and the
+                // whole selected/locked chip treatment is dead code on every flavour — the
+                // tapped chip never shows a check, never locks, and the unpicked chips never
+                // fade back. Matched on value OR label because a chip may carry only a label.
+                recordAlignmentPick(action.question)
                 pendingSendQueryProperties = action.sendQueryProperties ?: SendQueryProperties(
                     screenName = AnalyticsScreens.CHAT,
                     isFollowupPrompt = true,
@@ -849,7 +855,9 @@ class ChatViewModel(
                             _state.update { st ->
                                 st.copy(messages = st.messages.filterNot { it.id == streamId })
                             }
-                            handleTextPromptResult(ApiResult.Success(event.response), placeholderId)
+                            handleTextPromptResult(
+                                ApiResult.Success(event.response), placeholderId, reuseId = streamId
+                            )
                         }
 
                         // Fallback terminal: remember it, let a following `metadata` win.
@@ -868,6 +876,37 @@ class ChatViewModel(
             } catch (e: Exception) {
                 finalizeStreamOrFail(StreamErrorKind.NETWORK)
             }
+        }
+    }
+
+    /**
+     * Records a tapped alignment chip on its own message so the surface can render it as picked.
+     *
+     * Kept in core rather than duplicated per flavour: both Compose and Views dispatch a plain
+     * [ChatAction.SendFollowUpQuestion] for a chip tap, so neither needs to know about selection
+     * state and both light up from this one place.
+     */
+    private fun recordAlignmentPick(question: String) {
+        if (question.isBlank()) return
+        _state.update { st ->
+            val idx = st.messages.indexOfLast {
+                it is ChatMessage.AiResponse && it.alignmentKind != null
+            }
+            if (idx < 0) return@update st
+            val surface = st.messages[idx] as ChatMessage.AiResponse
+            // Only record a match against this surface's own chips — a follow-up the user typed
+            // themselves must never mark a chip as chosen.
+            val matches = surface.alignmentChips.orEmpty().any { chip ->
+                chip.value == question || chip.label == question
+            }
+            if (!matches || question in surface.alignmentSelectedValues) return@update st
+            st.copy(
+                messages = st.messages.toMutableList().also {
+                    it[idx] = surface.copy(
+                        alignmentSelectedValues = surface.alignmentSelectedValues + question
+                    )
+                }
+            )
         }
     }
 
@@ -956,16 +995,24 @@ class ChatViewModel(
             st.copy(
                 messages = updated,
                 isLoading = false,
-                errorMessage = labelManager.getLabel(
-                    Labels.FAILED_TO_GET_RESPONSE, "Failed to get response"
-                )
+                // Deliberately NOT setting errorMessage: the interrupted message carries its own
+                // StreamErrorCard with kind-specific copy and the retry action. Setting both made
+                // the UI show two error messages and two "Try again" buttons.
+                errorMessage = null
             )
         }
     }
 
     private fun handleTextPromptResult(
         result: ApiResult<org.digitalgreen.farmerchat.sdk.core.model.TextPromptResponse>,
-        placeholderId: String?
+        placeholderId: String?,
+        /**
+         * Id to give the settled answer. The synchronous path passes null and gets a fresh UUID.
+         * The agentic path passes its stream id, because the UI's reveal-once set is keyed on the
+         * message id: a fresh id is absent from that set, so the typewriter would replay over
+         * text the farmer just watched stream in.
+         */
+        reuseId: String? = null
     ) {
         when (result) {
             is ApiResult.Success -> {
@@ -990,7 +1037,7 @@ class ChatViewModel(
                     return
                 }
                 markFirstQueryAsked()
-                val aiId = UUID.randomUUID().toString()
+                val aiId = reuseId ?: UUID.randomUUID().toString()
                 _state.update { current ->
                     current.copy(
                         messages = current.messages.filterNot { it.id == placeholderId } +

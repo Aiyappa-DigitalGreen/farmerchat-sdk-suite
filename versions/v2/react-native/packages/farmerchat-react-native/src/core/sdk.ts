@@ -2,6 +2,7 @@
  * FarmerChatSdk — composition root wiring config → store → http → api →
  * session/labels/analytics. One instance per `FarmerChat.initialize()`.
  */
+import { AgenticChatDataSource } from './agenticStream';
 import { FarmerChatApi } from './api';
 import { AnalyticsManager } from './analytics';
 import {
@@ -40,6 +41,12 @@ export class FarmerChatSdk {
   readonly http: HttpClient;
   readonly api: FarmerChatApi;
   readonly session: SessionManager;
+  /**
+   * Agentic streaming source (#27a). Constructed on every 2.0.0 instance — it is free;
+   * {@link ResolvedFarmerChatConfig.enableAgenticChat} decides whether `useChat` streams from it
+   * or takes the synchronous #27 path.
+   */
+  readonly agentic: AgenticChatDataSource;
 
   private pendingTarget: PendingTarget | null = null;
   private hydratePromise: Promise<void> | null = null;
@@ -66,6 +73,11 @@ export class FarmerChatSdk {
     );
     this.api = new FarmerChatApi(this.http, this.config);
     this.session = new SessionManager(this.api, this.store, this.analytics, this.config);
+    this.agentic = new AgenticChatDataSource(
+      this.config,
+      this.store,
+      this.http.authenticator,
+    );
   }
 
   /** Hydrate persisted state; idempotent. Called by the provider before splash. */

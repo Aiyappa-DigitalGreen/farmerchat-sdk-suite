@@ -116,6 +116,15 @@ public struct FarmerChatConfig: Sendable {
     public var enableVoice: Bool
     public var enableImages: Bool
     public var enableWeather: Bool
+    /// Opt in to agentic streaming chat (SDK 2.0.0, endpoint #27a).
+    ///
+    /// Default **false**: on 2.0.0 artifacts a host that does nothing keeps the 1.0.0 synchronous
+    /// chat contract (#27) unchanged. When true, text queries stream — the answer accretes from
+    /// `text_delta` events and tool progress is surfaced as it happens.
+    ///
+    /// See `versions/v2/README.md`. Note the wire framing is not yet confirmed against a real
+    /// stream (docs/05-open-questions.md), so treat this as preview until it is.
+    public var enableAgenticChat: Bool
 
     // MARK: - FAB customization (config-level defaults; per-instance params win)
     /// Default launcher label; nil = round icon-only FAB (current behavior).
@@ -186,6 +195,7 @@ public struct FarmerChatConfig: Sendable {
         enableVoice: Bool = true,
         enableImages: Bool = true,
         enableWeather: Bool = true,
+        enableAgenticChat: Bool = false,
         fabLabel: String? = nil,
         fabBackgroundColor: Color? = nil,
         fabContentColor: Color? = nil,
@@ -230,6 +240,7 @@ public struct FarmerChatConfig: Sendable {
         self.enableVoice = enableVoice
         self.enableImages = enableImages
         self.enableWeather = enableWeather
+        self.enableAgenticChat = enableAgenticChat
         self.fabLabel = fabLabel
         self.fabBackgroundColor = fabBackgroundColor
         self.fabContentColor = fabContentColor

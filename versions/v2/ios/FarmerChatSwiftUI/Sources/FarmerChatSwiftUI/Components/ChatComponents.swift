@@ -27,12 +27,16 @@ public struct FCMarkdownText: View {
 
 // MARK: - Client-side "typewriter" answer reveal (port of AiAnswer.kt AiAnswerBlock)
 //
-// HONESTY NOTE: the FarmerChat backend returns the whole answer in ONE
-// synchronous JSON response (docs/02 — chat replies are NOT streamed; no
-// SSE/WebSocket). This reveal is a purely cosmetic view-layer animation that
-// re-renders a growing prefix of the already-received markdown. It never
-// touches the ViewModel, network, or ChatState. History and pre-generated
-// answers pass `animate: false` and render in full immediately.
+// HONESTY NOTE: on the 1.0.0 path the FarmerChat backend returns the whole
+// answer in ONE synchronous JSON response (docs/02 — #27 is NOT streamed).
+// This reveal is a purely cosmetic view-layer animation that re-renders a
+// growing prefix of the already-received markdown. It never touches the
+// ViewModel, network, or ChatState. History and pre-generated answers pass
+// `animate: false` and render in full immediately.
+//
+// 2.0.0: an agentic answer (#27a) arrives a token at a time and is therefore
+// rendered with `animate: false` — the text is already typing itself, and
+// animating it again would double-type it.
 
 /// Splits into "word + trailing whitespace" chunks so newlines / markdown
 /// survive a prefix cut (mirrors the Android regex `\S+\s*`).
@@ -274,6 +278,16 @@ public struct FCAiResponseBubble: View {
     /// Bubbled up when the reveal finishes (also fires immediately when
     /// `animate == false`) so the parent can un-gate the follow-up section.
     var onRevealComplete: () -> Void
+    // ---- agentic streaming (2.0.0) ----
+    /// True for the newest answer: gates the stream error card and the escape
+    /// hatch on an alignment surface.
+    var isLatest: Bool
+    /// Thread-level busy flag; locks alignment chips while a send is in flight.
+    var isBusy: Bool
+    /// Retry for an interrupted stream (`.retryLastRequest`).
+    var onRetryStream: (() -> Void)?
+    /// Tap handler for an ADDITIVE alignment surface rendered below the answer.
+    var onAlignmentChipTap: ((AlignmentChip) -> Void)?
 
     /// Reveal-finished mirror so the action row / read-full-advice fade in only
     /// after the answer has fully appeared.
@@ -290,7 +304,11 @@ public struct FCAiResponseBubble: View {
         onShare: @escaping () -> Void,
         onDownload: @escaping () -> Void,
         onReadFullAdvice: (() -> Void)? = nil,
-        onRevealComplete: @escaping () -> Void = {}
+        onRevealComplete: @escaping () -> Void = {},
+        isLatest: Bool = false,
+        isBusy: Bool = false,
+        onRetryStream: (() -> Void)? = nil,
+        onAlignmentChipTap: ((AlignmentChip) -> Void)? = nil
     ) {
         self.message = message
         self.showActions = showActions
@@ -303,6 +321,10 @@ public struct FCAiResponseBubble: View {
         self.onDownload = onDownload
         self.onReadFullAdvice = onReadFullAdvice
         self.onRevealComplete = onRevealComplete
+        self.isLatest = isLatest
+        self.isBusy = isBusy
+        self.onRetryStream = onRetryStream
+        self.onAlignmentChipTap = onAlignmentChipTap
         _revealFinished = State(initialValue: !animate)
     }
 
@@ -312,7 +334,9 @@ public struct FCAiResponseBubble: View {
                 FCLogoMark(size: 26, tint: theme.brand.surfacePrimary)
                 FCAiAnswerText(
                     text: message.text,
-                    animate: animate,
+                    // A streaming answer must never run the typewriter reveal — the text is
+                    // already arriving a token at a time, and animating it again double-types it.
+                    animate: animate && !message.isStreaming,
                     color: FarmerChat.shared.config.aiBubbleTextColor,
                     onRevealComplete: {
                         withAnimation(.easeOut(duration: 0.35)) { revealFinished = true }
@@ -320,6 +344,51 @@ public struct FCAiResponseBubble: View {
                     }
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Tool progress, or the initial "getting your answer" state before any text arrived.
+            if message.isStreaming,
+               message.text.isEmpty || !(message.streamingStatus ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                FCThinkingIndicator(
+                    label: message.streamingStatus
+                        ?? fcLabel(
+                            AgenticLabels.gettingYourAnswer,
+                            AgenticLabels.gettingYourAnswerFallback
+                        )
+                )
+            }
+
+            // Text is flowing but has stalled with no tool status: a transient client-side hint,
+            // NOT a failure. Keyed on the text length so the next delta clears it automatically.
+            if message.isStreaming,
+               !message.text.isEmpty,
+               (message.streamingStatus ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                FCStreamStallHint(textLength: message.text.count)
+            }
+
+            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
+            // Single-tap; the answer above keeps its own action row.
+            if let kind = message.alignmentKind, kind.isAdditive, let onAlignmentChipTap {
+                FCAlignmentSurface(
+                    kind: kind,
+                    message: message.alignmentMessage ?? "",
+                    chips: message.alignmentChips ?? [],
+                    selectedValues: message.alignmentSelectedValues,
+                    isLoading: isBusy,
+                    isLatest: isLatest,
+                    onChipTap: onAlignmentChipTap
+                )
+            }
+
+            // Interrupted terminal state: keep any partial answer above and offer retry. Only the
+            // latest answer shows the card — an older failed question keeps its partial text but
+            // drops the retry action.
+            if message.isInterrupted, isLatest, let onRetryStream {
+                FCStreamErrorCard(
+                    errorKind: message.streamErrorKind ?? .unknown,
+                    hasPartial: !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    onRetry: onRetryStream
+                )
             }
 
             if revealFinished, message.isPreGenerated, let onReadFullAdvice {
@@ -335,7 +404,7 @@ public struct FCAiResponseBubble: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            if revealFinished, showActions {
+            if revealFinished, showActions, !message.isStreaming, !message.isInterrupted {
                 // Cleaner Share / Save / Listen row — bordered brand-accent
                 // chips that recolor with the host theme; fade/slide in only
                 // after the reveal completes.

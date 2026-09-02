@@ -155,7 +155,14 @@ fun HomeAppBar(
     weatherMessage: String,
     weatherIconUrl: String? = null,
     showWeather: Boolean = true,
-    onWeatherClick: () -> Unit = {}
+    onWeatherClick: () -> Unit = {},
+    /**
+     * App parity (HomeScreen.kt:1023, `appBar(showBackground)`): the 2.0.0 agentic Home draws
+     * one green gradient band behind the whole top section, so the bar itself must be
+     * transparent and must not stack a second glow on top of the band's. Default `true`
+     * keeps the 1.0.0 opaque bar with its own glow, unchanged.
+     */
+    showBackground: Boolean = true
 ) {
     val brand = LocalBrandColors.current
 
@@ -166,16 +173,20 @@ fun HomeAppBar(
         modifier = modifier
             .fillMaxWidth()
             .height(barHeight)
-            .background(brand.surfacePrimary)
+            .then(
+                if (showBackground) Modifier.background(brand.surfacePrimary) else Modifier
+            )
     ) {
-        Glow(
-            type = GlowType.Yellow,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .align(Alignment.TopCenter)
-                .alpha(1.0f)
-        )
+        if (showBackground) {
+            Glow(
+                type = GlowType.Yellow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .align(Alignment.TopCenter)
+                    .alpha(1.0f)
+            )
+        }
 
         Row(
             modifier = Modifier

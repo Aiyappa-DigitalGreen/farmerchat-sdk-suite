@@ -339,4 +339,25 @@ object Labels {
     const val ALLOW_LOCATION_IN_SETTINGS = "fc_v2_app_label_allow_location_in_settings"
     /** "Accept and continue" */
     const val ACCEPT_AND_CONTINUE = "fc_v2_app_label_accept_and_continue"
+
+    // ---- Settings "My Farm" + phone (2.0.0). All eight verified present on endpoint #3. ----
+    /** "My Farm" — settings section heading. */
+    const val MY_FARM = "fc_v2_app_label_my_farm"
+    /** "Location" */
+    const val LOCATION = "fc_v2_app_label_location"
+    /** "Estimated" — location precision badge. */
+    const val ESTIMATED = "fc_v2_app_label_estimated"
+    /** "approximate" — location precision badge. */
+    const val APPROXIMATE = "fc_v2_app_label_approximate"
+    /** "Share your location for better advice." */
+    const val LOCATION_HELPER_SHARE = "fc_v2_app_label_share_your_location_for_better_advice"
+    /** "Advice and weather for this area." */
+    const val LOCATION_HELPER_ADVICE_WEATHER = "fc_v2_app_label_advice_and_weather_for_this_area"
+    /** "Change anytime." */
+    const val LOCATION_HELPER_CHANGE_ANYTIME = "fc_v2_app_label_change_anytime"
+    /** "Your phone" */
+    const val YOUR_PHONE = "fc_v2_app_label_your_phone"
+
+    /** "Your location:" — label above the address on the location chat bubble (2.0.0). */
+    const val YOUR_LOCATION = "fc_v2_app_label_your_location"
 }

@@ -625,6 +625,46 @@ export interface TextPromptResponse {
   hide_source?: boolean | null;
   points?: number | null;
   intent_classification_output?: IntentClassificationOutput | null;
+  /**
+   * Server-driven alignment surface (clarify / confirm / escalate) — **2.0.0**. Present when the
+   * backend needs the user to disambiguate, confirm, or respond to an urgent situation instead of
+   * (or before) giving a normal answer. In that case `response` is typically EMPTY and this
+   * carries the prompt message plus quick-reply chips. Null for a normal answer.
+   */
+  alignments?: Alignment | null;
+}
+
+/**
+ * A short prompt the user answers by tapping a chip, instead of receiving a normal answer
+ * (**2.0.0**).
+ *
+ * `type` selects the visual treatment (see `AlignmentKind` in `./alignment`); `chips` are the
+ * quick replies; `original_query` is the query that triggered the surface, kept for context — it
+ * is the chip's `value` that gets sent on tap.
+ */
+export interface Alignment {
+  type?: string | null;
+  message?: string | null;
+  chips?: AlignmentChip[] | null;
+  original_query?: string | null;
+  /** True when the backend needs this answered before it can proceed. */
+  blocking?: boolean | null;
+  /** Backend intent tag (e.g. "capability", "profile"); informational for the client. */
+  intent?: string | null;
+}
+
+/**
+ * One quick-reply chip. `label` is shown, `value` is sent on tap.
+ *
+ * `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
+ * location), "decline" lets the user opt out (use an approximate location). Today every chip's
+ * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
+ * "select" chips without another wire change.
+ */
+export interface AlignmentChip {
+  label?: string | null;
+  value?: string | null;
+  action?: string | null;
 }
 
 // ---------------------------------------------------------------------------

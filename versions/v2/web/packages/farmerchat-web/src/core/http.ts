@@ -185,6 +185,59 @@ export class HttpClient {
     );
   }
 
+  /**
+   * Opens a long-lived streaming POST (endpoint #27a, agentic chat — **2.0.0**).
+   *
+   * Deliberately NOT `request()`:
+   * - **no timeout** — an agentic answer streams for as long as the agent works, so any
+   *   ApiPriority deadline would cut it; cancellation is the caller's job via `signal`.
+   * - **no retry table** — a half-consumed stream cannot be replayed, so a non-2xx is handed
+   *   back as-is and surfaces as a `SERVER` stream failure.
+   * - `Accept: application/json` — the backend 406s `text/event-stream` (verified live
+   *   2026-09-02) even though it answers with that content type.
+   *
+   * The 401 path is kept: single-flight refresh with the same skip-list and loop guard as
+   * `request()`, then one replay — parity with Android, where the streaming OkHttp client still
+   * carries the auth interceptors.
+   *
+   * Rejects only on a transport throw (including the caller's abort); the caller distinguishes
+   * the two via `isAbortError`.
+   */
+  async openStream(
+    opts: { path: string; body?: unknown; apiName?: string },
+    signal: AbortSignal,
+  ): Promise<Response> {
+    const url = this.deps.baseUrl + opts.path;
+    let authAttempts = 0;
+    for (;;) {
+      const headers: Record<string, string> = {
+        'X-Request-ID': generateUuid(),
+        'Build-Version': 'v2',
+        'Device-Info': deviceInfoHeaderValue(),
+        // Must NOT be text/event-stream — the server 406s that. application/json passes
+        // negotiation; the streaming view sets its own response Content-Type regardless.
+        Accept: 'application/json',
+      };
+      const token = this.accessToken;
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const init: RequestInit = { method: 'POST', headers, signal };
+      if (opts.body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(opts.body);
+      }
+
+      const response = await fetch(url, init);
+      if (response.status === 401 && !this.isAuthSkipped(url) && authAttempts < 2) {
+        authAttempts++;
+        // Drain the 401 body so the connection can be reused, then replay with a fresh Bearer.
+        await safeText(response);
+        const refreshed = await this.authenticate();
+        if (refreshed) continue;
+      }
+      return response;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // TokenAuthenticator port
   // -------------------------------------------------------------------------

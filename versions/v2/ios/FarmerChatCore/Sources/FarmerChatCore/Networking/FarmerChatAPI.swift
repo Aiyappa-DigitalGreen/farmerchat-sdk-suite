@@ -8,12 +8,16 @@ public final class FarmerChatAPI: @unchecked Sendable {
     private let guestApiKey: String?
     private let geoApiKey: String?
     private let session: URLSession
+    /// #27a agentic streaming source (2.0.0). Constructed unconditionally — it is free; the
+    /// `FarmerChatConfig.enableAgenticChat` flag decides whether the chat path uses it.
+    private let agentic: AgenticChatDataSource
 
     init(client: APIClient, guestApiKey: String?, geoApiKey: String?) {
         self.client = client
         self.guestApiKey = guestApiKey
         self.geoApiKey = geoApiKey
         self.session = URLSession(configuration: .default)
+        self.agentic = AgenticChatDataSource(client: client)
     }
 
     // MARK: 1. Guest init
@@ -331,6 +335,17 @@ public final class FarmerChatAPI: @unchecked Sendable {
             priority: .p3,
             name: "get_answer_for_text_query"
         ), as: TextPromptResponse.self)
+    }
+
+    // MARK: 27a. Agentic streaming answer (2.0.0) — no timeout, not an ApiPriority call
+
+    /// Streams endpoint #27a. Events arrive as they are produced; a transport failure is surfaced
+    /// as `AgenticEvent.failure` rather than thrown, and only cancellation throws. Gated by
+    /// `FarmerChatConfig.enableAgenticChat` at the call site — see ``AgenticChatDataSource``.
+    public func streamAnswerForTextQueryAgentic(
+        _ body: TextPromptRequest
+    ) -> AsyncThrowingStream<AgenticEvent, Error> {
+        agentic.stream(body)
     }
 
     // MARK: 28. Image analysis (Plantix) — P3, mapped to the real path

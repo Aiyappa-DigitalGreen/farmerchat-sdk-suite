@@ -708,6 +708,126 @@ export interface TextPromptResponse {
   hide_source?: boolean | null;
   points?: number | null;
   intent_classification_output?: IntentClassificationOutput | null;
+  /**
+   * Server-driven alignment surface (clarify / confirm / escalate) — **2.0.0**. Present when the
+   * backend needs the user to disambiguate, confirm, or respond to an urgent situation instead
+   * of (or before) giving a normal answer. In that case {@link TextPromptResponse.response} is
+   * typically EMPTY and this carries the prompt message plus quick-reply chips. Null for a
+   * normal answer.
+   *
+   * Arrives on the synchronous #27 response and on the agentic #27a `metadata` event alike, so
+   * it is NOT gated on `enableAgenticChat`.
+   */
+  alignments?: Alignment | null;
+}
+
+// ---------------------------------------------------------------------------
+// Alignment surfaces (2.0.0) — port of Android core `ChatModels.kt`
+// ---------------------------------------------------------------------------
+
+/**
+ * A short prompt the user answers by tapping a chip, instead of receiving a normal answer.
+ *
+ * `type` selects the visual treatment (see {@link AlignmentKind}); `chips` are the quick
+ * replies; `original_query` is the query that triggered the surface, kept for context — it is
+ * the chip's `value` that gets sent on tap.
+ */
+export interface Alignment {
+  type?: string | null;
+  message?: string | null;
+  chips?: AlignmentChip[] | null;
+  original_query?: string | null;
+  /** True when the backend needs this answered before it can proceed. */
+  blocking?: boolean | null;
+  /** Backend intent tag (e.g. "capability", "profile"); informational for the client. */
+  intent?: string | null;
+}
+
+/**
+ * One quick-reply chip. `label` is shown, `value` is sent on tap.
+ *
+ * `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
+ * location), "decline" lets the user opt out (use an approximate location). Today every chip's
+ * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
+ * "select" chips without another wire change.
+ */
+export interface AlignmentChip {
+  label?: string | null;
+  value?: string | null;
+  action?: string | null;
+}
+
+/** The alignment surfaces the backend can ask for. */
+export const AlignmentKinds = {
+  CLARIFY: 'CLARIFY',
+  CONFIRM: 'CONFIRM',
+  ESCALATE: 'ESCALATE',
+  GPS_PROMPT: 'GPS_PROMPT',
+  UPLOAD_PHOTO: 'UPLOAD_PHOTO',
+  GENDER_SELECT: 'GENDER_SELECT',
+  COMMODITY_CONFIRM: 'COMMODITY_CONFIRM',
+} as const;
+
+export type AlignmentKind = (typeof AlignmentKinds)[keyof typeof AlignmentKinds];
+
+/** Wire `type` → kind. Null for an unknown or absent type: render as a normal answer. */
+export function alignmentKindFromType(
+  type: string | null | undefined,
+): AlignmentKind | null {
+  switch (type?.trim().toLowerCase()) {
+    case 'alignment-clarify':
+      return AlignmentKinds.CLARIFY;
+    case 'alignment-confirm':
+      return AlignmentKinds.CONFIRM;
+    case 'alignment-escalate':
+      return AlignmentKinds.ESCALATE;
+    case 'gps-prompt':
+      return AlignmentKinds.GPS_PROMPT;
+    case 'upload-photo':
+      return AlignmentKinds.UPLOAD_PHOTO;
+    case 'gender-select':
+      return AlignmentKinds.GENDER_SELECT;
+    case 'commodity-confirm':
+      return AlignmentKinds.COMMODITY_CONFIRM;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Additive surfaces accompany a normal answer — they render BELOW it as an optional nudge and
+ * never suppress the answer or its follow-ups. Exclusive surfaces (clarify / confirm / escalate
+ * / capability prompts) own the message area and replace the answer.
+ *
+ * The backend marks the additive ones non-blocking (`blocking:false`, `intent:"profile"`). Both
+ * are single-select: one tap sends immediately and locks the card.
+ */
+export function isAdditiveAlignment(kind: AlignmentKind): boolean {
+  return kind === AlignmentKinds.GENDER_SELECT || kind === AlignmentKinds.COMMODITY_CONFIRM;
+}
+
+/**
+ * The exact wire `type` string, reported as the `agentic_chip_type` analytics property so
+ * funnels can be segmented by which surface was tapped. Keep these stable and in sync with
+ * {@link alignmentKindFromType} — dashboards depend on them.
+ */
+export function alignmentAnalyticsType(kind: AlignmentKind): string {
+  switch (kind) {
+    case AlignmentKinds.CLARIFY:
+      return 'alignment-clarify';
+    case AlignmentKinds.CONFIRM:
+      return 'alignment-confirm';
+    case AlignmentKinds.ESCALATE:
+      return 'alignment-escalate';
+    case AlignmentKinds.GPS_PROMPT:
+      return 'gps-prompt';
+    case AlignmentKinds.UPLOAD_PHOTO:
+      return 'upload-photo';
+    case AlignmentKinds.GENDER_SELECT:
+      return 'gender-select';
+    case AlignmentKinds.COMMODITY_CONFIRM:
+      return 'commodity-confirm';
+  }
 }
 
 // ---------------------------------------------------------------------------

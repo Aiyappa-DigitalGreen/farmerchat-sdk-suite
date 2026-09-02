@@ -21,6 +21,7 @@ import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioPlayback
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
@@ -275,37 +276,70 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     }
 
     private fun refreshRows(state: ChatState) {
-        val lastAiId = state.messages.lastOrNull { it is ChatMessage.AiResponse }?.id
+        val lastAi = state.messages.lastOrNull { it is ChatMessage.AiResponse }
+            as? ChatMessage.AiResponse
+        val lastAiId = lastAi?.id
         val rows = buildList {
             state.messages.forEach { message ->
                 when (message) {
                     is ChatMessage.UserMessage -> add(ChatRow.User(message))
+
+                    // 2.0.0: the farmer's resolved location, standing in for the text bubble they
+                    // would otherwise have sent in reply to a GPS_PROMPT chip.
+                    //
+                    // KNOWN GAP vs Compose: Compose renders this with the dedicated
+                    // LocationChatBubble (pin icon, asymmetric corners, "Your location:" label
+                    // above the address). Views has no port of that component, so the address is
+                    // shown in the ordinary right-aligned user bubble with the label prefixed.
+                    // Correct and readable, but not the designed treatment — tracked in docs/04.
+                    is ChatMessage.LocationMessage -> add(
+                        ChatRow.User(
+                            ChatMessage.UserMessage(
+                                text = label(Labels.YOUR_LOCATION, "Your location:") +
+                                    " " + message.address,
+                                id = message.id
+                            )
+                        )
+                    )
                     is ChatMessage.AiResponse -> {
                         val isLast = message.id == lastAiId
+                        // 2.0.0: a live or interrupted agentic stream owns the message area —
+                        // no action row, no related questions. Matches Compose, which gates the
+                        // action row on `!isInterrupted` and the follow-up section on
+                        // `!state.isLoading && errorMessage == null` (both hold here, because a
+                        // stream keeps isLoading true and an interruption sets errorMessage).
+                        val settled = !message.isStreaming && !message.isInterrupted
+                        val showFollowUps = isLast && settled
                         add(
                             ChatRow.Ai(
                                 message = message,
                                 isLast = isLast,
-                                followUps = if (isLast) state.suggestedQuestions.orEmpty()
+                                followUps = if (showFollowUps) state.suggestedQuestions.orEmpty()
                                 else emptyList(),
-                                followUpIds = if (isLast) {
+                                followUpIds = if (showFollowUps) {
                                     state.suggestedQuestionIds
                                         ?: List(state.suggestedQuestions.orEmpty().size) { null }
                                 } else emptyList(),
                                 clarificationRequired = state.clarificationRequired,
                                 showReadFullAdvice = message.isPreGenerated &&
                                     state.readFullAdviceRequestedForMessageId != message.id,
-                                showActions = isLast && !state.isLoading,
+                                showActions = isLast && !state.isLoading && settled,
                                 isTtsEnabled = state.isTtsEnabled,
                                 isAudioLoading = state.isLoadingSynthesiseAudio,
-                                isAudioPlaying = state.audioPlaybackUrl != null && state.isAudioPlaying
+                                isAudioPlaying = state.audioPlaybackUrl != null && state.isAudioPlaying,
+                                isStateLoading = state.isLoading
                             )
                         )
                     }
                     is ChatMessage.LoadingPlaceholder -> add(ChatRow.Loading(message.id))
                 }
             }
-            if (state.errorMessage != null && !state.isLoading) {
+            // 2.0.0: an interrupted stream already carries its own inline error card, with the
+            // same "Try again" action, attached to the partial answer. The ViewModel ALSO sets
+            // state.errorMessage on interruption, so rendering the generic error row too would
+            // show the farmer two error messages and two retry buttons.
+            val streamErrorShown = lastAi?.isInterrupted == true
+            if (state.errorMessage != null && !state.isLoading && !streamErrorShown) {
                 add(ChatRow.InlineError(state.errorMessage.orEmpty()))
             }
         }
@@ -352,6 +386,32 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
 
     override fun onRetry() {
         vm.onAction(ChatAction.RetryLastRequest)
+    }
+
+    // ------------------------------------------------------------------ agentic (2.0.0)
+
+    /**
+     * An alignment chip sends its `value` (falling back to its label) as a follow-up question —
+     * the value is what the backend expects, the label is only what the farmer reads.
+     */
+    override fun onAlignmentChipClick(chip: AlignmentChip) {
+        val question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
+        if (question.isBlank()) return
+        vm.onAction(ChatAction.SendFollowUpQuestion(question))
+    }
+
+    /**
+     * Alignment escape hatch: opens the text input so a farmer whose answer is not among the
+     * chips can type or dictate it (the Views equivalent of the Compose `focusTextInput`).
+     */
+    override fun onTypeInstead() {
+        overlays?.showTextInput()
+    }
+
+    /** The stall hint became due: re-render so the hint appears under the growing answer. */
+    override fun onStallHintChanged() {
+        if (view == null) return
+        refreshRows(vm.state.value)
     }
 
     // ------------------------------------------------------------------ share / download

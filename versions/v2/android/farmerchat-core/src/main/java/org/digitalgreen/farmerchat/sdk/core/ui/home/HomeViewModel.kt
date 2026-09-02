@@ -32,7 +32,9 @@ class HomeViewModel(
     private val chatUseCase: ChatUseCase,
     private val getUserProfileUseCase: GetUserProfileUseCase,
     private val prefs: SdkPreferences,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    /** 2.0.0: owns accept_terms (#7) and privacy_policy (#4) for `TermsOfUseDialog`. */
+    private val legalUseCase: org.digitalgreen.farmerchat.sdk.core.usecase.GetSupportedLanguagesUseCase
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -46,6 +48,8 @@ class HomeViewModel(
             is HomeAction.UpdateCultivatedCrops -> updateCultivatedCrops(action)
             is HomeAction.NewConversation -> newConversation(action)
             is HomeAction.TranscribeAudio -> transcribeAudio(action)
+            is HomeAction.AcceptTerms -> acceptTerms(action.userId)
+            is HomeAction.FetchPrivacyPolicy -> fetchPrivacyPolicy()
             is HomeAction.MarkImageViewed -> markImageViewed(action)
             is HomeAction.FetchImageStatement -> fetchImageStatement(action)
             is HomeAction.ClearTranscriptionState ->
@@ -101,6 +105,36 @@ class HomeViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    /**
+     * Accepts the terms of use (#7). Best-effort, matching the app: the dialog closes on tap and
+     * a failure never blocks the farmer — acceptance is recorded server-side when it succeeds.
+     */
+    private fun acceptTerms(userId: String) {
+        if (userId.isBlank()) return
+        scope.launch {
+            legalUseCase.acceptTerms(
+                org.digitalgreen.farmerchat.sdk.core.model.AcceptPPandTCRequest(user_id = userId)
+            ).collect { /* best-effort: acceptance is recorded, failure never blocks the farmer */ }
+        }
+    }
+
+    /** Fetches the legal links (#4) so `TermsOfUseDialog` can link out to the terms. */
+    private fun fetchPrivacyPolicy() {
+        scope.launch {
+            run {
+                // Collect rather than first()+is-check: `when` over ApiResult is the pattern
+                // used everywhere else in this file, and it smart-casts without a star projection.
+                legalUseCase.fetchPrivacyPolicy().collect { result ->
+                    when (result) {
+                        is ApiResult.Success ->
+                            _state.update { it.copy(farmerchatTermsOfUse = result.data.termsOfUseUrl) }
+                        is ApiResult.Error -> Unit  // legal links are best-effort
+                    }
+                }
+            }
         }
     }
 

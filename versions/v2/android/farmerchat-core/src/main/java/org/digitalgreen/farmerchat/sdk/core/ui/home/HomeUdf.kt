@@ -61,6 +61,15 @@ sealed class HomeAction {
         val triggered_input_type: String
     ) : HomeAction()
 
+    /**
+     * 2.0.0: accept the terms of use from `TermsOfUseDialog`. Calls endpoint #7
+     * (`accept_terms`) — best-effort, matching the app: acceptance is recorded but never blocks.
+     */
+    data class AcceptTerms(val userId: String) : HomeAction()
+
+    /** 2.0.0: fetch the legal links (#4) so `TermsOfUseDialog` can link out. */
+    object FetchPrivacyPolicy : HomeAction()
+
     object ClearTranscriptionState : HomeAction()
 
     object ConsumeResult : HomeAction()
@@ -77,5 +86,7 @@ data class HomeState(
     val voiceTranscribeState: UiState<GetVoiceResponse> = UiState.Idle,
     val imageViewedState: UiState<ImageViewedResponse> = UiState.Idle,
     val imageStatementState: UiState<ImageStatementResponse> = UiState.Idle,
-    val dismissedCardIds: Set<String> = emptySet()
+    val dismissedCardIds: Set<String> = emptySet(),
+    /** 2.0.0: terms-of-use URL from #4, for `TermsOfUseDialog`. */
+    val farmerchatTermsOfUse: String? = null
 )

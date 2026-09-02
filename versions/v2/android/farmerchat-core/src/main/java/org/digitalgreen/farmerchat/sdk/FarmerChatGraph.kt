@@ -328,7 +328,7 @@ class FarmerChatGraph internal constructor(
         phoneAuthUseCases, getSupportedLanguagesUseCase, sessionManager, prefs, labelManager, analytics
     )
 
-    fun homeViewModel() = HomeViewModel(homeUseCase, chatUseCase, getUserProfileUseCase, prefs, analytics)
+    fun homeViewModel() = HomeViewModel(homeUseCase, chatUseCase, getUserProfileUseCase, prefs, analytics, getSupportedLanguagesUseCase)
 
     fun chatViewModel() = ChatViewModel(
         appContext, chatUseCase, prefs, labelManager, analytics, config, agenticChatDataSource

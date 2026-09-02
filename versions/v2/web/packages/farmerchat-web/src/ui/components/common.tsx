@@ -34,6 +34,10 @@ export const Icon = {
   card: '📄',
   check: '✓',
   location: '📍',
+  // 2.0.0 agentic surfaces (stream error card / alignment escape hatch).
+  warning: '⚠️',
+  wifiOff: '📵',
+  info: 'ℹ️',
 } as const;
 
 /**

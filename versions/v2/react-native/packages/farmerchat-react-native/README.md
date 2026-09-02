@@ -124,8 +124,87 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | `enableVoice` | `boolean` | `true` | Speak input + Listen TTS |
 | `enableImages` | `boolean` | `true` | Photo queries |
 | `enableWeather` | `boolean` | `true` | weather chip + advice CTA |
+| `enableAgenticChat` | `boolean` | `false` | **2.0.0 opt-in.** Streams the answer from endpoint #27a instead of the synchronous #27. See [Agentic streaming chat](#agentic-streaming-chat-200-opt-in). |
 | `onEvent` | `(name, props) => void` | – | analytics fan-out |
 | `onSessionExpired` | `() => void` | – | refresh + guest fallback both failed |
+
+## Agentic streaming chat (2.0.0, opt-in)
+
+`enableAgenticChat: true` routes chat answers through endpoint #27a
+`api/chat/get_answer_for_text_query_agentic/`, which responds
+`Content-Type: text/event-stream` and streams for as long as the agent needs. The default is
+`false`: a host that does nothing keeps 1.0.0 behaviour (one synchronous #27 reply).
+
+What it adds to the chat screen: live answer text with **no** typewriter animation (the tokens
+are already arriving one at a time), a tool-progress indicator with a 700 ms minimum dwell per
+status, a transient "Paused, resuming…" hint after 4 s of silence that clears on the next chunk,
+and an inline retry card if the stream ends without a complete answer (keeping any partial text).
+
+### Transport: XMLHttpRequest, and what that costs
+
+React Native's `fetch` is a polyfill over the native networking module and does **not** expose a
+readable `response.body` — `ReadableStream` is absent from the RN runtime — so `await fetch(...)`
+only resolves once the whole response is buffered. The SDK therefore uses `XMLHttpRequest`, which
+switches RN's native networking into incremental mode when an `onprogress` / `onreadystatechange`
+handler is attached, and then grows `xhr.responseText` while `readyState === 3`. The reader keeps
+a cursor into `responseText` and holds back the tail after the last newline so a half-arrived line
+is never parsed. `react-native-sse` uses the same mechanism; it is not added as a dependency.
+
+Honest limitations:
+
+- The entire response accumulates in memory in `responseText` for the life of the request.
+- Any network interposer that buffers responses — Flipper's network plugin on Android, a proxy
+  with buffering, a host that monkey-patches `XMLHttpRequest` — collapses the body into one
+  chunk. Events are still parsed correctly; the answer simply appears all at once instead of
+  typing in.
+- On React Native Web the browser XHR is used. Incremental `responseText` works there, but a
+  gzip-buffering or CORS-restricted intermediary can again collapse it.
+- `timeout` is set to `0`. RN's `timeout` is a whole-request deadline, not a read timeout, so any
+  nonzero value would kill a multi-minute answer. This request never goes through the
+  ApiPriority/`AbortController` path for the same reason. Auth is unaffected: the same
+  `Build-Version` / `Device-Info` / `Authorization` headers are sent and a 401 refreshes the
+  token once (single-flight, shared with `HttpClient`) and replays the stream.
+- Header parity with the Android `agenticClient`: **no `X-Request-ID` and no `X-Timeout`** are
+  sent on this endpoint, because deriving an `X-Timeout` would advertise a deadline the request
+  does not have.
+- The **wire framing is not confirmed against a live stream** (a guest receives 0 bytes on
+  dev/stage/prod; agentic answers appear to be gated on an OTP-verified user). The reader accepts
+  both `data:`-prefixed SSE and bare NDJSON, and takes the event type from an `event:` line or a
+  `type`/`event` field in the JSON, case- and separator-insensitively.
+
+### Alignment surfaces
+
+`TextPromptResponse.alignments` carries a server-driven prompt the farmer answers by tapping a
+chip. It is handled on the **synchronous #27 path too** and is not gated on `enableAgenticChat`.
+Exclusive surfaces (`alignment-clarify` / `-confirm` / `-escalate`, `gps-prompt`, `upload-photo`)
+arrive with `response` **empty on purpose** and replace the answer with `alignments.message`;
+additive ones (`gender-select`, `commodity-confirm`) render below a real answer. Escalate gets an
+urgent tint derived from the theme's failure colour.
+
+### Known gaps vs. the Android reference
+
+- `AlignmentChip.action` (`"select"` invokes a device capability, `"decline"` opts out) is parsed
+  into the type and otherwise ignored — matching Android, where no device flow consumes it
+  either. No GPS/photo capability flow is wired on either platform, so a capability chip is sent
+  back as a plain follow-up.
+- The Compose `AlignmentSurface` has a `fetchingProgressLabel` slot for a capability in flight;
+  it is not ported, for the same reason.
+- The stream error card uses the `info` icon for both states (this package's bundled icon set has
+  no wifi-off/warning glyph); the copy still distinguishes them.
+- Tapping an alignment chip records the pick so the chip locks and stays highlighted — an
+  **addition** on React Native. The Android core has the `alignmentSelectedValues` field but
+  nothing that fills it, so a tapped chip never locks there.
+- When an agentic answer settles from the terminal `metadata` event, the settled bubble **keeps
+  the stream's id** instead of minting a new one as Android does. Android's fresh id makes its
+  reveal-tracking set miss, which replays the typewriter animation over text the farmer just
+  watched stream in.
+
+### Localization caveat
+
+User-visible strings resolve through the label manager, but this package has a **known
+pre-existing bug**: several of its label base keys do not match the keys the server ships, so
+those strings fall back to their English defaults. The agentic/alignment strings use the same base
+keys as the Android SDK, but localization on React Native is **not verified**.
 
 ## Networking guarantees (parity with the production app)
 

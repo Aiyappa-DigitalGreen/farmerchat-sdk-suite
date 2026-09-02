@@ -170,6 +170,18 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   enableVoice?: boolean;
   enableImages?: boolean;
   enableWeather?: boolean;
+  /**
+   * Opt into agentic (streaming) chat — **SDK 2.0.0**, endpoint #27a.
+   *
+   * `false` (the default) keeps the 1.0.0 synchronous chat contract (#27) unchanged, so a host
+   * that does nothing sees no behaviour change. When true, text queries stream: the answer
+   * accretes from `text_delta` events and tool progress is surfaced as it happens.
+   *
+   * Note the wire framing is not yet confirmed against a real stream
+   * (docs/05-open-questions.md), so treat this as preview until it is.
+   * @default false
+   */
+  enableAgenticChat?: boolean;
 
   // --- FAB customization (config-level defaults; per-instance props win) ---
   /** FAB default label; omitted → round icon-only FAB. */
@@ -238,6 +250,7 @@ export interface ResolvedConfig {
   enableVoice: boolean;
   enableImages: boolean;
   enableWeather: boolean;
+  enableAgenticChat: boolean;
   theme?: FarmerChatTheme;
   authMode: AuthMode;
   accessToken?: string;
@@ -284,6 +297,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     enableVoice: config.enableVoice ?? true,
     enableImages: config.enableImages ?? true,
     enableWeather: config.enableWeather ?? true,
+    // 2.0.0 streaming chat is opt-in: default false keeps v1 behaviour.
+    enableAgenticChat: config.enableAgenticChat ?? false,
     theme: config.theme,
     authMode: config.authMode ?? 'SDK_OTP',
     accessToken: config.accessToken,

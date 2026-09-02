@@ -9,6 +9,17 @@
     android:paddingTop="8dp"
     android:paddingBottom="8dp">
 
+    <!--
+      Agentic (2.0.0) EXCLUSIVE alignment surface (clarify / confirm / escalate / capability
+      prompt). When visible it REPLACES the answer and owns the whole message area: no answer
+      text, no action row, no related questions.
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.AlignmentSurfaceView
+        android:id="@+id/fcAiAlignmentExclusive"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/fcAiText"
         android:layout_width="match_parent"
@@ -17,6 +28,37 @@
         android:textSize="17sp"
         android:lineSpacingExtra="4dp"
         tools:text="Here is the advice for your crop..." />
+
+    <!--
+      Agentic (2.0.0) stream status: the tool-progress label while streaming, or the transient
+      "paused, resuming" stall hint. The two states are mutually exclusive, so one spinner serves
+      both (app parity: LogoSpinnerHorizontal).
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LogoSpinnerView
+        android:id="@+id/fcAiStreamStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:visibility="gone" />
+
+    <!--
+      Agentic (2.0.0) ADDITIVE alignment surface (gender-select / commodity-confirm): a nudge
+      BELOW a real answer. The answer above keeps its own action row and related questions.
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.AlignmentSurfaceView
+        android:id="@+id/fcAiAlignmentAdditive"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:visibility="gone" />
+
+    <!-- Agentic (2.0.0) interrupted stream: preserved partial text above, retry here. -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.StreamErrorCardView
+        android:id="@+id/fcAiStreamError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/fcAiReadFull"

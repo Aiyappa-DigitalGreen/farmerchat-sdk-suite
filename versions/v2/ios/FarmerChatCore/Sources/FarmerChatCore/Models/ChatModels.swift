@@ -206,6 +206,11 @@ public struct TextPromptResponse: Codable, Sendable {
     public var hideSource: Bool?
     @LossyOptional public var points: Int?
     public var intentClassificationOutput: IntentClassificationOutput?
+    /// Server-driven alignment surface (clarify / confirm / escalate) — **2.0.0**. Present when
+    /// the backend needs the user to disambiguate, confirm, or respond to an urgent situation
+    /// instead of (or before) giving a normal answer. In that case ``response`` is typically empty
+    /// and this carries the prompt message plus quick-reply chips. Nil for a normal answer.
+    public var alignments: AlignmentSurface?
 
     enum CodingKeys: String, CodingKey {
         case error, message
@@ -224,6 +229,7 @@ public struct TextPromptResponse: Codable, Sendable {
         case hideSource = "hide_source"
         case points
         case intentClassificationOutput = "intent_classification_output"
+        case alignments
     }
 }
 
@@ -585,4 +591,123 @@ public struct GeoResponse: Codable, Sendable {
 
     public var location: Location?
     public var accuracy: Double?
+}
+
+// MARK: - Alignment surfaces (2.0.0)
+
+/// A short prompt the user answers by tapping a chip, instead of receiving a normal answer.
+///
+/// `type` selects the visual treatment (see ``AlignmentKind``); `chips` are the quick replies;
+/// `original_query` is the query that triggered the surface, kept for context — it is the chip's
+/// `value` that gets sent on tap.
+///
+/// Named `AlignmentSurface`, not `Alignment` as on Android: `SwiftUI.Alignment` already owns that
+/// name, and a public `Alignment` in Core would make every `Alignment` reference ambiguous in any
+/// host file that imports both modules. The wire key stays `alignments`.
+public struct AlignmentSurface: Codable, Sendable, Equatable {
+    public var type: String?
+    public var message: String?
+    public var chips: [AlignmentChip]?
+    public var originalQuery: String?
+    /// True when the backend needs this answered before it can proceed.
+    public var blocking: Bool?
+    /// Backend intent tag (e.g. "capability", "profile"); informational for the client.
+    public var intent: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, message, chips
+        case originalQuery = "original_query"
+        case blocking, intent
+    }
+
+    public init(
+        type: String? = nil,
+        message: String? = nil,
+        chips: [AlignmentChip]? = nil,
+        originalQuery: String? = nil,
+        blocking: Bool? = nil,
+        intent: String? = nil
+    ) {
+        self.type = type
+        self.message = message
+        self.chips = chips
+        self.originalQuery = originalQuery
+        self.blocking = blocking
+        self.intent = intent
+    }
+}
+
+/// One quick-reply chip. `label` is shown, `value` is sent on tap.
+///
+/// `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
+/// location), "decline" lets the user opt out (use an approximate location). Today every chip's
+/// value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
+/// "select" chips without another wire change.
+public struct AlignmentChip: Codable, Sendable, Equatable, Identifiable {
+    public var label: String?
+    public var value: String?
+    public var action: String?
+
+    public init(label: String? = nil, value: String? = nil, action: String? = nil) {
+        self.label = label
+        self.value = value
+        self.action = action
+    }
+
+    /// Stable-enough identity for SwiftUI lists (chips are short, fixed sets).
+    public var id: String { "\(label ?? "")|\(value ?? "")|\(action ?? "")" }
+
+    /// What a tap sends: the chip's `value`, falling back to its visible `label`.
+    public var submittedQuery: String {
+        if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return value }
+        return label ?? ""
+    }
+}
+
+/// The alignment surfaces the backend can ask for.
+public enum AlignmentKind: String, Sendable, Equatable, CaseIterable {
+    case clarify
+    case confirm
+    case escalate
+    case gpsPrompt
+    case uploadPhoto
+    case genderSelect
+    case commodityConfirm
+
+    /// Additive surfaces accompany a normal answer — they render BELOW it as an optional nudge and
+    /// never suppress the answer or its follow-ups. Exclusive surfaces (clarify / confirm /
+    /// escalate / capability prompts) own the message area and replace the answer.
+    ///
+    /// The backend marks the additive ones non-blocking (`blocking:false`, `intent:"profile"`).
+    /// Both are single-select: one tap sends immediately and locks the card.
+    public var isAdditive: Bool { self == .genderSelect || self == .commodityConfirm }
+
+    /// The exact wire `type` string, reported as the `agentic_chip_type` analytics property so
+    /// funnels can be segmented by which surface was tapped. Keep these stable and in sync with
+    /// ``fromType(_:)`` — dashboards depend on them.
+    public var analyticsType: String {
+        switch self {
+        case .clarify: return "alignment-clarify"
+        case .confirm: return "alignment-confirm"
+        case .escalate: return "alignment-escalate"
+        case .gpsPrompt: return "gps-prompt"
+        case .uploadPhoto: return "upload-photo"
+        case .genderSelect: return "gender-select"
+        case .commodityConfirm: return "commodity-confirm"
+        }
+    }
+
+    /// Wire `type` → kind. Nil for an unknown or absent type: render as a normal answer.
+    public static func fromType(_ type: String?) -> AlignmentKind? {
+        switch type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "alignment-clarify": return .clarify
+        case "alignment-confirm": return .confirm
+        case "alignment-escalate": return .escalate
+        case "gps-prompt": return .gpsPrompt
+        case "upload-photo": return .uploadPhoto
+        case "gender-select": return .genderSelect
+        case "commodity-confirm": return .commodityConfirm
+        default: return nil
+        }
+    }
 }
