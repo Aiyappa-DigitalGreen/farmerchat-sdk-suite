@@ -122,6 +122,7 @@ import java.io.File
 import androidx.compose.ui.platform.LocalConfiguration
 import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
+import org.digitalgreen.farmerchat.sdk.compose.components.AlignmentSurface
 
 /**
  * Chat thread (doc 01 §3.8). Handles all entry modes (history, pre-generated,
@@ -730,6 +731,33 @@ fun ChatScreen(
                                                 )
                                             } else Modifier
 
+                                            val alignmentKind = message.alignmentKind
+                                            // An EXCLUSIVE surface owns the message area: it
+                                            // replaces the answer, its action row and its
+                                            // related-questions section. An ADDITIVE one falls
+                                            // through to the normal answer branch and renders
+                                            // below it as a nudge.
+                                            if (alignmentKind != null && !alignmentKind.isAdditive) {
+                                                AlignmentSurface(
+                                                    kind = alignmentKind,
+                                                    message = message.text,
+                                                    chips = message.alignmentChips.orEmpty(),
+                                                    selectedValues = message.alignmentSelectedValues,
+                                                    isLoading = state.isLoading,
+                                                    isLatest = isLastAi,
+                                                    onChipClick = { chip ->
+                                                        vm.onAction(
+                                                            ChatAction.SendFollowUpQuestion(
+                                                                question = chip.value?.takeIf { it.isNotBlank() }
+                                                                    ?: chip.label.orEmpty()
+                                                            )
+                                                        )
+                                                    },
+                                                    onTypeInstead = { focusTextInput?.invoke() }
+                                                )
+                                                return@item
+                                            }
+
                                             Column(
                                                 modifier = streamReserve,
                                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -783,6 +811,28 @@ fun ChatScreen(
                                                             )
                                                         )
                                                     }
+                                                }
+
+                                                // ADDITIVE surface: a nudge below the real answer
+                                                // (gender-select / commodity-confirm). Single-tap;
+                                                // the answer above keeps its own action row.
+                                                if (alignmentKind?.isAdditive == true) {
+                                                    AlignmentSurface(
+                                                        kind = alignmentKind,
+                                                        message = message.alignmentMessage.orEmpty(),
+                                                        chips = message.alignmentChips.orEmpty(),
+                                                        selectedValues = message.alignmentSelectedValues,
+                                                        isLoading = state.isLoading,
+                                                        isLatest = isLastAi,
+                                                        onChipClick = { chip ->
+                                                            vm.onAction(
+                                                                ChatAction.SendFollowUpQuestion(
+                                                                    question = chip.value?.takeIf { it.isNotBlank() }
+                                                                        ?: chip.label.orEmpty()
+                                                                )
+                                                            )
+                                                        }
+                                                    )
                                                 }
 
                                                 // Interrupted terminal state: keep any partial answer
