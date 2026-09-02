@@ -61,3 +61,21 @@ feature flag, not a guest session.
 **Conservative reading implemented meanwhile** (per CLAUDE.md §2): accept BOTH framings and
 resolve the type from `event:` when present, else the JSON `type` field — which is what the app
 does. If the real framing differs, only the reader changes; the `AgenticEvent` contract holds.
+
+---
+
+## Ask: two 2.0.0 label keys are missing from endpoint #3 (2026-09-02)
+
+Every other label v2 introduces was verified present on `api/language/v2/get_labels/` before use.
+These two are absent, so they fall back to their hardcoded English on **all four platforms**:
+
+| Key | English fallback in use | Where it shows |
+|---|---|---|
+| `fc_v2_app_label_response_paused_resuming` | "Paused, resuming…" | transient hint when a stream stalls mid-answer |
+| `fc_v2_app_label_connection_stopped_partial_saved` | "Connection stopped. Your partial answer is saved." | stream error card when a partial answer was preserved |
+
+Both are user-facing during a failure or a slow answer — exactly when a farmer most needs to read
+it in their own language. **Request:** add both keys to the label set for every supported language.
+
+No client change is needed once they land; `LabelManager` resolves `${key}_${lang}` →
+`${key}_en` → the English fallback, so the strings switch over automatically.
