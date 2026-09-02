@@ -485,6 +485,22 @@ Writing them surfaced a real defect: the parser's failure path calls `android.ut
 throws "not mocked" under JVM unit tests — so the one path that must never take down the chat was
 the one path that could not be tested. Fixed with `testOptions.unitTests.isReturnDefaultValues`.
 
+**The stream consumer is a faithful port, second pass.** The first version was my own design and
+was wrong in ways that mattered. Re-read against the app's `consumeAgenticStream`
+(ChatViewModel.kt:1444) and corrected:
+
+| Missed first time | Why it matters |
+|---|---|
+| `sanitizeStreamingText` | The stream carries control tokens (`<<commodities:chickpea>>`, a ```` ```followups ``` ```` block) absent from the clean `metadata.response`. Without stripping, the farmer watches raw tokens type themselves into the answer. |
+| Reusing `placeholderId` as the stream id | The loading bubble becomes the answer bubble in place; my version removed and re-inserted, which flickers. |
+| `TOOL_STATUS_MIN_DWELL_MS` (700 ms) | Back-to-back tool events are otherwise collapsed by StateFlow conflation into just the last one, so the farmer never sees the earlier steps. |
+| Clean EOF with partial text is **not** an interruption | Some backends stream deltas with no `done`/`metadata`. Flagging that interrupted would make every normal answer on such a backend look broken. |
+| `done` arriving before a transport drop still finalizes | The model finished; the answer should not be discarded because the socket closed after. |
+
+`sanitizeAgenticStreamText` is covered by **9 further unit tests** including the mid-stream cases
+(a half-arrived `<<comm`, an unterminated fence), since tokens arrive character by character.
+Totals: **23 unit tests, all passing.**
+
 **Still to do for 2.0.0:** confirm the wire framing with the backend, build the streaming UI
 (live text, tool-progress chips, `StreamErrorCard`), verify on device, then port to the other
 three platforms.
