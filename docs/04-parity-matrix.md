@@ -464,6 +464,8 @@ Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v
 | Alignment state on `AiResponse` + finalize wiring | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
 | `AlignmentSurface` UI (chips, escalate treatment) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | `Chip` (Suggested / Agentic / Escalate) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `InputComposer` (unified composer bar) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `ShimmerText` | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | `StreamErrorCard` + retry | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | Stall hint ("Paused, resuming…", 4 s) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 
@@ -527,6 +529,30 @@ answer is saved" is a materially different message from "nothing arrived", and i
 **Two labels are not on the server yet.** `fc_v2_app_label_connection_stopped_partial_saved` and
 `fc_v2_app_label_response_paused_resuming` returned null from endpoint #3, so they fall back to
 English. The backend needs to add them before those strings localize.
+
+### `InputComposer` port (2026-09-02)
+
+The v2 composer replaces v1's `TextInput` + `PrimaryInputButtons` pair with a single bar:
+camera / text field / mic-or-send, in floating (Home) or anchored (Chat) mode, with rotating
+placeholders, an ambient gradient aura, IME-aware seating and single-image attachment.
+
+Ported by **copying the app file and remapping its dependencies**, not by rewriting it. The
+first agentic attempt was a from-scratch design and diverged in five visible ways; a 737-line
+animated component would diverge far worse. Fidelity checked structurally rather than by eye:
+
+| Check | Result |
+|---|---|
+| Brace balance vs original | 79 / 79 — identical |
+| Composable surface | identical |
+| Lines dropped | 10, every one accounted for |
+
+The 10: the package line plus 9 imports (remapped to SDK equivalents), 3 `PLabel` call sites, and
+3 drawable references renamed to `fc_icon_*`. `PLabel`/`PlotlineConstants` are **deliberately
+dropped** — root CLAUDE.md §6 bans Plotline inside SDK packages — so the composer carries no
+analytics-label hooks. Nothing else changed.
+
+`ShimmerText` came across with it (the composer depends on it); `ScrollToBottomButton` and
+`LightContentColors` already existed in the SDK.
 
 **Still to do for 2.0.0:** confirm the wire framing with the backend, port the streaming UI to
 android-views, then to iOS, React Native and Web, and verify on a device.
