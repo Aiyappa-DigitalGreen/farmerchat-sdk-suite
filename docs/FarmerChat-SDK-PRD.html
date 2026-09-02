@@ -1,0 +1,516 @@
+<title>FarmerChat SDK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* ---- light palette (complete, on bare :root) ---- */
+  :root {
+    --paper:      #FAFBF8;
+    --surface:    #FFFFFF;
+    --surface-2:  #F1F4EE;
+    --ink:        #101A15;
+    --ink-2:      #37473F;
+    --ink-3:      #6B7B72;
+    --rule:       #DCE3D9;
+    --rule-soft:  #E9EEE5;
+    --accent:     #00873A;
+    --accent-ink: #006C2E;
+    --accent-wash:#E4F3E8;
+    --clay:       #A8622B;
+    --clay-wash:  #F7EDE3;
+    --shadow:     0 1px 2px rgba(16,26,21,.05), 0 8px 24px -16px rgba(16,26,21,.18);
+
+    --measure: 68ch;
+    --step--1: clamp(.78rem, .76rem + .1vw, .84rem);
+    --step-0:  clamp(1rem, .97rem + .16vw, 1.09rem);
+    --step-1:  clamp(1.2rem, 1.13rem + .34vw, 1.42rem);
+    --step-2:  clamp(1.5rem, 1.36rem + .68vw, 2rem);
+    --step-3:  clamp(2rem, 1.7rem + 1.5vw, 3.1rem);
+    color-scheme: light;
+  }
+  /* ---- dark: tokens only, guarded so an explicit light choice wins ---- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0C1310;
+      --surface:    #121C17;
+      --surface-2:  #17231C;
+      --ink:        #E8EFE9;
+      --ink-2:      #B3C2B8;
+      --ink-3:      #7E8F85;
+      --rule:       #26332B;
+      --rule-soft:  #1C2822;
+      --accent:     #35D46F;
+      --accent-ink: #7CE79F;
+      --accent-wash:#12291B;
+      --clay:       #D89355;
+      --clay-wash:  #2A1E12;
+      --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+      color-scheme: dark;
+    }
+  }
+  /* ---- dark: explicit toggle wins in the other direction ---- */
+  :root[data-theme="dark"] {
+    --paper:      #0C1310;
+    --surface:    #121C17;
+    --surface-2:  #17231C;
+    --ink:        #E8EFE9;
+    --ink-2:      #B3C2B8;
+    --ink-3:      #7E8F85;
+    --rule:       #26332B;
+    --rule-soft:  #1C2822;
+    --accent:     #35D46F;
+    --accent-ink: #7CE79F;
+    --accent-wash:#12291B;
+    --clay:       #D89355;
+    --clay-wash:  #2A1E12;
+    --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: var(--step-0);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 78ch;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.15rem, 5vw, 2.5rem) 5rem;
+  }
+
+  h1, h2, h3, .ui {
+    font-family: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    font-optical-sizing: auto;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 .9rem;
+  }
+
+  h1 {
+    font-size: var(--step-3);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -.025em;
+    text-wrap: balance;
+    margin: 0 0 .7rem;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: var(--measure);
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  h2 {
+    font-size: var(--step-2);
+    font-weight: 600;
+    letter-spacing: -.018em;
+    line-height: 1.12;
+    text-wrap: balance;
+    margin: 0 0 .25rem;
+  }
+
+  h3 {
+    font-size: var(--step-0);
+    font-weight: 600;
+    letter-spacing: -.005em;
+    margin: 0 0 .3rem;
+  }
+
+  section { margin-top: clamp(2.75rem, 6vw, 4rem); }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: .9rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 1.1rem;
+    margin-bottom: 1.4rem;
+  }
+  .sec-head .n {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+    flex: none;
+    padding-top: .2rem;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+  .lede { color: var(--ink-2); }
+
+  a { color: var(--accent-ink); }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-size: .88em;
+  }
+  p code, li code, td code {
+    background: var(--surface-2);
+    border: 1px solid var(--rule-soft);
+    border-radius: 4px;
+    padding: .08em .34em;
+  }
+
+  /* ---- spec strip ---- */
+  .spec {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 2.5rem;
+  }
+  .spec div { background: var(--surface); padding: .95rem 1.05rem; }
+  .spec dt {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 .3rem;
+  }
+  .spec dd {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 1.32rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+  .spec dd small {
+    display: block;
+    font-family: "Source Serif 4", serif;
+    font-size: .8rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--ink-3);
+    margin-top: .1rem;
+  }
+
+  /* ---- feature grid ---- */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1.5rem 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .features li { max-width: 34ch; }
+  .features h3 { display: flex; align-items: center; gap: .5rem; }
+  .features h3::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: none;
+  }
+  .features p { font-size: .93rem; color: var(--ink-2); margin: 0; }
+
+  /* ---- steps (genuinely sequential) ---- */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps > li {
+    counter-increment: s;
+    position: relative;
+    padding-left: 2.6rem;
+    margin-bottom: 1.75rem;
+  }
+  ol.steps > li:last-child { margin-bottom: 0; }
+  ol.steps > li::before {
+    content: counter(s);
+    position: absolute;
+    left: 0; top: .05rem;
+    width: 1.65rem; height: 1.65rem;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--accent-wash);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .78rem;
+    font-weight: 600;
+  }
+
+  pre {
+    background: var(--surface-2);
+    border: 1px solid var(--rule-soft);
+    border-left: 2px solid var(--accent);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    margin: .6rem 0 0;
+    font-size: .82rem;
+    line-height: 1.6;
+  }
+  pre code { background: none; border: 0; padding: 0; }
+  .cmt { color: var(--ink-3); }
+  .kw  { color: var(--accent-ink); }
+
+  /* ---- tables ---- */
+  .scroll { overflow-x: auto; margin-top: .5rem; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-size: .91rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .6rem .8rem .6rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  th {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: .74rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+    border-bottom-color: var(--rule);
+  }
+  td.num {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* ---- callout ---- */
+  .note {
+    background: var(--clay-wash);
+    border: 1px solid color-mix(in srgb, var(--clay) 26%, transparent);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    margin-top: 1.3rem;
+  }
+  .note h3 { color: var(--clay); margin-bottom: .35rem; }
+  .note p, .note li { font-size: .92rem; color: var(--ink-2); max-width: none; }
+  .note ul { margin: 0; padding-left: 1.1rem; }
+  .note li { margin-bottom: .35rem; }
+  .note li:last-child { margin-bottom: 0; }
+
+  footer {
+    margin-top: 4rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 1.1rem;
+    font-size: .84rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+
+  @media print {
+    :root {
+      --paper:#fff; --surface:#fff; --surface-2:#F4F6F2;
+      --ink:#101A15; --ink-2:#37473F; --ink-3:#5F6F66;
+      --rule:#D4DCD0; --rule-soft:#E6EBE2;
+      --accent:#007131; --accent-ink:#005C27; --accent-wash:#EAF4EC;
+      --clay:#8C5122; --clay-wash:#F7EFE6; --shadow:none;
+      color-scheme: light;
+    }
+    @page { margin: 15mm 14mm; }
+    body { background:#fff; font-size: 10.5pt; line-height: 1.5; }
+    .wrap { padding: 0; max-width: none; }
+    /* Only keep small units intact — avoiding breaks inside whole sections
+       stranded half-empty pages. */
+    section { margin-top: 1.5rem; }
+    .sec-head { break-after: avoid; break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+    /* All five stats on one row: a 4-up grid orphaned the fifth beside a dead cell. */
+    .spec { grid-template-columns: repeat(5, 1fr); }
+    .spec div { padding: .7rem .7rem; }
+    .spec dd { font-size: 1.1rem; }
+    .spec dd small { font-size: .68rem; }
+    .features { gap: 1rem 1.6rem; }
+    h1 { font-size: 26pt; }
+    h2 { font-size: 15pt; }
+    .standfirst { font-size: 12pt; }
+    .spec { margin-top: 1.4rem; break-inside: avoid; }
+    .features li, ol.steps > li, .note, table { break-inside: avoid; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Product requirements · Digital Green</p>
+    <h1>FarmerChat SDK</h1>
+    <p class="standfirst">Drop an AI farm advisor into an existing app. Farmers ask about their crops
+      and livestock by voice, photo or text, in their own language — and the host app writes three
+      lines of code.</p>
+
+    <dl class="spec">
+      <div><dt>Android size</dt><dd>2.73 <small>MB — core + views</small></dd></div>
+      <div><dt>Platforms</dt><dd>4 <small>8 packages</small></dd></div>
+      <div><dt>Screens</dt><dd>17 <small>full journey</small></dd></div>
+      <div><dt>Endpoints</dt><dd>34 <small>+ token refresh</small></dd></div>
+      <div><dt>Config knobs</dt><dd>46 <small>all optional</small></dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <div class="sec-head"><span class="n">01</span><h2>The problem</h2></div>
+    <p>Smallholder farmers need timely, local, plain-language advice — which crop variety, when to
+      sow, what the spots on those leaves mean. That expertise exists, but it doesn't reach them.</p>
+    <p class="lede">Partner organisations already have apps farmers use and trust: feed calculators,
+      procurement tools, cooperative portals. Rebuilding an AI advisor inside each one is
+      unaffordable. The SDK makes it an afternoon's work instead.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">02</span><h2>What it does</h2></div>
+    <ul class="features">
+      <li>
+        <h3>Ask any way</h3>
+        <p>Type a question, speak it, or photograph a diseased plant. Voice is transcribed
+          server-side; photos go to image analysis.</p>
+      </li>
+      <li>
+        <h3>Answers that continue</h3>
+        <p>Every reply carries follow-up questions, so a farmer can dig deeper without knowing what
+          to ask next. Answers can be read aloud.</p>
+      </li>
+      <li>
+        <h3>Their language</h3>
+        <p>Language chosen on first run and switchable any time. Every string is fetched from the
+          server, so copy updates without an app release.</p>
+      </li>
+      <li>
+        <h3>Advice that finds them</h3>
+        <p>A daily feed of location-relevant cards — crop guidance, seasonal tips, local weather —
+          each opening straight into a conversation.</p>
+      </li>
+      <li>
+        <h3>Nothing is lost</h3>
+        <p>Past conversations are saved and searchable, paged as the farmer scrolls back. Answers
+          can be shared or saved as an image.</p>
+      </li>
+      <li>
+        <h3>Looks like your app</h3>
+        <p>Brand colours, bubble styling, FAB, corner radii, fonts and copy overrides — the assistant
+          reads as part of the host, not bolted on.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">03</span><h2>Integrating it</h2></div>
+    <p class="lede">Android shown; the other platforms follow the same three steps with their own
+      idioms.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Add the dependency</h3>
+        <pre><code><span class="cmt">// core arrives transitively</span>
+implementation(<span class="kw">"org.digitalgreen.farmerchat:farmerchat-android-views:1.0.0"</span>)</code></pre>
+      </li>
+      <li>
+        <h3>Initialize once, at app start</h3>
+        <pre><code>FarmerChat.initialize(context, FarmerChatConfig
+    .builder(FarmerChatEnvironment.PROD)
+    .geoApiKey(BuildConfig.FC_GEO_API_KEY)
+    .fabBackgroundColor(brandGreen)
+    .build())</code></pre>
+      </li>
+      <li>
+        <h3>Give it an entry point</h3>
+        <pre><code><span class="cmt">&lt;!-- a floating button, anywhere in your layout --&gt;</span>
+&lt;org.digitalgreen.farmerchat.sdk.views.FarmerChatFab ... /&gt;
+
+<span class="cmt">// or call it yourself</span>
+FarmerChat.launch(context)                    <span class="cmt">// full journey</span>
+FarmerChat.openChat(context, question = <span class="kw">"…"</span>)  <span class="cmt">// straight to chat</span></code></pre>
+      </li>
+    </ol>
+
+    <div class="note">
+      <h3>What the host must provide</h3>
+      <ul>
+        <li><strong>A Google Geolocation key.</strong> Powers the location-aware advice feed and
+          local weather.</li>
+        <li><strong>minSdk 26 and JVM target 17.</strong> Lower-minSdk hosts can keep 24 via
+          <code>tools:overrideLibrary</code> plus a runtime API check.</li>
+        <li><strong>Play-listing permissions.</strong> The merged manifest gains microphone, camera
+          and location.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">04</span><h2>Two ways to embed</h2></div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Mode</th><th>The farmer gets</th><th>Suits</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>FULL_JOURNEY</code></td>
+            <td>Language choice, a daily advice feed, chat, history, settings and help — the whole
+              assistant.</td>
+            <td>Apps making FarmerChat a headline feature.</td>
+          </tr>
+          <tr>
+            <td><code>CHAT_ONLY</code></td>
+            <td>Straight into a conversation. History and language sit in the chat's own app bar; no
+              dashboard, no side menu.</td>
+            <td>Apps adding a quiet "ask an expert" affordance.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">Either mode can also be embedded inline as a view inside an existing
+      screen, rather than opened full-screen.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="n">05</span><h2>Platform coverage</h2></div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Platform</th><th>Packages</th><th>Requires</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Android</td><td>core + Views <em>or</em> Compose</td><td>minSdk 26, JVM 17</td></tr>
+          <tr><td>iOS</td><td>Core + SwiftUI <em>or</em> UIKit</td><td>iOS 15+ (SwiftUI 16+)</td></tr>
+          <tr><td>React Native</td><td>single npm package</td><td>RN 0.76+ / Expo 52+</td></tr>
+          <tr><td>Web</td><td>single npm package</td><td>React 18</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">All four share one behavioural spec — the same endpoints, retry and
+      timeout rules, token refresh, and screen flow — so a fix on one platform is expected on all
+      four.</p>
+  </section>
+
+  <footer>
+    Figures measured from the current build: Android AARs from the published artifacts, screens and
+    endpoints from the SDK specification.
+  </footer>
+
+</div>
