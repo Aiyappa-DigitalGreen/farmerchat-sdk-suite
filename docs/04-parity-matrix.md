@@ -460,6 +460,9 @@ Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v
 | Streaming send path in ChatViewModel | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
 | `AiResponse` streaming fields | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
 | Streaming UI (live text, tool status, error card) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `alignments` wire model + `AlignmentKind` | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
+| Alignment state on `AiResponse` + finalize wiring | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
+| `AlignmentSurface` UI (chips, escalate treatment) | n/a | ⛔ **not started** | ⛔ | ⛔ | ⛔ |
 | `StreamErrorCard` + retry | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | Stall hint ("Paused, resuming…", 4 s) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 

@@ -58,7 +58,34 @@ sealed class ChatMessage {
          */
         val isInterrupted: Boolean = false,
         /** Why the stream ended early; only meaningful when [isInterrupted]. */
-        val streamErrorKind: org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind? = null
+        val streamErrorKind: org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind? = null,
+        // ---- alignment surfaces (2.0.0) ----
+        /**
+         * Non-null when this response is an alignment surface (clarify / confirm / escalate or a
+         * capability prompt) rather than a normal answer. Drives the chip rendering and the urgent
+         * (escalate) treatment in place of the usual action row.
+         */
+        val alignmentKind: org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind? = null,
+        /** Quick-reply chips: label is shown, value is sent on tap. */
+        val alignmentChips: List<org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip>? = null,
+        /**
+         * The surface's own prompt message. For an EXCLUSIVE surface the prompt already lives in
+         * [text] (it replaced the answer), so this stays null. For an ADDITIVE surface
+         * ([AlignmentKind.isAdditive]) [text] holds the real answer and this carries the nudge
+         * rendered below it.
+         */
+        val alignmentMessage: String? = null,
+        /**
+         * Chip values already tapped on this surface. Accumulates so every picked chip stays
+         * highlighted and locked — each chip is clickable once — while the rest stay tappable.
+         */
+        val alignmentSelectedValues: List<String> = emptyList(),
+        /**
+         * The query that triggered this surface. Kept so a capability chip (e.g. "Share my
+         * location") can re-send the user's real question once the capability is satisfied,
+         * rather than sending the chip label as if it were the question.
+         */
+        val alignmentOriginalQuery: String? = null
     ) : ChatMessage()
 
     /** Placeholder shown while waiting for the AI response. */

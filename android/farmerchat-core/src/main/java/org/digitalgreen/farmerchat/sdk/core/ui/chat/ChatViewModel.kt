@@ -970,7 +970,16 @@ class ChatViewModel(
         when (result) {
             is ApiResult.Success -> {
                 val data = result.data
-                val answerText = data.response ?: data.translated_response ?: data.message.orEmpty()
+                val alignmentKind = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+                    .fromType(data.alignments?.type)
+                // An EXCLUSIVE alignment surface arrives with an empty `response` on purpose: its
+                // prompt IS the message. Fall back to alignments.message so it is not mistaken for
+                // an empty answer and turned into an error.
+                val answerText = (data.response ?: data.translated_response ?: data.message)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: (if (alignmentKind != null && !alignmentKind.isAdditive) {
+                        data.alignments?.message.orEmpty()
+                    } else "")
                 if (data.error || answerText.isBlank()) {
                     onAnswerError(
                         placeholderId,
@@ -988,7 +997,16 @@ class ChatViewModel(
                             ChatMessage.AiResponse(
                                 text = answerText,
                                 id = aiId,
-                                messageId = data.message_id
+                                messageId = data.message_id,
+                                // 2.0.0: an alignment surface asks the user to clarify/confirm
+                                // instead of (or alongside) answering. Exclusive surfaces replace
+                                // the answer, additive ones sit below it — see AlignmentKind.
+                                alignmentKind = alignmentKind,
+                                alignmentChips = data.alignments?.chips,
+                                alignmentMessage = if (alignmentKind?.isAdditive == true) {
+                                    data.alignments?.message
+                                } else null,
+                                alignmentOriginalQuery = data.alignments?.original_query
                             ),
                         isLoading = false,
                         errorMessage = null,
