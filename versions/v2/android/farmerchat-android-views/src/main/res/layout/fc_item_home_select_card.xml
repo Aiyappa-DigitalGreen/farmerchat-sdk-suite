@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/fc_bg_card"
+    android:orientation="vertical"
+    android:clipToOutline="true">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="26dp">
+
+        <TextView
+            android:id="@+id/fcSelectStatement"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="32dp"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="19sp"
+            tools:text="Which crops do you cultivate?" />
+
+        <ImageButton
+            android:id="@+id/fcSelectDismiss"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="end|top"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@null"
+            android:src="@drawable/fc_ic_close"
+            app:tint="@color/fc_foreground_secondary" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/fcSelectOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="20dp"
+        android:orientation="vertical" />
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+        android:id="@+id/fcSelectConfirm"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:visibility="gone" />
+</LinearLayout>

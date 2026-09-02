@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
@@ -29,8 +28,6 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.ChatUseCase
 import org.digitalgreen.farmerchat.sdk.core.util.ImageUtils
-import org.digitalgreen.farmerchat.sdk.core.model.AgenticEvent
-import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import java.io.File
 import java.util.UUID
 
@@ -43,44 +40,12 @@ private enum class InputType { TEXT, AUDIO, IMAGE }
  * questions, follow-ups (endpoint #29 only — never TextPromptResponse.follow_up_questions),
  * read-full-advice, retry-with-flag, Listen TTS, and paginated thread history.
  */
-private val CONTROL_TOKEN_REGEX = Regex("<<[^>]*>>")
-private val FOLLOWUPS_BLOCK_REGEX = Regex("```followups[\\s\\S]*?```")
-
-/**
- * Minimum on-screen time per tool status, so back-to-back tool events (latency 0) are not
- * collapsed by StateFlow conflation into just the last one.
- */
-private const val TOOL_STATUS_MIN_DWELL_MS = 700L
-
-/**
- * Strips agentic control tokens that trail the streamed text but are absent from the clean
- * `metadata.response` — e.g. `<<commodities:chickpea>>` and a ```` ```followups ... ``` ```` block.
- * Without this the farmer watches raw control tokens type themselves into the answer.
- *
- * Also cuts a still-streaming, not-yet-terminated token: mid-stream the text may end in a partial
- * `<<comm` or an unclosed fence, which must not be shown either.
- *
- * Internal (not private) so it can be unit-tested — the live stream cannot be exercised yet.
- */
-internal fun sanitizeAgenticStreamText(raw: String): String {
-    var text = FOLLOWUPS_BLOCK_REGEX.replace(raw, "")
-    text = CONTROL_TOKEN_REGEX.replace(text, "")
-    val fenceStart = text.indexOf("```followups")
-    if (fenceStart >= 0) text = text.substring(0, fenceStart)
-    val tokenStart = text.indexOf("<<")
-    if (tokenStart >= 0) text = text.substring(0, tokenStart)
-    return text.trimEnd()
-}
-
 class ChatViewModel(
     private val appContext: Context,
     private val chatUseCase: ChatUseCase,
     private val prefs: SdkPreferences,
     private val labelManager: LabelManager,
-    private val analytics: FarmerChatAnalytics,
-    private val config: org.digitalgreen.farmerchat.sdk.FarmerChatConfig,
-    /** #27a streaming source. Only touched when [config].enableAgenticChat is true. */
-    private val agenticChatDataSource: org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource
+    private val analytics: FarmerChatAnalytics
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(
@@ -747,219 +712,10 @@ class ChatViewModel(
             retry = retry
         )
 
-        if (config.enableAgenticChat) {
-            // 2.0.0 opt-in: streams #27a. Launches its own coroutine.
-            streamAgenticAnswer(request, placeholderId)
-        } else {
-            // 1.0.0 default: one synchronous #27 reply.
-            scope.launch {
-                chatUseCase.getTextPrompt(request).collect { result ->
-                    handleTextPromptResult(result, placeholderId)
-                }
-            }
-        }
-    }
-
-    /**
-     * Consumes the agentic SSE stream (#27a, SDK 2.0.0 — gated on
-     * [FarmerChatConfig.enableAgenticChat]). Faithful port of the app's
-     * `consumeAgenticStream` (fc-compose-agentic @ c0524dd6, ChatViewModel.kt:1444).
-     *
-     * Accumulates [AgenticEvent.TextDelta]s into the answer bubble for live typing, surfaces tool
-     * status labels while tools run, and finalizes on [AgenticEvent.Metadata]. If the stream ends
-     * without one, falls back to [AgenticEvent.Done], then to the accumulated text.
-     */
-    private fun streamAgenticAnswer(
-        request: org.digitalgreen.farmerchat.sdk.core.model.TextPromptRequest,
-        placeholderId: String?
-    ) {
-        // Reuse the placeholder's id as the stream id so the loading bubble becomes the answer
-        // bubble in place, with no remove/insert flicker.
-        val streamId = placeholderId ?: UUID.randomUUID().toString()
         scope.launch {
-            val builder = StringBuilder()
-            var finalized = false
-            // Captured but NOT finalized on arrival: a `metadata` normally follows `done` and is
-            // richer (message_id, follow-up ids), so it wins. `done` is only a fallback.
-            var pendingDone: AgenticEvent.Done? = null
-
-            // Single exit for every "no terminal metadata" outcome — clean EOF, a Failure event, or
-            // a thrown exception. Runs at most once (guarded + latches [finalized]).
-            fun finalizeStreamOrFail(errorKind: StreamErrorKind? = null) {
-                if (finalized) return
-                finalized = true
-                val fallbackText = sanitizeStreamingText(builder.toString())
-                val done = pendingDone
-                when {
-                    // A `done` means the model actually finished → a complete answer, not an
-                    // interruption, even if the transport dropped right after.
-                    done != null && (!done.answer.isNullOrBlank() || fallbackText.isNotEmpty()) ->
-                        finalizeAgenticAnswer(
-                            text = done.answer?.takeIf { it.isNotBlank() } ?: fallbackText,
-                            followUps = done.followUps.takeIf { it.isNotEmpty() },
-                            messageId = null,
-                            streamId = streamId
-                        )
-                    // Genuine error after some text arrived: keep the partial and mark it
-                    // interrupted so the UI can offer retry.
-                    errorKind != null && fallbackText.isNotEmpty() ->
-                        interruptAgentic(streamId, fallbackText, errorKind)
-                    // Clean EOF with partial text and no terminal event: some backends stream
-                    // deltas without a done/metadata. Treat it as the complete answer — flagging it
-                    // interrupted would make every normal answer on such a backend look broken.
-                    fallbackText.isNotEmpty() ->
-                        finalizeAgenticAnswer(fallbackText, null, null, streamId)
-                    // Nothing usable arrived.
-                    else -> interruptAgentic(streamId, "", errorKind ?: StreamErrorKind.UNKNOWN)
-                }
+            chatUseCase.getTextPrompt(request).collect { result ->
+                handleTextPromptResult(result, placeholderId)
             }
-
-            try {
-                agenticChatDataSource.stream(request).collect { event: AgenticEvent ->
-                    when (event) {
-                        is AgenticEvent.ToolCall ->
-                            if (!event.statusText.isNullOrBlank()) {
-                                updateStreamingResponse(
-                                    streamId, sanitizeStreamingText(builder.toString()), event.statusText
-                                )
-                                delay(TOOL_STATUS_MIN_DWELL_MS)
-                            }
-
-                        is AgenticEvent.ToolResult ->
-                            if (!event.statusText.isNullOrBlank()) {
-                                updateStreamingResponse(
-                                    streamId, sanitizeStreamingText(builder.toString()), event.statusText
-                                )
-                                delay(TOOL_STATUS_MIN_DWELL_MS)
-                            }
-
-                        is AgenticEvent.TextDelta -> {
-                            builder.append(event.delta)
-                            // Text is flowing; clear any transient tool status.
-                            updateStreamingResponse(
-                                streamId, sanitizeStreamingText(builder.toString()), null
-                            )
-                        }
-
-                        is AgenticEvent.Metadata -> {
-                            finalized = true
-                            // metadata carries a TextPromptResponse — the same shape #27 returns —
-                            // so finalize through the shared synchronous path and inherit its
-                            // analytics, TTS gating and follow-up handling for free.
-                            _state.update { st ->
-                                st.copy(messages = st.messages.filterNot { it.id == streamId })
-                            }
-                            handleTextPromptResult(ApiResult.Success(event.response), placeholderId)
-                        }
-
-                        // Fallback terminal: remember it, let a following `metadata` win.
-                        is AgenticEvent.Done -> pendingDone = event
-
-                        // Don't discard a completed `done`: if it arrived before the failure the
-                        // answer is still finalized from it.
-                        is AgenticEvent.Failure -> finalizeStreamOrFail(event.kind)
-                    }
-                }
-                // Clean EOF with no terminal metadata: no transport error was observed.
-                finalizeStreamOrFail()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Screen left / scope cancelled: propagate, don't write a stale error card.
-                throw e
-            } catch (e: Exception) {
-                finalizeStreamOrFail(StreamErrorKind.NETWORK)
-            }
-        }
-    }
-
-    /**
-     * Strips agentic control tokens that trail the streamed text but are absent from the clean
-     * `metadata.response` — e.g. `<<commodities:chickpea>>` and a ```` ```followups ... ``` ````
-     * block. Without this the farmer sees raw control tokens appear in the answer as it types.
-     * Also cuts a still-streaming, not-yet-terminated token.
-     */
-    private fun sanitizeStreamingText(raw: String): String = sanitizeAgenticStreamText(raw)
-
-    /** Replaces the loading placeholder / prior streaming bubble with the in-progress answer. */
-    private fun updateStreamingResponse(streamId: String, text: String, status: String?) {
-        _state.update { st ->
-            val streaming = ChatMessage.AiResponse(
-                text = text,
-                followUpQuestions = emptyList(),
-                id = streamId,
-                isStreaming = true,
-                streamingStatus = status,
-                isAgentic = true
-            )
-            val idx = st.messages.indexOfFirst { it.id == streamId }
-            val updated = if (idx >= 0) {
-                st.messages.toMutableList().also { it[idx] = streaming }
-            } else {
-                val base = if (st.messages.lastOrNull() is ChatMessage.LoadingPlaceholder) {
-                    st.messages.dropLast(1)
-                } else st.messages
-                base + streaming
-            }
-            st.copy(messages = updated, isLoading = true, errorMessage = null, failedMessageId = null)
-        }
-    }
-
-    /** Settles a streamed answer that finished without a `metadata` event. */
-    private fun finalizeAgenticAnswer(
-        text: String,
-        followUps: List<String>?,
-        messageId: String?,
-        streamId: String
-    ) {
-        markFirstQueryAsked()
-        _state.update { st ->
-            val settled = ChatMessage.AiResponse(
-                text = text,
-                followUpQuestions = followUps,
-                id = streamId,
-                messageId = messageId,
-                isAgentic = true
-            )
-            val idx = st.messages.indexOfFirst { it.id == streamId }
-            val updated = if (idx >= 0) {
-                st.messages.toMutableList().also { it[idx] = settled }
-            } else {
-                st.messages.filterNot { it is ChatMessage.LoadingPlaceholder } + settled
-            }
-            st.copy(
-                messages = updated,
-                isLoading = false,
-                errorMessage = null,
-                failedMessageId = null,
-                chatResponseState = UiState.Success(text),
-                suggestedQuestions = followUps,
-                suggestedQuestionIds = null
-            )
-        }
-    }
-
-    /** Settles a stream that ended early; [text] may hold a preserved partial answer. */
-    private fun interruptAgentic(streamId: String, text: String, kind: StreamErrorKind) {
-        _state.update { st ->
-            val settled = ChatMessage.AiResponse(
-                text = text,
-                id = streamId,
-                isAgentic = true,
-                isInterrupted = true,
-                streamErrorKind = kind
-            )
-            val idx = st.messages.indexOfFirst { it.id == streamId }
-            val updated = if (idx >= 0) {
-                st.messages.toMutableList().also { it[idx] = settled }
-            } else {
-                st.messages.filterNot { it is ChatMessage.LoadingPlaceholder } + settled
-            }
-            st.copy(
-                messages = updated,
-                isLoading = false,
-                errorMessage = labelManager.getLabel(
-                    Labels.FAILED_TO_GET_RESPONSE, "Failed to get response"
-                )
-            )
         }
     }
 
@@ -970,16 +726,7 @@ class ChatViewModel(
         when (result) {
             is ApiResult.Success -> {
                 val data = result.data
-                val alignmentKind = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
-                    .fromType(data.alignments?.type)
-                // An EXCLUSIVE alignment surface arrives with an empty `response` on purpose: its
-                // prompt IS the message. Fall back to alignments.message so it is not mistaken for
-                // an empty answer and turned into an error.
-                val answerText = (data.response ?: data.translated_response ?: data.message)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: (if (alignmentKind != null && !alignmentKind.isAdditive) {
-                        data.alignments?.message.orEmpty()
-                    } else "")
+                val answerText = data.response ?: data.translated_response ?: data.message.orEmpty()
                 if (data.error || answerText.isBlank()) {
                     onAnswerError(
                         placeholderId,
@@ -997,16 +744,7 @@ class ChatViewModel(
                             ChatMessage.AiResponse(
                                 text = answerText,
                                 id = aiId,
-                                messageId = data.message_id,
-                                // 2.0.0: an alignment surface asks the user to clarify/confirm
-                                // instead of (or alongside) answering. Exclusive surfaces replace
-                                // the answer, additive ones sit below it — see AlignmentKind.
-                                alignmentKind = alignmentKind,
-                                alignmentChips = data.alignments?.chips,
-                                alignmentMessage = if (alignmentKind?.isAdditive == true) {
-                                    data.alignments?.message
-                                } else null,
-                                alignmentOriginalQuery = data.alignments?.original_query
+                                messageId = data.message_id
                             ),
                         isLoading = false,
                         errorMessage = null,

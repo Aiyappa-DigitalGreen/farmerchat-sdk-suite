@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "FarmerChat Packaged Example",
+    "slug": "farmerchat-example-packaged",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#1565C0"
+    },
+    "ios": {
+      "bundleIdentifier": "org.digitalgreen.farmerchat.packaged",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "org.digitalgreen.farmerchat.packaged"
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "FarmerChat uses the microphone so you can ask questions with your voice."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "FarmerChat uses the camera so you can ask questions about photos of your crops.",
+          "photosPermission": "FarmerChat lets you pick crop photos to ask questions about."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FarmerChat uses your location to give weather and advice for your exact area."
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}

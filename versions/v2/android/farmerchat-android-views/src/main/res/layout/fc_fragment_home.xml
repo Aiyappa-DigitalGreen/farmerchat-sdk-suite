@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_green700">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:fitsSystemWindows="true">
+
+        <include
+            android:id="@+id/fcHomeAppBar"
+            layout="@layout/fc_view_appbar" />
+
+        <!-- Greeting -->
+        <TextView
+            android:id="@+id/fcHomeGreeting"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="20dp"
+            android:textColor="@color/fc_white"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            tools:text="Tap a button to ask a question" />
+
+        <!-- Pinned Photo / Speak / Type row -->
+        <LinearLayout
+            android:id="@+id/fcHomeInputButtons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:id="@+id/fcInputPhoto"
+                style="@style/FcInputButton">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_camera" />
+                <TextView
+                    android:id="@+id/fcInputPhotoLabel"
+                    style="@style/FcInputButtonLabel"
+                    tools:text="Photo" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fcInputSpeak"
+                style="@style/FcInputButton"
+                android:layout_marginStart="6dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_mic" />
+                <TextView
+                    android:id="@+id/fcInputSpeakLabel"
+                    style="@style/FcInputButtonLabel"
+                    tools:text="Speak" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fcInputType"
+                style="@style/FcInputButton"
+                android:layout_marginStart="6dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_keyboard" />
+                <TextView
+                    android:id="@+id/fcInputTypeLabel"
+                    style="@style/FcInputButtonLabel"
+                    tools:text="Type" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Feed -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/fcHomeFeed"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="24dp" />
+
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LogoSpinnerView
+                android:id="@+id/fcHomeLoading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/fcHomeError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="24dp"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/fc_bg_circle_error">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_ic_close"
+                        app:tint="@color/fc_white" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/fcHomeErrorTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:gravity="center"
+                    android:textColor="@color/fc_white"
+                    android:textSize="19sp"
+                    tools:text="Can't load right now" />
+
+                <TextView
+                    android:id="@+id/fcHomeErrorRetry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="24dp"
+                    android:background="@drawable/fc_bg_retry_button"
+                    android:drawablePadding="8dp"
+                    android:gravity="center"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:textColor="@color/fc_foreground_primary"
+                    android:textSize="17sp"
+                    tools:text="Try again" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Overlays -->
+    <include
+        android:id="@+id/fcHomeOverlays"
+        layout="@layout/fc_view_input_overlays" />
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+        android:id="@+id/fcHomeToast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone" />
+</FrameLayout>

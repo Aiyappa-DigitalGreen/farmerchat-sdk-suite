@@ -31,13 +31,6 @@ object ApiConstants {
     const val NEW_CONVERSATION = "api/chat/new_conversation/"
     const val TRANSCRIBE_AUDIO = "api/chat/transcribe_audio/"
     const val GET_TEXT_PROMPT = "api/chat/get_answer_for_text_query/"
-
-    /**
-     * #27a — agentic streaming answer (SDK 2.0.0, opt-in via
-     * [FarmerChatConfig.enableAgenticChat]). Returns `text/event-stream`; see
-     * [org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource].
-     */
-    const val GET_TEXT_PROMPT_AGENTIC = "api/chat/get_answer_for_text_query_agentic/"
     const val GET_PLANTIX = "api/chat/image_analysis/"
     const val GET_FOLLOW_UP_QUESTIONS = "api/chat/follow_up_questions/"
     const val POST_TRACK_FOLLOW_UP_QUESTIONS = "api/chat/follow_up_question_click/"

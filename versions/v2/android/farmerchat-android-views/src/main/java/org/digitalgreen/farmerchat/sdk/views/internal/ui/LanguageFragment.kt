@@ -1,0 +1,190 @@
+package org.digitalgreen.farmerchat.sdk.views.internal.ui
+
+import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
+import android.view.View
+import androidx.core.view.isVisible
+import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.LinearLayoutManager
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.base.UiState
+import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.core.model.GeoRequestBody
+import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingAction
+import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingSharedViewModel
+import org.digitalgreen.farmerchat.sdk.views.R
+import org.digitalgreen.farmerchat.sdk.views.databinding.FcFragmentLanguageBinding
+import org.digitalgreen.farmerchat.sdk.views.internal.BaseFragment
+import org.digitalgreen.farmerchat.sdk.views.internal.NavRoutes
+import org.digitalgreen.farmerchat.sdk.views.internal.activityCoreVm
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+
+/**
+ * Language onboarding (doc 01 §3.2): geo → guest init → languages list,
+ * per-row label fetch, legal links, "Start using FarmerChat".
+ */
+internal class LanguageFragment : BaseFragment(R.layout.fc_fragment_language) {
+
+    override val analyticsScreenName: String = AnalyticsScreens.LANGUAGE
+
+    // Shared between Splash and Language in the app (OnboardingSharedViewModel).
+    private val vm: OnboardingSharedViewModel by lazy {
+        activityCoreVm("onboarding") { graph.onboardingViewModel() }
+    }
+
+    private lateinit var binding: FcFragmentLanguageBinding
+    private lateinit var adapter: LanguageListAdapter
+    private var navigatedOnSuccess = false
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        binding = FcFragmentLanguageBinding.bind(view)
+
+        adapter = LanguageListAdapter(showHeader = true) { language ->
+            vm.onAction(OnboardingAction.SelectLanguage(language.id))
+        }
+        binding.fcLanguageList.layoutManager = LinearLayoutManager(requireContext())
+        binding.fcLanguageList.adapter = adapter
+
+        binding.fcLanguageStartButton.setOnClickListener {
+            vm.onAction(OnboardingAction.AcceptTerms)
+            vm.onAction(OnboardingAction.GetStartedClicked)
+        }
+
+        if (!graph.prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)) {
+            // ResetState only when re-entering before completion (app parity).
+            if (vm.state.value.languageSubmitSuccess) {
+                vm.onAction(OnboardingAction.ResetState)
+            }
+        }
+        vm.onAction(OnboardingAction.FetchGeoLocation(GeoRequestBody(), fromScreen = "language"))
+        vm.onAction(OnboardingAction.FetchLegalLinks)
+
+        vm.state.collectWhenStarted { state ->
+            renderTexts()
+
+            val languagesLoaded = state.languageState is UiState.Success
+            binding.fcLanguageLoading.isVisible = !languagesLoaded
+            binding.fcLanguageContent.isVisible = languagesLoaded
+            if (!languagesLoaded) {
+                binding.fcLanguageLoading.text = when (state.languageState) {
+                    is UiState.Loading -> label(Labels.LOADING_LANGUAGES, "Loading languages...")
+                    else -> label(Labels.FARMERCHAT_STARTING, "FarmerChat is Starting...")
+                }
+            }
+
+            (state.languageState as? UiState.Success)?.let { success ->
+                adapter.submit(
+                    priorityLanguages = success.data,
+                    expandedLanguages = state.expandedLanguages,
+                    selectedLanguageId = state.selectedLanguageId,
+                    fetchingLabelsForId = state.fetchingLabelsForId
+                )
+            }
+
+            binding.fcLanguageStartButton.state = when {
+                state.isSubmittingLanguage -> PrimaryButtonView.State.LOADING
+                else -> PrimaryButtonView.State.CHEVRON
+            }
+            binding.fcLanguageStartButton.text = if (state.isSubmittingLanguage) {
+                label(Labels.SETTING_LANGUAGE, "Setting language")
+            } else {
+                label(Labels.START_USING_FARMERCHAT, "Start using FarmerChat")
+            }
+            binding.fcLanguageStartButton.setButtonEnabled(
+                state.selectedLanguageId != null && !state.isFetchingLabels
+            )
+
+            renderLegal(state.termsOfUseUrl, state.privacyPolicyUrl)
+
+            if (state.languageSubmitSuccess && !navigatedOnSuccess) {
+                navigatedOnSuccess = true
+                vm.onAction(OnboardingAction.ConsumeLanguageResult)
+                NavRoutes.navigateFromSplash(findNavController(), graph.routeDecider.routeFromSplash())
+            }
+
+            if (state.shouldNavigateToError) {
+                vm.onAction(OnboardingAction.ConsumeErrorNavigation)
+                findNavController().navigate(
+                    R.id.fc_dest_error,
+                    NavRoutes.errorArgs(state.errorIsNetworkError, state.errorFromScreen),
+                    NavRoutes.singleTop()
+                )
+            }
+        }
+    }
+
+    private fun renderTexts() {
+        adapter.headerTitle = label(Labels.CHOOSE_YOUR_LANGUAGE, "Choose your language")
+        adapter.headerSubtitle = label(Labels.YOU_CHANGE_LATER, "You can change this later")
+        adapter.expanderLabel = label(Labels.ALL_LANGUAGES, "All languages")
+        binding.fcLanguageTagline.text = label(
+            Labels.FARMERCHAT_TAGLINE,
+            "Practical advice for your crops and animals"
+        )
+    }
+
+    /** Two centered lines: prefix + underlined "Terms of use · Privacy policy". */
+    private fun renderLegal(termsUrl: String?, privacyUrl: String?) {
+        binding.fcLanguageLegal.text =
+            label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing you agree to our")
+
+        val terms = label(Labels.TERMS_OF_USE, "Terms of use")
+        val privacy = label(Labels.PRIVACY_POLICY, "Privacy policy")
+
+        val builder = SpannableStringBuilder()
+        appendLink(builder, terms, termsUrl) { url ->
+            graph.analytics.track(AnalyticsEvents.TERMS_OF_USE_OPENED)
+            openLegal(url, terms)
+        }
+        builder.append(" · ")
+        appendLink(builder, privacy, privacyUrl) { url ->
+            graph.analytics.track(AnalyticsEvents.PRIVACY_POLICY_OPENED)
+            openLegal(url, privacy)
+        }
+        binding.fcLanguageLegalLinks.text = builder
+        binding.fcLanguageLegalLinks.movementMethod = LinkMovementMethod.getInstance()
+    }
+
+    private fun appendLink(
+        builder: SpannableStringBuilder,
+        text: String,
+        url: String?,
+        onClick: (String) -> Unit
+    ) {
+        val start = builder.length
+        builder.append(text)
+        builder.setSpan(
+            android.text.style.UnderlineSpan(),
+            start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        if (!url.isNullOrBlank()) {
+            builder.setSpan(
+                object : ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        onClick(url)
+                    }
+
+                    override fun updateDrawState(ds: android.text.TextPaint) {
+                        ds.isUnderlineText = true
+                        // Keep the foreground color (no link blue).
+                    }
+                },
+                start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+    }
+
+    private fun openLegal(url: String, title: String) {
+        findNavController().navigate(
+            R.id.fc_dest_legal_content,
+            NavRoutes.legalArgs(url, title),
+            NavRoutes.singleTop()
+        )
+    }
+}

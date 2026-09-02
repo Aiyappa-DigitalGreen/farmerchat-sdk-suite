@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_green700"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <include
+        android:id="@+id/fcHelpAppBar"
+        layout="@layout/fc_view_appbar" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/fc_surface_primary">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:id="@+id/fcHelpFaqTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:text="How to use FarmerChat" />
+
+            <LinearLayout
+                android:id="@+id/fcHelpFaqCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/fc_bg_card_md"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/fcHelpMoreTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                tools:text="More" />
+
+            <LinearLayout
+                android:id="@+id/fcHelpMoreCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/fc_bg_card_md"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/fcHelpVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:gravity="center"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="13sp"
+                tools:text="FarmerChat v1.0.0" />
+
+            <TextView
+                android:id="@+id/fcHelpCopyright"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textColor="@color/fc_foreground_tertiary"
+                android:textSize="12sp"
+                tools:text="© Digital Green" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

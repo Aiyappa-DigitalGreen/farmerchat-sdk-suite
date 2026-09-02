@@ -108,17 +108,6 @@ class FarmerChatConfig private constructor(
     val enableVoice: Boolean,
     val enableImages: Boolean,
     val enableWeather: Boolean,
-    /**
-     * Opt in to agentic streaming chat (SDK 2.0.0, endpoint #27a).
-     *
-     * Default **false**: on 2.0.0 artifacts a host that does nothing keeps the 1.0.0 synchronous
-     * chat contract (#27) unchanged. When true, text queries stream — the answer accretes from
-     * `text_delta` events and tool progress is surfaced as it happens.
-     *
-     * See versions/v2/README.md. Note the wire framing is not yet confirmed against a real
-     * stream (docs/05-open-questions.md), so treat this as preview until it is.
-     */
-    val enableAgenticChat: Boolean,
     /** Analytics fan-out callback (same payloads as [FarmerChatAnalyticsListener]). */
     val onEvent: ((name: String, props: Map<String, Any?>) -> Unit)?,
     /** Invoked when both token refresh and the guest-token fallback fail (session unrecoverable). */
@@ -239,7 +228,6 @@ class FarmerChatConfig private constructor(
         private var enableVoice: Boolean = true
         private var enableImages: Boolean = true
         private var enableWeather: Boolean = true
-        private var enableAgenticChat: Boolean = false
         private var onEvent: ((String, Map<String, Any?>) -> Unit)? = null
         private var onSessionExpired: (() -> Unit)? = null
         private var debugLogging: Boolean = false
@@ -295,8 +283,6 @@ class FarmerChatConfig private constructor(
         fun enableVoice(enabled: Boolean) = apply { enableVoice = enabled }
         fun enableImages(enabled: Boolean) = apply { enableImages = enabled }
         fun enableWeather(enabled: Boolean) = apply { enableWeather = enabled }
-        /** Opt in to agentic streaming chat (2.0.0, endpoint #27a). Default false. */
-        fun enableAgenticChat(enabled: Boolean) = apply { enableAgenticChat = enabled }
         fun onEvent(callback: ((String, Map<String, Any?>) -> Unit)?) = apply { onEvent = callback }
         fun onSessionExpired(callback: (() -> Unit)?) = apply { onSessionExpired = callback }
         fun debugLogging(enabled: Boolean) = apply { debugLogging = enabled }
@@ -361,7 +347,6 @@ class FarmerChatConfig private constructor(
             enableVoice = enableVoice,
             enableImages = enableImages,
             enableWeather = enableWeather,
-            enableAgenticChat = enableAgenticChat,
             onEvent = onEvent,
             onSessionExpired = onSessionExpired,
             debugLogging = debugLogging,

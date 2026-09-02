@@ -1,0 +1,279 @@
+package org.digitalgreen.farmerchat.sdk.core.ui.home
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
+import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
+import org.digitalgreen.farmerchat.sdk.core.base.UiState
+import org.digitalgreen.farmerchat.sdk.core.base.toUiError
+import org.digitalgreen.farmerchat.sdk.core.model.HomeUdfResponse
+import org.digitalgreen.farmerchat.sdk.core.model.ImageStatementRequest
+import org.digitalgreen.farmerchat.sdk.core.model.ImageViewedRequest
+import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
+import org.digitalgreen.farmerchat.sdk.core.model.SetCultivatedCropsRequest
+import org.digitalgreen.farmerchat.sdk.core.model.SetVoiceRequest
+import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
+import org.digitalgreen.farmerchat.sdk.core.usecase.ChatUseCase
+import org.digitalgreen.farmerchat.sdk.core.usecase.GetUserProfileUseCase
+import org.digitalgreen.farmerchat.sdk.core.usecase.HomeUseCase
+
+/**
+ * Home (dashboard) state machine. Port of the app's HomeViewModel over
+ * HomeAction/HomeState. Feed errors stay in-state (HomeFeedErrorUI renders them
+ * in place); weather/card errors are non-blocking.
+ */
+class HomeViewModel(
+    private val homeUseCase: HomeUseCase,
+    private val chatUseCase: ChatUseCase,
+    private val getUserProfileUseCase: GetUserProfileUseCase,
+    private val prefs: SdkPreferences,
+    private val analytics: FarmerChatAnalytics
+) : CoreViewModel() {
+
+    private val _state = MutableStateFlow(HomeState())
+    val state: StateFlow<HomeState> = _state
+
+    fun onAction(action: HomeAction) {
+        when (action) {
+            is HomeAction.LoadHome -> loadHome(action)
+            is HomeAction.LoadWeather -> loadWeather(action)
+            is HomeAction.FetchUserProfile -> fetchUserProfile(action.userId)
+            is HomeAction.UpdateCultivatedCrops -> updateCultivatedCrops(action)
+            is HomeAction.NewConversation -> newConversation(action)
+            is HomeAction.TranscribeAudio -> transcribeAudio(action)
+            is HomeAction.MarkImageViewed -> markImageViewed(action)
+            is HomeAction.FetchImageStatement -> fetchImageStatement(action)
+            is HomeAction.ClearTranscriptionState ->
+                _state.update { it.copy(voiceTranscribeState = UiState.Idle) }
+            is HomeAction.ConsumeResult ->
+                _state.update {
+                    it.copy(
+                        cropUpdateState = UiState.Idle,
+                        imageStatementState = UiState.Idle
+                    )
+                }
+            is HomeAction.SetLoadingState ->
+                _state.update { it.copy(homeFeedState = UiState.Loading) }
+        }
+    }
+
+    fun dismissCard(sectionId: String) {
+        _state.update { it.copy(dismissedCardIds = it.dismissedCardIds + sectionId) }
+    }
+
+    // ------------------------------------------------------------------ feed
+
+    private fun loadHome(action: HomeAction.LoadHome) {
+        if (!action.skipLoadingCheck && _state.value.homeFeedState is UiState.Loading) return
+        _state.update { it.copy(homeFeedState = UiState.Loading) }
+        scope.launch {
+            homeUseCase.getDailyHomeSections(action.userDeviceTime, action.userId)
+                .collect { result ->
+                    when (result) {
+                        is ApiResult.Success -> {
+                            _state.update { it.copy(homeFeedState = UiState.Success(result.data)) }
+                            analytics.track(AnalyticsEvents.DASHBOARD_VIEWED)
+                            if (!prefs.getBoolean(SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, false)) {
+                                prefs.putBoolean(SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, true)
+                                analytics.track(AnalyticsEvents.FIRST_TIME_DASHBOARD_VIEWED)
+                            }
+                        }
+                        is ApiResult.Error -> {
+                            // 204 → empty feed is delivered by Retrofit as a null-body success;
+                            // executeApiCall treats null body as an error, so surface an empty
+                            // feed for 204s and a real error otherwise.
+                            if (result.code == 204) {
+                                _state.update {
+                                    it.copy(
+                                        homeFeedState = UiState.Success(
+                                            HomeUdfResponse(greeting = null, sections = emptyList())
+                                        )
+                                    )
+                                }
+                            } else {
+                                _state.update { it.copy(homeFeedState = result.toUiError()) }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun loadWeather(action: HomeAction.LoadWeather) {
+        if (!action.skipLoadingCheck && _state.value.weatherState is UiState.Loading) return
+        _state.update { it.copy(weatherState = UiState.Loading) }
+        scope.launch {
+            homeUseCase.getWeatherForecast(action.userId).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        _state.update { it.copy(weatherState = UiState.Success(result.data)) }
+                    }
+                    is ApiResult.Error -> {
+                        // Weather chip failures are silent (chip just hides).
+                        _state.update { it.copy(weatherState = result.toUiError()) }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ profile / crops
+
+    private fun fetchUserProfile(userId: String) {
+        if (userId.isBlank()) return
+        scope.launch {
+            getUserProfileUseCase.fetchUserProfile(userId).collect { result ->
+                if (result is ApiResult.Success) {
+                    val name = result.data.userProfile.displayName()
+                    if (name.isNotBlank()) {
+                        prefs.putString(SdkPreferences.Keys.USER_NAME, name)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateCultivatedCrops(action: HomeAction.UpdateCultivatedCrops) {
+        _state.update { it.copy(cropUpdateState = UiState.Loading) }
+        scope.launch {
+            homeUseCase.updateCultivatedCrops(
+                SetCultivatedCropsRequest(user_id = action.userId, crop_details = action.cropIds)
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        analytics.track(
+                            AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
+                            mapOf(
+                                AnalyticsProps.CARD_TYPE to "crop",
+                                AnalyticsProps.VALUE to action.cropIds.joinToString(",")
+                            )
+                        )
+                        _state.update { it.copy(cropUpdateState = UiState.Success(result.data)) }
+                    }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(cropUpdateState = result.toUiError()) }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ conversation / voice
+
+    private fun newConversation(action: HomeAction.NewConversation) {
+        _state.update { it.copy(newConversationState = UiState.Loading) }
+        scope.launch {
+            chatUseCase.newConversation(
+                NewConversationRequest(
+                    user_id = action.userId,
+                    content_provider_id = action.contentProviderId
+                )
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        prefs.putString(
+                            SdkPreferences.Keys.NEW_CONVERSATION_ID,
+                            result.data.conversation_id
+                        )
+                        _state.update { it.copy(newConversationState = UiState.Success(result.data)) }
+                    }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(newConversationState = result.toUiError()) }
+                }
+            }
+        }
+    }
+
+    private fun transcribeAudio(action: HomeAction.TranscribeAudio) {
+        _state.update { it.copy(voiceTranscribeState = UiState.Loading) }
+        scope.launch {
+            chatUseCase.transcribeAudio(
+                SetVoiceRequest(
+                    conversation_id = action.conversationId,
+                    query = action.query,
+                    message_reference_id = action.messageReferenceId,
+                    input_audio_encoding_format = action.audioFormat,
+                    triggered_input_type = action.triggeredType
+                )
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        val data = result.data
+                        val accepted = !data.error &&
+                            (data.confidence_score ?: 0.0) > 0.7 &&
+                            !data.heard_input_query.isNullOrBlank()
+                        analytics.track(
+                            if (accepted) AnalyticsEvents.TRANSCRIPTION_SUCCESS
+                            else AnalyticsEvents.TRANSCRIPTION_FAILED,
+                            mapOf(
+                                AnalyticsProps.CONFIDENCE_SCORE to (data.confidence_score ?: 0.0),
+                                AnalyticsProps.AUDIO_FORMAT to action.audioFormat
+                            )
+                        )
+                        _state.update { it.copy(voiceTranscribeState = UiState.Success(data)) }
+                    }
+                    is ApiResult.Error -> {
+                        analytics.track(
+                            AnalyticsEvents.TRANSCRIPTION_FAILED,
+                            mapOf(AnalyticsProps.CONFIDENCE_SCORE to "N/A")
+                        )
+                        _state.update { it.copy(voiceTranscribeState = result.toUiError()) }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ cards
+
+    private fun markImageViewed(action: HomeAction.MarkImageViewed) {
+        scope.launch {
+            homeUseCase.markImageViewed(
+                ImageViewedRequest(statement_id = action.statementId, user_id = action.userId)
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        analytics.track(
+                            AnalyticsEvents.CARD_VIEWED,
+                            mapOf(AnalyticsProps.SENTENCE_ID to action.statementId)
+                        )
+                        _state.update { it.copy(imageViewedState = UiState.Success(result.data)) }
+                    }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(imageViewedState = result.toUiError()) }
+                }
+            }
+        }
+    }
+
+    private fun fetchImageStatement(action: HomeAction.FetchImageStatement) {
+        _state.update { it.copy(imageStatementState = UiState.Loading) }
+        scope.launch {
+            homeUseCase.getImageStatement(
+                ImageStatementRequest(
+                    statement_id = action.statementId,
+                    triggered_input_type = action.triggered_input_type
+                )
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success -> {
+                        result.data.conversation_id?.let {
+                            prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, it)
+                        }
+                        _state.update { it.copy(imageStatementState = UiState.Success(result.data)) }
+                    }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(imageStatementState = result.toUiError()) }
+                }
+            }
+        }
+    }
+}
+
+/** Acceptance rule for a server transcription (doc 02): !error && confidence > 0.7 && text not blank. */
+fun org.digitalgreen.farmerchat.sdk.core.model.GetVoiceResponse.isAcceptedTranscription(): Boolean =
+    !error && (confidence_score ?: 0.0) > 0.7 && !heard_input_query.isNullOrBlank()

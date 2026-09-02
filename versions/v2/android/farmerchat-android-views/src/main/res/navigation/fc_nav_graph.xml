@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/fc_nav_graph"
+    app:startDestination="@id/fc_dest_splash">
+
+    <fragment
+        android:id="@+id/fc_dest_splash"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.SplashFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_language"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.LanguageFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_name"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.EnterNameFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_home"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.HomeFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_chat"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.ChatFragment">
+        <argument android:name="source" app:argType="string" android:defaultValue="home" />
+        <argument android:name="question" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="conversationId" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="imageUri" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="transcriptionId" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="audioUri" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="statementId" app:argType="integer" android:defaultValue="-1" />
+        <argument android:name="homeStatementId" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="preGeneratedAnswer" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="followUpQuestions" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="isWeatherAdviceCTA" app:argType="boolean" android:defaultValue="false" />
+        <argument android:name="isSSFR" app:argType="boolean" android:defaultValue="false" />
+        <argument android:name="ssfrCrop" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+        <argument android:name="channel" app:argType="string" app:nullable="true" android:defaultValue="@null" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/fc_dest_settings"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.SettingsFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_settings_name"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.SettingsNameFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_help"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.HelpFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_settings_language"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.LanguageChooserFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_chat_history"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.ChatHistoryFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_error"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.ErrorFragment">
+        <argument android:name="isNetworkError" app:argType="boolean" android:defaultValue="true" />
+        <argument android:name="fromScreen" app:argType="string" android:defaultValue="" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/fc_dest_account_benefits"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.AccountBenefitsFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_auth"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.AuthFragment" />
+
+    <fragment
+        android:id="@+id/fc_dest_account_success"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.AccountSuccessFragment" />
+
+    <dialog
+        android:id="@+id/fc_dest_legal_content"
+        android:name="org.digitalgreen.farmerchat.sdk.views.internal.ui.LegalContentDialogFragment">
+        <argument android:name="url" app:argType="string" />
+        <argument android:name="title" app:argType="string" />
+    </dialog>
+</navigation>

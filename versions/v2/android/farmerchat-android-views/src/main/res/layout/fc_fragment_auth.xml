@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_surface_primary"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp">
+
+        <ImageButton
+            android:id="@+id/fcAuthClose"
+            style="@style/FcAppBarIcon"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/fc_ic_close"
+            app:tint="@color/fc_foreground_primary" />
+
+        <TextView
+            android:id="@+id/fcAuthTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            tools:text="Sign up" />
+    </FrameLayout>
+
+    <ViewFlipper
+        android:id="@+id/fcAuthFlipper"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Step 1: phone entry -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/fcPhoneTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/fc_foreground_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    tools:text="Enter your phone number" />
+
+                <TextView
+                    android:id="@+id/fcPhoneSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="15sp"
+                    tools:text="We'll send a one-time code to sign you in" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:id="@+id/fcCountrySelector"
+                        android:layout_width="wrap_content"
+                        android:layout_height="56dp"
+                        android:background="@drawable/fc_bg_input_field"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="8dp">
+
+                        <ImageView
+                            android:id="@+id/fcCountryFlag"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/fc_flag_india" />
+
+                        <TextView
+                            android:id="@+id/fcCountryCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:textColor="@color/fc_foreground_primary"
+                            android:textSize="16sp"
+                            tools:text="+91" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/fc_icon_arrow_down"
+                            app:tint="@color/fc_foreground_secondary" />
+
+                        <ProgressBar
+                            android:id="@+id/fcCountryLoading"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_marginStart="4dp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <EditText
+                        android:id="@+id/fcPhoneInput"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/fc_bg_input_field"
+                        android:inputType="phone"
+                        android:maxLines="1"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textColorHint="@color/fc_foreground_tertiary"
+                        android:textSize="16sp"
+                        android:importantForAutofill="no"
+                        tools:hint="Enter phone number" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/fcPhoneError"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/fc_error"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    tools:text="Please enter a valid number..." />
+
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+                    android:id="@+id/fcWhatsappButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp" />
+
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+                    android:id="@+id/fcSmsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" />
+
+                <TextView
+                    android:id="@+id/fcAuthLegal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="12sp"
+                    tools:text="By Continuing to Verification, you're accepting our Terms of Use. Please also see our Privacy Policy." />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Step 2: OTP entry -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/fcOtpTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/fc_foreground_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    tools:text="Enter the code we sent" />
+
+                <TextView
+                    android:id="@+id/fcOtpSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="15sp"
+                    tools:text="Check your messages for the code" />
+
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.OtpView
+                    android:id="@+id/fcOtpView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp" />
+
+                <TextView
+                    android:id="@+id/fcOtpError"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/fc_error"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    tools:text="Please enter a valid OTP" />
+
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+                    android:id="@+id/fcVerifyButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp" />
+
+                <TextView
+                    android:id="@+id/fcOtpTimer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:drawableStart="@drawable/fc_icon_timer"
+                    android:drawablePadding="8dp"
+                    android:drawableTint="@color/fc_foreground_secondary"
+                    android:gravity="center_vertical"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="14sp"
+                    tools:text="180 seconds" />
+
+                <LinearLayout
+                    android:id="@+id/fcOtpResendRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/fcResendButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/fc_bg_secondary_button"
+                        android:gravity="center"
+                        android:padding="14dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="16sp"
+                        tools:text="Resend code" />
+
+                    <TextView
+                        android:id="@+id/fcStartOverButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center"
+                        android:padding="14dp"
+                        android:textColor="@color/fc_green700"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        tools:text="Start over" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </ViewFlipper>
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+        android:id="@+id/fcAuthToast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+</LinearLayout>

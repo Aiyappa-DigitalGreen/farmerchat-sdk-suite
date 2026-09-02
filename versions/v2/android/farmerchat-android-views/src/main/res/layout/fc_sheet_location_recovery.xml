@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/fc_bg_rounded_top"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/fcRecoveryTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="36dp"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            tools:text="We need your location" />
+
+        <ImageButton
+            android:id="@+id/fcRecoveryClose"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="end|top"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@null"
+            android:src="@drawable/fc_ic_close"
+            app:tint="@color/fc_foreground_secondary" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/fcRecoverySubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/fc_foreground_secondary"
+        android:textSize="15sp"
+        tools:text="Sharing your location helps FarmerChat tailor advice to your farm." />
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+        android:id="@+id/fcRecoveryButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp" />
+</LinearLayout>

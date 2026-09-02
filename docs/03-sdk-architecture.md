@@ -91,18 +91,23 @@ Green brand surface (`#146152`-family as in app theme), reading surface for chat
 
 ## Versioning (added 2026-09-02)
 
-The suite is **one codebase, multiple published versions** — there is no per-version source tree.
-`android/`, `ios/`, `react-native/` and `web/` are the only implementations; a version is a
-release of them.
+Each version is a **complete, self-contained SDK** — all four platforms, buildable and publishable
+independently:
 
-| Version | Chat transport |
-|---|---|
-| 1.0.0 | Synchronous JSON — endpoint #27 |
-| 2.0.0 | Agentic SSE streaming — endpoint #27a, behind a config flag |
+```
+android/  ios/  react-native/  web/          v1.0.0  synchronous chat (endpoint #27)
+versions/v2/android/  ios/  react-native/  web/   v2.0.0  agentic streaming (#27a)
+```
 
-Agentic chat is **opt-in**. A host that does not enable it keeps 1.0.0 behaviour on 2.0.0
-artifacts, so the two differ by configuration rather than by code fork. Hosts on 1.0.0 continue to
-receive patch releases, because fixes live in the same code.
+| Version | Chat transport | App source of truth |
+|---|---|---|
+| 1.0.0 | Synchronous JSON, #27 | `fc-compose` @ `9f5e4ca` (v4.0.3) |
+| 2.0.0 | Agentic SSE streaming, #27a | `fc-compose-agentic` @ `c0524dd6` (v4.1.2) |
 
-Rationale and the rejected alternatives are in `versions/README.md`; the v2 delta is in
-`versions/v2/README.md`.
+Both publish to the same group at different versions, so a host selects one with an ordinary
+dependency coordinate and gets that version's whole flow.
+
+**Trade-off, recorded deliberately:** the trees are independent copies, so a fix in one does not
+reach the other and must be applied twice. This was chosen over a shared codebase with a feature
+flag so that a host on 1.0.0 can never be affected by v2 work. `versions/README.md` carries the
+detail; `docs/04-parity-matrix.md` is the ledger for both.

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand primitives (Compose theme/Color.kt parity) -->
+    <color name="fc_green500">#00C950</color>
+    <color name="fc_green700">#008236</color>
+    <color name="fc_green800">#08361B</color>
+    <color name="fc_green950">#032E15</color>
+    <color name="fc_red500">#E5533D</color>
+    <color name="fc_sun300">#F9FF47</color>
+    <color name="fc_green500_16">#2900C950</color>
+
+    <!-- Zinc neutral ramp -->
+    <color name="fc_zinc50">#FAFAFA</color>
+    <color name="fc_zinc100">#F4F4F5</color>
+    <color name="fc_zinc150">#ECECEE</color>
+    <color name="fc_zinc200">#E4E4E7</color>
+    <color name="fc_zinc300">#D4D4D8</color>
+    <color name="fc_zinc400">#9F9FA9</color>
+    <color name="fc_zinc500">#71717B</color>
+    <color name="fc_zinc600">#52525C</color>
+    <color name="fc_zinc700">#3F3F46</color>
+    <color name="fc_zinc800">#27272A</color>
+    <color name="fc_zinc900">#18181B</color>
+    <color name="fc_zinc950">#09090B</color>
+
+    <color name="fc_white">#FFFFFF</color>
+    <color name="fc_black">#000000</color>
+
+    <!-- Content semantic (LightContentColors) -->
+    <color name="fc_surface_primary">#ECECEE</color>
+    <color name="fc_surface_secondary">#FFFFFF</color>
+    <color name="fc_surface_tertiary">#E4E4E7</color>
+    <color name="fc_surface_active">#2900C950</color>
+    <color name="fc_surface_reading">#FFFFFF</color>
+    <color name="fc_surface_reading_secondary">#ECECEE</color>
+    <color name="fc_foreground_primary">#000000</color>
+    <color name="fc_foreground_secondary">#52525C</color>
+    <color name="fc_foreground_tertiary">#D4D4D8</color>
+    <color name="fc_border_default">#D4D4D8</color>
+    <color name="fc_border_active">#00C950</color>
+    <color name="fc_form_placeholder">#71717B</color>
+    <color name="fc_divider">#E4E4E7</color>
+    <color name="fc_skeleton">#E4E4E7</color>
+    <color name="fc_input_background">#FFFFFF</color>
+    <color name="fc_button_primary_surface">#08361B</color>
+
+    <!-- Brand semantic (same in both modes) -->
+    <color name="fc_brand_surface">#008236</color>
+    <color name="fc_brand_surface_secondary">#08361B</color>
+    <color name="fc_brand_button_surface">#08361B</color>
+    <color name="fc_brand_deep">#032E15</color>
+    <color name="fc_accent">#00C950</color>
+    <color name="fc_error">#E5533D</color>
+    <color name="fc_on_brand">#FFFFFF</color>
+
+    <color name="fc_scrim">#80000000</color>
+</resources>

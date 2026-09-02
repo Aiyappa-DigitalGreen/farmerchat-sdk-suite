@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FarmerChatSdk" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/fc_green700</item>
+        <item name="colorOnPrimary">@color/fc_white</item>
+        <item name="colorPrimaryContainer">@color/fc_green800</item>
+        <item name="colorOnPrimaryContainer">@color/fc_white</item>
+        <item name="colorSecondary">@color/fc_green500</item>
+        <item name="colorOnSecondary">@color/fc_green950</item>
+        <item name="colorError">@color/fc_red500</item>
+        <item name="android:colorBackground">@color/fc_surface_primary</item>
+        <item name="colorSurface">@color/fc_surface_secondary</item>
+        <item name="colorOnSurface">@color/fc_foreground_primary</item>
+        <item name="android:windowBackground">@color/fc_surface_primary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.FarmerChatSdk.LegalDialog" parent="ThemeOverlay.Material3.Dialog">
+        <item name="android:windowMinWidthMajor">100%</item>
+        <item name="android:windowMinWidthMinor">100%</item>
+        <item name="android:windowBackground">@color/fc_surface_secondary</item>
+    </style>
+</resources>

@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/fcOverlayRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone">
+
+    <View
+        android:id="@+id/fcOverlayScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/fc_scrim" />
+
+    <!-- Text input bar -->
+    <LinearLayout
+        android:id="@+id/fcTextInputPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/fc_bg_rounded_top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <EditText
+            android:id="@+id/fcTextInputField"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/fc_bg_input_field"
+            android:inputType="textCapSentences|textMultiLine"
+            android:maxLines="4"
+            android:minHeight="48dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:textColor="@color/fc_foreground_primary"
+            android:textColorHint="@color/fc_foreground_tertiary"
+            android:textSize="16sp"
+            android:importantForAutofill="no"
+            tools:hint="Ask about your farm..." />
+
+        <ImageButton
+            android:id="@+id/fcTextInputSend"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/fc_bg_circle_brand"
+            android:contentDescription="@null"
+            android:src="@drawable/fc_icon_send"
+            app:tint="@color/fc_white" />
+    </LinearLayout>
+
+    <!-- Voice input panel -->
+    <LinearLayout
+        android:id="@+id/fcVoicePanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/fc_bg_rounded_top"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/fcVoiceStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            tools:text="Speak now" />
+
+        <TextView
+            android:id="@+id/fcVoiceHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/fc_foreground_secondary"
+            android:textSize="13sp"
+            tools:text="Keep background noise low" />
+
+        <TextView
+            android:id="@+id/fcVoiceTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/fc_green700"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            tools:text="0:07" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/fcVoiceCancel"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/fc_bg_circle_surface"
+                android:contentDescription="@null"
+                android:src="@drawable/fc_ic_close"
+                app:tint="@color/fc_foreground_primary" />
+
+            <ImageButton
+                android:id="@+id/fcVoiceMain"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:background="@drawable/fc_bg_circle_brand"
+                android:contentDescription="@null"
+                android:src="@drawable/fc_ic_stop"
+                app:tint="@color/fc_white" />
+
+            <ProgressBar
+                android:id="@+id/fcVoiceProcessing"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:visibility="invisible" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Photo input panel -->
+    <LinearLayout
+        android:id="@+id/fcPhotoPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/fc_bg_rounded_top"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/fcPhotoTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            tools:text="Photos" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/fcPhotoCamera"
+                style="@style/FcInputButton">
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_camera" />
+                <TextView
+                    android:id="@+id/fcPhotoCameraLabel"
+                    style="@style/FcInputButtonLabel"
+                    tools:text="Camera" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fcPhotoGallery"
+                style="@style/FcInputButton"
+                android:layout_marginStart="8dp">
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_card" />
+                <TextView
+                    android:id="@+id/fcPhotoGalleryLabel"
+                    style="@style/FcInputButtonLabel"
+                    tools:text="Gallery" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

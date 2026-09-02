@@ -51,15 +51,7 @@ data class TextPromptResponse(
     @SerializedName("hide_tts_speaker") val hide_tts_speaker: Boolean? = null,
     @SerializedName("hide_source") val hide_source: Boolean? = null,
     @SerializedName("points") val points: Int?,
-    @SerializedName("intent_classification_output") val intent_classification_output: IntentClassificationOutput? = null,
-    /**
-     * Server-driven alignment surface (clarify / confirm / escalate) — **2.0.0**. Present when the
-     * backend needs the user to disambiguate, confirm, or respond to an urgent situation instead
-     * of (or before) giving a normal answer. In that case [response] is typically empty and this
-     * carries the prompt message plus quick-reply chips. Null for a normal answer.
-     */
-    @SerializedName("alignments")
-    val alignments: Alignment? = null
+    @SerializedName("intent_classification_output") val intent_classification_output: IntentClassificationOutput? = null
 ) : Serializable
 
 data class IntentClassificationOutput(
@@ -252,90 +244,3 @@ data class followUpQuestionsResponseMoengage(
     val video_resources: List<videoResourcesRespopnseMoengage>,
     val error: Boolean?
 )
-
-// ---------------- Alignment surfaces (2.0.0) ----------------
-
-/**
- * A short prompt the user answers by tapping a chip, instead of receiving a normal answer.
- *
- * [type] selects the visual treatment (see [AlignmentKind]); [chips] are the quick replies;
- * [original_query] is the query that triggered the surface, kept for context — it is the chip's
- * `value` that gets sent on tap.
- */
-data class Alignment(
-    @SerializedName("type")
-    val type: String? = null,
-    @SerializedName("message")
-    val message: String? = null,
-    @SerializedName("chips")
-    val chips: List<AlignmentChip>? = null,
-    @SerializedName("original_query")
-    val original_query: String? = null,
-    /** True when the backend needs this answered before it can proceed. */
-    @SerializedName("blocking")
-    val blocking: Boolean? = null,
-    /** Backend intent tag (e.g. "capability", "profile"); informational for the client. */
-    @SerializedName("intent")
-    val intent: String? = null
-) : java.io.Serializable
-
-/**
- * One quick-reply chip. [label] is shown, [value] is sent on tap.
- *
- * [action] describes how the chip behaves: "select" invokes a capability (take a photo, share
- * location), "decline" lets the user opt out (use an approximate location). Today every chip's
- * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
- * "select" chips without another wire change.
- */
-data class AlignmentChip(
-    @SerializedName("label")
-    val label: String? = null,
-    @SerializedName("value")
-    val value: String? = null,
-    @SerializedName("action")
-    val action: String? = null
-) : java.io.Serializable
-
-/** The alignment surfaces the backend can ask for. */
-enum class AlignmentKind {
-    CLARIFY, CONFIRM, ESCALATE, GPS_PROMPT, UPLOAD_PHOTO, GENDER_SELECT, COMMODITY_CONFIRM;
-
-    /**
-     * Additive surfaces accompany a normal answer — they render BELOW it as an optional nudge and
-     * never suppress the answer or its follow-ups. Exclusive surfaces (clarify / confirm /
-     * escalate / capability prompts) own the message area and replace the answer.
-     *
-     * The backend marks the additive ones non-blocking (`blocking:false`, `intent:"profile"`).
-     * Both are single-select: one tap sends immediately and locks the card.
-     */
-    val isAdditive: Boolean get() = this == GENDER_SELECT || this == COMMODITY_CONFIRM
-
-    /**
-     * The exact wire `type` string, reported as the `agentic_chip_type` analytics property so
-     * funnels can be segmented by which surface was tapped. Keep these stable and in sync with
-     * [fromType] — dashboards depend on them.
-     */
-    val analyticsType: String get() = when (this) {
-        CLARIFY -> "alignment-clarify"
-        CONFIRM -> "alignment-confirm"
-        ESCALATE -> "alignment-escalate"
-        GPS_PROMPT -> "gps-prompt"
-        UPLOAD_PHOTO -> "upload-photo"
-        GENDER_SELECT -> "gender-select"
-        COMMODITY_CONFIRM -> "commodity-confirm"
-    }
-
-    companion object {
-        /** Wire `type` → kind. Null for an unknown or absent type: render as a normal answer. */
-        fun fromType(type: String?): AlignmentKind? = when (type?.trim()?.lowercase()) {
-            "alignment-clarify" -> CLARIFY
-            "alignment-confirm" -> CONFIRM
-            "alignment-escalate" -> ESCALATE
-            "gps-prompt" -> GPS_PROMPT
-            "upload-photo" -> UPLOAD_PHOTO
-            "gender-select" -> GENDER_SELECT
-            "commodity-confirm" -> COMMODITY_CONFIRM
-            else -> null
-        }
-    }
-}
