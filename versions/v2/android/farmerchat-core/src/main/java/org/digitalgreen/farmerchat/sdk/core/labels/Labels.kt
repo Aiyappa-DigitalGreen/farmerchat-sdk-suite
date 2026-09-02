@@ -327,4 +327,16 @@ object Labels {
     const val DONT_SEE_YOUR_OPTION = "fc_v2_app_label_dont_see_your_option"
     /** "Type or say it." — escape-hatch action. */
     const val TYPE_OR_SAY_IT = "fc_v2_app_label_type_or_say_it"
+
+    // ---- location + terms (2.0.0). All five verified present on endpoint #3. ----
+    /** "Set your location" */
+    const val SET_YOUR_LOCATION = "fc_v2_app_label_set_your_location"
+    /** "Location found" */
+    const val LOCATION_FOUND = "fc_v2_app_label_location_found"
+    /** "Change" */
+    const val CHANGE = "fc_v2_app_label_change"
+    /** "Allow location in Settings" */
+    const val ALLOW_LOCATION_IN_SETTINGS = "fc_v2_app_label_allow_location_in_settings"
+    /** "Accept and continue" */
+    const val ACCEPT_AND_CONTINUE = "fc_v2_app_label_accept_and_continue"
 }

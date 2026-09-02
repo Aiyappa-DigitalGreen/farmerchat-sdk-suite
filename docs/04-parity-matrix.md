@@ -466,6 +466,10 @@ Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v
 | `Chip` (Suggested / Agentic / Escalate) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | `InputComposer` (unified composer bar) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | `ShimmerText` | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `MarkdownText` v2 (tables, header scale) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `Sunbeams`, `SectionHeader` | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `LocationChatBubble`, `LocationButton` | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `TermsOfUseDialog` | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | `StreamErrorCard` + retry | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 | Stall hint ("Paused, resuming…", 4 s) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 
@@ -553,6 +557,35 @@ analytics-label hooks. Nothing else changed.
 
 `ShimmerText` came across with it (the composer depends on it); `ScrollToBottomButton` and
 `LightContentColors` already existed in the SDK.
+
+### Component batch (2026-09-02)
+
+Six more components ported into `versions/v2/` with the same copy-and-remap recipe, driven by a
+reusable script rather than by hand:
+
+| Component | Lines | Note |
+|---|---|---|
+| `MarkdownText` | 249 → 549 | v2 rewrite: tables, header→type-scale mapping, inline trailing slot, paragraph spacing |
+| `LocationButton` | 241 | |
+| `TermsOfUseDialog` | 179 → 168 | app analytics call removed, see below |
+| `Sunbeams` | 150 | |
+| `LocationChatBubble` | 129 | |
+| `SectionHeader` | 107 | |
+
+Brace balance matches the original for **every** file, and no `org.digitalgreen.farmer.chatbot`
+reference remains anywhere in `versions/v2/`.
+
+Two deliberate SDK adaptations, both required by root CLAUDE.md §6:
+
+- **Plotline removed.** `PLabel` / `PlotlineConstants` hooks are stripped (`InputComposer`), so
+  the SDK carries no Plotline labels.
+- **App analytics removed.** `TermsOfUseDialog` tracked a Plotline ToS event through the app's
+  `AnalyticsManager`. The SDK never calls it — events reach the host via `FarmerChatAnalytics` /
+  `config.onEvent` — so the dialog now exposes a plain `onAcceptAndContinue` callback and the
+  caller owns tracking.
+
+Ten new labels added across this and the previous slice, **all verified present on endpoint #3**
+with matching English fallbacks. Two drawables copied (`fc_ellipse_icon`, `fc_leaf`).
 
 **Still to do for 2.0.0:** confirm the wire framing with the backend, port the streaming UI to
 android-views, then to iOS, React Native and Web, and verify on a device.
