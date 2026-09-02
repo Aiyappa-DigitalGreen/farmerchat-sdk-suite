@@ -86,3 +86,23 @@ Navigation graph, back-stack semantics (`popUpTo` equivalents), and the `routeFr
 
 ## Design tokens (shared)
 Green brand surface (`#146152`-family as in app theme), reading surface for chat, day/night palettes, logo-spinner loading affordance, full-screen green error/message layout. Each platform defines tokens in its idiom (Compose theme / UIKit+SwiftUI assets / TS theme object) matching the app's `theme/` package.
+
+---
+
+## Versioning (added 2026-09-02)
+
+The suite is **one codebase, multiple published versions** — there is no per-version source tree.
+`android/`, `ios/`, `react-native/` and `web/` are the only implementations; a version is a
+release of them.
+
+| Version | Chat transport |
+|---|---|
+| 1.0.0 | Synchronous JSON — endpoint #27 |
+| 2.0.0 | Agentic SSE streaming — endpoint #27a, behind a config flag |
+
+Agentic chat is **opt-in**. A host that does not enable it keeps 1.0.0 behaviour on 2.0.0
+artifacts, so the two differ by configuration rather than by code fork. Hosts on 1.0.0 continue to
+receive patch releases, because fixes live in the same code.
+
+Rationale and the rejected alternatives are in `versions/README.md`; the v2 delta is in
+`versions/v2/README.md`.

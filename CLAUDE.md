@@ -41,7 +41,11 @@ fc-compose Android app source (/Users/Aiyappa/AndroidStudioProjects/fc-compose �
   - OTP: 4 digits, 180 s resend timer, WhatsApp/SMS channels per country (endpoint #20).
   - `routeFromSplash()` decision tree and all `popUpTo` back-stack semantics per docs/01 §2.
   - Follow-up questions come from endpoint #29, never from `TextPromptResponse.follow_up_questions` (always null).
-  - Chat replies are synchronous JSON. Do not introduce streaming/SSE/WebSocket.
+  - Chat replies are synchronous JSON in **1.0.0**. Do not introduce streaming/SSE/WebSocket on
+    the 1.0.0 path. **2.0.0 lifts this for the agentic endpoint only**
+    (`api/chat/get_answer_for_text_query_agentic/`, `text/event-stream`) — see
+    `versions/v2/README.md`. Endpoint #27 keeps the synchronous contract; a host that does not
+    opt in to agentic chat sees no change.
 - Preserve the documented app quirks in docs/02 §"Known app quirks" exactly as specified there (P1=5s, history=P3, plantix priority mapped to `image_analysis`).
 
 ## 4. Parity rule

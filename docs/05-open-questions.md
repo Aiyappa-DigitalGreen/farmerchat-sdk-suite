@@ -27,3 +27,37 @@ Rule (root CLAUDE.md §2): when the docs and app source leave something ambiguou
 | 18 | iOS 204 empty feed | Same as #12: URLSession delivers an empty body on 204. | ios-core APIClient decodes empty bodies as `{}` so `HomeUdfResponse` succeeds with nil sections → feed renders empty instead of erroring. | Same as #12. |
 
 Add new rows above this line.
+
+---
+
+## Q: What is the agentic stream's actual wire framing? (2026-09-02, blocks 2.0.0)
+
+`api/chat/get_answer_for_text_query_agentic/` opens correctly but has never been observed
+delivering an event.
+
+**Probed live** on dev, stage and prod with a freshly minted guest (preferred language set,
+location set via #11, conversation created via #15):
+
+```
+POST .../get_answer_for_text_query_agentic/
+  Accept: application/json
+  Authorization: Bearer <guest>
+→ 200, Content-Type: text/event-stream, Transfer-Encoding: chunked
+→ 0 bytes, all three environments
+```
+
+The app's own `AgenticChatDataSource` flags the same uncertainty: *"The exact wire framing should
+be confirmed against a real authenticated stream."*
+
+**Working hypothesis:** agentic answers require a signed-up (OTP-verified) user or a server-side
+feature flag, not a guest session.
+
+**Needed from the backend team:**
+1. Does the agentic endpoint serve guest sessions, or only OTP-verified users?
+2. Is there a per-user or per-environment feature flag gating it?
+3. A captured sample stream — is it `data:`-prefixed SSE, or bare NDJSON?
+4. Are event names sent on an SSE `event:` line, or only as a `type` field in the JSON?
+
+**Conservative reading implemented meanwhile** (per CLAUDE.md §2): accept BOTH framings and
+resolve the type from `event:` when present, else the JSON `type` field — which is what the app
+does. If the real framing differs, only the reader changes; the `AgenticEvent` contract holds.

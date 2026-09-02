@@ -57,6 +57,7 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 | 25 | PATCH | `api/images/v2/viewed/` | Mark card viewed | — | `ImageViewedRequest(statement_id, user_id, status="viewed")` → resp |
 | 26 | POST | `api/images/v2/statement/` | Card pre-gen answer | — | `ImageStatementRequest(statement_id, triggered_input_type)` → `ImageStatementResponse(short_answer, follow_up_questions, message_id, conversation_id)` |
 | 27 | POST | `api/chat/get_answer_for_text_query/` | **Main AI answer** | — | `TextPromptRequest` → `TextPromptResponse` |
+| 27a | POST | `api/chat/get_answer_for_text_query_agentic/` | **Agentic AI answer (2.0.0)** | — | `TextPromptRequest` → **SSE stream** of `AgenticEvent` |
 | 28 | POST | `api/chat/image_analysis/` | Image AI ("Plantix") | — | `PlantixRequest(conversation_id, image(base64), query?, lat/lng, image_name)` → `PlantixResponse` |
 | 29 | GET | `api/chat/follow_up_questions/` | Follow-ups (post-answer) | `message_id`, `use_latest_prompt=true` | → `FollowUpQuestionsResponse(questions[], clarification_required)` |
 | 30 | POST | `api/chat/follow_up_question_click/` | Track follow-up click | — | `{follow_up_question}` → `{message?}` |
@@ -68,6 +69,35 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 - Out-of-range pages return HTTP **200** with `{"data": []}` (verified pages 2, 3 and 99 on a one-turn conversation), so `items.isNotEmpty() → page + 1` terminates correctly. The response carries no pagination metadata.
 | 33 | POST | `api/chat/add_query_to_history/` | MoEngage qapair insert | — | `followUpQuestionsRequestMoengage` → resp |
 | 34 | GET | `api/images/v2/user_question_count/` | Question count | — | → `UserQuestionCountResponse(total_questions_asked, bypass_interstitial)` |
+
+### Endpoint #27a — agentic streaming (2.0.0 only)
+
+Introduced by app v4.1.2 (`fc-compose-agentic`). Same `TextPromptRequest` body as #27; the reply
+is a stream, not a document. **Endpoint #27 is unchanged and remains the 1.0.0 path.**
+
+**Verified live 2026-09-02** on dev, stage and prod:
+
+```
+POST api/chat/get_answer_for_text_query_agentic/
+  Accept: application/json          <- NOT text/event-stream (the backend 406s that)
+→ HTTP 200
+  Content-Type: text/event-stream
+  Transfer-Encoding: chunked
+```
+
+- **No read timeout.** Agentic answers stream for a long time, so this call must not use the
+  ApiPriority timeout client — it needs a dedicated client that still carries the auth
+  interceptors so 401 refresh applies.
+- **Event contract** (`AgenticEvent`): `ToolCall`, `ToolResult`, `TextDelta`, `Metadata`, `Done`,
+  `Failure`. The answer accretes from `TextDelta`; `Metadata` carries the ids needed for TTS (#31)
+  and follow-ups (#29); `Failure` is a mid-stream error.
+
+⚠ **Wire framing UNVERIFIED.** A guest with language, location and a conversation received
+**0 bytes** on all three environments — the stream opens and delivers nothing. Agentic answers
+likely require a signed-up user or a server-side flag. Until a real stream is captured, implement
+the app's conservative reader: accept both `data:`-prefixed SSE lines (blank line ends an event)
+and bare NDJSON, taking the event type from an SSE `event:` line when present, else a `type` field
+in the JSON. Tracked in docs/05.
 
 ## Token endpoints (`AuthApi`, non-suspend, called from authenticator)
 - POST `api/user/get_new_access_token/` — `RefreshTokenRequest(refresh_token)` → `RefreshTokenResponse(access_token, refresh_token)`
