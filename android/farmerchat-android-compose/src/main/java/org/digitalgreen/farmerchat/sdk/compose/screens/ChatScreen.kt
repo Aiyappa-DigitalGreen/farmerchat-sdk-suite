@@ -119,12 +119,21 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import java.io.File
+import androidx.compose.ui.platform.LocalConfiguration
+import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
+import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 
 /**
  * Chat thread (doc 01 §3.8). Handles all entry modes (history, pre-generated,
  * image, voice, plain question), follow-ups, read-full-advice, retry, Listen
  * (TTS), voice-clip playback, share/download card and history pagination.
  */
+/**
+ * How long a streamed answer may stall, with no tool status, before the UI shows a transient
+ * "Paused, resuming…" hint. Client-side only — not a failure, and it clears on the next delta.
+ */
+private const val PAUSE_HINT_DELAY_MS = 4000L
+
 @Composable
 fun ChatScreen(
     args: Destination.Chat,
@@ -708,14 +717,92 @@ fun ChatScreen(
                                                 message.id !in revealedIds
                                             val answerRevealed = message.id in revealedIds
 
-                                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            // 2.0.0 agentic streaming: while a stream is live the
+                                            // answer grows in place, so reserve a screen's height to
+                                            // pin the question at the top instead of letting the list
+                                            // clamp it downward as text arrives. Also held for the
+                                            // interrupted state so the error card sits near the top.
+                                            val streamReserve = if (
+                                                isLastAi && (message.isStreaming || message.isInterrupted)
+                                            ) {
+                                                Modifier.heightIn(
+                                                    min = LocalConfiguration.current.screenHeightDp.dp
+                                                )
+                                            } else Modifier
+
+                                            Column(
+                                                modifier = streamReserve,
+                                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
                                                 AiAnswerBlock(
+                                                    // A streaming answer must never run the typewriter
+                                                    // reveal — the text is already arriving a token at
+                                                    // a time, and animating it again double-types it.
                                                     text = message.text,
-                                                    animate = shouldAnimate,
+                                                    animate = shouldAnimate && !message.isStreaming,
                                                     onRevealComplete = { markRevealed(message.id) }
                                                 )
 
-                                                if (isLastAi && !state.isLoading && answerRevealed) {
+                                                // Tool progress, or the initial "getting your answer"
+                                                // state before any text has arrived.
+                                                if (message.isStreaming &&
+                                                    (message.text.isEmpty() ||
+                                                        !message.streamingStatus.isNullOrBlank())
+                                                ) {
+                                                    LogoSpinner(
+                                                        type = LogoSpinnerType.Horizontal,
+                                                        label = message.streamingStatus
+                                                            ?: label(
+                                                                Labels.GETTING_YOUR_ANSWER,
+                                                                "Getting your answer…"
+                                                            )
+                                                    )
+                                                }
+
+                                                // Text is flowing but has stalled with no tool status:
+                                                // a transient client-side hint, NOT a failure. Keyed on
+                                                // text.length so the next delta clears it automatically.
+                                                if (message.isStreaming &&
+                                                    message.text.isNotEmpty() &&
+                                                    message.streamingStatus.isNullOrBlank()
+                                                ) {
+                                                    var stalled by remember(message.id) {
+                                                        mutableStateOf(false)
+                                                    }
+                                                    LaunchedEffect(message.id, message.text.length) {
+                                                        stalled = false
+                                                        delay(PAUSE_HINT_DELAY_MS)
+                                                        stalled = true
+                                                    }
+                                                    if (stalled) {
+                                                        LogoSpinner(
+                                                            type = LogoSpinnerType.Horizontal,
+                                                            label = label(
+                                                                Labels.RESPONSE_PAUSED_RESUMING,
+                                                                "Paused, resuming…"
+                                                            )
+                                                        )
+                                                    }
+                                                }
+
+                                                // Interrupted terminal state: keep any partial answer
+                                                // above and offer retry. Only the latest answer shows
+                                                // the card — an older failed question keeps its partial
+                                                // text but drops the retry action.
+                                                if (message.isInterrupted && isLastAi) {
+                                                    StreamErrorCard(
+                                                        errorKind = message.streamErrorKind
+                                                            ?: StreamErrorKind.UNKNOWN,
+                                                        hasPartial = message.text.isNotBlank(),
+                                                        onRetry = {
+                                                            vm.onAction(ChatAction.RetryLastRequest)
+                                                        }
+                                                    )
+                                                }
+
+                                                if (isLastAi && !state.isLoading &&
+                                                    !message.isInterrupted && answerRevealed
+                                                ) {
                                                     // Fade/slide the actions in once the reveal completes.
                                                     val actionsVisible = remember {
                                                         MutableTransitionState(false)

@@ -459,7 +459,9 @@ Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v
 | `enableAgenticChat` config flag | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
 | Streaming send path in ChatViewModel | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
 | `AiResponse` streaming fields | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
-| Streaming UI (live text, tool status, error card) | n/a | ⛔ **not started** | ⛔ | ⛔ | ⛔ |
+| Streaming UI (live text, tool status, error card) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| `StreamErrorCard` + retry | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
+| Stall hint ("Paused, resuming…", 4 s) | n/a | ✅ compose · ⛔ views | ⛔ | ⛔ | ⛔ |
 
 **Opt-in.** `enableAgenticChat` defaults to **false**, so on 2.0.0 artifacts a host that does
 nothing keeps the 1.0.0 synchronous contract (#27) byte-for-byte. Nothing about the existing chat
@@ -501,9 +503,29 @@ was wrong in ways that mattered. Re-read against the app's `consumeAgenticStream
 (a half-arrived `<<comm`, an unterminated fence), since tokens arrive character by character.
 Totals: **23 unit tests, all passing.**
 
-**Still to do for 2.0.0:** confirm the wire framing with the backend, build the streaming UI
-(live text, tool-progress chips, `StreamErrorCard`), verify on device, then port to the other
-three platforms.
+### Compose streaming UI (2026-09-02)
+
+Ported from the app's `ChatThreadContent.kt:405-495`. Four behaviours, each of which only exists
+because the answer is now partial for a while:
+
+| Behaviour | Why |
+|---|---|
+| Screen-height reserve while streaming | The answer grows in place; without it the list clamps the question downward as text arrives. Also held for the interrupted state so the error card sits near the top. |
+| Typewriter reveal **disabled** while streaming | The text is already arriving a token at a time — animating it again double-types it. |
+| Tool-progress spinner | Shown when there is no text yet, or a tool status is set. |
+| Stall hint after 4 s | Text flowing but no status → a transient "Paused, resuming…". Client-side only, NOT a failure; keyed on `text.length` so the next delta clears it. |
+| `StreamErrorCard` on the latest answer only | An older failed question keeps its partial text but drops the retry action, so retry always means "the newest one". |
+
+The card's copy is driven by both `errorKind` and `hasPartial` — "connection stopped, your partial
+answer is saved" is a materially different message from "nothing arrived", and it tints from
+`feedbackFail` so a themed host gets its own failure colour.
+
+**Two labels are not on the server yet.** `fc_v2_app_label_connection_stopped_partial_saved` and
+`fc_v2_app_label_response_paused_resuming` returned null from endpoint #3, so they fall back to
+English. The backend needs to add them before those strings localize.
+
+**Still to do for 2.0.0:** confirm the wire framing with the backend, port the streaming UI to
+android-views, then to iOS, React Native and Web, and verify on a device.
 
 ## Known intentional gaps (docs/03 adaptation table)
 - Play in-app update/review: all platforms ⛔ (host concern).

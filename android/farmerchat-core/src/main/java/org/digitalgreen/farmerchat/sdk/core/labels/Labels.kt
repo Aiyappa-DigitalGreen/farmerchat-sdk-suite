@@ -307,4 +307,10 @@ object Labels {
     const val SSFR_WHEAT_QUESTION = "fc_v2_app_label_ssfr_wheat_question"
     const val SSFR_MAIZE_QUESTION = "fc_v2_app_label_ssfr_maize_question"
 
+
+    // ---- agentic streaming (2.0.0) ----
+    /** "Connection stopped. Your partial answer is saved." */
+    const val CONNECTION_STOPPED_PARTIAL_SAVED = "fc_v2_app_label_connection_stopped_partial_saved"
+    /** "Paused, resuming…" — transient stall hint while a stream is mid-answer. */
+    const val RESPONSE_PAUSED_RESUMING = "fc_v2_app_label_response_paused_resuming"
 }
