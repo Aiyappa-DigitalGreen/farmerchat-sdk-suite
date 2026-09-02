@@ -41,7 +41,24 @@ sealed class ChatMessage {
         override val id: String = java.util.UUID.randomUUID().toString(),
         /** Identifies pre-generated answers from the home screen. */
         val isPreGenerated: Boolean = false,
-        val messageId: String? = null
+        val messageId: String? = null,
+        // ---- agentic streaming (SDK 2.0.0, endpoint #27a). All default to the 1.0.0 behaviour,
+        // so a synchronous answer is indistinguishable from before. ----
+        /** True while the agentic stream is in progress; suppresses the action buttons. */
+        val isStreaming: Boolean = false,
+        /** Transient tool progress label (e.g. "Checking weather forecast") shown while streaming. */
+        val streamingStatus: String? = null,
+        /** True when this answer came from the agentic endpoint (drives follow-up chip styling). */
+        val isAgentic: Boolean = false,
+        /**
+         * Terminal outcome of an agentic stream that did NOT complete normally. When true the
+         * answer renders with an inline error and a retry action; [text] may still hold a
+         * preserved partial answer, or be blank if the stream broke at the start. Always false
+         * for a normally finalized answer.
+         */
+        val isInterrupted: Boolean = false,
+        /** Why the stream ended early; only meaningful when [isInterrupted]. */
+        val streamErrorKind: org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind? = null
     ) : ChatMessage()
 
     /** Placeholder shown while waiting for the AI response. */

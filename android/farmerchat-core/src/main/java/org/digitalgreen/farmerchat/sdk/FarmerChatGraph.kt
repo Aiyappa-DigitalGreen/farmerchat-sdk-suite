@@ -63,6 +63,7 @@ import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateBuildVersionUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserLocationUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserNameUseCase
 import org.digitalgreen.farmerchat.sdk.core.model.SetPreferredLanguageRequest
+import org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -159,6 +160,25 @@ class FarmerChatGraph internal constructor(
         .authenticator(tokenAuthenticator)
         .build()
 
+    /**
+     * Agentic streaming client (#27a, 2.0.0).
+     *
+     * Deliberately NOT [mainClient]: agentic answers stream for minutes, so this client has
+     * **no read timeout**. It must also skip the ApiPriority/Timeout interceptors, whose whole
+     * job is to impose the P1/P2/P3 deadlines that would cut a stream short.
+     *
+     * It keeps [authHeaderInterceptor] and the [tokenAuthenticator], so `Authorization` and the
+     * 401 refresh behave exactly as on every other call.
+     */
+    private val agenticClient: OkHttpClient = OkHttpClient.Builder()
+        .retryOnConnectionFailure(true)
+        .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .callTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .addInterceptor(authHeaderInterceptor)
+        .addInterceptor(loggingInterceptor)
+        .authenticator(tokenAuthenticator)
+        .build()
+
     /** Token client: no auth header interceptor, no authenticator (skip-listed endpoints). */
     private val baseAuthClient: OkHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
@@ -226,6 +246,17 @@ class FarmerChatGraph internal constructor(
     val getUserProfileUseCase = GetUserProfileUseCase(profileRepository)
     val updateBuildVersionUseCase = UpdateBuildVersionUseCase(profileRepository)
     val updateUserLocationUseCase = UpdateUserLocationUseCase(locationRepository)
+
+    /**
+     * Agentic streaming source (#27a). Present on 2.0.0 artifacts regardless of the flag —
+     * constructing it is free; [FarmerChatConfig.enableAgenticChat] decides whether the chat
+     * state machine uses it or the synchronous #27 path.
+     */
+    val agenticChatDataSource = AgenticChatDataSource(
+        client = agenticClient,
+        gson = gson,
+        baseUrl = config.resolvedBaseUrl
+    )
     val homeUseCase = HomeUseCase(homeRepository)
     val chatUseCase = ChatUseCase(chatRepository)
     val phoneAuthUseCases = PhoneAuthUseCases(authRepository)
@@ -299,7 +330,9 @@ class FarmerChatGraph internal constructor(
 
     fun homeViewModel() = HomeViewModel(homeUseCase, chatUseCase, getUserProfileUseCase, prefs, analytics)
 
-    fun chatViewModel() = ChatViewModel(appContext, chatUseCase, prefs, labelManager, analytics)
+    fun chatViewModel() = ChatViewModel(
+        appContext, chatUseCase, prefs, labelManager, analytics, config, agenticChatDataSource
+    )
 
     fun chatHistoryViewModel() = ChatHistoryViewModel(historyUseCase, prefs)
 

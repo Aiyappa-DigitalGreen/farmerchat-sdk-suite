@@ -447,6 +447,48 @@ entries stored.
 | android-core (+compose/views) | ✅ `showNameScreen` knob + headless bootstrap |
 | ios / react-native / web | ⛔ **NOT PORTED** — `locale` already skips the language screen on those platforms, but they have no `showNameScreen` knob and no headless label bootstrap, so a fresh install there would still hit the name screen and run on English fallbacks. |
 
+## 2.0.0 — agentic streaming chat (started 2026-09-02)
+
+Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v2/README.md`.
+
+| Piece | android-core | android UI | ios | react-native | web |
+|---|---|---|---|---|---|
+| `AgenticEvent` model + payloads | ✅ | n/a | ⛔ | ⛔ | ⛔ |
+| `AgenticChatDataSource` (SSE reader) | ✅ | n/a | ⛔ | ⛔ | ⛔ |
+| Dedicated no-read-timeout client | ✅ | n/a | ⛔ | ⛔ | ⛔ |
+| `enableAgenticChat` config flag | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
+| Streaming send path in ChatViewModel | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
+| `AiResponse` streaming fields | ✅ | ✅ (via core) | ⛔ | ⛔ | ⛔ |
+| Streaming UI (live text, tool status, error card) | n/a | ⛔ **not started** | ⛔ | ⛔ | ⛔ |
+
+**Opt-in.** `enableAgenticChat` defaults to **false**, so on 2.0.0 artifacts a host that does
+nothing keeps the 1.0.0 synchronous contract (#27) byte-for-byte. Nothing about the existing chat
+path changed.
+
+**Design note.** Finalization routes the `metadata` event back through the *existing*
+`handleTextPromptResult`. That event carries a `TextPromptResponse` — the same shape #27 returns —
+so analytics, TTS gating, follow-ups (#29) and first-query marking are shared with the synchronous
+path rather than reimplemented. Only text accretion is new code.
+
+### ⚠ Not verified against a live stream
+
+The endpoint opens but has never been observed emitting an event: a guest with language, location
+and a conversation received **0 bytes** on dev, stage and prod (docs/05). The reader is
+deliberately permissive — it accepts both `data:`-prefixed SSE and bare NDJSON, and resolves the
+type from an `event:` line or a `type` field.
+
+Because the wire cannot be exercised, the mapping is pinned by **14 unit tests**
+(`AgenticEventParsingTest`) covering both framings, the delta aliases, terminal `metadata`/`done`,
+typeless-payload recovery, and malformed JSON. All pass.
+
+Writing them surfaced a real defect: the parser's failure path calls `android.util.Log.w`, which
+throws "not mocked" under JVM unit tests — so the one path that must never take down the chat was
+the one path that could not be tested. Fixed with `testOptions.unitTests.isReturnDefaultValues`.
+
+**Still to do for 2.0.0:** confirm the wire framing with the backend, build the streaming UI
+(live text, tool-progress chips, `StreamErrorCard`), verify on device, then port to the other
+three platforms.
+
 ## Known intentional gaps (docs/03 adaptation table)
 - Play in-app update/review: all platforms ⛔ (host concern).
 - Plotline/MoEngage/Adjust/Firebase SDKs: all platforms ⛔ (replaced by analytics listener).

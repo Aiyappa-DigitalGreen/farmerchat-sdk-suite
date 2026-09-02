@@ -40,6 +40,16 @@ android {
             withSourcesJar()
         }
     }
+
+    testOptions {
+        unitTests {
+            // The agentic parser logs a warning on a malformed event. Without this, every
+            // android.util.Log call throws "not mocked" and the error path is untestable —
+            // which is exactly the path that must never take down the chat.
+            isReturnDefaultValues = true
+        }
+    }
+
 }
 
 dependencies {

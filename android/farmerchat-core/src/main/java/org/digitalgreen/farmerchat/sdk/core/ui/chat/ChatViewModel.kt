@@ -28,6 +28,7 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.ChatUseCase
 import org.digitalgreen.farmerchat.sdk.core.util.ImageUtils
+import org.digitalgreen.farmerchat.sdk.core.model.AgenticEvent
 import java.io.File
 import java.util.UUID
 
@@ -45,7 +46,10 @@ class ChatViewModel(
     private val chatUseCase: ChatUseCase,
     private val prefs: SdkPreferences,
     private val labelManager: LabelManager,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    private val config: org.digitalgreen.farmerchat.sdk.FarmerChatConfig,
+    /** #27a streaming source. Only touched when [config].enableAgenticChat is true. */
+    private val agenticChatDataSource: org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(
@@ -713,9 +717,129 @@ class ChatViewModel(
         )
 
         scope.launch {
-            chatUseCase.getTextPrompt(request).collect { result ->
-                handleTextPromptResult(result, placeholderId)
+            if (config.enableAgenticChat) {
+                streamAgenticAnswer(request, placeholderId)
+            } else {
+                chatUseCase.getTextPrompt(request).collect { result ->
+                    handleTextPromptResult(result, placeholderId)
+                }
             }
+        }
+    }
+
+    /**
+     * Agentic streaming answer (#27a, SDK 2.0.0 — gated on [FarmerChatConfig.enableAgenticChat]).
+     *
+     * The placeholder is swapped for a live [ChatMessage.AiResponse] that accretes text from
+     * `text_delta` events, with tool progress surfaced in `streamingStatus`.
+     *
+     * Finalization deliberately routes through [handleTextPromptResult]: the `metadata` event
+     * carries a [TextPromptResponse], the same shape endpoint #27 returns, so every downstream
+     * behaviour — analytics, TTS gating, follow-ups (#29), first-query marking — is shared with
+     * the synchronous path rather than reimplemented. Only the accretion is new.
+     *
+     * `done` is a fallback: it is NOT terminal, so a `metadata` that follows still wins. It only
+     * finalizes if the stream ends without one, so the answer is never lost.
+     */
+    private suspend fun streamAgenticAnswer(
+        request: org.digitalgreen.farmerchat.sdk.core.model.TextPromptRequest,
+        placeholderId: String?
+    ) {
+        val streamId = UUID.randomUUID().toString()
+        val accrued = StringBuilder()
+        var status: String? = null
+        var finalized = false
+        var lastDone: AgenticEvent.Done? = null
+
+        // Replaces the placeholder (first delta) or updates the live message in place.
+        fun render() {
+            val live = ChatMessage.AiResponse(
+                text = accrued.toString(),
+                id = streamId,
+                isStreaming = true,
+                streamingStatus = status,
+                isAgentic = true
+            )
+            _state.update { cur ->
+                val without = cur.messages.filterNot { it.id == placeholderId || it.id == streamId }
+                cur.copy(messages = without + live, isLoading = false, errorMessage = null)
+            }
+        }
+
+        fun interrupt(kind: org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind, msg: String?) {
+            finalized = true
+            _state.update { cur ->
+                val without = cur.messages.filterNot { it.id == placeholderId || it.id == streamId }
+                cur.copy(
+                    messages = without + ChatMessage.AiResponse(
+                        text = accrued.toString(),   // preserve any partial answer
+                        id = streamId,
+                        isAgentic = true,
+                        isInterrupted = true,
+                        streamErrorKind = kind
+                    ),
+                    isLoading = false,
+                    errorMessage = msg ?: labelManager.getLabel(
+                        Labels.FAILED_TO_GET_RESPONSE, "Failed to get response"
+                    )
+                )
+            }
+        }
+
+        try {
+            agenticChatDataSource.stream(request).collect { event ->
+                when (event) {
+                    is AgenticEvent.ToolCall -> { status = event.statusText; render() }
+                    is AgenticEvent.ToolResult -> { status = event.statusText; render() }
+                    is AgenticEvent.TextDelta -> {
+                        accrued.append(event.delta)
+                        status = null
+                        render()
+                    }
+                    is AgenticEvent.Done -> lastDone = event
+                    is AgenticEvent.Metadata -> {
+                        finalized = true
+                        // Drop the live message; the shared finalizer rebuilds it.
+                        _state.update { cur ->
+                            cur.copy(messages = cur.messages.filterNot { it.id == streamId })
+                        }
+                        handleTextPromptResult(ApiResult.Success(event.response), placeholderId)
+                    }
+                    is AgenticEvent.Failure -> interrupt(event.kind, event.message)
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!finalized) {
+                interrupt(org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind.NETWORK, e.message)
+            }
+            return
+        }
+
+        if (finalized) return
+
+        // Stream ended without `metadata`. Fall back to `done` if it carried an answer, else
+        // whatever text accrued; only a completely empty stream is an error.
+        val fallback = lastDone?.answer?.takeIf { it.isNotBlank() } ?: accrued.toString()
+        if (fallback.isNotBlank()) {
+            markFirstQueryAsked()
+            _state.update { cur ->
+                val without = cur.messages.filterNot { it.id == placeholderId || it.id == streamId }
+                cur.copy(
+                    messages = without + ChatMessage.AiResponse(
+                        text = fallback,
+                        id = streamId,
+                        isAgentic = true,
+                        followUpQuestions = lastDone?.followUps?.takeIf { it.isNotEmpty() }
+                    ),
+                    isLoading = false,
+                    errorMessage = null,
+                    chatResponseState = UiState.Success(fallback)
+                )
+            }
+        } else {
+            interrupt(org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind.UNKNOWN, null)
         }
     }
 
