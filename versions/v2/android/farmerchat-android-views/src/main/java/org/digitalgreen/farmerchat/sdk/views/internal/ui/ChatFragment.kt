@@ -390,11 +390,32 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 scrollToBottom()
             }
 
-            // Scroll to bottom when a new message is appended.
+            // Scroll when a new message is appended.
             val lastKey = adapter.rows.lastOrNull()?.key
             if (lastKey != null && lastKey != lastRenderedLastKey) {
                 lastRenderedLastKey = lastKey
-                if (restoreAnchorKey == null) scrollToBottom()
+                if (restoreAnchorKey == null) {
+                    // A live agentic stream must NOT scroll to the bottom. `ChatAdapter.bindAi`
+                    // reserves a full screen height on the streaming row so the question can pin
+                    // at the top while the answer grows into the space below it. Scrolling to the
+                    // bottom parks the viewport at the far end of that empty reserve: the question
+                    // is pushed off the top, and the text — which grows from the row's TOP —
+                    // arrives off-screen. Device-verified 2026-09-03: the thread went blank from
+                    // ~1.5 s until the stream settled and the reserve collapsed.
+                    //
+                    // So anchor the row ABOVE the stream (the farmer's question) to the top of the
+                    // viewport instead, which is exactly what the reserve exists to make possible.
+                    val streamingIndex = adapter.rows.indexOfLast {
+                        it is ChatRow.Ai && (it.message.isStreaming || it.message.isInterrupted)
+                    }
+                    if (streamingIndex > 0) {
+                        (binding.fcChatList.layoutManager as? LinearLayoutManager)
+                            ?.scrollToPositionWithOffset(streamingIndex - 1, 0)
+                            ?: scrollToBottom()
+                    } else {
+                        scrollToBottom()
+                    }
+                }
             }
         }
     }

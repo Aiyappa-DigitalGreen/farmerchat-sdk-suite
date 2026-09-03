@@ -368,12 +368,30 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll to bottom on new messages (non-history appends).
+    // Auto-scroll on new messages (non-history appends).
     LaunchedEffect(state.messages.size, state.isLoading) {
         if (prependOldCount == null && state.messages.isNotEmpty() &&
             (!isHistoryEntry || initialScrollDone)
         ) {
-            listState.animateScrollToItem((state.messages.size - 1).coerceAtLeast(0))
+            // While a stream is live, anchor the row ABOVE it — the farmer's question — to the top
+            // of the viewport rather than the streaming row itself. `streamReserve` gives that row
+            // a full screen of minimum height precisely so the question can stay pinned while the
+            // answer grows into the space below; scrolling to the streaming row instead pushes the
+            // question off the top, which defeats the reserve.
+            //
+            // The views flavour had the same conflict with a worse symptom: RecyclerView's
+            // smoothScrollToPosition parked the viewport at the far end of the reserve, so the
+            // thread went BLANK mid-stream (device-verified 2026-09-03). Keep both flavours on the
+            // same rule.
+            val streamingIndex = state.messages.indexOfLast {
+                it is ChatMessage.AiResponse && (it.isStreaming || it.isInterrupted)
+            }
+            val target = if (streamingIndex > 0) {
+                streamingIndex - 1
+            } else {
+                (state.messages.size - 1).coerceAtLeast(0)
+            }
+            listState.animateScrollToItem(target)
         }
     }
 
