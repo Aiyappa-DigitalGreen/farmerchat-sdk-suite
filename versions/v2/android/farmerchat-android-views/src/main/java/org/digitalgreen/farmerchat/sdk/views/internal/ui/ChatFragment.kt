@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioPlayback
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
@@ -31,7 +32,9 @@ import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.AlignmentChipRoute
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.routeAlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatState
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatViewModel
@@ -61,10 +64,11 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
 
     /**
      * 2.0.0 unified composer instead of the Photo/Speak/Type row — Compose parity with
-     * `ChatScreen.isComposerUi`, which is exactly `graph.config.enableAgenticChat`. Off by
-     * default, so a host that does not opt in to agentic chat keeps the 1.0.0 input verbatim.
+     * `ChatScreen.isComposerUi`. Mirrors the app's `v2_composer_ui_enabled` flag via the host's
+     * `enableComposerUi`, which defaults to following `enableAgenticChat` — so a host that opts
+     * in to neither keeps the 1.0.0 input verbatim.
      */
-    private val isComposerUi: Boolean get() = graph.config.enableAgenticChat
+    private val isComposerUi: Boolean get() = graph.config.resolvedComposerUi
 
     /**
      * The single image attached to the composer, awaiting send.
@@ -169,6 +173,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         overlays = InputOverlaysController(
             fragment = this,
             binding = binding.fcChatOverlays,
+            screenName = AnalyticsScreens.CHAT,
             onTextSubmitted = { text -> vm.onAction(ChatAction.SendFollowUpQuestion(text)) },
             onImagePicked = { uri ->
                 if (isComposerUi) {
@@ -416,7 +421,16 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                         // `!state.isLoading && errorMessage == null` (both hold here, because a
                         // stream keeps isLoading true and an interruption sets errorMessage).
                         val settled = !message.isStreaming && !message.isInterrupted
-                        val showFollowUps = isLast && settled
+                        // An ADDITIVE alignment surface owns the space under the answer: while its
+                        // chips are on screen the follow-up list is hidden, so the farmer answers
+                        // the nudge instead of being offered two competing lists. ANDed with the
+                        // existing gate, not replacing it. App parity — `fc-compose-agentic`
+                        // 43ba5de4 "no follow up in case of chips". The backend agrees: the live
+                        // prose capture's metadata carries `"followups_gated_by":
+                        // "commodity-confirm"` with `followups: []`.
+                        val additiveSurfaceOpen = message.alignmentKind?.isAdditive == true &&
+                            !message.alignmentChips.isNullOrEmpty()
+                        val showFollowUps = isLast && settled && !additiveSurfaceOpen
                         add(
                             ChatRow.Ai(
                                 message = message,
@@ -498,39 +512,38 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     // ------------------------------------------------------------------ agentic (2.0.0)
 
     /**
-     * An alignment chip sends its `value` (falling back to its label) as a follow-up question —
-     * the value is what the backend expects, the label is only what the farmer reads.
-     */
-    /**
-     * Routes an alignment chip tap. GPS_PROMPT and UPLOAD_PHOTO chips marked
-     * [AlignmentChip.ACTION_SELECT] do NOT send their text — they invoke a device capability and
-     * only the outcome is sent. Every other chip stays on the plain follow-up path.
-     * Port of the app's `onAlignmentChipClick`.
+     * Routes an alignment chip tap. The decision table lives in core (`routeAlignmentChip`) so
+     * this fragment, the Compose screen and the unit tests exercise ONE function — an inline copy
+     * passes the test while drifting from it (docs/04).
      */
     override fun onAlignmentChipClick(messageId: String, kind: AlignmentKind, chip: AlignmentChip) {
-        val isInvoke = chip.action == AlignmentChip.ACTION_SELECT
-        val isShareLocation = kind == AlignmentKind.GPS_PROMPT && isInvoke &&
-            chip.value == AlignmentChip.VALUE_SHARE_LOCATION
-        val isPhotoCapability = kind == AlignmentKind.UPLOAD_PHOTO && isInvoke
-        when {
-            isShareLocation -> {
+        when (val route = routeAlignmentChip(kind, chip)) {
+            AlignmentChipRoute.ShareLocation ->
                 // Permission dialog / GPS fetch / recovery are owned by the journey's location
                 // host; the outcome arrives on the collector installed in onViewCreated. Only
                 // start when no other location flow is running (mirrors Home's guard).
                 if (graph.locationPromptManager.state.value is LocationPromptState.Idle) {
                     pendingLocationSourceId = messageId
-                    graph.locationPromptManager.triggerFromLocalContext()
+                    // fromAgenticChip = true → the whole GPS funnel is attributed to Chat and
+                    // carries agentic_chip_type = gps-prompt (app parity).
+                    graph.locationPromptManager.triggerFromLocalContext(fromAgenticChip = true)
                 }
-            }
-            isPhotoCapability && chip.value == AlignmentChip.VALUE_TAKE_PHOTO ->
-                overlays?.launchCameraForCapability()
-            isPhotoCapability && chip.value == AlignmentChip.VALUE_CHOOSE_FROM_GALLERY ->
-                overlays?.launchGalleryForCapability()
-            else -> {
-                val question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
-                if (question.isBlank()) return
-                vm.onAction(ChatAction.SendFollowUpQuestion(question))
-            }
+            AlignmentChipRoute.TakePhoto -> overlays?.launchCameraForCapability()
+            AlignmentChipRoute.ChooseFromGallery -> overlays?.launchGalleryForCapability()
+            AlignmentChipRoute.Ignore -> Unit
+            is AlignmentChipRoute.SendText -> vm.onAction(
+                ChatAction.SendAlignmentChip(
+                    query = route.query,
+                    selectionValue = route.selectionValue,
+                    sourceMessageId = messageId,
+                    displayLabel = route.displayLabel,
+                    locationDeclined = route.locationDeclined,
+                    photoDeclined = route.photoDeclined,
+                    chipType = kind.analyticsType,
+                    chipValue = chip.value,
+                    chipLabel = chip.label
+                )
+            )
         }
     }
 
@@ -569,15 +582,23 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                         )
                     )
                 } else {
-                    // Denied / cancelled / failed: still answer the blocking question. The app uses
-                    // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
-                    // neither, so the correlation and chip analytics are lost (docs/04).
+                    // Denied / cancelled / failed: still answer the blocking question. Sent as a
+                    // chip pick exactly as the app does, so it carries `location_declined = true`
+                    // and the surface's `parent_message_id` — the backend can then answer from an
+                    // approximate location instead of waiting for coordinates.
+                    val declineText = graph.labelManager.getLabel(
+                        Labels.LOCATION_PERMISSION_DECLINED,
+                        "Continue without sharing my location"
+                    )
                     vm.onAction(
-                        ChatAction.SendFollowUpQuestion(
-                            question = graph.labelManager.getLabel(
-                                Labels.LOCATION_PERMISSION_DECLINED,
-                                "Continue without sharing my location"
-                            )
+                        ChatAction.SendAlignmentChip(
+                            query = declineText,
+                            selectionValue = declineText,
+                            sourceMessageId = srcId,
+                            locationDeclined = true,
+                            chipType = AlignmentKind.GPS_PROMPT.analyticsType,
+                            chipValue = AlignmentChip.VALUE_NOT_NOW,
+                            chipLabel = declineText
                         )
                     )
                 }
@@ -608,7 +629,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     // ------------------------------------------------------------------ share / download
 
     override fun onShare(message: ChatMessage.AiResponse) {
-        graph.analytics.track(AnalyticsEvents.SHARE_BUTTON_CLICKED)
+        graph.analytics.track(
+            AnalyticsEvents.SHARE_BUTTON_CLICKED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+        ) // app ChatScreen.kt:907
         val bitmap = renderShareCard(message) ?: return
         runCatching {
             val file = File(requireContext().cacheDir, "fc_share_${System.currentTimeMillis()}.png")
@@ -632,7 +656,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     }
 
     override fun onDownload(message: ChatMessage.AiResponse) {
-        graph.analytics.track(AnalyticsEvents.SAVE_BUTTON_CLICKED)
+        graph.analytics.track(
+            AnalyticsEvents.SAVE_BUTTON_CLICKED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+        ) // app ChatScreen.kt:931
         val bitmap = renderShareCard(message) ?: return
         runCatching {
             val values = ContentValues().apply {
@@ -846,7 +873,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         bar.fcAppBarActions.isVisible = showHistory || showLanguage
 
         bar.fcAppBarHistory.contentDescription =
-            label(Labels.RECENT_CHATS, "Past Advice")
+            label(Labels.RECENT_CHATS, "Recent Chats")
         bar.fcAppBarLanguage.contentDescription =
             label(Labels.LANGUAGE, "Language")
 

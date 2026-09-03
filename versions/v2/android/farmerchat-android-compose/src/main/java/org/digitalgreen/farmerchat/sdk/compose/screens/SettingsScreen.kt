@@ -59,6 +59,7 @@ import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.appearanceAnalyticsValue
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
@@ -191,7 +192,12 @@ fun SettingsScreen(
         graph.prefs.putString(SdkPreferences.Keys.APPEARANCE_MODE, mode)
         graph.analytics.track(
             AnalyticsEvents.SETTINGS_OPTION_SELECTED,
-            mapOf(AnalyticsProps.OPTION to "appearance_$mode")
+            // App SettingsScreen.kt:150 — lowercase `option`/`value` keys, and the
+            // value is the app's AppearanceMode label (Light / Dark / Default).
+            mapOf(
+                AnalyticsProps.OPTION_LOWER to "Appearance",
+                AnalyticsProps.VALUE_LOWER to appearanceAnalyticsValue(mode)
+            )
         )
         onAppearanceModeChange(mode)
     }
@@ -255,7 +261,7 @@ fun SettingsScreen(
                         "night" -> label(Labels.FARMERCHAT_ALWAYS_DARK_MODE, "FarmerChat is always in dark mode")
                         else -> label(
                             Labels.FARMERCHAT_ADJUSTS_YOUR_PHONE_SETTINGS,
-                            "FarmerChat adjusts to your phone settings"
+                            "FarmerChat adjusts with your phone settings"
                         )
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -376,7 +382,11 @@ fun SettingsScreen(
                     SecondaryButton(
                         label = label(Labels.LOGOUT, "Logout"),
                         onClick = {
-                            graph.analytics.track(AnalyticsEvents.LOGOUT_CLICK_EVENT)
+                            graph.analytics.track(
+                                AnalyticsEvents.LOGOUT_CLICK_EVENT,
+                                // App AppNavGraph.kt:586.
+                                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SETTINGS)
+                            )
                             onLogOutClick()
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -384,7 +394,14 @@ fun SettingsScreen(
                 } else {
                     SecondaryButton(
                         label = label(Labels.SIGN_UP, "Sign up"),
-                        onClick = onSignUpClick,
+                        onClick = {
+                            // App SettingsScreen.kt:353 — `option` only, no `value`.
+                            graph.analytics.track(
+                                AnalyticsEvents.SETTINGS_OPTION_SELECTED,
+                                mapOf(AnalyticsProps.OPTION_LOWER to "Signup")
+                            )
+                            onSignUpClick()
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

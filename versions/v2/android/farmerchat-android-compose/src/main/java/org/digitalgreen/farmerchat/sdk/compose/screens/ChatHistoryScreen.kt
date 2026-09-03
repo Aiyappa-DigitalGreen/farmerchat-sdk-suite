@@ -172,8 +172,11 @@ fun ChatHistoryScreen(
                                         graph.analytics.track(
                                             AnalyticsEvents.NEW_CHAT_CLICK_EVENT,
                                             mapOf(
-                                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT_HISTORY,
-                                                "conversation_id" to item.conversation_id
+                                                // App ChatHistoryScreen.kt:187 — raw literal
+                                                // screen name and the "Conversation ID" key
+                                                // (capitalised, with a space).
+                                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT_HISTORY_LITERAL,
+                                                AnalyticsProps.CONVERSATION_ID_SPACED to item.conversation_id
                                             )
                                         )
                                         onOpenChatFromHistory(item.conversation_id)
@@ -196,7 +199,7 @@ fun ChatHistoryScreen(
                         ) {
                             LogoSpinner(
                                 type = LogoSpinnerType.Horizontal,
-                                label = label(Labels.LOADING_MORE, "Loading more…")
+                                label = label(Labels.LOADING_MORE, "Loading more...")
                             )
                         }
                     }

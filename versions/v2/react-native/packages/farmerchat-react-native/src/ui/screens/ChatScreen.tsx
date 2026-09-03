@@ -103,11 +103,11 @@ export function ChatScreen(props: {
 
   // 2.0.0 composer UI. The app gates this on two independent Firebase Remote Config flags
   // (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()` for the visual
-  // theme + routing). The SDK carries no Remote Config and exposes exactly one host-set switch,
-  // so both collapse onto `enableAgenticChat` — the same collapse the Compose SDK makes
-  // (ChatScreen.kt:167). With it off, the 1.0.0 Photo/Speak/Type row + text overlay are
+  // theme + routing). The SDK carries no Remote Config, so the host supplies both:
+  // `enableComposerUi` (omitted ⇒ follow `enableAgenticChat`), resolved into `config.composerUi`
+  // — same resolution as Compose. With it off, the 1.0.0 Photo/Speak/Type row + text overlay are
   // untouched, so a host that has not opted in sees no change (root CLAUDE.md §3).
-  const isComposerUi = sdk.config.enableAgenticChat;
+  const isComposerUi = sdk.config.composerUi;
   const composerRef = useRef<InputComposerHandle>(null);
   // Single attached image per query — the composer renders the thumbnail, this screen owns it.
   const [attachedImage, setAttachedImage] = useState<PickedImage | null>(null);

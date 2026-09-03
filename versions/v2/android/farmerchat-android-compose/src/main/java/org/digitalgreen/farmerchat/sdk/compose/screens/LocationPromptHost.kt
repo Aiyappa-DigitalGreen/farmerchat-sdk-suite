@@ -189,7 +189,7 @@ fun LocationPromptHost(
                 mainMessage = label(Labels.GET_ADVICE_YOUR_AREA, "Get advice for your area"),
                 subtitle = label(
                     Labels.LOCATION_HELPS_SUGGESTIONS,
-                    "Your location helps us give better suggestions"
+                    "Your location helps us suggest crops, weather, and pests near you."
                 ),
                 primaryCtaLabel = label(Labels.TURN_LOCATION_ON_NOW, "Turn location on now"),
                 primaryButtonState = if (isBusy) PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
@@ -237,7 +237,7 @@ fun LocationPromptHost(
                     Text(
                         text = label(
                             Labels.LOCATION_TAILOR_ADVICE,
-                            "Your location helps us tailor advice to your area"
+                            "Sharing your location helps FarmerChat tailor advice to your farm."
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
@@ -279,7 +279,7 @@ fun LocationPromptHost(
                     label(Labels.NO_INTERNET_CONNECTION, "No internet connection"),
                     label(
                         Labels.PLEASE_CONNECT_INTERNET_TRY_AGAIN,
-                        "Please connect to the internet and try again"
+                        "Check your connection and try again"
                     )
                 )
                 LocationErrorType.GpsUnavailable -> Triple(

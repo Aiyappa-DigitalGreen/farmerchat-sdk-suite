@@ -132,11 +132,11 @@ export function HomeScreen(props: {
 
   // 2.0.0 composer / agentic Home. The app gates this on two independent Firebase Remote Config
   // flags (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()` for the
-  // visual theme + card-tap API routing). The SDK carries no Remote Config and exposes exactly
-  // one host-set switch, so both collapse onto `enableAgenticChat` — the same collapse the
-  // Compose SDK makes (HomeScreen.kt:159). With it off, the 1.0.0 green surface + sticky
+  // visual theme + card-tap API routing). The SDK carries no Remote Config, so the host supplies
+  // both: `enableComposerUi` (omitted ⇒ follow `enableAgenticChat`, the historical collapse),
+  // resolved into `config.composerUi`. With it off, the 1.0.0 green surface + sticky
   // Photo/Speak/Type tiles + text overlay are untouched (root CLAUDE.md §3).
-  const isComposerUi = sdk.config.enableAgenticChat;
+  const isComposerUi = sdk.config.composerUi;
   const composerRef = useRef<InputComposerHandle>(null);
   // Single attached image per query — the composer renders the thumbnail, this screen owns it.
   const [attachedImage, setAttachedImage] = useState<PickedImage | null>(null);

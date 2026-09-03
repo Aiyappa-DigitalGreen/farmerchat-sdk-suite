@@ -11,6 +11,7 @@ import androidx.navigation.fragment.findNavController
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.HelpSupportData
@@ -131,7 +132,15 @@ internal class HelpFragment : BaseFragment(R.layout.fc_fragment_help) {
         } else {
             faqs.forEach { faq ->
                 addRow(binding.fcHelpFaqCard, faq.title) {
-                    graph.analytics.track(AnalyticsEvents.FAQ_CLICKED)
+                    // App HelpScreen.kt:201.
+                    graph.analytics.track(
+                        AnalyticsEvents.FAQ_CLICKED,
+                        mapOf(
+                            AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL,
+                            AnalyticsProps.QUESTION to faq.title,
+                            AnalyticsProps.ID to faq.id
+                        )
+                    )
                     openUrl(faq.webviewUrl, faq.title)
                 }
             }
@@ -144,12 +153,22 @@ internal class HelpFragment : BaseFragment(R.layout.fc_fragment_help) {
             binding.fcHelpMoreCard,
             terms?.title ?: label(Labels.TERMS_OF_USE, "Terms of use")
         ) {
+            // App HelpScreen.kt:245.
+            graph.analytics.track(
+                AnalyticsEvents.TERMS_OF_USE_OPENED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL)
+            )
             openUrl(terms?.webviewUrl, terms?.title ?: label(Labels.TERMS_OF_USE, "Terms of use"))
         }
         addRow(
             binding.fcHelpMoreCard,
             privacy?.title ?: label(Labels.PRIVACY_POLICY, "Privacy policy")
         ) {
+            // App HelpScreen.kt:263.
+            graph.analytics.track(
+                AnalyticsEvents.PRIVACY_POLICY_OPENED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL)
+            )
             openUrl(
                 privacy?.webviewUrl,
                 privacy?.title ?: label(Labels.PRIVACY_POLICY, "Privacy policy")

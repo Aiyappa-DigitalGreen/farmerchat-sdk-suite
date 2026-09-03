@@ -39,6 +39,43 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 | 5 | GET | `api/geography/get_all_countries/` | Country list | — | → `List<CountryItem>` |
 | 6 | POST | `api/user/set_preferred_language/` | Save language | — | `SetPreferredLanguageRequest(user_id, language_id)` → `{user_id}` |
 | 7 | POST | `api/user/accept_terms/` | Accept T&C | — | `AcceptPPandTCRequest(user_id)` → `AcceptPPandTCResponse` |
+| 7a | GET | `api/user/policy_acceptance_status/` | **Terms-of-Use acceptance gate (2.0.0)** | `user_id` (**required**) | → `PolicyAcceptanceStatusResponse` |
+
+**Endpoint #7a — mandatory Terms-of-Use acceptance gate (2.0.0 only, verified live 2026-09-03 on stage):**
+
+Introduced by app v4.1.2 (`fc-compose-agentic`): `ApiConstants.POLICY_ACCEPTANCE_STATUS`,
+`ApiServices.fetchPolicyAcceptanceStatus(@Query("user_id"))`, called from
+`HomeViewModel.fetchPolicyAcceptanceStatus` on **every Home entry**. When
+`requires_acceptance == true` the app overlays Home with a **non-cancellable**
+`TermsOfUseUpdatedBottomSheet` until the user accepts via #7.
+
+- `user_id` is **required**. Omitting it → HTTP **400** `{"error":"user_id is required"}`. 400 is
+  non-retryable per the retry table, so a blank/`"null"` value fails the gate silently — hence the
+  app's guard (`userId.isBlank() || userId.equals("null", true)` → skip the call entirely).
+- Priority: **P2** (`PRIORITY_2_NO_FALLBACK`), `apiName = "policy_acceptance_status"`.
+- Live response for a **guest** token (`initialize_user` only, no OTP) on stage:
+
+  ```json
+  { "requires_acceptance": true, "terms_accepted": false, "terms_accepted_at": null,
+    "latest_policy_version": { "id": 2, "policy_type": "combined", "version_label": "v2",
+      "published_at": "2026-09-02T14:09:15.601280Z",
+      "terms_of_service_url": "https://farmerchat.farmstack.co/v2/farmer_chat_tos_stage/",
+      "privacy_policy_url": "https://farmerchat.farmstack.co/farmer_chat_pp/" } }
+  ```
+
+  So the gate **does fire for guests** — `initialize_user` persists a `user_id`, the app's guard
+  only skips a *missing* one, and the backend answers `requires_acceptance: true` for it. This is
+  app behaviour, not an SDK divergence.
+- The terms URL the gate's content screen loads is
+  `latest_policy_version.terms_of_service_url` — **not** `privacy_policy.farmerchat_terms_of_use`
+  (#4). #4 feeds the *other*, dismissible terms dialog; the two are independent.
+- **Its seven label keys are all served by #3** (verified live 2026-09-03, stage, `language=1/2/3`):
+  `fc_v2_app_terms_of_use_changed`, `_description`, `_read_terms`, `_accept`, `_accept_terms`,
+  `_accepted`, `_accepting_one_second` — present in **en, hi and sw**. Note they lack the
+  `_label_` infix the rest of the app's `Labels` keys use; that is how the app declares them, so
+  they are copied character-for-character. Because the gate is mandatory and non-dismissible,
+  a missing key here would mean hardcoded English on a screen a farmer cannot leave — hence the
+  check.
 | 8 | POST | `api/user/update_user_profile/` | Update name/profile | — | `UserNameRequest` → `UserNameResponse` |
 | 9 | GET | `api/user/view_user_profile/` | Fetch profile | `id` | → `FarmerProfile` |
 | 10 | PATCH | `api/user/v2/update_build_version/` | Report build version | — | `UpdateBuildVersionRequest(user_id)` → resp |
@@ -131,6 +168,7 @@ in the JSON. Tracked in docs/05.
 - **UpdateLocationRequest**: `lat?, long?, user_id, country?, level_2..6?, display_address?, osm_response?(OSM/Nominatim shape)`.
 - **CountryItem**: `code, display_name, flag, id, name, phone_country_code, phone_length, phone_number_pattern?`.
 - **UserNameRequest**: `age, farmer_reach_count, gender, land_holding, live_stock_details, name, profile_picture, receive_com_via_whatsapp, role, specialization, user_id`.
+- **PolicyAcceptanceStatusResponse** (#7a, 2.0.0): `requires_acceptance: Boolean, terms_accepted: Boolean, terms_accepted_at: String?, latest_policy_version: LatestPolicyVersion?`; `LatestPolicyVersion(id: Int, policy_type: String, version_label: String, published_at: String, terms_of_service_url: String, privacy_policy_url: String)`. Field names verified against the live stage response 2026-09-03 and against the app's `domain/model/policy/PolicyAcceptanceStatusResponse.kt` — identical. `requires_acceptance == true` is the only signal that raises the gate; `terms_accepted` / `terms_accepted_at` are informational and unread by the app's UI.
 
 ## Networking behavior (must be reproduced by every SDK core)
 
@@ -187,3 +225,105 @@ in the JSON. Tracked in docs/05.
 - Plantix priority URL-map mismatch (`api/chat/get_plantix/` vs real `api/chat/image_analysis/`) — SDKs map priority correctly to `image_analysis`.
 - Dead constants (`auth/login`, `chat/send`, …) not carried over.
 - `TextPromptResponse.follow_up_questions` is always null; real follow-ups come from endpoint #29.
+
+## #27a agentic stream — REAL WIRE CONTRACT, captured live 2026-09-03
+
+**This supersedes every "not verified" note about the agentic framing.** The stream was captured
+from stage with a guest token; both captures are checked in under `docs/captures/`:
+
+- `agentic_stream_prose_20260903.sse` — a prose answer (13,273 bytes)
+- `agentic_stream_gps_surface_20260903.sse` — a `gps-prompt` alignment surface (4,620 bytes)
+
+### How to reproduce
+
+```bash
+# 1. guest WITH coordinates (an unplaceable guest is what produced the earlier 0-byte responses)
+curl -s -X POST "$BASE/api/user/initialize_user/" -H "API-Key: $KEY" -H "Build-Version: v2" \
+  -H "Content-Type: application/json" \
+  -d '{"device_id":"probe","lat":"-0.023559","long":"37.906193"}'
+# 2. a real conversation — a BLANK conversation_id returns HTTP 400, not an empty stream
+curl -s -X POST "$BASE/api/chat/new_conversation/" -H "Authorization: Bearer $TOK" \
+  -H "Build-Version: v2" -H "Content-Type: application/json" \
+  -d '{"user_id":"'$USERID'","content_provider_id":null}'
+# 3. the stream
+curl -s -N -X POST "$BASE/api/chat/get_answer_for_text_query_agentic/" \
+  -H "Authorization: Bearer $TOK" -H "Build-Version: v2" \
+  -H "Content-Type: application/json" -H "Accept: application/json" -d "$BODY"
+```
+
+`Accept: text/event-stream` returns **HTTP 406** (re-confirmed 2026-09-03). Send
+`Accept: application/json`, which is what every SDK platform already does.
+
+### Framing
+
+Real SSE: `event: <name>` then `data: <json>`, blank-line separated. **Seven** event names, not the
+six the SDK contract assumed:
+
+| `event:` | payload keys | notes |
+|---|---|---|
+| `status` | `stage` (e.g. `"thinking"`) | progress ping. **Not in the SDK's contract** — currently ignored |
+| `tool_call` | `name`, `arguments`, `status_text` | `status_text` e.g. `"Loading your farms"` |
+| `tool_result` | `name`, `result`, `status_text`, `latency_ms` | `result.content[]` is MCP-style `{type,text}` |
+| `text_delta` | **`delta`** | the incremental prose. 9 deltas in the captured answer |
+| `surface` | `id`, `type`, `payload` | an alignment surface delivered MID-STREAM. **Not in the SDK's contract** |
+| `done` | `answer`, `alignment`, `surface`, `followups`, `clarifications`, `trace`, `metrics`, `resolution_type`, `query_id`, `trace_id`, `error` | NOT terminal |
+| `metadata` | a full `TextPromptResponse` incl. `alignments` | **arrives LAST and is the terminal event** |
+
+Two SDK design decisions are hereby **confirmed correct against the real wire**: `text_delta`'s key
+really is `delta` (the SDK's primary alias), and treating `done` as non-terminal while finalizing
+from `metadata` matches the observed order exactly.
+
+`status` and `surface` were unhandled when this contract was first written — not misparsed, but
+falling into the reader's typeless fallback, carrying no `response`/`follow_up_questions`, mapping
+to null and being silently dropped. Consequences were: the `status` progress ping unused, and an
+alignment surface picked up only from `metadata.alignments` (which does carry it) rather than as
+soon as `surface` arrives.
+
+> **Handled on `versions/v2/android` as of 2026-09-03** (`AgenticEvent.Status` /
+> `AgenticEvent.Surface`); still unhandled on ios / react-native / web — see
+> `docs/04-parity-matrix.md` §"#27a real wire contract".
+
+### Alignment chips are RICHER than the SDK models
+
+A real `gps-prompt` chip:
+
+```json
+{"label": "Give permission", "label_key": "gps.button", "label_en": "Give permission",
+ "value": "share_precise_location", "behavior": "invoke_capability", "capability": "location",
+ "request": "gps", "action": "invoke",
+ "submit": {"kind": "action", "surface_type": "gps-prompt", "action": "grant", "data": {},
+            "requires": "location"}}
+```
+
+Confirmed correct in the SDK: `action` is **`"invoke"`** and the share value is
+**`"share_precise_location"`**.
+
+NOT modelled by the SDK's `AlignmentChip` (which has only `label`/`value`/`action`): `label_key`,
+`label_en`, `behavior`, `capability`, `request`, and the whole `submit` object.
+
+**And the decline value differs from the app's constant.** The live `gps-prompt` decline chip is
+`value: "use_approximate_location"` with `behavior: "continue"`, NOT the `not_now` that the app's
+`AlignmentChip.VALUE_NOT_NOW` declares. `not_now` may belong to other surface types; treat
+`VALUE_NOT_NOW` as unconfirmed for `gps-prompt` (docs/05).
+
+The surface `payload` also carries `intent`, `interaction_kind`, `blocking`, `context`
+(`required_precision`, `original_query`), `original_query` and `budget` (`asked`, `max`) — the
+budget being how many times the backend may re-ask.
+
+### Request fields the SDK does not send
+
+`TextPromptRequest` in the app (`domain/model/chat/TextPromptRequest.kt`) has six fields the SDK's
+copy lacks. All are in app source, so none is an invention:
+
+| field | purpose |
+|---|---|
+| `parent_message_id` | correlates an alignment-chip answer to the surface that asked |
+| `location_declined` | the farmer refused the GPS prompt |
+| `photo_declined` | the farmer refused the photo prompt |
+| `streaming_required` | **per-language**, from the language API's `streaming_required`, persisted by the app under `is_streaming_required` |
+| `image_name`, `image` | inline image payload on the text-prompt path |
+
+`streaming_required` was suspected of gating the stream. It does **not**: the endpoint returned a
+full stream both with and without it (3,351 vs 4,620 bytes). It is still a fidelity gap, because the
+language API returns it per language and the SDK never parses, persists or sends it.
+

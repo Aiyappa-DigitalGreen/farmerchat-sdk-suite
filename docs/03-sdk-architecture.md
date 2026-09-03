@@ -102,7 +102,7 @@ versions/v2/android/  ios/  react-native/  web/   v2.0.0  agentic streaming (#27
 | Version | Chat transport | App source of truth |
 |---|---|---|
 | 1.0.0 | Synchronous JSON, #27 | `fc-compose` @ `9f5e4ca` (v4.0.3) |
-| 2.0.0 | Agentic SSE streaming, #27a | `fc-compose-agentic` @ `c0524dd6` (v4.1.2) |
+| 2.0.0 | Agentic SSE streaming, #27a | `fc-compose-agentic` @ `0c8c740f` (v4.1.3, versionCode 108) |
 
 Both publish to the same group at different versions, so a host selects one with an ordinary
 dependency coordinate and gets that version's whole flow.

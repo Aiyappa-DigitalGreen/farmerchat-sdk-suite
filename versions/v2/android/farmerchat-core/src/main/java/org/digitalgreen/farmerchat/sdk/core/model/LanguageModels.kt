@@ -15,6 +15,12 @@ data class SupportedLanguage(
     val ttsVoiceName: String = "",
     @SerializedName("asr_enabled") val isAsrEnabled: Boolean = false,
     @SerializedName("tts_enabled") val isTtsEnabled: Boolean = false,
+    /**
+     * Whether the agentic answer should be streamed for THIS language. Sent back on every
+     * text-prompt request as `TextPromptRequest.streaming_required` (the app persists it under
+     * `is_streaming_required`); it does not gate the stream — docs/02 §#27a.
+     */
+    @SerializedName("streaming_required") val streaming_required: Boolean = true,
     @SerializedName("country_phone_code") val countryPhoneCode: String = ""
 )
 
@@ -61,6 +67,30 @@ data class PrivacyPolicyResponse(
 data class LegalLinks(
     val privacyPolicyUrl: String?,
     val termsOfUseUrl: String?
+)
+
+/**
+ * Endpoint #7a (`api/user/policy_acceptance_status/`, 2.0.0) — the mandatory Terms-of-Use
+ * acceptance gate. 1:1 port of the app's `domain/model/policy/PolicyAcceptanceStatusResponse`;
+ * field names verified against the live stage response 2026-09-03 (doc 02 §Endpoint #7a).
+ *
+ * `requires_acceptance == true` is the only signal that raises the gate. `terms_accepted` /
+ * `terms_accepted_at` are informational — the app's UI never reads them.
+ */
+data class PolicyAcceptanceStatusResponse(
+    val requires_acceptance: Boolean,
+    val terms_accepted: Boolean,
+    val terms_accepted_at: String?,
+    val latest_policy_version: LatestPolicyVersion?
+)
+
+data class LatestPolicyVersion(
+    val id: Int,
+    val policy_type: String,
+    val version_label: String,
+    val published_at: String,
+    val terms_of_service_url: String,
+    val privacy_policy_url: String
 )
 
 // ---------------- Google Geolocation ----------------

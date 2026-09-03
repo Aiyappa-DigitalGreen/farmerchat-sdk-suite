@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.FarmerChatGraph
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.network.NetworkUtils
@@ -73,7 +75,10 @@ internal class JourneyController(
     fun openDrawer() {
         // C3: showDrawer=false disables the navigation drawer entirely.
         if (!graph.config.showDrawer) return
-        graph.analytics.track(AnalyticsEvents.HAMBURGER_MENU_CLICKED)
+        graph.analytics.track(
+            AnalyticsEvents.HAMBURGER_MENU_CLICKED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+        ) // app HomeScreen.kt:1072
         binding.fcDrawerLayout.openDrawer(GravityCompat.START)
     }
 
@@ -229,12 +234,12 @@ internal class JourneyController(
     /** Sign up: question count decides Auth vs AccountBenefits (bypass_interstitial). */
     private fun handleSignUpClick() {
         closeDrawer()
+        // App parity (AppNavGraph.kt handleSignUpClick): sign-up has NO pre-flight error
+        // screen. Offline, getUserQuestionCount() simply fails to return Success and the
+        // user lands on the AccountBenefits interstitial. Skip the doomed call when offline
+        // rather than routing to Error — which also aligns this with Compose FarmerChatRoot.
         if (!NetworkUtils.isOnline(activity)) {
-            navController.navigate(
-                R.id.fc_dest_error,
-                NavRoutes.errorArgs(isNetworkError = true, fromScreen = "auth"),
-                NavRoutes.singleTop()
-            )
+            navController.navigate(R.id.fc_dest_account_benefits)
             return
         }
         lifecycleOwner.lifecycleScope.launch {

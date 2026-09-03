@@ -39,6 +39,11 @@ object SampleConfig {
             .appearance(FarmerChatAppearance.AUTO)
             .debugLogging(true)
             .onEvent { name, props -> Log.d(TAG, "onEvent: $name $props") }
+            // Identity + user attributes: a host forwards these to its own analytics vendor
+            // (MoEngage setUserAttribute / Firebase setUserProperty / ...). No vendor SDK lives
+            // inside the SDK packages.
+            .onUserIdentified { userId -> Log.i(TAG, "onUserIdentified: $userId") }
+            .onUserAttribute { key, value -> Log.i(TAG, "onUserAttribute: $key = $value") }
             .onSessionExpired { Log.w(TAG, "session expired") }
             .onChatOpened { Log.i(TAG, "hook onChatOpened") }
             .onMessageSent { text -> Log.i(TAG, "hook onMessageSent: $text") }

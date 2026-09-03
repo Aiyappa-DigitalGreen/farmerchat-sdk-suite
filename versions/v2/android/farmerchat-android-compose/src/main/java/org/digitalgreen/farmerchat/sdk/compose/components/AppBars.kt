@@ -74,7 +74,12 @@ fun DefaultAppBar(
     onLeftClick: () -> Unit = {},
     rightIcon: ImageVector? = null,
     rightLabel: String? = null,
-    onRightClick: () -> Unit = {}
+    onRightClick: () -> Unit = {},
+    /**
+     * Lets a caller grey out the right action while its work is in flight — the app's
+     * TermsOfUseContentDialog uses it to block a double "Accept" (app DefaultAppBar.kt @ 0c8c740f).
+     */
+    rightEnabled: Boolean = true
 ) {
     val brand = LocalBrandColors.current
     val bg = containerColor ?: brand.surfacePrimary
@@ -134,7 +139,8 @@ fun DefaultAppBar(
                     background = brand.surfaceSecondary,
                     iconColor = brand.foregroundPrimary,
                     labelColor = brand.foregroundPrimary,
-                    radius = Radius.MD
+                    radius = Radius.MD,
+                    enabled = rightEnabled
                 )
             } else {
                 Box(modifier = Modifier.size(42.dp))

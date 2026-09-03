@@ -109,7 +109,10 @@ internal class AgenticChipView @JvmOverloads constructor(
         }
         val labelColor = when {
             selected -> foregroundPrimary
-            !enabled -> foregroundTertiary
+            // Muted but readable: fc_foreground_tertiary collides with fc_surface_tertiary in
+            // values-night (both #3F3F46), which made disabled chip text invisible. App
+            // components/chips/Chip.kt @ 0c8c740f (e335413b).
+            !enabled -> foregroundSecondary
             isEscalate -> onBrand
             else -> foregroundPrimary
         }
@@ -152,11 +155,16 @@ internal class AgenticChipView @JvmOverloads constructor(
             badgeCheck.setColorFilter(onBrand)
         } else if (number != null) {
             val badgeFill = when {
-                !enabled -> surfaceTertiary
+                // The disabled badge circle used to be fc_surface_tertiary — exactly the
+                // disabled chip surface — so it vanished into the chip in BOTH themes. Muted
+                // secondary foreground instead, as the app does (97832e9a).
+                !enabled -> foregroundSecondary
                 isEscalate -> FcTokens.withAlpha(onBrand, 0.22f)
                 else -> accent
             }
-            val badgeFg = if (!enabled) foregroundTertiary else onBrand
+            // Echo the chip surface on the muted disabled badge so the numeral stays legible in
+            // both themes; fc_foreground_tertiary here was the same #3F3F46 as the circle.
+            val badgeFg = if (!enabled) surfaceTertiary else onBrand
             badgeBox.background = FcTokens.roundedRect(context, BADGE_RADIUS, badgeFill)
             badgeNumber.text = number.toString()
             badgeNumber.setTextColor(badgeFg)

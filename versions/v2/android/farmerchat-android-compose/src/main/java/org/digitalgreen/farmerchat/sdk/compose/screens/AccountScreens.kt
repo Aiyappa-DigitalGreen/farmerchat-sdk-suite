@@ -38,10 +38,10 @@ fun AccountBenefitsScreen(
 
     FullScreenMessage(
         title = label(Labels.SIGN_UP, "Sign up"),
-        mainMessage = label(Labels.SAVE_YOUR_QUESTIONS_ANSWERS, "Save your questions and answers"),
+        mainMessage = label(Labels.SAVE_YOUR_QUESTIONS_ANSWERS, "Save your questions\nand answers"),
         subtitle = label(
             Labels.WELL_SAVE_YOUR_CHATS_YOU_CONTINUE,
-            "We'll save your chats so you can continue anytime"
+            "We'll save your chats so you can continue later."
         ),
         primaryCtaLabel = label(Labels.SIGN_UP_PHONE_NUMBER, "Sign up with phone number"),
         onPrimaryCta = {
@@ -92,7 +92,7 @@ fun AccountSuccessScreen(
         mainMessage = label(Labels.YOURE_ALL_SET, "You're all set!"),
         subtitle = label(
             Labels.PREVIOUS_QUESTIONS_MENU,
-            "Your previous questions will appear in the menu"
+            "Find your previous questions in the menu and continue anytime."
         ),
         primaryCtaLabel = label(Labels.CONTINUE, "Continue"),
         onPrimaryCta = {

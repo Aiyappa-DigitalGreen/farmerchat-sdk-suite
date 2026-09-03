@@ -363,6 +363,7 @@ internal class ChatAdapter(
                 isLoading = row.isStateLoading,
                 isLatest = row.isLast,
                 additive = false,
+                blocking = message.alignmentBlocking,
                 labelFor = callbacks::labelFor,
                 onChipClick = { chip -> callbacks.onAlignmentChipClick(message.id, alignmentKind, chip) },
                 onTypeInstead = { callbacks.onTypeInstead() }

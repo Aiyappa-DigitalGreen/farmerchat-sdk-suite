@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.RecyclerView
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.cardPositionLabels
+import org.digitalgreen.farmerchat.sdk.core.analytics.toHomeCardAnalytics
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioRecorder
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
@@ -62,13 +64,37 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
     private lateinit var adapter: HomeFeedAdapter
     private var overlays: InputOverlaysController? = null
 
+    /**
+     * 2.0.0: the mandatory Terms-of-Use acceptance gate (#7a). Owns its non-cancellable sheet and
+     * the "Read terms" content screen; driven from [observeState] on every emission.
+     */
+    private var termsGate: TermsOfUseGateController? = null
+
     private val viewedStatementIds = mutableSetOf<String>()
+
+    /** Card_Viewed is emitted at most once per card id (app HomeScreen.kt:2072 viewedCardIds). */
+    private val viewedCardIds = mutableSetOf<String>()
+
+    /**
+     * `Card_Position` labels for the currently rendered feed, in feed order
+     * (app HomeScreen.kt:2023 buildImageStatementSequences). Rebuilt on every submit.
+     */
+    private var feedPositionLabels: Map<String, String> = emptyMap()
+
+    /**
+     * Identity of the feed whose `Card_Shown` batch has already been announced. The state
+     * collector re-enters `UiState.Success` on every unrelated emission (card dismissal,
+     * weather landing, crop update), so without this guard the batch would re-fire each time.
+     * The app is keyed on the feed response itself (app HomeScreen.kt:925 `LaunchedEffect`).
+     */
+    private var shownFeedKey: String? = null
 
     /**
      * 2.0.0 unified composer instead of the pinned Photo/Speak/Type row — Compose parity with
-     * `HomeScreen.isComposerUi`, which is exactly `graph.config.enableAgenticChat`.
+     * `HomeScreen.isComposerUi`. Mirrors the app's `v2_composer_ui_enabled` flag via the host's
+     * `enableComposerUi`, which defaults to following `enableAgenticChat`.
      */
-    private val isComposerUi: Boolean get() = graph.config.enableAgenticChat
+    private val isComposerUi: Boolean get() = graph.config.resolvedComposerUi
 
     /**
      * The single image attached to the composer, awaiting send. App parity
@@ -104,6 +130,7 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         overlays = InputOverlaysController(
             fragment = this,
             binding = binding.fcHomeOverlays,
+            screenName = AnalyticsScreens.HOME,
             onTextSubmitted = { text -> navigateToChat(question = text) },
             onImagePicked = { uri ->
                 if (isComposerUi) {
@@ -131,7 +158,10 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         binding.fcHomeAppBar.fcAppBarTitle.text = ""
         binding.fcHomeAppBar.fcAppBarWeather.setOnClickListener { onWeatherClick() }
         binding.fcHomeErrorRetry.setOnClickListener {
-            graph.analytics.track(AnalyticsEvents.CONTENT_TRY_AGAIN_CLICKED)
+            graph.analytics.track(
+                AnalyticsEvents.CONTENT_TRY_AGAIN_CLICKED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+            ) // app HomeScreen.kt:1239
             loadHome()
         }
 
@@ -144,6 +174,16 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         }
         loadHome()
         vm.onAction(HomeAction.LoadWeather(context, uid))
+
+        // 2.0.0 Terms-of-Use acceptance gate. App parity (HomeScreen.kt:858): re-checked on
+        // EVERY Home entry so an updated policy version re-prompts; guests with no provisioned
+        // userId are skipped inside the ViewModel.
+        termsGate = TermsOfUseGateController(
+            fragment = this,
+            onAccept = { vm.onAction(HomeAction.AcceptTerms(userId())) },
+            onError = { message -> binding.fcHomeToast.show(message, ToastView.Type.ERROR) }
+        )
+        vm.onAction(HomeAction.FetchPolicyAcceptanceStatus(uid))
 
         observeState()
     }
@@ -294,6 +334,11 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
 
     private fun observeState() {
         vm.state.collectWhenStarted { state ->
+            // 2.0.0 Terms-of-Use acceptance gate (#7a) — shows/hides its own sheet and content
+            // screen from policyAcceptanceState + acceptTermsState. Guarded internally against
+            // this collector's repeat emissions.
+            termsGate?.render(state)
+
             // Feed
             when (val feed = state.homeFeedState) {
                 is UiState.Loading, UiState.Idle -> {
@@ -315,9 +360,25 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                             binding.fcHomeGreeting.text = it
                         }
                     }
+                    val renderable = feed.data.renderableSections()
+                    val labels = cardPositionLabels(renderable)
+                    feedPositionLabels =
+                        renderable.mapIndexed { i, s -> s.stableId() to labels[i] }.toMap()
+                    // App HomeScreen.kt:925-935 — one Card_Shown per visible section when the
+                    // feed response arrives, and only then (see shownFeedKey).
+                    val feedKey = renderable.joinToString(",") { it.stableId() }
+                    if (feedKey != shownFeedKey) {
+                        shownFeedKey = feedKey
+                        renderable.forEach { section ->
+                            graph.analytics.trackHomeCardEvent(
+                                AnalyticsEvents.CARD_SHOWN,
+                                section.toHomeCardAnalytics(cardPosition(section))
+                            )
+                        }
+                    }
                     adapter.submit(
                         // Drops plotline_widget (unrenderable in-SDK; would be blank cards).
-                        sections = feed.data.renderableSections(),
+                        sections = renderable,
                         // C3: SSFR card gated by config.enableSsfr.
                         ssfrEnabled = feed.data.ssfr_enable == true && graph.config.enableSsfr,
                         dismissedIds = state.dismissedCardIds
@@ -374,19 +435,32 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         val uid = userId()
         for (position in first..last) {
             val section = adapter.sectionAt(position) ?: continue
+            val child = layoutManager.findViewByPosition(position) ?: continue
+            val visibleRect = Rect()
+            if (!child.getGlobalVisibleRect(visibleRect)) continue
+            if (visibleRect.height() * 2 < child.height) continue
+
+            // App HomeScreen.kt:2071-2074 — Card_Viewed fires for EVERY card type at >=50%
+            // visibility, once per card id, with the full HomeCardAnalytics payload.
+            if (viewedCardIds.add(section.stableId())) {
+                graph.analytics.trackHomeCardEvent(
+                    AnalyticsEvents.CARD_VIEWED,
+                    section.toHomeCardAnalytics(cardPosition(section))
+                )
+            }
+
+            // #14 mark-image-viewed stays limited to unviewed image/statement cards.
             if (section.type != "image" && section.type != "statement") continue
             if (section.is_viewed == true) continue
             val statementId = section.statement_id?.toString() ?: continue
             if (statementId.isBlank() || viewedStatementIds.contains(statementId)) continue
-            val child = layoutManager.findViewByPosition(position) ?: continue
-            val visibleRect = Rect()
-            if (!child.getGlobalVisibleRect(visibleRect)) continue
-            if (visibleRect.height() * 2 >= child.height) {
-                viewedStatementIds.add(statementId)
-                vm.onAction(HomeAction.MarkImageViewed(statementId, uid))
-            }
+            viewedStatementIds.add(statementId)
+            vm.onAction(HomeAction.MarkImageViewed(statementId, uid))
         }
     }
+
+    private fun cardPosition(section: SectionDto): String =
+        feedPositionLabels[section.stableId()] ?: ""
 
     // ------------------------------------------------------------------ card callbacks
 
@@ -399,12 +473,10 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
             )
             return
         }
-        graph.analytics.track(
+        // App HomeScreen.kt:610 — full HomeCardAnalytics payload.
+        graph.analytics.trackHomeCardEvent(
             AnalyticsEvents.CARD_CLICKED,
-            mapOf(
-                AnalyticsProps.CARD_TYPE to (section.type ?: ""),
-                AnalyticsProps.SENTENCE_ID to (section.statement_id?.toString() ?: "")
-            )
+            section.toHomeCardAnalytics(cardPosition(section))
         )
         val question = section.question_text ?: section.title.orEmpty()
         pendingQuestion = question
@@ -465,11 +537,19 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
             ),
             AnalyticsScreens.HOME
         )
+        val genderValue = option.id ?: option.text ?: ""
+        // App HomeScreen.kt:1401 — Card_Clicked carries the selection as `Value`.
+        graph.analytics.trackHomeCardEvent(
+            AnalyticsEvents.CARD_CLICKED,
+            section.toHomeCardAnalytics(""),
+            value = genderValue
+        )
+        // App HomeScreen.kt:1407 — `{screen_name, gender}`.
         graph.analytics.track(
             AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
             mapOf(
-                AnalyticsProps.CARD_TYPE to (section.statement_type ?: "gender"),
-                AnalyticsProps.VALUE to (option.id ?: option.text ?: "")
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                AnalyticsProps.GENDER to genderValue
             )
         )
         vm.dismissCard(section.stableId())
@@ -486,6 +566,12 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         val uid = userId()
         if (uid.isBlank() || optionIds.isEmpty()) return
         val isLivestock = section.statement_type?.contains("livestock", ignoreCase = true) == true
+        // App HomeScreen.kt:1454 — Card_Clicked carries the selected ids as `Value`.
+        graph.analytics.trackHomeCardEvent(
+            AnalyticsEvents.CARD_CLICKED,
+            section.toHomeCardAnalytics(""),
+            value = optionIds.joinToString(",")
+        )
         if (isLivestock) {
             vmProfile.onAction(
                 UserNameAction.UpdateUserName(
@@ -496,11 +582,12 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                 ),
                 AnalyticsScreens.HOME
             )
+            // App HomeScreen.kt:1492 — `{screen_name, livestock}`.
             graph.analytics.track(
                 AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
                 mapOf(
-                    AnalyticsProps.CARD_TYPE to "livestock",
-                    AnalyticsProps.VALUE to optionIds.joinToString(",")
+                    AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                    AnalyticsProps.LIVESTOCK to optionIds.joinToString(",")
                 )
             )
             binding.fcHomeToast.show(
@@ -524,7 +611,7 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         onSsfrClick(
             label(
                 Labels.SSFR_WHEAT_QUESTION,
-                "Give me fertilizer recommendation for my wheat farm"
+                "What is the recommended quantity of fertiliser for wheat?"
             ),
             "wheat"
         )
@@ -534,7 +621,7 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         onSsfrClick(
             label(
                 Labels.SSFR_MAIZE_QUESTION,
-                "Give me fertilizer recommendation for my maize farm"
+                "What is the recommended quantity of fertiliser for maize?"
             ),
             "maize"
         )
@@ -565,7 +652,10 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
             )
             return
         }
-        graph.analytics.track(AnalyticsEvents.WEATHER_FORECAST_VIEWED)
+        graph.analytics.track(
+            AnalyticsEvents.WEATHER_FORECAST_VIEWED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+        ) // app HomeScreen.kt:559
         val weatherQuestion =
             label(Labels.WHAT_IS_THE_PRESENT_WEATHER, "What is the present weather?")
         if (graph.locationPromptManager.hasStoredLocation()) {
@@ -710,6 +800,9 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
     override fun onDestroyView() {
         overlays?.release()
         overlays = null
+        // Dismiss the gate's dialogs before the window goes, or they leak across a config change.
+        termsGate?.destroy()
+        termsGate = null
         super.onDestroyView()
     }
 }

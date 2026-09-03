@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.AiImageOverlayView
 import org.digitalgreen.farmerchat.sdk.core.model.OptionDto
 import org.digitalgreen.farmerchat.sdk.core.model.SectionDto
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemHomeContentCardBinding
@@ -142,7 +143,7 @@ internal class HomeFeedAdapter(
     private fun bindContent(holder: ContentHolder, section: SectionDto) {
         val b = holder.binding
         val hasImage = section.type == "image" && !section.image_url.isNullOrBlank()
-        b.fcCardImage.isVisible = hasImage
+        b.fcCardImageFrame.isVisible = hasImage
         if (hasImage) {
             // 16:9 image inset by 8dp inside the card (Compose ContentCard parity).
             b.fcCardImage.post {
@@ -156,7 +157,19 @@ internal class HomeFeedAdapter(
                     }
                 }
             }
-            b.fcCardImage.load(section.image_url)
+            // App parity (components/cards/ContentCard.kt): loading and error draw two
+            // DIFFERENT placeholder animations, driven off the Coil request state.
+            val overlay = b.fcCardImageOverlay
+            b.fcCardImage.load(section.image_url) {
+                listener(
+                    onStart = { overlay.setMode(AiImageOverlayView.Mode.LOADING) },
+                    onSuccess = { _, _ -> overlay.setMode(AiImageOverlayView.Mode.HIDDEN) },
+                    onError = { _, _ -> overlay.setMode(AiImageOverlayView.Mode.ERROR) },
+                    onCancel = { overlay.setMode(AiImageOverlayView.Mode.HIDDEN) }
+                )
+            }
+        } else {
+            b.fcCardImageOverlay.setMode(AiImageOverlayView.Mode.HIDDEN)
         }
 
         val headline = section.title?.takeIf { it.isNotBlank() }

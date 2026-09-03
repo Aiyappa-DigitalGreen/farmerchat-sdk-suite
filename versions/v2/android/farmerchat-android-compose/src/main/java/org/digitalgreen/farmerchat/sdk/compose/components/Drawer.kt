@@ -62,6 +62,7 @@ import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.util.rememberDebouncedAction
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.ui.history.DrawerQuestion
 import org.digitalgreen.farmerchat.sdk.core.ui.history.DrawerQuestionType
@@ -210,14 +211,14 @@ fun DrawerContent(
     fun trackMenuOptionClick(option: String) {
         analytics.track(
             AnalyticsEvents.MENU_OPTION_CLICK_EVENT,
-            mapOf("option" to option)
+            mapOf(AnalyticsProps.OPTION_LOWER to option) // app DrawerContent.kt:120 — lowercase key
         )
     }
 
     fun trackChatHistoryClickFromMenu() {
         analytics.track(
             AnalyticsEvents.CHAT_HISTORY_CLICK_EVENT,
-            mapOf(AnalyticsProps.SCREEN_NAME to "Menu")
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.MENU_LITERAL) // app DrawerContent.kt:133
         )
     }
 
@@ -385,9 +386,10 @@ fun DrawerContent(
                                         analytics.track(
                                             AnalyticsEvents.CHAT_HISTORY_CLICK,
                                             mapOf(
-                                                AnalyticsProps.SCREEN_NAME to "Side Menu",
-                                                "conversation_id" to question.conversationId,
-                                                "question_index" to index.toString()
+                                                // App DrawerContent.kt:368.
+                                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SIDE_MENU_LITERAL,
+                                                AnalyticsProps.CONVERSATION_ID to question.conversationId,
+                                                AnalyticsProps.QUESTION_INDEX to index.toString()
                                             )
                                         )
                                         onQuestionClick(index, question.conversationId)

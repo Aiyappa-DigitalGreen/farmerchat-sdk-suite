@@ -49,10 +49,11 @@ export function ChatScreen(props: {
   const { params } = props;
   const isHistoryEntry = params.source === 'history';
 
-  // 2.0.0: with agentic chat on, the unified InputComposer replaces BOTH the Photo/Speak/Type row
-  // and the text overlay — Compose gates exactly this on `isComposerUi = config.enableAgenticChat`
-  // (ChatScreen.kt:167). With the flag off nothing below changes, so a 1.0.0 host keeps v1 input.
-  const isComposerUi = services.config.enableAgenticChat;
+  // 2.0.0: with the composer on, the unified InputComposer replaces BOTH the Photo/Speak/Type row
+  // and the text overlay — Compose gates exactly this on `config.resolvedComposerUi`: the host's
+  // `enableComposerUi`, or `enableAgenticChat` when omitted (the app's independent
+  // `v2_composer_ui_enabled` flag). With it off nothing below changes, so a 1.0.0 host keeps v1.
+  const isComposerUi = services.config.composerUi;
   const composerRef = useRef<InputComposerHandle | null>(null);
   // A single image per query, mirroring Compose's `photoUris` (rendered `.take(1)`). The photo
   // overlay fills this; `onSend` consumes it, so the question and the image travel together.

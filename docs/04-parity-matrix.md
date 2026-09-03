@@ -729,6 +729,9 @@ the v1 trees are byte-clean.
 | **Location bubble actually PRODUCED** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Capability chips (`gps-prompt`, `upload-photo`)** | ✅ | ✅ | ✅ | ✅ both | ✅ | ✅ |
 | `TermsOfUseDialog` wired | n/a | ✅ | ⛔ | ⛔ | ✅ | ✅ via `openScreen('termsofuse')` |
+| **#7a `policy_acceptance_status` (endpoint + wire model)** | ✅ | n/a | n/a | ⛔ | ⛔ | ⛔ |
+| **`HomeAction.FetchPolicyAcceptanceStatus` + `HomeState.policyAcceptanceState`/`acceptTermsState`** | ✅ | n/a | n/a | ⛔ | ⛔ | ⛔ |
+| **Mandatory ToU gate sheet + content screen, rendered from Home** | n/a | ✅ | ✅ | ⛔ | ⛔ | ⛔ |
 | `MarkdownText` v2 (tables, dividers, nesting) | n/a | ✅ | ⛔ | ⛔ | ⛔ | ✅ |
 | Alignment chip pick recorded per message | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Settings "My Farm" rows | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
@@ -788,11 +791,12 @@ the table passes the test while diverging from it.
 
 **Deltas recorded, not built** (identical on all four platforms):
 
-- **No `parent_message_id`.** The app returns the surface's server `message_id` so the backend
-  correlates the answer to the prompt. The SDK's `TextPromptRequest` has no such field, so NO
-  alignment chip send carries it. Adding an unexercisable wire field (the agentic endpoint still
-  returns 0 bytes to a guest) was judged worse than recording it. **This is the largest known
-  fidelity gap in the alignment feature.**
+- ~~**No `parent_message_id`.**~~ **CLOSED for android on 2026-09-03** — the field, and the other
+  five missing `TextPromptRequest` fields, are now sent; both the chip path and the location path
+  resolve it from the source surface's SERVER `messageId`. See "#27a real wire contract" at the end
+  of this document. **Still open for ios / react-native / web.** (It was recorded rather than built
+  because the endpoint returned 0 bytes to a guest and the field was unexercisable; the live capture
+  removed that objection.)
 - **No `agentic_chip_*` analytics.** `SendQueryProperties` has no `isAlignmentChip` / chip
   type-value-label-status fields, so these report as ordinary text queries. `triggered_input_type`
   IS sent as `align_chip_sel`.
@@ -942,6 +946,123 @@ verified before fixing, and each is fixed in **core**, so every flavour inherits
 iOS names the model `AlignmentSurface`, not `Alignment` — `SwiftUI.Alignment` owns that name and a
 public `Alignment` in Core made `FarmerChatFabButton` ambiguous for any host importing both
 modules. The wire key is still `alignments`.
+
+### The mandatory Terms-of-Use gate (#7a) — closed on android 2.0.0, 2026-09-03
+
+The app has a **blocking** policy-acceptance gate the SDK had no trace of: not the endpoint, not
+the model, not the UDF fields, not the UI. It is fully-implemented app code
+(`ui/home/HomeViewModel.kt:107/176`, `ui/home/udf/HomeState.kt`,
+`domain/model/policy/PolicyAcceptanceStatusResponse.kt`, `ui/home/HomeScreen.kt:858/1818`), and it
+is **not** the Plotline-triggered `TermsOfUseDialog` that was already ported — the app's own
+comment at `HomeScreen.kt:331` says this one is "driven by GET policy_acceptance_status rather
+than a campaign card". The two are independent and both now exist on android.
+
+**Verified live before implementing** (2026-09-03, stage, guest token):
+`GET api/user/policy_acceptance_status/?user_id=<uuid>` → **200** with exactly the app's field
+set; omitting `user_id` → **400** `{"error":"user_id is required"}`. Shape and field names match
+`PolicyAcceptanceStatusResponse` character-for-character, so nothing went to docs/05. Recorded in
+docs/02 §Endpoint #7a with the live body.
+
+What landed:
+
+| Layer | android-core | android-compose | android-views |
+|---|---|---|---|
+| `ApiConstants.POLICY_ACCEPTANCE_STATUS`, `ApiServices.fetchPolicyAcceptanceStatus` | ✅ | — | — |
+| `PolicyAcceptanceStatusResponse` + `LatestPolicyVersion` (snake_case, 1:1) | ✅ | — | — |
+| `LanguageRepository.fetchPolicyAcceptanceStatus`, `GetSupportedLanguagesUseCase.fetchPolicyAcceptanceStatus` (P2, `apiName="policy_acceptance_status"`) | ✅ | — | — |
+| `HomeAction.FetchPolicyAcceptanceStatus`, `HomeState.policyAcceptanceState`, `HomeState.acceptTermsState` | ✅ | — | — |
+| Dispatched on **every** Home entry | — | ✅ | ✅ |
+| Non-cancellable sheet + "Read terms" content screen | — | ✅ `TermsOfUseGate.kt` | ✅ `TermsOfUseGateController.kt` |
+| 5 app analytics events, host-raised | — | ✅ | ✅ |
+| 7 app label keys (**all live on #3 in en/hi/sw**) | ✅ | ✅ | ✅ |
+| Shared gate predicate + 9 unit tests | ✅ | uses it | uses it |
+
+**The bug this round deliberately did not ship.** The SDK's pre-existing `acceptTerms` was
+fire-and-forget — `collect { /* best-effort */ }`, writing no state. The gate's only exit is
+`acceptTermsState is UiState.Success`, so shipping the sheet on top of that would have produced a
+**non-dismissible overlay permanently covering Home**. `HomeViewModel.acceptTerms` now writes
+`Loading → Success/Error` like the app's, and the app's reset (`fetchPolicyAcceptanceStatus` sets
+`policyAcceptanceState = Loading, acceptTermsState = Idle` in one update) is ported verbatim — a
+stale `Success` from the dismissible dialog earlier in the session would otherwise suppress a
+freshly-required re-acceptance. Both are covered by `TermsOfUseGateTest`.
+
+**The gate fires for guests, and that is app behaviour.** `initialize_user` persists a `user_id`
+(app `OnboardingSharedViewModel.kt:387`, SDK `SessionManager.kt:62`), the app's guard skips only a
+*missing* userId (`isBlank() || equals("null")`), and the backend answers
+`requires_acceptance: true` for a guest token — that is exactly what the live probe returned. The
+guard is ported literally, so a guest-only host (e.g. the CHAT_ONLY bootstrap) will see the sheet
+on Home. Its error path is retryable on both flavours: `UiState.Error` re-enables both buttons and
+surfaces the reason as a toast.
+
+**Recorded deltas from the app:**
+- **No Adjust tokens and no `Plotline_Accept_Terms_Click_Event`** (`"ToS_Aug26_Accept_Terms"`).
+  The other five events are ported character-for-character
+  (`Terms_Of_Use_Sheet_Shown`, `…_Content_Screen_Viewed`, `…_Content_Screen_Exited`,
+  `…_Accept_Click_Event`, `…_Read_Terms_Click_Event`) with
+  `AnalyticsScreens.TERMS_OF_USE_CONTENT_SCREEN = "Terms of Use Content Screen"`. The app's
+  components self-track through `AnalyticsManager`; the SDK raises them from the caller through
+  `FarmerChatAnalytics` instead (root CLAUDE.md §6). The app's timing quirk is kept:
+  `Terms_Of_Use_Accept_Click_Event` fires on API **success**, not on the tap, tagged with which of
+  the two CTAs initiated it.
+- The app's optional `bannerRes` sheet variant is not ported (Home always passes `null`, so the
+  icon variant is the only one the app ever renders). `ic_tou_info.xml` is copied as
+  `fc_ic_tou_info.xml`.
+- The content screen's app-bar close button is **inert** rather than **dimmed** while #7 is in
+  flight on compose: the app passes `rightEnabled` to its `DefaultAppBar`, which the SDK's shared
+  `DefaultAppBar` does not have, and adding a parameter to a component five screens share was not
+  worth the churn. Taps are ignored, which is the load-bearing half.
+- The gate predicate is extracted to core (`HomeState.requiresTermsAcceptance()`,
+  `latestTermsOfServiceUrl()`) rather than left inline as the app has it. The app has one UI; the
+  SDK has two, and a duplicated inline predicate is exactly how the two flavours drift.
+- **`showContentScreen` is not saved across a config change**, matching the app's plain
+  `remember`. Rotating with the content screen open drops back to the sheet; the gate itself is
+  re-derived from state and stays up.
+- **Views-only visual delta**: the content screen's bottom action bar uses `fc_bg_rounded_top`
+  (white / `surface_secondary`) where compose and the app use `brand.foregroundPrimary`.
+
+**Labels checked, not assumed.** All seven keys are served by #3 on stage in **en, hi and sw**
+(probed 2026-09-03, `language=1/2/3`). This mattered more than usual: the gate cannot be dismissed,
+so a missing key would strand a non-English farmer on a hardcoded-English screen with no way out.
+Recorded in docs/02 §Endpoint #7a.
+
+**Verified 2026-09-03**: `:farmerchat-core:assembleDebug`, `:farmerchat-android-compose:assembleDebug`,
+`:farmerchat-android-views:assembleDebug`, `:sample-compose:assembleDebug`,
+`:sample-views:assembleDebug`, `:farmerchat-core:testDebugUnitTest` → **BUILD SUCCESSFUL**, core
+unit tests **76 total / 0 failures** (9 new). **NOT verified: nothing ran on a device or emulator** —
+the gate has never been seen on a screen. `TermsOfUseGateTest` pins the predicate given a state;
+that `HomeViewModel.acceptTerms` writes that state, and that both flavours construct the sheet, is
+build-and-inspection evidence only.
+
+**Not done in this lane:** iOS, react-native and web have none of #7a — no endpoint, model, state
+or UI. That is the honest ⛔ in the matrix rows above, not a partial.
+
+### Home sweep (android 2.0.0, same round)
+
+Diffed the app's `ui/home/` against both android flavours. Findings, so the next reader does not
+re-derive them:
+
+- **UDF is now exactly 1:1.** App `HomeAction` has 14 members, SDK had 13 — the single delta was
+  `FetchPolicyAcceptanceStatus`. App `HomeState` has 11 fields, SDK had 9 — the delta was
+  `policyAcceptanceState` + `acceptTermsState`. All three are now present, so the action/state
+  surfaces match member-for-member with no renames.
+- **Feed section types**: app renders `image`, `statement`, `question` (`single`/multi
+  `selection_type`) and `plotline_widget`. Both flavours cover the first three and filter
+  `plotline_widget` through `HomeUdfResponse.renderableSections()` — correct per docs/02 §#12,
+  which warns a catch-all branch turns those into blank cards. No gap.
+- **Weather CTA**: present on both (`onWeatherClick` → location prompt when unresolved → chat with
+  `isWeatherAdviceCTA`); the pill is additionally gated by `config.enableWeather`, an SDK-only
+  host knob. No gap.
+- **Crops / livestock submission targets** match the app: `single` gender →
+  `UserNameRequest(gender)`; livestock (`statement_type` contains "livestock") →
+  `UserNameRequest(live_stock_details)`; crops → `UpdateCultivatedCrops` (#14). No gap.
+- **`MarkImageViewed`, image-statement, question-count** are all wired on both flavours.
+  Question-count is called where the app calls it — the sign-up routing decision
+  (`bypass_interstitial ? Auth : AccountBenefits`), app `AppNavGraph.kt:143`, SDK
+  `FarmerChatRoot.kt:236` / `JourneyController.kt:244` — not from Home. No gap.
+- **Greeting logic**: both flavours render the API greeting with the app's agentic/plain split.
+- **Still open (unchanged this round, confirmed):** Settings "My Farm" rows and the agentic Home
+  visuals (sunbeams, gradient, pinned header) are compose-only; views has the composer and the
+  "For your farm today" title but not the surface treatment. Matrix rows above are accurate.
 
 **Still to do for 2.0.0:**
 1. **Confirm the wire framing with the backend.** Still the biggest risk: the endpoint emits 0
@@ -1684,13 +1805,172 @@ simulator** — build- and test-verified only, like the rest of 2.0.0.
 - **ios-core (bug fix, 2026-07-20)**: `ConversationListItem` decoded `title`/`question` but the real API + app model (`ConversationListItem.kt`) field is `conversation_title` — history-list rows and drawer recent-8 titles were blank. Added the `conversation_title` CodingKey (+ non-empty `displayText` fallback). Fixes BOTH ios-swiftui and ios-uikit drawer + ChatHistory titles (screenshot-verified: `ios-uikit-19-drawer.png`, `ios-uikit-17-history.png`). (The web port had the same class of bug, fixed separately — see web debts.)
 - **ios-uikit**: SPM platform floor prevents FarmerChatUIKit (iOS 15) from depending on FarmerChatSwiftUI (iOS 16), so the "host SwiftUI flow via UIHostingController on iOS 16+" option lives in FarmerChatSwiftUI (`present(from:)`) rather than inside FarmerChatUIKit (docs/05 iOS entry).
 - **android (all)**: ✅ above means Kotlin compile + AAR/APK assembly passed (root CLAUDE.md §5 minimum, exceeded — full `assembleDebug` chain verified by the main session on 2026-07-17 after bumping compileSdk/targetSdk 35→36 repo-wide, required by androidx.activity 1.13 / compose BOM 2026.05; matches the production app's compileSdk 36). NOT yet runtime-tested on a device/emulator: no end-to-end API call, MediaRecorder capture, camera/FileProvider flow, fused-location fetch, or share/MediaStore save has been exercised.
-- **android-compose**: deviations, all functional — SmoothShapes corner smoothing approximated with plain rounded corners (no androidx.graphics.shapes dep); card mark-viewed fires on item composition rather than a strict ≥50%-visibility measurement; Error "Try Again" is uniform `popBackStack + retryLastAction` instead of the app's seven per-fromScreen branches (screens re-fire entry effects so retries still work); AccountSuccess→Home uses `popUpTo(Home)` instead of `popUpTo(AccountBenefits){inclusive}` (avoids a stale entry on the bypass path); VoiceInput returns the recorded file and the screen drives transcription (component not VM-injected).
-- **android-views**: deviations, all functional — SIM-number prefill and SIM-picker dialog omitted (country auto-detect uses persisted guest-init country); WhatsApp OTP-less SDK reflection helper not integrated (channel buttons + SMS Retriever only; same functional path as RN/web); Home greeting is a static header above the pinned input row (app scrolls it under a sticky header); voice panel is tap-to-stop with timer, no waveform animation; chat scroll-indicator/Tips affordances not built; AccountSuccess can remain in the back stack under Home on the bypass-interstitial path (popUpTo(AccountBenefits) no-ops when absent); core's internal SDK_VERSION_NAME mirrored as a local constant for the Help footer.
+- **android-compose**: deviations, all functional — SmoothShapes corner smoothing approximated with plain rounded corners (no androidx.graphics.shapes dep); card mark-viewed fires on item composition rather than a strict ≥50%-visibility measurement; ~~Error "Try Again" is uniform `popBackStack + retryLastAction`~~ **FIXED 2026-09-03 — the app's full per-`fromScreen` retry tree is now in `FarmerChatRoot.kt`**; ~~AccountSuccess→Home uses `popUpTo(Home)`~~ **FIXED 2026-09-03 — `popUpTo<AccountBenefits>{inclusive}` + `BackHandler`, matching the app**; VoiceInput returns the recorded file and the screen drives transcription (component not VM-injected).
+- **android-views**: deviations, all functional — SIM-number prefill and SIM-picker dialog omitted (country auto-detect uses persisted guest-init country); WhatsApp OTP-less SDK reflection helper not integrated (channel buttons + SMS Retriever only; same functional path as RN/web); Home greeting is a static header above the pinned input row (app scrolls it under a sticky header); voice panel is tap-to-stop with timer, no waveform animation; chat scroll-indicator/Tips affordances not built; AccountSuccess can remain in the back stack under Home on the bypass-interstitial path (popUpTo(AccountBenefits) no-ops when absent — same in the app, and now in Compose too); core's internal SDK_VERSION_NAME mirrored as a local constant for the Help footer.
 - **android**: WhatsApp OTP endpoint #19 has no UI caller in either Android UI module (reflection-based WhatsApp OTP SDK from the app not integrated; channel selection still works via #17 with `channel:["whatsapp"]`). Endpoints #18/#33 implemented in core with no UI caller (same rationale as other platforms).
 - **android (distribution/theming/features C1–C5, 2026-07-20)**: hardened to distribution-grade at v1.0.0. **Distribution PROVEN**: `./gradlew publishToMavenLocal` publishes all three artifacts under `org.digitalgreen.farmerchat:{farmerchat-core,farmerchat-android-compose,farmerchat-android-views}:1.0.0`; a new `:sample-consumer` module consumes the SDK **by Maven coordinate from `mavenLocal()`** (`implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0")`, NOT `project(...)`) and `:sample-consumer:assembleDebug` passes — dependency tree confirms `…:farmerchat-android-compose:1.0.0 → …:farmerchat-core:1.0.0`. Version from ONE source (root `build.gradle.kts` `farmerChatVersion`/group on all subprojects; runtime mirror `FarmerChatVersion.VERSION`). API hardening: `resourcePrefix="fc_"` on both UI modules; `requireGraph()`/`FarmerChatGraph` gated behind `@InternalFarmerChatApi` (opt-in error; UI modules opt in at module level, hosts cannot reach it); `-Xexplicit-api=warning` on core; retrofit/okhttp/gson demoted `api`→`implementation` so they are `runtime`-scope in the core POM (verified: NOT on the consumer compile classpath). **Theming PROVEN (Compose)**: `:sample-consumer` supplies a blue host `FarmerChatTheme`; **screenshot-verified on emulator (Pixel 6 Pro)** — Language (`scratchpad/phase2_language_blue.png`) and Home (`scratchpad/phase2_home_blue_final.png`) render fully in the host blue palette (app bars, tiles, primary buttons, accent chevrons + glyphs, 16dp cards, 8dp buttons) with zero per-screen edits. **Features C1/C2/C4/C5 wired in core (+Compose)**; C3 fully wired in Compose. Full `./gradlew assembleDebug` (all modules incl. Views + both project-samples + coordinate-consumer) passes. NOT yet done: **Views theming** (XML color/drawable resources are not runtime-overridden — the `FarmerChatTheme` model is reachable via core but the Views screens do not consume it) and **Views C3 UI toggles** (config fields exist; JourneyController/drawer/home in Views still render the full journey regardless). C2 HOST_TOKEN / CHAT_ONLY landing / programmatic openScreen / semantic hooks are build-verified but not runtime-exercised on device this pass (only the themed Language+Home journey was driven on the emulator).
 - **ios (distribution + theming + features C1–C5, 2026-07-20)**: hardened to distribution-grade at v1.0.0. **Distribution PROVEN as a binary artifact**: `ios/build-xcframework.sh` archives each package for iphoneos + iphonesimulator and produces `dist/{FarmerChatCore,FarmerChatSwiftUI,FarmerChatUIKit}.xcframework` (each with device `ios-arm64` + `ios-arm64_x86_64-simulator` slices and the `.swiftinterface` copied into `Modules/` — the SwiftPM archive quirk the script works around by temporarily flipping products to `type: .dynamic`, restored on exit via a trap). The UI xcframeworks dynamically link `FarmerChatCore.framework` via `@rpath` (verified with `otool -L`) so there are no duplicate Core symbols. `ios/Package.binary.swift` is the binaryTarget manifest variant (swap `path:`→`url:`+`checksum:` for a remote release). A separate consumer `ios/ConsumerApp` links the three `.xcframework`s (`framework:`+`embed:true` in `project.yml`, **NOT** the source packages), imports all three modules from their compiled interfaces, exercises `FarmerChat.initialize`/`FarmerChatConfig`/`FarmerChatTheme`/`Color(hex:)`/`FarmerChatView`/`FarmerChatInlineView`/`sendQuestion`, and **builds AND runs on the iPhone 17 simulator** (`scratchpad/consumer_binary.png`, `consumer_full_menu.png`). What was NOT exercised: true git-URL/tag SPM resolution and remote CocoaPods trunk (offline); `FarmerChatUIKit.podspec` validated only by `ruby -c` (Syntax OK) — CocoaPods is not installed so `pod lib lint` was NOT run. **API hardening**: demoted the networking internals `APIClient`, `HTTPMethod`, `TokenRefresher`(+`Outcome`), `DeviceInfoProvider`, `KeychainTokenStore`(+`Key`) and `FarmerChat.tokenStore`/`.deviceInfo`/`SessionManager.tokenStore`/`FarmerChatAPI.init`/`SessionManager.init` to `internal` — none are referenced by the UI packages (`FarmerChatAPI`/`PreferenceStore`/`SessionManager` methods still consumed by UI stay public; the wire models + ViewModels are necessarily public across the multi-module boundary, documented constraint). All three packages still build clean after demotion and the binary consumer proves the internals are not reachable. **Theming PROVEN**: `FarmerChatTheme` (SwiftUI `Color`/`Image`; colors+dark/shape/typography/logo) on `FarmerChatConfig.theme` (Core imports SwiftUI only for these value types); one resolver `FCTheme.applyHostOverrides` overlays host overrides onto the SwiftUI token layer (`FCBrandColors`/`FCContentColors`/`FCShapes`) with auto on-brand contrast + derived button/dark tints, and `FCUITheme` gets the same overlay via a `hostColor` KeyPath resolver (Color→UIColor) — every screen recolors with **zero per-screen edits**. **Screenshot-verified on the iPhone 17 simulator (iOS 26.1, dev env, blue host brand: brandPrimary #1565C0 / brandPrimaryDark #0D47A1 / brandAccent #42A5F5)** — Language (`scratchpad/themed_language.png`: blue "Start using FarmerChat" CTA + light-blue chevron, radius 12) and Home (`themed_home.png`: blue Photo/Speak/Type tiles, blue "Start chat" accent, 16-pt cards) render fully in host blue, live feed cards from dev. **Features**: C1 `FarmerChatInlineView()` + `FarmerChatViewController` child-VC; C2 authMode SDK_OTP|HOST_TOKEN (`markHostAuthenticated`, `TokenRefresher` host-mode 401→tokenProvider→onSessionExpired); C3 mode FULL_JOURNEY|CHAT_ONLY + showSettings/History/Drawer + enableSsfr (SwiftUI-wired); C4 semantic callbacks (onScreenView/onChatOpened via AnalyticsDispatcher; onMessageSent/onAnswerReceived/onError in ChatViewModel; onSessionStart in initialize) + `FarmerChat.sendQuestion/openConversation/openScreen`; C5 `stringOverrides` (host wins) + forced `locale` in LabelManager. Verification depth: theming colors + C1 (build+run) screenshot/runtime-proven; C5 label resolution unit-tested (12/12); C2/C3(toggles)/C4 are **type-checked/build-verified but NOT runtime-exercised** (the themed sim run used the default all-on full-journey path). Typography: `typeScale`/`fontName` are exposed as `theme.font(...)` tokens and applied where that helper is used, but the screens' existing `.font(.system(size:))` call sites were NOT swept, so type scaling is partial (colors/shape are the fully-wired, screenshot-verified deliverables). UIKit C2/C3/C4 UI toggles are core-level only (UIKit-native screens not re-wired this pass — iOS 16+ hosts should prefer FarmerChatSwiftUI).
 - **react-native (distribution/theming/features C1–C5, 2026-07-20)**: hardened to distribution-grade at v1.0.0. **Distribution PROVEN**: `tsc` build + `npm pack` → `digitalgreenorg-farmerchat-react-native-1.0.0.tgz` (773 kB / 357 files: dist + src + 39 PNG assets + README). A fresh `react-native/example-packaged/` installs the SDK **from the .tgz** (`npm install ../packages/farmerchat-react-native/digitalgreenorg-farmerchat-react-native-1.0.0.tgz` — a real copy under node_modules, NOT the `file:` symlink) and passes **both** `npx tsc --noEmit` **and** `npx expo export --platform android` (Metro resolved the SDK + all PNG assets from node_modules and emitted a 3.5 MB Android bundle). package.json is publish-correct: `exports` map (`source`/`types`/`react-native`→`src`, `import`/`default`→built `dist/`) + `main`/`module`/`types`; react/react-native are peerDependencies only (no `dependencies`, not bundled); `files`=dist+src+README; `sideEffects:false`. Version 1.0.0 in package.json and `SDK_VERSION` (kept in sync). **Theming PROVEN**: `theme` on `FarmerChatConfig` → a single `resolveTheme()` called in the SDK constructor overlays host colors(+optional dark)/shape/typography/logo onto `src/ui/theme.ts` and reassigns the live token bindings (`dayTheme`/`nightTheme`/`radius`/`typography`/`brandLogo`); colors + text typography recolor every screen with zero per-screen edits (a handful of brand-literal spots in Chrome/Cards/InputOverlays/Buttons were repointed to theme tokens). **Screenshot-verified on the Android emulator (Pixel 6 Pro, Expo Go SDK 52, dev env, blue host brand)** — Language (`scratchpad/fc_lang_clean.png`, selection `fc_lang_selected.png`), EnterName (`fc_after_lang.png`) and Home (`fc_home.png`) render fully in the host blue palette (app bars, dark-blue hamburger chip + Photo/Speak/Type tiles, light-blue accent icons/radio dot/chevrons, blue CTAs, blue-tinted footer flower). **Features**: C1 `<FarmerChatInlineView style/>`; C2 authMode SDK_OTP|HOST_TOKEN (+tokenProvider/401 path); C3 mode + showSettings/History/Drawer + enableWeather/Ssfr; C4 semantic callbacks + `FarmerChat.sendQuestion/openConversation/openScreen`; C5 stringOverrides + forced locale — all type-checked, and **C1 inline embed, C3 CHAT_ONLY, C5 stringOverrides + forced locale, C4 semantic hooks, and the blue theme recolor are now RUNTIME-verified on the emulator (mock, 2026-07-20; screenshots `scratchpad/rn-19..22`)**. Runtime NOT exercised: C2 HOST_TOKEN flow and programmatic sendQuestion/openConversation/openScreen (type-checked only). Known limitation: **shape** overrides (`cardCornerRadius`/`buttonCornerRadius`/`inputCornerRadius`) only affect radii read at render time (inline styles); radii baked into module-level `StyleSheet.create` at load keep their defaults — colors and text typography (incl. fontFamily/typeScale) are unaffected and recolor fully.
 - **react-native (dedicated-emulator E2E pass, 2026-07-21 — closes the remaining runtime debts)**: driven end-to-end on a dedicated Android emulator (emulator-5556, Expo Go SDK 52 pulled from the shared device, mock backend via `adb reverse tcp:8899`, blue host theme). Every remaining screen now has UI+logic runtime evidence, screenshots `scratchpad/c-*.png`, each read back: **Splash** (`c-00`); **Auth OTP** entry → typed `1234` → Verify → **AccountSuccess "You're all set!"** (`c-09`/`c-09b`/`c-10`; mock `verify_otp` accepts any 4-digit, `Send_OTP_Click_Event`→`Verify OTP Screen`→`Account Success Screen`, 180 s resend timer shown); **AccountBenefits** (`c-07`); **Settings** appearance **Day→Night** applied live (whole screen dark, `c-20`/`c-20b`); **SettingsName** edit "Ravi"→"Ravi Kumar" → Save → "Your name has updated" toast (`c-21`/`c-21b`/`c-21c`); **LanguageChooser** change English→Hindi → Save (`Save_Language_Click_Event {language_code:"hi",from_screen:"settings"}` → Home) (`c-22`/`c-22c`); **Help** FAQ + Terms/Privacy + version footer (`c-23`) and the **legal WebView** modal opened the real Terms URL (`terms_of_use_opened`; content failed only because the emulator has no public internet — `net::ERR_INTERNET_DISCONNECTED`, `c-23b`); **ChatHistory** grouped list Today/Yesterday/This-week (`c-19`) and an **opened thread** rendering query-text + markdown response + image message + follow-up chips (`c-19b`/`c-19c`); **Chat retry** — dropping the mock reverse mid-send produced the "Not sent" + "No internet connection… Try again" bubble (`c-17`), then restoring it + Try again re-sent and rendered the answer (`c-17b`); **Error/NoInternet** full-screen (`error_type:NO_INTERNET,from_screen:language`) via a fresh guest with the mock unreachable (`c-24`), and Try again (mock restored) recovered to the Language screen (`c-24b`). The **blockquote fix** was re-shot: `> Tip:` now renders as a styled left-bar italic blockquote, not raw ">" (`c-11`/`c-11b`). **LocationPrompt**: the state machine is runtime-verified from the weather CTA (`Location_Update_Triggered {source:weather}` → `gps_flow_step {step:"interstitial_shown"}`, `c-25`), but the interstitial's full-screen RN `Modal` (`ui/screens/LocationPromptHost.tsx`) renders only a scrim (no visible card) on this **landscape-locked tablet AVD** (2560×1600, app letterboxed) — a Modal/letterbox layout quirk on that device, not a logic defect; the non-Modal full-screen messages (AccountBenefits/Success, Error) render correctly. **Four wire-model conformance bugs were found and fixed during this pass** (app source was authoritative; the RN port read wrong names — now at parity, `npx tsc --noEmit` + `tsc` build clean): (1) **blockquote** — `MarkdownText` had no `^\s*>` case so quotes showed the raw ">"; added a styled blockquote block (matches web `markdown.tsx`); (2) **`ConversationListItem`** read `title`/`question`/`last_message` but the API/app field is **`conversation_title`** (+`created_on`) — history-list rows and drawer recent-8 titles were blank (same class as the web/iOS bug); (3) **`ConversationChatHistoryResponse`** read `messages`/`results` but the app returns the array under **`data`** — history threads rendered empty; (4) **`ConversationChatHistoryMessageItem.questions`** was typed `string[]` but the app sends **`ConversationChatHistoryQuestion` objects** (`{follow_up_question_id,sequence,question}`) — rendering them crashed with "Objects are not valid as a React child"; added the object type and normalize to display strings. The C4 **`onError`** hook was also observed firing at runtime (`onError 0 "Network error"` on the dropped-reverse paths). Still not driven: `expo-location` actual GPS fetch (blocked by the interstitial-Modal render issue above) and the legal WebView's remote content (emulator has no public internet).
+
+## Third-party SDK boundary audit (2026-09-03)
+
+Audited every third-party SDK in the production app (`fc-compose-agentic`, read-only) against the
+SDK suite, per root `CLAUDE.md` §6: **no Firebase / Plotline / MoEngage / Adjust dependency may
+enter an SDK package**; events reach the host through the pluggable analytics listener only.
+Confirmed the rule holds — `grep` for those four vendors across `versions/v2/{android,ios,react-native,web}`
+returns zero dependency declarations and zero imports. The catalogue and the host integration
+guide live in `docs/07-customization-and-distribution.md` **Part D**.
+
+### Remote Config flags: app → SDK
+
+The app reads five booleans from Firebase Remote Config (`core/firebase/OnboardingRemoteConfig.kt:24-30`,
+keys in `core/constants/RemoteConfigKeys.kt`). The SDK carries no Remote Config client; the host
+supplies resolved values at `initialize()`.
+
+| App RC key | App default | App read sites | SDK status |
+|---|---|---|---|
+| `v2_show_name_screen_onboarding` | `true` | `AppNavigator.kt:42`, `OnboardingSharedViewModel.kt:715` | ✅ `showNameScreen` (pre-existing), default `true` |
+| `v2_agentic_chat_enabled` | `false` in the defaults map, **getter hardcoded `= true`** (`OnboardingRemoteConfig.kt:72-73`) | `ChatViewModel.kt:1425,1867`, `HomeScreen.kt:221,654,884`, `HomeViewModel.kt:830`, `OnboardingSharedViewModel.kt:727` | ✅ `enableAgenticChat` (pre-existing), default **`false`** — deliberate divergence from the app, which ships it on; §3 freezes the synchronous #27 contract for a host that opts into nothing |
+| `v2_composer_ui_enabled` | `false` in the defaults map, **getter hardcoded `= true`** (`:81-82`) | `ChatScreen.kt:155`, `HomeScreen.kt:220,883`, `HomeViewModel.kt:825`, `OnboardingSharedViewModel.kt:721` | ✅ **NEW this pass** — `enableComposerUi` on android/react-native/web; ⛔ gap on iOS (no composer surface exists to gate) |
+| `v2_wobble_animation_enabled` | `true` | `AttentionWobble.kt:42` | ⛔ **GAP, no knob added.** No platform in the suite has a home-card attention animation, so the flag has nothing to gate; a knob would be a dead no-op in the public API (same reasoning as the `aiBubbleColor` decision below) |
+| `v2_stop_animation_on_first_card_click` | **inconsistent in the app**: defaults map says `true` (`OnboardingRemoteConfig.kt:27`), the KDoc says "Default false" (`RemoteConfigKeys.kt:16`) | `AttentionWobble.kt:43` | ⛔ **GAP, no knob added** — same reason (no wobble in the suite) |
+
+Two further keys are declared in the app but **dead**: `google_ads_enabled` and `native_ads_enabled`
+(`RemoteConfigKeys.kt:30-31`) are absent from the defaults map and have zero read sites, so they
+never even reach Firebase as fetched keys. No SDK equivalent needed. Also note
+`RemoteConfigKeys.kt:35-46` holds `GUEST_USER_API_KEY`, `MOENGAGE_APP_ID`, `ADJUST_APP_TOKEN` and
+`PLOTLINE_API_KEY_DEV/PROD` — hardcoded vendor **constants**, not Remote Config values, despite
+the file name.
+
+### `enableComposerUi` — new knob (2026-09-03)
+
+Before this pass all four platforms hardcoded `isComposerUi = config.enableAgenticChat`, collapsing
+two flags the app documents as independent (`RemoteConfigKeys.kt:22-27`: the composer flag "only
+controls the composer UI, not which API the query is routed to"). Added as a **nullable** knob whose
+`null`/omitted default resolves to `enableAgenticChat`, so an existing host — including one that set
+`enableAgenticChat(true)` — sees byte-identical behaviour.
+
+| Platform | Status | Where |
+|---|---|---|
+| android | ✅ `FarmerChatConfig.enableComposerUi: Boolean?` + `Builder.enableComposerUi()`; read via new `resolvedComposerUi` at `compose/screens/HomeScreen.kt`, `compose/screens/ChatScreen.kt`, `views/internal/ui/HomeFragment.kt`, `views/internal/ui/ChatFragment.kt` | `farmerchat-core/.../FarmerChatConfig.kt` |
+| react-native | ✅ `enableComposerUi?: boolean` → resolved `config.composerUi`; `ui/screens/{Home,Chat}Screen.tsx` read it | `src/core/config.ts` |
+| web | ✅ same shape (`enableComposerUi?` → `composerUi`); `ui/screens/{Home,Chat}Screen.tsx` read it | `src/core/config.ts` |
+| ios | ⛔ **GAP** — iOS has no unified `InputComposer` at all (`grep -i composer` over `versions/v2/ios` finds only incidental comments; no such view exists). Adding a config field there would be a knob that gates nothing. Closes when the iOS composer is built. |
+
+Also fixed while in `FarmerChatConfig.newBuilder()` (android): it did not round-trip
+`enableAgenticChat` or `showNameScreen`, so a `newBuilder()` reconfigure silently reset a host's
+feature gating to the defaults. All three RC-mirroring knobs now round-trip. `newBuilder()` has no
+call sites today, so this was latent, not live. **Still lossy and NOT fixed** (outside this lane —
+reported, not touched): `defaultCountryCode`, `defaultStateCode`, `defaultLatitude/Longitude`,
+`minSplashDurationMs`.
+
+### Full catalogue — every third-party SDK in the app, with an SDK-suite verdict
+
+Evidence read from the app's `gradle/libs.versions.toml`, root + `app/build.gradle.kts`,
+`app/google-services.json` and `app/src/main/AndroidManifest.xml` — not from imports alone.
+`google-services.json` declares project `farmer-chat-fcm` (project number 149082202998) for
+package `org.digitalgreen.farmer.chat`, with only `appinvite_service` in its services block: the
+Firebase **products in use are determined by the Gradle deps and plugins**, not by that file.
+
+| SDK / product | Version | What the app uses it for | Touchpoints (file:line) | SDK-suite equivalent |
+|---|---|---|---|---|
+| **Firebase Analytics** | `firebase-bom 34.18.0` | primary event sink; user id + user properties | `libs.versions.toml:88`, `app/build.gradle.kts:250`; `core/analytics/AnalyticsManager.kt:17,45-57`; `AnalyticsUserIdentityManager.kt:37`; `UserAttributeTracker.kt:31` | ✅ events via `config.onEvent` (same names/props); ◐ user-id / user-property now expressible on android v2 via `config.onUserIdentified` / `config.onUserAttribute`, but only 7 of 54 attributes are raised (see event-boundary gaps) |
+| **Firebase Crashlytics** | plugin `3.0.8` | crash reporting + custom keys/logs | `libs.versions.toml:89,116`, root `build.gradle.kts:8`, `app/build.gradle.kts:11,251`; `core/crashlytics/CrashlyticsManager.kt:18`; `FarmerChatApplication.kt:116-125` | ◐ partial — a host can breadcrumb from `onEvent` and record from `onError` (docs/07 Part D); ⛔ no `recordException` path for throws the SDK swallows internally |
+| **Firebase Remote Config** | (BOM) | 5 feature flags | `libs.versions.toml:56`, `app/build.gradle.kts:253`; `core/firebase/OnboardingRemoteConfig.kt`; `core/constants/RemoteConfigKeys.kt` | ✅/⛔ per flag — see the Remote Config table above (3 of 5 have knobs, 2 are gaps) |
+| **Firebase Performance** | plugin `2.0.2` | startup/screen traces + OkHttp network timing | `libs.versions.toml:87,115`, root `build.gradle.kts:7`, `app/build.gradle.kts:10,249`; `FarmerChatApplication.kt:169-193` (`isPerformanceCollectionEnabled = true`, `:176`); `core/performance/FirebasePerformanceInterceptor.kt`, `NetworkTracker.kt`, `ScreenPerformanceTracker.kt`, `AppStartupTracker.kt`; manifest kill-switch `firebase_performance_collection_enabled` set to **`false`** (`AndroidManifest.xml:141-143`) and re-enabled at runtime in code (`FarmerChatApplication.kt:176`); `core/firebase/FirebaseConfigGuard.kt` | ⛔ **GAP.** No equivalent and no hook shape for one: there is no `onNetworkTiming(api, ms, code)` / trace callback, so a host cannot instrument the SDK's HTTP calls at all. Not closable without a new listener; the SDK's own `ApiPriority` timeouts and the `API_Call_*` analytics events are the nearest signal a host gets |
+| **Firebase Messaging** | (BOM) | FCM token → handed to MoEngage; push-driven chat deeplinks | `libs.versions.toml:90`, `app/build.gradle.kts:252`; `MainActivity.kt:419-426` (`FirebaseMessaging.getInstance().token` → `MoEFireBaseHelper.passPushToken`); `AndroidManifest.xml:102-105` (`MoEFireBaseMessagingService` bound to `com.google.firebase.MESSAGING_EVENT`) | ⛔ **GAP, and a feature gap not just a vendor one.** The SDK has no push at all — no token handling, no `CustomPushMessageListener` analogue, and no equivalent of the app's push-payload deeplink into a chat (`utils/CustomPushMessageListener.kt` → `navigation/AppNavigator.kt:244`, which reads `query` / `response` / `follow_up_questions` off the payload). A host owning its own FCM can reach chat via `FarmerChat.openChat`, but the SDK cannot consume a push payload |
+| **MoEngage** | catalog `9.2.0` (`core`, `inapp`, `pushAmp`, `richNotification`) | events, user attributes, push, in-app | `settings.gradle.kts:25-28` (its own version catalog) + custom repo; `app/build.gradle.kts:224-227`; `FarmerChatApplication.kt:210-229` (`initialiseDefaultInstance`, `registerMessageListener`), `:142` `enableAdIdTracking`; `AnalyticsManager.kt:30-41`; `AndroidManifest.xml:95` `MoEActivity` | ✅ events via `onEvent` (docs/07 Part D shows the `Properties` conversion + the app's MoEngage-excludes-screen-events routing); ◐ identity + attributes now reachable on android v2 (`config.onUserIdentified` / `config.onUserAttribute`, 7 of 54 keys raised); ⛔ push |
+| **Plotline** | `5.2.5` (custom maven `android-sdk.plotline.so`) | events, in-product nudges/tours keyed on `PLabel` tags, feature gating (`show_app_review`) | `settings.gradle.kts:19-21`; `libs.versions.toml:81`, `app/build.gradle.kts:216`; `FarmerChatApplication.kt:103,158-167`; `AnalyticsManager.kt:60-70`; `AnalyticsUserIdentityManager.kt:42-62`; `core/constants/PlotlineConstants.kt` + `PLabel(...)` tags on widgets (e.g. `components/appbars/HomeAppBar.kt:100`, `components/cards/ContentCard.kt:300`, `SuggestedCard.kt:65`); `AndroidManifest.xml:98` `PlotlinePushActivity` | ✅ events via `onEvent`; ⛔ **`PLabel` widget tagging has no analogue** — the SDK's views/composables carry no Plotline tags, so a host cannot target SDK UI with Plotline nudges. Tagging would mean a Plotline dependency inside the SDK (§6) |
+| **Adjust** | `5.8.0` + signature `5.5.0` | attribution + per-event tokens, deferred deeplinks, FB app id | `libs.versions.toml:82-83`, `app/build.gradle.kts:219-220`; `FarmerChatApplication.kt:195-208` (`Adjust.initSdk`, `setOnDeferredDeeplinkResponseListener`, `setFbAppId`, `:206`); `AnalyticsManager.kt:73-85`; `core/analytics/AdjustEventTokens.kt` (81 tokens) | ◐ events reachable via `onEvent` **but the token is not passed** — host supplies its own `Map<eventName, token>` (docs/07 Part D). ⛔ attribution, deferred deeplink and global params have no equivalent |
+| **Google Ads identifier** | `play-services-ads-identifier 18.3.0` | GAID for Adjust/MoEngage ad-id tracking | `libs.versions.toml:78`, `app/build.gradle.kts:221`; `utils/Extensions.kt:8,172` (`AdvertisingIdClient.getAdvertisingIdInfo`); `FarmerChatApplication.kt:142`; `AndroidManifest.xml:17` `uses-permission com.google.android.gms.permission.AD_ID` | ⛔ **none, and deliberately.** An SDK that pulls the advertising id would force the AD_ID permission and a Play data-safety declaration onto every host. Marketing attribution is host-owned (§6) |
+| **Install Referrer** | `installreferrer 2.2` | UTM / install attribution | `libs.versions.toml:84`, `app/build.gradle.kts:230`; `MainActivity.kt:70,110,354,445-449` (`InstallReferrerManager`) | ⛔ none, deliberately — install attribution is a property of the *host app's* Play listing, not of an embedded SDK |
+| **Play Location** | `play-services-location 21.4.0` | GPS fix + Location Settings resolution | `libs.versions.toml:91`, `app/build.gradle.kts:256`; app `core/location/*` | ✅ implemented in both Android UI modules, `runCatching`-guarded (see optional-SDK table below) |
+| **SMS Retriever** | `play-services-auth-api-phone 18.3.1` | OTP autofill | `libs.versions.toml:92`, `app/build.gradle.kts:258` | ✅ implemented in both Android UI modules, `runCatching`-guarded (below) |
+| **WhatsApp OTP SDK** | **no dependency** | hand OTP intent to WhatsApp | reflection only — `utils/whatsapp/WhatsAppOtpSdk.kt:15` (`Class.forName("com.whatsapp.otp.android.sdk.WhatsAppOtpHandler")`) | ⛔ pre-existing gap (already in the android-views deviation list). Endpoint #19 exists in core with no UI caller |
+| **Play App Update** | `app-update-ktx 2.1.0` | force/flexible in-app update | `libs.versions.toml:52`, `app/build.gradle.kts:233`; `core/update/ForceUpdateManager.kt:6-9,20`; `MainActivity.kt:51,78,132` | ⛔ none, **correctly** — an SDK cannot update its host app; the host owns its own update prompt |
+| **Play In-App Review** | `play-review-ktx 2.0.2` | rating prompt, gated on a Plotline flag | `libs.versions.toml:93`, `app/build.gradle.kts:234`; `core/review/InAppReviewCoordinator.kt:9,36`; `MainActivity.kt:634` | ⛔ none, **correctly** — a review prompt is about the host's Play listing. A host wanting to trigger one off SDK engagement can do so from `onEvent` |
+| **libphonenumber** | `9.0.38` | phone validation safety net | `libs.versions.toml:75`, `app/build.gradle.kts:245`; `ui/auth/AuthViewModel.kt:890-896` | ◐ **intentional deviation, already documented in code** — the SDK ships no libphonenumber and reimplements the app's own country-length/regex chain plus a 6..15-digit fallback (`core/ui/auth/AuthViewModel.kt:47-83`). Keeps the AAR small; behaviour matches for the countries the app enumerates |
+| **Coil** | `2.7.0` (+ `coil-svg`) | image loading | `libs.versions.toml:53-54`, `app/build.gradle.kts:236-237` | ✅ present in both Android UI modules (`farmerchat-android-compose/build.gradle.kts:70-71`, `farmerchat-android-views/build.gradle.kts:65-66`) — a rendering library, not an analytics/marketing SDK, so §6 does not apply |
+| **Koin** | `4.2.2` | DI | `app/build.gradle.kts:201-203` | ✅ n/a by design — the SDK uses a hand-rolled `FarmerChatGraph` instead, so no DI framework is imposed on a host |
+
+Net: of the app's third-party surface, the SDK reproduces **events** (host-forwarded) and the two
+**Play Services** platform integrations. It deliberately reproduces none of the attribution/ad-id
+stack, and it is **missing** four things that are not purely vendor concerns and would need new SDK
+surface to close: user identity/attributes, network-performance instrumentation, push, and Plotline
+widget tagging.
+
+### Event-boundary gaps — item 1 partly CLOSED on android v2 (2026-09-03)
+
+Things the app sends to third parties that `onEvent(name, props)` structurally cannot carry.
+Documented for hosts in docs/07 Part D. Item 1 now has a host surface on android v2 (with the
+caveats listed under it); items 2 and 3 remain closed-by-documentation by design.
+
+1. ◐ **`onUserIdentified` / `onUserAttribute` — SURFACE NOW EXISTS ON ANDROID v2; ⛔ ios / react-native / web.**
+   The app sets user *identity* on all four vendors (`AnalyticsUserIdentityManager.identifyUser()`:
+   MoEngage `identifyUser`, Firebase `setUserId`, Plotline `init`/`initAnonymousUser`, Adjust global
+   partner+callback params — file `core/analytics/AnalyticsUserIdentityManager.kt:15-71`) and user
+   *attributes* over 54 keys (`UserAttributeTracker.track()` → MoEngage `setUserAttribute`, Firebase
+   `setUserProperty`, Plotline `identify`, Adjust global partner param —
+   `core/analytics/UserAttributeTracker.kt:13-49`; keys in `core/analytics/UserAttributeKeys.kt`).
+   Identity is not an event and a user property is not an event property, so no amount of event
+   parity closes this.
+
+   **Shipped (android v2, 2026-09-03):** `FarmerChatConfig.onUserIdentified((userId: String) -> Unit)?`
+   and `FarmerChatConfig.onUserAttribute((key: String, value: String) -> Unit)?` (+ builder setters,
+   + the `newBuilder()` round-trip), dispatched by `FarmerChatAnalytics.identifyUser()` /
+   `.setUserAttribute()`. Deliberately NOT added to `FarmerChatAnalyticsListener`: it is a
+   `fun interface`, so a second abstract method would break every host's SAM lambda. Both are
+   blank-guarded and wrap the host callback in `runCatching`.
+
+   Three caveats, so nobody reads this as parity:
+   - **7 of 54 attributes** are raised (the device/carrier set: `Carrier_Name`, `Carrier_Code`,
+     `Device_Type`, `Brand`, `Model`, `Manufacturer`, `OS`). The other 47 — IP/profile location,
+     app version, `GPS_Location_Shared`, `Mobile_No_Verified`, registration date, … — have no raise
+     site yet.
+   - **`value` was narrowed to `String`**, not the `Any?` this section originally requested. Every
+     value in scope today is a string, but the app tracks `GPS_Location_Shared` as a Boolean and
+     `App_Version_Code` as an Int. Whoever wires those must stringify, because widening
+     `(String, String) -> Unit` to `(String, Any?) -> Unit` later is a source-breaking change to a
+     shipped public callback (root CLAUDE.md §3). Decided, not overlooked.
+   - Identity fires at three sites: onboarding guest-init success (app
+     `OnboardingSharedViewModel.kt:392`), `verify_otp` success (app `AuthViewModel.kt:652`), and the
+     CHAT_ONLY bootstrap (SDK-only, since it skips onboarding).
+
+   ⛔ ios / react-native / web still have no equivalent of either callback — out of lane for the
+   android v2 change that added them, recorded here per root CLAUDE.md §4.
+2. ℹ️ **Per-sink routing is unrepresentable, and that is accepted.** `AnalyticsManager.trackScreenView`
+   / `trackScreenExit` (`:96-137`) deliberately send `Screen_Viewed` / `Screen_Exited` to Firebase,
+   Adjust and Plotline but **not** MoEngage; every other event goes to all four. A flat listener
+   cannot express it. Closed by documentation instead — docs/07 Part D publishes the routing rule
+   and the host-side filter — no SDK change wanted.
+3. ℹ️ **Adjust event tokens are not forwarded, deliberately.** `AnalyticsEvent.adjustToken` drives
+   `AnalyticsManager.trackAdjust` (`:73-85`) and Adjust rejects an untokened event. The SDK's
+   `onEvent` passes the name only. Not closed by shipping the app's table: the 81 tokens in
+   `core/analytics/AdjustEventTokens.kt` are opaque ids issued by **Digital Green's** Adjust app and
+   are meaningless in a host's account. docs/07 Part D instead shows the host-owned
+   `Map<eventName, token>` pattern and points at the app file for anyone reporting into our account.
+
+### Optional platform SDKs — `android/CLAUDE.md` requirement re-verified (no fix needed)
+
+| Integration | Dependency shape | Guard | Verdict |
+|---|---|---|---|
+| SMS Retriever (`play-services-auth-api-phone`) | hard `implementation` in both UI modules | all calls in `runCatching`, receiver nulled on failure, unregister in `runCatching` — `compose/screens/AuthScreen.kt:129-166`, `views/internal/ui/AuthFragment.kt:240-273` | ✅ absence degrades to "no OTP autofill", cannot crash |
+| Fused location + Location Settings (`play-services-location`) | hard `implementation` in both UI modules | `runCatching` with explicit "Play Services absent — proceed as if GPS is enabled" fallback — `views/internal/location/LocationPromptHost.kt:282-305`, `compose/screens/LocationPromptHost.kt:110-130` | ✅ absence degrades to "GPS treated as enabled, fetch falls back" |
+| WhatsApp OTP SDK | **not a dependency anywhere** — the app reaches it purely by `Class.forName` (`utils/whatsapp/WhatsAppOtpSdk.kt`) | n/a | ⛔ pre-existing gap, unchanged: not integrated in either Android UI module (already recorded in the android-views deviation list above). Endpoint #19 exists in core with no UI caller |
+
+Because both Play Services artifacts are hard `implementation` deps they normally reach the host
+transitively via the POM; absence arises only if a host `exclude`s them, and the guards cover that.
+
+### Verification (2026-09-03, actually run)
+
+- **android**: `./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug :farmerchat-android-views:assembleDebug :sample-compose:assembleDebug :sample-views:assembleDebug :farmerchat-core:testDebugUnitTest` → `BUILD SUCCESSFUL in 13s`, `178 actionable tasks: 39 executed, 139 up-to-date`, exit 0. (An intermediate re-run failed for ~5 minutes on a cause outside this lane — `core/ui/onboarding/OnboardingSharedViewModel.kt:327` and `core/ui/settings/SettingsViewModel.kt:141` referenced `AnalyticsScreens` without importing it, from a concurrent event-parity edit. Left untouched to avoid a two-writer race; that lane landed the import at 11:38 and the command was re-run clean.)
+- **react-native**: `npx tsc --noEmit` in `packages/farmerchat-react-native` → clean, exit 0.
+- **web**: `npx tsc --noEmit` → clean, exit 0; `npx vite build` → `✓ built in 262ms` (296.63 kB ESM / 218.00 kB CJS), exit 0.
+- **react-native / web `dist/`**: `dist` is a build artifact (not git-tracked; RN regenerates it via `prepublishOnly`). Both were rebuilt anyway so the local tree is consistent — `npm run build` exit 0 in each, and `dist/core/config.d.ts` now carries `enableComposerUi?: boolean` + `composerUi: boolean` in both packages. Relevant because RN's `exports` map points `import`/`default`/`types` at `dist/`, so a tarball consumer would not see the option from `src/` alone.
+- **ios**: `swift build` **NOT run this pass** — no iOS source was changed (the iOS composer gap is recorded, not coded).
+- Not runtime-exercised: no emulator/device run of `enableComposerUi(true)` + `enableAgenticChat(false)`. The knob is build-verified and the resolution is a one-line `?:` / `??`, but the decoupled combination has never been rendered.
+
 
 ## READMENEW.md additive merge (2026-07-21 — new host-customization features, all ADDITIVE, no existing behavior removed; `git` baseline commit proves 0 deletions of prior features)
 
@@ -1703,3 +1983,613 @@ Good ideas from an alternate `READMENEW.md` spec were merged into the existing (
 ### Intentionally NOT shipped from READMENEW.md (tracked gap, needs opt-in)
 - **`aiBubbleColor`, `aiAvatarEmoji`, `showUserAvatar`** — ⛔ all platforms. These are NOT overrides of existing UI: no platform renders a per-message AI bubble *container* (Android/RN show the AI answer as bare text on the surface; web/iOS have an AI bg) or any avatar (only iOS SwiftUI shows the logo as an AI mark; no platform shows a user avatar). Shipping them means building net-new per-message UI across 6 UI modules, layout-altering, and it contradicts the SDK's deliberate no-container AI answer design. Per parity rule #4 they must land on all platforms together or be recorded as a gap — recorded here. Config fields were deliberately left OUT so there are no dead/no-op knobs. Re-add with the UI only on explicit host request (build-verified only until a device run is possible).
 - **README API-shape differences that are already covered a different way** (NOT gaps): flat `sdkApiKey`/`baseUrl` (we use `guestApiKey` + `environment`/`customBaseUrl`); `chatTitle`/`chatSubtitle`/`inputHintText`/`followUpHeaderText` (achievable via `stringOverrides` label keys); the README's 9 endpoints (a subset of our documented 34); `ChatModal`/`ChatFAB` naming (we ship `FarmerChatFab`/`FarmerChatFabButton`).
+
+---
+
+## Screen / UI / validation / navigation fidelity sweep — v2 android only (2026-09-03)
+
+Scope: `versions/v2/android` **compose + views** flavours. v1 and `versions/v2/{ios,web,react-native}`
+untouched — every fix below is therefore an **android-only parity gap on the other platforms** until
+the corresponding lane picks it up (parity rule §4(b)).
+
+### Six flagged app composables — three were already present under another name
+
+| App composable | Verdict | SDK equivalent |
+|---|---|---|
+| `NoInternetScreen` (`ui/error/NoInternetScreen.kt`) | **✅ already faithful — no work.** In the app this is a *legacy wrapper* that delegates to `ErrorScreen(ErrorType.NO_INTERNET)` and has **zero live call sites** (the three grep hits are `HomeViewModel.navigateToNoInternetScreen` — a differently-named private fn — plus its own `@Preview` and a comment). | compose `screens/ErrorScreen.kt` + `components/FullScreenMessage.kt`; views `ErrorFragment` + `FullScreenMessageView` |
+| `LanguageSelectionScreen` (`ui/onboarding/language/LanguageScreen.kt`) | **✅ present, 2 fidelity fixes applied** (below) | compose `screens/LanguageScreen.kt`; views `LanguageFragment` |
+| `LegalContentDialog` (private, inside `LanguageScreen.kt`) | **✅ superseded.** The app itself routes legal links through `dialog<Destination.LegalContent>` → `PolicyWebViewScreen`; the private in-screen dialog is the pre-nav-graph path. The SDK uses the nav-graph dialog on both flavours, which is the app's live path. | compose `dialog<Destination.LegalContent>` → `screens/LegalContentScreen.kt`; views `LegalContentDialogFragment` |
+| `PolicyWebViewScreen` (`ui/onboarding/language/PolicyWebViewScreen.kt.kt`) | **✅ present.** Its `showBottomButtons` Close/Continue row is **dead code on the only live path** — `AppNavGraph.kt:906` passes `showBottomButtons = false, onContinue = null` — so the SDK omitting it is correct, not a gap. `faq_terms` sentinel renamed (`"faq"` → `"faq_terms"`) but internally consistent SDK-wide; one flavour-parity fix applied (case-insensitive match in compose, matching views). | compose `screens/LegalContentScreen.kt`; views `LegalContentDialogFragment` |
+| `AIGeneratingImageOverlay` (`ui/home/components/AIGeneratingImageOverlay.kt`) | **⛔ WAS MISSING — now ported to both flavours.** | new compose `components/AiImageOverlays.kt`; new views `widgets/AiImageOverlayView.kt` |
+| `MagicEraserProcessingOverlay` (private, inside `ui/home/components/AIGeneratedGradient.kt`) | **⛔ WAS MISSING — now ported to both flavours** (as its only public caller, `AIGeneratedGradient`). | same two new files |
+
+### The image-placeholder gap (the real missing UI)
+
+The app's `ContentCard` (`components/cards/ContentCard.kt:177/200`) drives **two different
+animations** off the Coil painter state:
+
+| Coil state | App | SDK before | SDK now |
+|---|---|---|---|
+| `Loading` | `AIGeneratingImageOverlay(isLoading = true)` — radial fog + 26 orbiting Google-coloured bubbles (2500 ms), and a 40-particle white water blast + fog fade on exit | a **static green linear gradient** (`private fun AiGeneratedGradient`) | ✅ faithful port |
+| `Error` | `AIGeneratedGradient` — neutral base + `MagicEraserProcessingOverlay` (fog, 2200 ms radial dissolve, fading processing ring, 24 sticky bubbles drifting once over 3000 ms, light grain) | **the same static green gradient** | ✅ faithful port |
+
+Same colours, same particle counts, same durations, same maths on both flavours. The static
+`AiGeneratedGradient` stand-in was deleted.
+
+- **compose** — `components/AiImageOverlays.kt` (`AIGeneratingImageOverlay`, `AIGeneratedGradient`,
+  private `MagicEraserProcessingOverlay`), wired into `components/Cards.kt` at the exact two branches.
+- **views** — there is no per-state hook on an `ImageView`, so the two animations live in one custom
+  `View` (`widgets/AiImageOverlayView`, `Mode.{LOADING,ERROR,HIDDEN}`) drawn over the card image
+  inside a new `FrameLayout` in `fc_item_home_content_card.xml`, driven from Coil's
+  `load { listener(onStart/onSuccess/onError/onCancel) }` in `HomeFeedAdapter`. Canvas is clipped to
+  the card's 16 dp rounded rect (`FcShapeRounded16`).
+
+**Adjacent gap NOT closed:** the app's `Success` branch uses `FogRevealImage`
+(`ui/home/components/FogRevealImage.kt`) with a `rememberSaveable` reveal-once guard and an
+`enableRevealAnimation` flag (false in scrollable lists to avoid jank). Neither flavour has it — both
+render a plain `Image`/`ImageView` on success. **⛔ NOT IMPLEMENTED, both flavours + all other platforms.**
+
+### Navigation edges fixed (docs/01 §2 already documented all of these — the code diverged, not the docs)
+
+| Edge | App | SDK before | Now |
+|---|---|---|---|
+| `Error` → `onTryAgain` | 5-branch tree on `fromScreen` | **compose**: uniform `popBackStack + retryLastAction`; **views**: already faithful | ✅ compose ported **from views**, which was already app-faithful — no re-derivation from app source. The one place the two flavours cannot share code is the `"drawer"` branch's history refresh: views resolves `activityCoreVm("chat_history")`, compose uses the graph-level `rememberCoreViewModel("sharedChatHistory")`. **Verified these are each flavour's single shared instance** — views uses the key `"chat_history"` at all three sites (`FarmerChatActivity`, `ChatHistoryFragment`, `ErrorFragment`) and compose has exactly one `chatHistoryViewModel()` call site — so both refresh the same VM the drawer and ChatHistory screen read. The key *names* differ; the instance semantics do not. |
+| `AccountSuccess` → back | `BackHandler` → Home, `popUpTo(AccountBenefits){inclusive}` | **compose**: no `BackHandler`, `popUpTo<Home>{inclusive=false}`; **views**: already faithful | ✅ compose now has `BackHandler` + `popUpTo<AccountBenefits>{inclusive}` |
+| `AccountBenefits` primary CTA offline | `errorNavigationManager.navigateToError(isNetworkError=true, fromScreen="auth", retry={navigate(Auth)})` | **both flavours** navigated straight to the Error destination, so **`retryLastAction()` was a no-op** — "Try again" left the user on Error | ✅ both flavours route through `navigateToError` with the retry registered |
+| Drawer/Settings sign-up offline | app has **no** pre-flight check — `getUserQuestionCount()` simply fails to return Success and the user lands on `AccountBenefits` | **compose**: falls back to `AccountBenefits` (app-equivalent); **views**: navigated to the **Error screen** — a flavour split *and* a divergence from the app | ✅ views now falls through to `AccountBenefits` |
+
+The Error retry tree, verbatim on both flavours: still-offline + `isNetworkError` → stay put;
+`drawer` → history refresh + pop; `chathistory` → pop + re-enter ChatHistory (singleTop);
+`home_weather`/`home_card` → pop only, **no** `retryLastAction()` (no API was triggered);
+otherwise pop, and if nothing popped re-navigate by `language`/`name`/`auth`, then `retryLastAction()`.
+
+**Nav edge recorded, deliberately NOT implemented:** `Home` → `SettingsLanguage` after an app update
+(`AppInstallUpdateTracker.isUpdateLanguageScreenPending`, Kenya-excluded; docs/01 §2 row
+"Home (post-update, non-Kenya)"). An SDK embedded in a host app has no meaningful "the app was
+updated" signal — the host's versionCode is not the SDK's. ⛔ NOT IMPLEMENTED, all platforms.
+See docs/05.
+
+### Validation ported 1:1
+
+| Rule | App source | SDK before | Now |
+|---|---|---|---|
+| `isPhoneValid` | `ui/auth/AuthViewModel.kt:861` | **no Ethiopia rule**; treated `phone_number_pattern` as the *final* answer instead of one of several hard gates | ✅ 1:1: `+251` → starts 7\|9 **and** exactly 9 digits (short-circuits, applies even with no country selected); then `phone_length` hard gate; then `phone_number_pattern` hard gate (malformed regex → reject, never throw); then unknown-country fallback `6..15`. Extracted to `AuthViewModel.isPhoneValid(countryCode, phoneLocal, country)` — **11 new unit tests**. **One deliberate deviation, not 1:1:** both the length gate and the input cap are guarded with `phone_length > 0`, so a `phone_length: 0` row from endpoint #16 degrades to the pattern/`6..15` path instead of locking the field at zero characters as the app would. Conservative reading; open question in docs/05 |
+| phone input cap | `setPhoneLocal` caps at `selectedCountry?.phone_length ?: 15` | **no cap** — the user could type past the country length | ✅ capped |
+| `setOtp` | 4 digits; `otpError` deliberately **sticky** ("keeps OTP boxes red after a failed attempt, per UX requirement") | cleared `otpError` on every keystroke | ✅ sticky |
+| `normalizeNameInput` | `isLetter() \|\| isWhitespace()`, `trimStart()`, then `Regex("\\s+") → " "` | filtered `it == ' '` only, so a pasted `"John\tDoe"` became `"JohnDoe"` | ✅ 1:1 |
+| `sanitizeNameForUi` | trim, blank `"No Name"`/`"null"`, `.take(100)` | no `.take(100)` | ✅ 1:1 |
+| name min/max + toasts | 3 / 100, `NAME_MUST_BE_AT_LEAST`/`NAME_MUST_BE_AT_MOST` + `CHARACTERS` | ✅ already faithful (both flavours) | unchanged |
+| OTP length / verify gate | 4 digits | ✅ already faithful (both flavours) | unchanged |
+
+Unverifiable-by-design note: the app also runs Google **libphonenumber** as a *safety net* but
+explicitly does not hard-fail when it is absent (`if (libOk == false) return false`, `null` when the
+library is missing). The SDK ships no libphonenumber dependency, so it takes the app's own
+library-absent branch. ⛔ libphonenumber cross-check NOT IMPLEMENTED, all platforms.
+
+### English label fallbacks realigned to the app's exact copy (root CLAUDE.md §2)
+
+A mechanical diff of every `getLabel(Labels.X, "…")` in the app against every
+`label(Labels.X, "…")` / `labelManager.getLabel(Labels.X, "…")` in the v2 android tree found
+**34 keys whose English fallback did not match the app**. **44 literals across 19 files** were
+corrected to the app's exact string. Only fallbacks changed — no key was added, removed or renamed.
+
+Two of them were not cosmetic:
+
+- **`SSFR_WHEAT_QUESTION` / `SSFR_MAIZE_QUESTION`** are the **query text sent to the chat API**,
+  not decoration. The SDK asked *"Give me fertilizer recommendation for my wheat farm"*; the app asks
+  *"What is the recommended quantity of fertiliser for wheat?"*. Fixed in both flavours. Scope of the
+  effect, stated precisely: both keys (`fc_v2_app_label_ssfr_{wheat,maize}_question`, byte-identical
+  to the app's) **are served by endpoint #3** — they are not among the ten unserved keys in docs/05 —
+  so whenever labels resolve, the server value wins and this change is cosmetic. It only changes what
+  the farmer actually asks on the **fallback path** (labels not yet fetched, or the key missing for a
+  language), where the SDK was previously sending a question the app never sends.
+- **`PLEASE_ENABLE_CAMERA_SETTINGS` / `PLEASE_ENABLE_MICROPHONE_SETTINGS`** in views
+  `InputOverlaysController` were *truncated* concatenated literals (`"…get instant "` + `"advice…"`).
+  The rewrite initially duplicated the tail; caught and repaired — verified by reading the file back.
+
+Other notable ones: `FARMERCHAT_TAGLINE` (SDK invented *"Practical advice for your crops and
+animals"*; app is *"FarmerChat: Practical advice\nfor your crops & livestock"*),
+`GET_STARTED_BY_CLICKING_…` , `CHOOSE_A_FOLLOWUP_OPTION_BELOW`, `RECENT_CHATS` (views said
+*"Past Advice"*), `PREVIOUS_QUESTIONS_MENU`, `LOCATION_HELPS_SUGGESTIONS`, `LOCATION_TAILOR_ADVICE`,
+`WE_GREET_YOU_NAME`, plus a batch of `…` → `...` ellipsis mismatches.
+
+**⛔ The same audit has NOT been run on ios / web / react-native** (out of lane). Given that a
+majority of the 34 mismatches were shared-origin wording, the other three platforms very likely
+carry the same drift. Recorded as a gap for those lanes.
+
+**Known limit of the audit, so the next person does not over-trust it:** the detector matches
+`…(Labels.X, "literal"` and therefore reads only the **first fragment** of a multi-line concatenated
+fallback. That is exactly how the two truncated `PLEASE_ENABLE_*_SETTINGS` literals were both found
+*and* briefly mis-rewritten. Re-running the same diff after the pass reports zero remaining
+mismatches for all 34 keys (proof nothing was clobbered by the concurrent lanes), but a *correctly*
+concatenated multi-line fallback is only partially covered — `TERMS_OF_USE_DESCRIPTION`, added by
+another lane during this pass, shows up as a false positive for this reason and was verified by hand
+to concatenate to the app's exact string in both flavours.
+
+Also fixed while in `AuthScreen`: the SDK appended `"${countryCode} ${phoneLocal}"` after
+`CHECK_YOUR_MESSAGES_CODE`; the app renders that label alone (`ui/auth/AuthScreen.kt:1030`).
+Compose now matches views.
+
+### `displayedLanguages` row ordering (app rule, was missing on both flavours)
+
+The app pins the current selection to the **top of the priority list** when it lives only in the
+collapsed "All languages" list (`LanguageScreen.kt` + `LanguageChooserScreen.kt`, identical code).
+Compose rendered the priority list unmodified (selection invisible while collapsed); views instead
+**force-expanded** the whole list. Both now share one core implementation,
+`core/ui/settings/LanguageDisplayOrder.rowsToShow(...)` — **5 new unit tests**.
+
+### LanguageScreen divergences recorded, deliberately NOT churned
+
+The SDK screen is a faithful *port*, not a pixel copy, and these differences all resolve through the
+SDK's own theme tokens. Recorded so the ledger is honest, not as work items: `titleLarge` vs
+`displaySmall` for "Choose your language"; logo mark 32 dp/`borderActive` vs 44 dp/`foregroundPrimary`;
+`Scaffold`+`bottomBar`+220 dp spacer vs weighted `Column`; the "All languages" chip on
+`buttonPrimarySurface` vs `surfaceSecondary`; app picks one loading label from
+`guestInitState`/`languageState` while the SDK rotates both through `LogoSpinner`; app's Start button
+is `Chevron` when enabled / `Default` otherwise while the SDK adds a `Loading` + `SETTING_LANGUAGE`
+submitting state. Chasing these is unbounded and none changes behaviour.
+
+### Third-party SDK boundary (root CLAUDE.md §6)
+
+Every ported screen was checked. The app's `FullScreenMessage`, `ErrorScreen`,
+`LanguageSelectionScreen`, `PolicyWebViewScreen` and the `AccountBenefits` nav entry all call
+`so.plotline.insights.Plotline.trackPage/track`; `LanguageSelectionScreen` and `AccountBenefits`
+additionally call `AnalyticsManager.track(... AdjustEventTokens …)` and
+`OnboardingRemoteConfig.refresh()` (Firebase). **None of that is in the SDK** — the ported screens
+raise `graph.analytics.trackScreenView/trackScreenExit/track` only, which reaches the host through
+`config.onEvent`. The two new overlay files are pure drawing code with no analytics in the app either.
+No new third-party dependency was added (notably **not** libphonenumber).
+
+### Verification (actually run, 2026-09-03)
+
+`./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug
+:farmerchat-android-views:assembleDebug :sample-compose:assembleDebug :sample-views:assembleDebug
+:farmerchat-core:testDebugUnitTest` — **BUILD SUCCESSFUL**; `testDebugUnitTest` reported
+**76 tests, 0 failures** across 11 classes (the 43 documented for 2.0.0, this lane's **16 new**
+— 11 `PhoneValidationTest` + 5 `LanguageDisplayOrderTest` — and the rest added by the lanes running
+concurrently in the same tree). Build-verified only: **nothing in this pass ran on a device or
+emulator**, so the two ported animations have never been *seen* — their fidelity is argued from a
+line-by-line port of the app's colours, counts, durations and maths, not from a screenshot.
+
+---
+
+## 2.0.0 android — analytics event fidelity (lane: analytics events + properties, 2026-09-03)
+
+Scope: `versions/v2/android` only. Full enumeration of every event name and property key
+the app can emit (`core/analytics/*.kt` **plus every call site**, since call sites pass keys
+the constants file never declares), diffed against the SDK, then closed.
+
+### Diff summary
+
+**Emitted by both, but the SDK sent a DIFFERENT property key or value — all fixed:**
+
+| Event | App key/value | SDK before | Now |
+|---|---|---|---|
+| `Country_selected` | `country_code` = `selected.code` | `Country` = `country.name` | `country_code` = `country.code` (+ `screen_name`) |
+| `Send_OTP_Click_Event` / `Resend_OTP_Click_Event` | `channel` | `type` | `channel`; resend attributed to `Verify OTP Screen` |
+| `Submit_OTP` | `verification_status`, `error_message` (+ `attempt_number` on failure), **no** `screen_name`; fired on the RESULT | `screen_name` only; fired on submit | app payload, fired on success + failure |
+| `Login_Completed` | fires for **all** users with `user_id` + `is_new_user` (String) | fired only for existing users, no props | app payload, fires for all users |
+| `OTP_Lockout_Reached` | `screen_name`, `lockout_type` (`rate_limit`/`device_limit`), `error_message`, `channel` | no props | app payload |
+| `Settings_Option_Selected` | `option` = `"Appearance"`, `value` = `Light`/`Dark`/`Default`; `option` = `"Signup"` on sign-up | `Option` = `"appearance_$mode"`; no sign-up event | both app payloads |
+| `New_Chat_Click_Event` | `screen_name` = `"Chat History screen"`, `Conversation ID` (space) | `Chat History Screen`, `conversation_id` | app payload |
+| `FAQ_Clicked` | `screen_name` = `"Help and support screen"`, `Question`, `ID` | no props | app payload |
+| `question_card_data_Submitted` | `screen_name` + `crops` / `livestock` / `gender` | `Card_Type` + `Value` | app payload for all three cards in **both** UI artifacts (crops via `HomeViewModel`; gender + livestock at the compose `onSingleConfirmed`/`onMultiConfirmed` and the views `onSingleSelect`/`onMultiSelectConfirm`), each paired with the app's question-card `Card_Clicked` carrying the selection as `Value` (app HomeScreen.kt:1401/1454) |
+| `Mobile_verification_Started` | `screen_name`, `trigger` = `"Signup button"` | no props | app payload |
+| `Transcription_Success` (Home) | `{screen_name, Input_type, Source}`, **no** `Confidence_Score` | `Confidence_Score` + `audio_format` | app payload (`audio_format` removed — the app never sends it here) |
+| `Transcription_Failed` | above + `Confidence_Score` as a **String** (`"N/A"` when unavailable) | `Confidence_Score` as a Double | app payload |
+| `Card_Clicked` / `Card_Viewed` | full 15-key `trackHomeCardEvent` payload | 2 keys | full payload |
+| `Logout_Click_Event`, `Hamburger_Menu_Clicked`, `Weather_Forecast_Viewed`, `Content_Try_Again_Clicked`, `Answer_Share/Save_Button_Clicked`, `Started/Stopped_Playing_Response_Audio`, `Name_Skip_Click_Event`, `Save_Language_Click_Event`, `Start_Over_Clicked`, `terms_of_use_opened`, `privacy_policy_opened`, `Microphone_Click_Event`, `Chat_Icon_Clicked`, `Image_Option_Dialog_Click_Event`, `Send/Cancel_Record_Audio_Click_Event`, `Input_Capture_Failed`, `Permission_granted/denied/popup_shown`, `Permission_Fallback_Default_Setting_Shown` | each carries `screen_name` and, per event, `Icon` / `Option` / `Input_type` / `Source` / `Failure_Reason` / `Permission_type` / `Attempt` / `No_of_seconds_played` | mostly bare | app payloads |
+
+**App-only → now emitted by the SDK (were declared but reached from nowhere):**
+
+| Event(s) | Where wired |
+|---|---|
+| `API_Call_Initiated` / `_Success` / `_Failed` / `_Timeout` | 36 sites across `OnboardingSharedViewModel`, `HomeViewModel`, `SettingsViewModel`, `EnterNameViewModel`, `LocationPromptManager` via new `FarmerChatAnalytics.trackApi*` helpers. New `AnalyticsApis` object ports the app's ten `API_Name` values verbatim. `Timeout` vs `Failed` selected by `ApiResult.Error.isTimeout`, as the app does |
+| `Device_Location_Fetch_Initiated` / `_Succeded` / `_Failed` | `OnboardingSharedViewModel` geolocate, always `screen_name = Splash Screen` |
+| `Onboarding_completed`, `FirstTimeOnboardingCompleted` | `OnboardingSharedViewModel` set-language success, `screen_name = Select Language Screen`; the one-shot gate now uses the app's default-**true** semantics |
+| `Card_Shown` | both UI layers, one per visible section when the feed lands |
+| `ToS_Aug26_Accept_Terms` | compose `TermsOfUseDialog` accept, `{screen_name: "TermsOfUseDialog", Accepted: true}` |
+| `Permission_popup_shown` + `location_permission_prompt_triggered` + `Permission_granted/denied` + `Permission_Fallback_Default_Setting_Shown` on the GPS flow | `LocationPromptManager`, via a port of the app's `trackGpsEvent`/`triggerLabel` (every GPS event now carries `screen_name = "GPS Screen"`, the app's `Trigger` label — `Weather Icon`/`Home Screen`/`Settings Screen`/`Plotline Campaign`/`MoEngage Campaign` — and `Attempt`) |
+| `Location_Update_Triggered` | `LocationPromptManager.enterFetchingLocation`. The app has exactly **one** emit site and it is in the **fetch** phase, not at trigger time (app `LocationPromptHost.kt:435-452`, inside the `LaunchedEffect(state)` fused-location effect): `Attempt = s.attempt + 1`, and `screen_name` is **overridden to `Dashboard Screen`**, not the GPS screen. A first draft of this lane emitted it from all four trigger entry points with `screen_name = "GPS Screen"` — that was wrong and was corrected before landing |
+
+**App-only, NOT closed (recorded with reason):**
+
+| Event | Reason |
+|---|---|
+| `App_Installed`, `App_Updated` | the app's `AppInstallUpdateTracker` observes install/update of the **host** app, which is not the SDK's to observe. No emit point exists |
+| `Force_Update_Popup_Shown` / `_Update_clicked` / `_Cancel_clicked` | the SDK has no force-update feature at all (`grep -ri force_update` → 0 hits). No feature, no emit point; building one is out of this lane |
+| `Chat_History_Click` `question_index`/`conversation_id` in **views** | the views drawer has no previous-questions list; the compose drawer emits the full payload |
+| `ToS_Aug26_Accept_Terms` from Home | the app's Home site is driven by the Plotline widget event bus (`PlotlineHomeEvents.acceptTerms`), which the SDK has no equivalent of (§6). The dialog site IS emitted |
+| `Onboarding_completed_Step2` | declared in the app's constants but the app has **no live call site**. Not invented here |
+| `Starter_Questions_Generated`, `Profile_Click`, `New_Chat_Click`, `Account_Preference_Click`, `location_permission_allowed`, `location_fallback_used_ip_based_location`, `location_settings_opened`, `location_settings_update_location_clicked`, `location_settings_location_permission_clicked` | same: declared in the app's constant files, zero live app call sites (several are commented out at the call site). Left unemitted rather than guessing a trigger |
+
+**SDK-only emissions (no §2 name violation — every name below is declared in the app's own
+`OnboardingAnalyticsEvents`/`GpsAnalyticsEvents` — but the app never fires them):**
+
+| Event | Justification |
+|---|---|
+| `Registration_Completed` | app-declared; the app expresses new-vs-returning as `Login_Completed` + `is_new_user`. The SDK now emits the app's `Login_Completed` payload for **all** users and keeps `Registration_Completed` as an additional new-user signal for hosts already consuming it. A host wanting exact app shape should read `is_new_user` |
+| `Chat_Screen_Back_Button_Click` | app-declared, no live app call site; kept because the SDK's chat back affordance is a real, distinct user action worth a signal |
+| `Edit_Profile_Click` | app-declared, no live app call site (`Account_Preference_Click` is commented out in `DrawerContent.kt:219`) |
+| `location_update_success`, `location_update_failure` | app-declared, no live app call site; the app tracks the same outcome only as `API_Call_Success/Failed` for `Update user location`, which the SDK **also** now emits alongside |
+| screen names `"Chat History Screen"`, `"Settings Name Screen"`, `"Error Screen"` | the app's `AnalyticsScreens` has no constant for these three surfaces (its Chat-History/Settings-Name screens never call `trackScreenView`, and it has no error screen). Kept as SDK additions and labelled as such in `AnalyticsScreens` |
+
+No SDK-only **event name** exists that is absent from the app's constant files.
+
+### Preserved app quirks (asserted in tests, do not "fix")
+
+- Property-key typos frozen by the analytics sheet: `langauge_code`, `isOnnboarding_query`,
+  `length_of_Text_query`.
+- Event-name typo: `Device_Location_Fetch_Succeded`.
+- `trackHomeCardEvent` maps `AnalyticsProps.STATE to data.county` — the `State` key carries the
+  **county** value and `County` is never emitted, despite being declared.
+- `screen_name` on card events is always `Dashboard Screen`, whatever surface raised the card.
+- Call-site literals that are NOT the `AnalyticsScreens`/`AnalyticsProps` constants for the same
+  thing and must stay distinct: `"Menu"`, `"Side Menu"`, `"Chat History screen"`,
+  `"Help and support screen"`, `"TermsOfUseDialog"`; `option`/`value`/`trigger` (lowercase) vs
+  `Option`/`Value`/`Trigger`; `Conversation ID` (capitalised, with a space) vs `conversation_id`.
+- `Confidence_Score` is emitted as a **String** (`"N/A"` when the API failed), never a number.
+- `Attempt` is `1` on a permission grant and the **next** deny count on a denial.
+
+### Trigger-timing deltas between the two Android UI artifacts (recorded, not closed)
+
+| Event | App trigger | android-views | android-compose |
+|---|---|---|---|
+| `Card_Viewed` | `Modifier.onGloballyPositioned`, fires at **≥50% visible** (app HomeScreen.kt:2059-2080) | ✅ same — measured from `getGlobalVisibleRect` in `trackVisibleCards()` | ⚠️ fires from `LaunchedEffect(section.stableId())`, i.e. **entered composition**. `LazyColumn` composes ahead of the viewport, so compose can report a card viewed slightly before it is 50% visible. Closing this needs an `onGloballyPositioned` visibility port and is out of this lane's scope |
+| `Card_Shown` | `LaunchedEffect(homeFeedResponse)` — once per feed response | ✅ guarded by `shownFeedKey` (the views state collector re-enters `UiState.Success` on every unrelated emission — card dismissal, weather, crop update — so an unguarded batch would re-fire each time) | ✅ `LaunchedEffect(feed)`, keyed on the feed as the app is |
+
+### Preference-key correction made by this lane
+
+`FirstTimeDashboardViewed` was gated on `SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED`
+(`"PREF_FirstTimeOnboardingCompleted"`), which is the app's **onboarding** gate. The app uses two
+separate keys. Added `FIRST_TIME_DASHBOARD_VIEWED = "FirstTimeDashboardViewed"` and moved the
+dashboard gate onto it; the onboarding key now carries the app's default-true semantics for
+`FirstTimeOnboardingCompleted`.
+
+Two one-off migration effects on installs upgraded from an earlier 2.0.0 build, both accepted:
+`FirstTimeDashboardViewed` fires once more (its new key has never been written), and an install
+whose old `PREF_FirstTimeOnboardingCompleted` was set to `true` (which used to mean "dashboard
+seen") now reads as "not yet fired" under the app's default-true semantics, so it can emit one
+spurious `FirstTimeOnboardingCompleted` on its next set-language success.
+
+### Left to the agentic-chip lane (not touched here, by agreement)
+
+`SendQueryProperties`' chip fields and the chip send path are owned by the `SendAlignmentChip`
+lane. Findings handed over: the app puts **seven** chip keys on *every* `Send_Query` /
+`Send_Query_Initiated` (not only chip ones) — `agentic_chip_status` defaulting to `"none"` and
+`agentic_chip_type` / `_value` / `_label` / `_skipped_type` / `_shown_type` defaulting to `""`;
+the shipping status values are the `AnalyticsProps.CHIP_STATUS_*` constants
+(`selected`/`skipped`/`available`/`none`), **not** the `skipped_manual`/`shown`/`not_shown`
+strings in that file's KDoc; and `isAlignmentChip -> "align_chip_sel"` is the **first** branch of
+the app's `click_type` `when`, ahead of `isReadFullAdvice`. `agentic_chip_type` on GPS events
+(app `LocationPromptHost.kt:181-188`) is likewise left to that lane.
+
+> **Handed over and BUILT the same day** — see §"Chip analytics — BUILT" at the end of this
+> document. All three findings above were implemented as stated (including the constants-not-KDoc
+> point and the `align_chip_sel`-first precedence) and are guarded by literal assertions that took
+> `AnalyticsNamesTest` from 19 to 28 tests.
+
+### Verification (actually run, 2026-09-03)
+
+`./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug
+:farmerchat-android-views:assembleDebug :farmerchat-core:testDebugUnitTest` — **BUILD SUCCESSFUL**;
+`testDebugUnitTest` reported **117 tests, 0 failures, 0 errors** across 13 classes, of which this
+lane's new `AnalyticsNamesTest` contributes **22** (event names, property keys, screen names,
+`API_Name` values, the emitted `API_Call_*` and card payloads, `cardPositionLabels`,
+`toHomeCardAnalytics` fallbacks, the five `gpsTriggerLabel` strings + `gpsAnalyticsProps` shape,
+and `appearanceAnalyticsValue` — all asserted as **literals** transcribed from the app, never by
+referencing the constant under test). `gpsTriggerLabel` / `gpsAnalyticsProps` /
+`appearanceAnalyticsValue` were lifted out of the UI files into core precisely so these
+hand-transcribed strings could be tested and cannot drift between the two UI artifacts. Build- and test-verified only: **nothing ran on a device or
+emulator**, so no event was observed arriving at a host listener at runtime.
+
+## #27a real wire contract — android v2 brought in line (2026-09-03)
+
+The agentic stream was captured live from stage for the first time on 2026-09-03. The contract and
+the two raw captures are in **docs/02 §#27a** / `docs/captures/`; they are the ground truth for
+everything below. Scope of this pass: **`versions/v2/android` only**. v1 untouched;
+`core/analytics/` untouched (a parallel lane owns it).
+
+### Confirmed correct, left alone
+
+`text_delta`'s payload key really is `delta`; `done` really is non-terminal with `metadata` last;
+`Accept: application/json` is right (`text/event-stream` → HTTP 406, re-confirmed);
+`ACTION_SELECT == "invoke"` and `VALUE_SHARE_LOCATION == "share_precise_location"` match the wire.
+
+### What changed on android
+
+| # | Change | Where |
+|---|---|---|
+| 1 | `event: status` (`{"stage":"thinking"}`) handled — was dropped by the typeless fallback. New `AgenticEvent.Status`; surfaced like a tool status label, so the loading placeholder becomes a live bubble before the first delta (6.7 s TTFT on the capture) | `AgenticModels.kt`, `AgenticChatDataSource.parseEvent`, `ChatViewModel.streamAgenticAnswer` |
+| 2 | `event: surface` handled — an alignment surface now renders MID-STREAM instead of waiting for `metadata.alignments`. New `AgenticEvent.Surface` | same three + `ChatViewModel.applyStreamSurface` |
+| 3 | `AlignmentChip` gains `label_key`, `label_en`, `behavior`, `capability`, `request`, `submit{kind,surface_type,action,text,data,requires}`. Routing prefers `behavior`/`capability`, keeps the value match | `ChatModels.kt`, new `core/ui/chat/AlignmentChipRouting.kt` |
+| 4 | `VALUE_USE_APPROXIMATE_LOCATION` added; the decline path recognises it as well as `not_now` | `ChatModels.kt`, `AlignmentChipRouting.kt`, docs/05 |
+| 5 | Surface payload gains `intent`, `interaction_kind`, `blocking`, `context{required_precision,original_query,subject}`, `budget{asked,max}`. `blocking` drives dismissibility — the "type or say it" escape hatch is withheld on a blocking surface | `ChatModels.kt`, `ChatModels.kt` (ui), both `AlignmentSurface`s |
+| 6 | Six `TextPromptRequest` fields added and sent: `parent_message_id`, `location_declined`, `photo_declined`, `streaming_required`, `image_name`, `image`. `streaming_required` is wired end to end: `SupportedLanguage.streaming_required` → prefs `is_streaming_required` → every text-prompt request | `ChatModels.kt`, `LanguageModels.kt`, `SdkPreferences`, `OnboardingSharedViewModel`, `SettingsViewModel`, `ChatViewModel.fetchTextPromptResponse` |
+| 7 | `ChatAction.SendAlignmentChip` ported (the app's 18th action; SDK had 17) with the app's exact 9-parameter signature and `sendAlignmentChip` implementation. Both flavours' chip taps and both location-decline paths now route through it | `ChatAction.kt`, `ChatViewModel.kt`, both flavours' chat screens |
+
+**Routing table moved into core.** The previous pass kept it per-flavour and tested a local mirror;
+this doc already called that the worse pattern. `routeAlignmentChip(kind, chip)` in
+`core/ui/chat/AlignmentChipRouting.kt` is now the single table, called by the Compose screen, the
+Views fragment and `CapabilityChipTest` (which was rewritten onto it, deleting its mirror).
+
+`behavior` beats `action`, and `capability` alone can never select the invoke path — **both** live
+`gps-prompt` chips carry `capability: "location"`, so keying on it would send the decline chip into
+the permission dialog the farmer just refused.
+
+### Three defects the captures exposed
+
+1. **Every non-`metadata` finalize path erased a mid-stream surface.** `finalizeAgenticAnswer` and
+   `interruptAgentic` build a fresh `AiResponse` with no alignment fields. On the gps capture
+   `done.answer` is `null` and there are ZERO deltas, so a stream that dropped after `done` fell all
+   the way to `interruptAgentic` — the farmer's blocking question replaced by an error card. The
+   rendered surface is now threaded through finalize, plus a new "surface rendered, no metadata →
+   settle it" branch ahead of the error branches.
+2. **`handleTextPromptResult` removed-then-appended.** With `reuseId` it now replaces IN PLACE.
+   Removing and appending re-ordered the settled answer behind anything added meanwhile and would
+   have duplicated a surface the farmer had already answered. This is also what makes the
+   `surface` + `metadata.alignments` pair ONE message rather than two: both write the same id.
+3. **The reader never closed its channel on the terminal event** (drive-by, same file). `dispatch`
+   returning true did `return@use`, skipping `producer.close()`, so `callbackFlow`'s collector
+   suspended until its scope was cancelled. Safe to fix: `finalized` is already true post-metadata,
+   so the now-reachable `finalizeStreamOrFail()` is a no-op.
+
+**Not test-covered.** `AgenticCaptureReplayTest` asserts what the PARSER emits; there are no
+ChatViewModel-level tests in the module, so all three of the above — the finalize branches,
+`applyStreamSurface`/`settleStreamSurface`, and the in-place replace — are argued from the captured
+event ordering and read, not exercised by a test. Treat them as reasoned, not verified.
+
+`blocking` also drives whether a mid-stream surface settles immediately: while `state.isLoading` is
+true the flavours disable every chip, so a blocking surface that stayed "loading" would render the
+question and refuse the taps. Blocking/exclusive surfaces settle on arrival; an additive nudge
+attaches to the still-streaming answer and unlocks at finalize (a terminal settle forces
+`isStreaming = false` even for a non-blocking additive surface — otherwise the bubble stays in the
+streaming state forever, with no action row and a stall hint that never clears).
+
+**Caveat on change 2, so the entry is not read as an unqualified win.** The mid-stream render only
+buys anything when `metadata` is LATE — and that is exactly when a chip tapped from the early
+surface sends `parent_message_id = null`, because the bubble's server `messageId` is only populated
+by `metadata`. The same tap also lets a late `metadata` reset `isLoading` under the new in-flight
+request. On both captures `done` + `surface` + `metadata` arrive in one flush, so the window is
+milliseconds wide and no farmer can hit it; it is recorded because the null-`parent_message_id`
+case is the gap this pass closed everywhere else.
+
+### Testing
+
+New `AgenticCaptureReplayTest` (**11 tests**) copies both captures into
+`farmerchat-core/src/test/resources/wire-captures/` (NOT `captures/` — `.gitignore`'s Android-Studio-profiler rule swallows any directory of that name; the same rule had left `docs/captures/` itself untracked, and is now negated for it) and replays them through the PRODUCTION reader —
+`AgenticChatDataSource.readEvents`, extracted from `stream()` for exactly this purpose — asserting
+the full parsed sequence. It also asserts each capture's byte length (13,273 / 4,620, per docs/02)
+so a stale copy cannot pass.
+
+```
+prose: Status, ToolCall, ToolResult, TextDelta ×9, Done, Surface, Metadata   (15 events)
+gps:   Status, Surface, Done, Metadata                                       (4 events)
+```
+
+The 9 deltas concatenate **exactly** to `metadata.response`, and `sanitizeAgenticStreamText` of that
+concatenation equals `metadata.response.trimEnd()` — i.e. the sanitizer is a pure trim on a clean
+answer and strips nothing real. `CapabilityChipTest` grew from 7 to **15 tests**, now including the
+two verbatim live chips. `AgenticEventParsingTest` (14) is retained for the permissive fallbacks the
+captures do not exercise, its "cannot be verified against a live stream" class doc corrected.
+
+**Verification (actually run, 2026-09-03, in `versions/v2/android`):**
+
+```
+./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug \
+          :farmerchat-android-views:assembleDebug :sample-compose:assembleDebug \
+          :sample-views:assembleDebug :farmerchat-core:testDebugUnitTest
+BUILD SUCCESSFUL in 4s
+178 actionable tasks: 10 executed, 168 up-to-date
+```
+
+`testDebugUnitTest`: **123 tests, 0 failures** across 13 classes (`AgenticCaptureReplayTest` 11 new,
+`CapabilityChipTest` 7 → 15, `AnalyticsNamesTest` 19 → 28). Build- and test-verified only —
+**nothing in this pass ran on a device or emulator**, so the mid-stream surface render and the
+blocking-surface escape-hatch suppression have never been *seen*.
+
+### Chip analytics — BUILT (the analytics lane landed mid-pass and handed these over)
+
+Originally recorded here as "needed from the analytics lane". That lane finished and released
+`SendQueryProperties`, so the chip analytics were implemented in this pass rather than deferred.
+
+`SendQueryProperties` gains six fields — `isAlignmentChip`, `agenticChipType/Value/Label/Status`,
+`agenticChipSkippedType`, `agenticChipShownType` — and `AnalyticsProps` gains ten constants. Three
+things about it are easy to get wrong and are each guarded by a literal assertion in
+`AnalyticsNamesTest`:
+
+1. **Seven keys on EVERY `Send_Query` / `Send_Query_Initiated`, chip or not** — `agentic_chip_status`
+   defaulting to `"none"` and the other five string keys to `""`. A key that appears only on chip
+   payloads is a different schema from the app's; before this, non-chip payloads were seven keys
+   short too, not just the chip path.
+2. **The status values come from the app's CONSTANTS, not its KDoc.** `SendQueryAnalytics.kt`'s doc
+   comment says `skipped_manual` / `shown` / `not_shown`; `AnalyticsProps` declares `selected` /
+   `skipped` / `available` / `none`, and the app's own `toAnalyticsProperties()` compares against
+   the constants. Transcribing the KDoc would emit values the app never sends.
+3. **`isAlignmentChip -> "align_chip_sel"` is the FIRST `click_type` branch**, ahead of
+   `isReadFullAdvice`. Appended instead of prepended, a chip tapped on an advice card would report
+   `read_full_advice`.
+
+Both chip senders stamp them: `sendAlignmentChip` from the action's `chipType`/`chipValue`/
+`chipLabel` with status `selected`, and `sendLocationSharedQuery` reports a SUCCESSFUL location
+share as a chip pick (`gps-prompt` / `share_precise_location` / the `SHARE_LOCATION` label), which
+the app does at `ChatViewModel.kt:1105` and which the location path would otherwise bypass entirely.
+
+**`agentic_chip_type` on the GPS funnel** is also done, the half the events lane deliberately left
+open. `LocationPromptManager` gains `agenticChipOrigin` (port of the app's `activeAgenticChip`): set
+by `triggerFromLocalContext(fromAgenticChip = true)`, which both flavours now pass from the
+share-location chip, and cleared by every other trigger so it only ever describes the running flow.
+While set, every GPS event is re-attributed to Chat — `screen_name` = Chat, `Trigger` = "Chat
+Screen", `agentic_chip_type` = `gps-prompt`. The override is applied AFTER the per-call extras on
+purpose: the fetch-phase `Location_Update_Triggered` passes `screen_name` = Home as an extra and the
+chip attribution has to win over it (app `LocationPromptManager.kt:438`).
+
+`agenticChipStatus`'s `skipped` and `available` cases are modelled and tested but not yet STAMPED by
+any SDK caller — the app sets them from a `manualSendChipContext()` / response-time hook that is not
+ported. Recorded as a gap, not claimed.
+
+### An additive surface now suppresses the follow-up list (app 43ba5de4)
+
+The reference app was updated mid-pass (`fc-compose-agentic` HEAD `c0524dd6` → `0c8c740f`).
+Commit **43ba5de4 "no follow up in case of chips"** adds to `ChatThreadContent.kt`:
+
+```kotlin
+showFollowUps = !(alignmentKind != null && alignmentKind.isAdditive && !message.alignmentChips.isNullOrEmpty()),
+```
+
+Ported to both flavours, **ANDed** with the existing gate rather than replacing it — compose's
+`followUps.isNotEmpty() && !isLoading && errorMessage == null && lastAnswerRevealed`, views'
+`isLast && settled`. Without it an additive surface (`gender-select` / `commodity-confirm`) renders
+AND the follow-up list renders beneath it, offering the farmer two competing lists.
+
+The live capture independently corroborates the rule: the prose answer's `metadata` carries
+`"followups_gated_by": "commodity-confirm"` with `followups: []`, i.e. the backend suppresses its
+own follow-ups for exactly this case. Not a client-side guess.
+
+Also from that pull and confirmed ALREADY present in the SDK, so untouched: the chat-history
+`isAgentic = getAgenticChatEnabled()` mirroring.
+
+### Parity: what ios / react-native / web still need (root CLAUDE.md §4)
+
+Recorded as gaps, not silently skipped. Nothing here was applied off-android in this pass.
+
+| Change | ios | react-native | web | Notes |
+|---|---|---|---|---|
+| 1. `status` event → progress signal | ⛔ | ⛔ | ⛔ | Same symptom on all three: the ping falls into the typeless fallback and the farmer sees a bare spinner for the whole TTFT |
+| 2. `surface` event → mid-stream render | ⛔ | ⛔ | ⛔ | **Highest priority.** All three also carry defect (1) above — a dropped stream after `done` on a gps surface produces an error card in place of the question |
+| 3. Richer chip fields + `behavior`/`capability` routing | ⛔ | ⛔ | ⛔ | ios/rn/web already keep the routing table in a shared core module, so this is one function each |
+| 4. `use_approximate_location` decline value | ⛔ | ⛔ | ⛔ | Until fixed, the live decline chip sends no `location_declined` on any of the three |
+| 5. Surface `blocking` / `context` / `budget` / `interaction_kind` | ⛔ | ⛔ | ⛔ | Includes the `original_query` ← `context.original_query` fallback, without which a `context`-only surface loses its capability re-send |
+| 6. Six `TextPromptRequest` fields + `streaming_required` chain | ⛔ | ⛔ | ⛔ | `parent_message_id` was the largest known fidelity gap; it is now android-only closed |
+| 7. `SendAlignmentChip` equivalent | ⛔ | ⛔ | ⛔ | All three still dispatch a bare follow-up for a chip tap, so no `parent_message_id`, no chip marking by value, and the location-decline path is untagged |
+| 8. Seven `agentic_chip_*` keys on every query payload | ⛔ | ⛔ | ⛔ | Includes the `align_chip_sel`-first `click_type` precedence and the constants-not-KDoc status values. All three platforms are currently seven keys short on EVERY `Send_Query`, not only chip ones |
+| 8b. `agentic_chip_type` on the GPS funnel | ⛔ | ⛔ | ⛔ | Needs each platform's location manager to carry an agentic-chip-origin flag set by the share-location chip |
+| 9. Additive surface suppresses the follow-up list (app 43ba5de4) | ⛔ | ⛔ | ⛔ | Newest app commit; all three still render an additive surface AND the follow-up list |
+| Capture-replay tests | ⛔ | ⛔ | ⛔ | The captures are checked in and platform-agnostic; each platform can copy them into its own test resources and replay them through its own reader |
+
+`streaming_required` is deliberately NOT persisted from `verify_otp`'s `preferred_language` on
+android, because the app persists it only at its two language-SELECTION sites. Intentional, not a
+miss.
+
+## App re-baselined: `c0524dd6` → `0c8c740f` (app v4.1.3, versionCode 108) — 2026-09-03
+
+The reference app was pulled forward 21 commits (`features/dev_v2.3`, merged from `origin/dev/v2.4`),
+`31 files changed, 1130 insertions(+), 76 deletions(-)`. HEAD was committed 2026-09-02, i.e. BEFORE
+that day's SDK work, so several lanes were already reading the new code without knowing it — which
+is why the policy-acceptance gate turned up in the gap audit at all.
+
+Coverage of the delta, item by item:
+
+| App change | commit | SDK status |
+|---|---|---|
+| `TermsOfUseUpdatedBottomSheet` + `TermsOfUseContentDialog` (+466) | `02f60337`, `0b26291d`, `2b5e4ffa` | ✅ ported both flavours (policy-gate lane) |
+| `policy_acceptance_status` endpoint, model, use case, repo, `HomeAction`/`HomeState`/`HomeViewModel`/`HomeScreen` | same | ✅ ported, endpoint verified live (docs/02 #7a) |
+| 7 × `fc_v2_app_terms_of_use_*` labels | `78675b96`, `14da13d6` | ✅ in SDK, all 7 verified served by #3 in en/hi/sw |
+| 6 × `Terms_Of_Use_*` events + `Terms of Use Content Screen` | `d1530a98` etc. | ✅ (event-parity lane supplied the constants) |
+| chat history `isAgentic = getAgenticChatEnabled()` | `dc7b4d1b` | ✅ already implemented |
+| `getComposerUiEnabled() = true` | `df190b2d` | ✅ `enableComposerUi` knob added (android/RN/web; ⛔ iOS — no composer exists there) |
+| "no follow up in case of chips" — `showFollowUps` on additive chip surfaces | `43ba5de4` | 🟡 assigned to the agentic lane; SDK's views computed `isLast && settled` with no additive term, compose had no gate at all |
+| auth agreement info card + privacy-consent text (+147) | `9966b905` | ✅ ported **both android v2 flavours**; 5 new labels added, all verified served by #3. See ["Auth agreement card and privacy consent"](#auth-agreement-card-and-privacy-consent-android-v2-both-flavours-2026-09-03). ⛔ ios / react-native / web |
+| `Chip.kt` dark-mode fix | `e335413b`, `97832e9a` | ✅ **android v2 both flavours** (compose `components/Chip.kt`, views `AgenticChipView`). Collision confirmed in the SDK's OWN palettes, not just the app's: compose `DarkContentColors` has `surfaceTertiary = Neutral700 = #3F3F46` AND `foregroundTertiary = Neutral700 = #3F3F46` (`theme/Color.kt:153,160`); views `values-night/colors.xml` has `fc_surface_tertiary #3F3F46` AND `fc_foreground_tertiary #3F3F46` (lines 6, 12). Light mode was also failing: `#E4E4E7` on `#D4D4D8` ≈ 1.1:1. Fixes: disabled label → `foregroundSecondary` (dark `#9F9FA9`, light `#52525C`); disabled badge CIRCLE → `foregroundSecondary`; disabled badge NUMERAL → `surfaceTertiary`. Note the badge is a SLOT SWAP, not the app's token substitution: the SDK had circle=`surfaceTertiary` / numeral=`foregroundTertiary` where the app had the reverse, so a mechanical substitution would have left the circle exactly the chip surface. The `!enabled -> foregroundTertiary` branch of `chevronColor` is deliberately left alone — it is unreachable (`showChevron = clickable`, `chevron.isVisible = clickable`). **No chip drawables exist** in the views flavour — `AgenticChipView` builds its backgrounds programmatically via `FcTokens.roundedRect`; the only `tertiary`-referencing drawables are `fc_bg_retry_button.xml` and `fc_radio_dot_unselected.xml`, neither a chip. ⛔ ios/react-native/web: same fix needed wherever each renders a disabled chip — NOT applied (out of lane) |
+| `DefaultAppBar` (+4), `OnboardingSharedViewModel` (+25) | — | ✅ **android v2**. `DefaultAppBar` gained `rightEnabled: Boolean = true`, passed to the right `ActionButton`'s existing `enabled` (compose `components/AppBars.kt`); the views flavour has no analogue to port: its shared `fc_view_appbar.xml` right slot is a plain `TextView` (`fcAppBarRightLabel`) with no enabled/disabled treatment, and the knob's only app consumer — the ToU content dialog — is a separate views screen (`fc_fragment_terms_content.xml`) that already blocks a double-accept via its own `PrimaryButtonView.State.LOADING` (`TermsOfUseGateController.kt:260,296`), not via an app-bar action. The `OnboardingSharedViewModel` +25 IS the device/carrier attribute block — see the row below; it was ported additively at the guest-init success site and none of the same-day device-locale/`resolveFallbackCoordinates`/API-analytics work was reverted. ⛔ ios/react-native/web: `rightEnabled` not added (out of lane); only the app's ToU dialog uses it |
+| `DeviceTypeProvider` (new), `CarrierInfoProvider` hardening, 7 user-attribute keys (`Carrier_Name`, `Carrier_Code`, `Device_Type`, `Brand`, `Model`, `Manufacturer`, `OS`) | `15b1c33d`, `2d5ee864`, `2fbe0924` | ✅ **android v2** — and it required the new host surface below. Ported: `core/device/DeviceTypeProvider.kt` + `core/device/CarrierInfoProvider.kt` (pure Kotlin + Android framework, no vendor SDK, no new permission — `simOperator`/`simOperatorName` need none), `core/analytics/UserAttributeKeys.kt` (the 7 keys only), `core/analytics/DeviceUserAttributes.kt` raises them through `FarmerChatAnalytics.setUserAttribute` → `config.onUserAttribute`. `ACTUAL_DEVICE = "physical_device"` is verbatim from the app (the constant NAME says "actual"; the VALUE is what lands in a dashboard). Raise sites: onboarding guest-init success (the app's own site) and `FarmerChatGraph.ensureChatOnlySession` (SDK-only path that skips onboarding entirely) — deliberately NOT `ensureLabelsLoaded`, which is shared with the skipped-onboarding flow and would double-raise. Carrier reads run on `Dispatchers.IO` (Binder IPC on the splash path). Tests: `UserAttributeKeysTest` (7 key literals, distinctness, `Device_Type` values, `OS`-key-vs-`OS`-value), `CarrierInfoProviderTest` (absent telephony, throwing `simState`, throwing operator reads, not-ready SIM, blank values → null; happy path trims), `AnalyticsUserSurfaceTest` (both callbacks actually dispatched, blank-guarded, host exceptions swallowed) — 20 tests, all passing. Deviation: a blank value raises NO attribute (the app would send `""`). ⛔ ios/react-native/web: providers + attributes NOT ported (out of lane) |
+| Adjust token for ToU (+10) | `9a28929e` | ⛔ by design (§6). Adjust tokens are DG-account-scoped opaque ids and meaningless in a host's Adjust app; docs/07 documents the host-owned `Map<eventName, token>` pattern instead |
+| Plotline 5.2.5 bump, `libs.versions.toml` | `bedbca3a` | ⛔ by design (§6) — no vendor SDK enters an SDK package |
+| `bg_termsofuse_banner.png` (528 KB), `ic_tou_info.xml` | — | ✅ `fc_ic_tou_info.xml` already present in **both** android v2 flavours (policy-gate lane), byte-identical to the app's. It is **not** used by the agreement card — in the app it is referenced only by `TermsOfUseUpdatedBottomSheet`, so the auth lane vendored no duplicate. **The 528 KB PNG is deliberately NOT vendored** — it would add ~0.5 MB to every host's APK for one banner; recorded as a deviation, host-themable instead |
+
+### Standing risk this exposes
+
+The SDK tracks a **moving** app. This re-baseline was only caught because the user mentioned the
+pull; nothing in the repo detects it. `versions/README.md` and `docs/03` now cite `0c8c740f`, but
+the honest position is that any SDK claim of "app parity" is parity **as of a named commit**, and
+the app is on an active branch. Before the next parity claim, re-run
+`git -C <app> log --oneline <cited-commit>..HEAD` and diff the areas it touches.
+
+## Auth agreement card and privacy consent, android v2 both flavours (2026-09-03)
+
+App commit `9966b905` "added agreement info card and privacy policy consent text to auth phone
+entry screen". The commit itself touches exactly two app files — `core/labels/Labels.kt` (+5) and
+`ui/auth/AuthScreen.kt` (+114). **No `AuthViewModel` change belongs to this lane**: the `+25` that
+shows up in a `c0524dd6..HEAD -- '*AuthViewModel.kt'` diff is the carrier / device-attribute work
+(`15b1c33d`, `2d5ee864`, `2fbe0924`), which is a different row in the re-baseline table.
+`legalLinks` already existed on `AuthUiState` and `fetchLegalLinks()` was already called on both
+flavours, so nothing in `farmerchat-core` needed new state.
+
+### What shipped
+
+| Piece | compose | views |
+|---|---|---|
+| 5 label constants in `farmerchat-core` `Labels.kt` (app's exact names + English fallbacks) | ✅ shared | ✅ shared |
+| "What you are agreeing to:" card, between the phone row and the send-code buttons | ✅ `AgreementCard()` / `AgreementBulletPoint()` in `screens/AuthScreen.kt`, called from `PhoneEntryContent` | ✅ `fcAgreementCard` block in `fc_fragment_auth.xml` + `renderAgreementCard()` in `AuthFragment` |
+| Three bullet points | ✅ 16 dp bullet column, per the app | ✅ `BulletSpan(16 dp)` — same hanging indent for wrapped lines |
+| Consent copy below the buttons, only "Privacy Policy" clickable + underlined | ✅ `AuthConsentText()` → `BasicText` + `LinkAnnotation.Clickable` (the app's own migration off deprecated `ClickableText`) | ✅ `fcAuthConsent` + `SpannableStringBuilder`/`ClickableSpan`/`UnderlineSpan` + `LinkMovementMethod`, the pattern `LanguageFragment.renderLegal()` already uses |
+| `privacy_policy_opened` on tap, `SCREEN_NAME = Login Screen`, then navigate only if the URL is non-blank | ✅ | ✅ `fc_dest_legal_content` |
+
+Every user-visible string resolves through `LabelManager` (`label(Labels.X, "<app's English>")`) —
+no hardcoded copy. The card's new drawable was **not** needed (see the `ic_tou_info` row above).
+
+### Four deliberate deviations from a literal port
+
+1. **Theme tokens instead of the app's literals.** The app hardcodes `Neutral200` for the card and
+   `Color(0xFF000000)` / `Color(0xA3000000)` for the text. The SDK uses
+   `colors.surfaceTertiary` / `foregroundPrimary` / `foregroundSecondary`. `Color.kt:19`+`:130`
+   make `surfaceTertiary == Neutral200`, so **light mode is pixel-identical to the app**, while a
+   themed host and dark mode both keep contrast. A token background with hardcoded black text
+   would have reproduced exactly the `Chip.kt` dark-mode defect this same re-baseline fixed.
+   **Both pairs were checked for that collision, not assumed:** compose dark is
+   `surfaceTertiary = Green950` / `foregroundPrimary = White` (`Color.kt:74-76`), and views
+   `values-night/colors.xml` flips *both* halves — `fc_surface_tertiary` `#E4E4E7` → `#3F3F46`
+   and `fc_foreground_primary` `#000000` → `#FFFFFF`. No white-on-light-grey card on either.
+2. **The compose annotated string is keyed, defensively.** The app's `remember {}` takes no keys.
+   In the SDK `label()` resolves at call time against an asynchronously populated `LabelManager`,
+   so a keyless `remember` would pin the consent line to its English fallback if it ever composed
+   before endpoint #3 landed. In practice auth is only reachable after language onboarding has
+   fetched labels (`is_language_labels_loaded`), so this is belt-and-braces rather than a bug fix
+   — which is why the **views** flavour was deliberately left resolving once in
+   `renderStaticTexts()` at `onViewCreated`, exactly like every other string in that fragment
+   (`fcPhoneTitle`, `fcAuthLegal`, …). If a late-label case is ever observed, the fix belongs to
+   `AuthFragment.renderStaticTexts()` as a whole, not to this one line.
+3. **`onOpenPrivacyPolicy` is not threaded as a new parameter.** The app added one because its
+   `PhoneEntryContent` had no legal callback; the SDK's already receives `onOpenLegal`, so the
+   lambda is built at the call site (the same shape line 411 already uses).
+4. **Transient loading state.** Compose's `PhoneEntryContent` gates the whole phone row + buttons
+   block behind `if (state.countries.isEmpty())`; the card and consent line sit in the same branch
+   as their neighbours, so during the (brief) country fetch the screen shows only the spinner. The
+   app instead swaps just the country selector for a spinner and keeps the card visible. Not
+   churned — inverting that gate is a rewrite of the whole composable, not this lane's change. The
+   views flavour has no such gate and always shows the card.
+
+### Recorded, deliberately NOT churned: the auth screen now shows two consent blurbs
+
+The app's older `LegalConsentText` ("By Continuing to Verification, you're accepting our Terms of
+Use…") is **commented out at its call site** (`AuthScreen.kt:492`) and has been since before
+`c0524dd6` — the app renders only the new card + consent line. The SDK ported that legal row as
+*active* on both flavours (compose's terms · privacy row, views' `fcAuthLegal`). Removing it would
+drop the only Terms-of-Use link on the signup screen, which root CLAUDE.md §3 makes a decision
+requiring its own entry — and it is not this lane's call. So v2 auth currently renders the new
+consent line **and** the legacy legal row, both linking Privacy Policy. Flagged here for whoever
+owns the copy decision; one line deletes it on each flavour.
+
+`docs/01` §3.4 does not yet describe the agreement card. Left unedited (this lane's docs scope is
+04) but it is now under-specified.
+
+### Parity (root CLAUDE.md §4)
+
+| Platform | Status |
+|---|---|
+| android v2 compose | ✅ |
+| android v2 views | ✅ |
+| android v1 (both flavours) | ⛔ out of scope by design — v1 tracks the 1.0.0 app contract |
+| ios v2 (SwiftUI + UIKit) | ⛔ **GAP** — user-visible auth UI, all 5 labels served, needs the card + consent link |
+| react-native v2 | ⛔ **GAP** — same |
+| web v2 | ⛔ **GAP** — same |
+
+### Verification (actually run, 2026-09-03)
+
+```
+cd versions/v2/android
+./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug \
+          :farmerchat-android-views:assembleDebug :sample-compose:assembleDebug \
+          :sample-views:assembleDebug :farmerchat-core:testDebugUnitTest
+BUILD SUCCESSFUL — 123 core unit tests, 0 failures
+```

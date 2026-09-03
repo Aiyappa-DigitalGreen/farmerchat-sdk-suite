@@ -54,11 +54,13 @@ import org.digitalgreen.farmerchat.sdk.compose.util.rememberDebouncedAction
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.GeoRequestBody
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.settings.LanguageDisplayOrder
 import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingAction
 import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingSharedViewModel
 
@@ -187,7 +189,17 @@ fun LanguageScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            languageState.data.forEach { language ->
+                            // App parity: when the "All languages" list is collapsed and the
+                            // selection lives only in it, the selected language is pinned to
+                            // the top of the priority list so it is never invisible
+                            // (LanguageScreen.kt `displayedLanguages`).
+                            val rows = LanguageDisplayOrder.rowsToShow(
+                                priority = languageState.data,
+                                expanded = state.expandedLanguages,
+                                selectedId = state.selectedLanguageId,
+                                isExpanded = showAllLanguages
+                            )
+                            rows.forEach { language ->
                                 RadioButton(
                                     label = language.displayName.ifBlank { language.name },
                                     selected = state.selectedLanguageId == language.id,
@@ -259,7 +271,7 @@ fun LanguageScreen(
                         Text(
                             text = label(
                                 Labels.FARMERCHAT_TAGLINE,
-                                "Practical advice for your crops and animals"
+                                "FarmerChat: Practical advice\nfor your crops & livestock"
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.foregroundSecondary,
@@ -288,9 +300,15 @@ fun LanguageScreen(
                             onOpenLegal = { url, title ->
                                 when (title) {
                                     label(Labels.TERMS_OF_USE, "Terms of use") ->
-                                        graph.analytics.track(AnalyticsEvents.TERMS_OF_USE_OPENED)
+                                        graph.analytics.track(
+                        AnalyticsEvents.TERMS_OF_USE_OPENED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE)
+                    ) // app LanguageScreen.kt:315
                                     else ->
-                                        graph.analytics.track(AnalyticsEvents.PRIVACY_POLICY_OPENED)
+                                        graph.analytics.track(
+                        AnalyticsEvents.PRIVACY_POLICY_OPENED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE)
+                    ) // app LanguageScreen.kt:339
                                 }
                                 onOpenLegal(url, title)
                             }
@@ -304,8 +322,8 @@ fun LanguageScreen(
                 LogoSpinner(
                     type = LogoSpinnerType.Vertical,
                     labels = listOf(
-                        label(Labels.FARMERCHAT_STARTING, "FarmerChat is Starting…"),
-                        label(Labels.LOADING_LANGUAGES, "Loading languages…")
+                        label(Labels.FARMERCHAT_STARTING, "FarmerChat is Starting..."),
+                        label(Labels.LOADING_LANGUAGES, "Loading languages...")
                     ),
                     modifier = Modifier.align(Alignment.Center)
                 )
@@ -329,7 +347,7 @@ private fun LegalLinksRow(
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Text(
-            text = label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing you agree to our"),
+            text = label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing, you agree to our"),
             style = MaterialTheme.typography.labelSmall,
             color = colors.foregroundSecondary,
             textAlign = TextAlign.Center

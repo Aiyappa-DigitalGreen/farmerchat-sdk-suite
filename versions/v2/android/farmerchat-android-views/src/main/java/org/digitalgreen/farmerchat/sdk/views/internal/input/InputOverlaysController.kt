@@ -19,6 +19,8 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioRecorder
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
@@ -34,6 +36,13 @@ import java.io.File
 internal class InputOverlaysController(
     private val fragment: Fragment,
     private val binding: FcViewInputOverlaysBinding,
+    /**
+     * `screen_name` stamped on every event this controller emits. The app tracks the
+     * same overlay events from Home (`AnalyticsScreens.HOME`, HomeScreen.kt:1670-1773)
+     * and from Chat (`AnalyticsScreens.CHAT`, ChatInputOverlays.kt:114-182), so the
+     * hosting fragment must supply its own screen.
+     */
+    private val screenName: String,
     private val onTextSubmitted: (String) -> Unit,
     private val onImagePicked: (Uri) -> Unit,
     private val onVoiceFinished: (File) -> Unit,
@@ -115,18 +124,35 @@ internal class InputOverlaysController(
             }
         }
         binding.fcVoiceCancel.setOnClickListener {
-            graph.analytics.track(AnalyticsEvents.CANCEL_RECORD_AUDIO_CLICK_EVENT)
+            graph.analytics.track(
+                AnalyticsEvents.CANCEL_RECORD_AUDIO_CLICK_EVENT,
+                audioProps() // app ChatInputOverlays.kt:182
+            )
             cancelAndHide()
         }
         binding.fcVoiceMain.setOnClickListener {
             if (isRecording) stopRecordingAndSubmit()
         }
         binding.fcPhotoCamera.setOnClickListener {
-            graph.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT)
+            graph.analytics.track(
+                AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT,
+                // App ChatScreen.kt:1921 / HomeScreen.kt:1759.
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to screenName,
+                    AnalyticsProps.OPTION to "Camera"
+                )
+            )
             requestCamera()
         }
         binding.fcPhotoGallery.setOnClickListener {
-            graph.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT)
+            graph.analytics.track(
+                AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT,
+                // App ChatScreen.kt:1935 / HomeScreen.kt:1773.
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to screenName,
+                    AnalyticsProps.OPTION to "Gallery"
+                )
+            )
             galleryLauncher.launch("image/*")
         }
 
@@ -187,7 +213,14 @@ internal class InputOverlaysController(
     }
 
     fun showVoiceInput() {
-        graph.analytics.track(AnalyticsEvents.MICROPHONE_CLICK_EVENT)
+        graph.analytics.track(
+            AnalyticsEvents.MICROPHONE_CLICK_EVENT,
+            // App ChatScreen.kt:857 / HomeScreen.kt:687.
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to screenName,
+                AnalyticsProps.ICON_TYPE to "Voice"
+            )
+        )
         requestMicThenRecord()
     }
 
@@ -262,7 +295,10 @@ internal class InputOverlaysController(
     }
 
     private fun stopRecordingAndSubmit() {
-        graph.analytics.track(AnalyticsEvents.SEND_RECORD_AUDIO_CLICK_EVENT)
+        graph.analytics.track(
+            AnalyticsEvents.SEND_RECORD_AUDIO_CLICK_EVENT,
+            audioProps() // app ChatInputOverlays.kt:114
+        )
         stopTimer()
         isRecording = false
         val file = recorder.stopRecording()
@@ -316,7 +352,16 @@ internal class InputOverlaysController(
             cameraOutputUri = uri
             cameraLauncher.launch(uri)
         }.onFailure {
-            graph.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED)
+            graph.analytics.track(
+                AnalyticsEvents.INPUT_CAPTURE_FAILED,
+                // App HomeScreen.kt:437 / ChatScreen.kt:616.
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to screenName,
+                    AnalyticsProps.INPUT_TYPE to "Image",
+                    AnalyticsProps.SOURCE to "Camera",
+                    AnalyticsProps.FAILURE_REASON to "No camera app"
+                )
+            )
         }
     }
 
@@ -325,9 +370,29 @@ internal class InputOverlaysController(
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
+    /** `{screen_name, Input_type, Source}` — the app's audio-overlay payload. */
+    private fun audioProps(extra: Map<String, Any?> = emptyMap()): Map<String, Any?> =
+        mapOf(
+            AnalyticsProps.SCREEN_NAME to screenName,
+            AnalyticsProps.INPUT_TYPE to "Audio",
+            AnalyticsProps.SOURCE to "Mic"
+        ) + extra
+
     private fun bumpAttempt(key: String) {
-        prefs.putInt(key, prefs.getInt(key, 0) + 1)
-        graph.analytics.track(AnalyticsEvents.PERMISSION_POPUP_SHOWN)
+        val attempt = prefs.getInt(key, 0) + 1
+        prefs.putInt(key, attempt)
+        val isCamera = key == SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT
+        // App HomeScreen.kt:527/1756, ChatScreen.kt:696 — the Camera popup also carries
+        // `Option`, the Microphone popup does not.
+        graph.analytics.track(
+            AnalyticsEvents.PERMISSION_POPUP_SHOWN,
+            buildMap {
+                put(AnalyticsProps.SCREEN_NAME, screenName)
+                put(AnalyticsProps.PERMISSION_TYPE, if (isCamera) "Camera" else "Microphone")
+                if (isCamera) put(AnalyticsProps.OPTION, "Camera")
+                put(AnalyticsProps.ATTEMPT, attempt.toString())
+            }
+        )
     }
 
     private fun denyCount(key: String): Int = prefs.getInt(key, 0)
@@ -338,20 +403,44 @@ internal class InputOverlaysController(
         isCamera: Boolean,
         onGranted: () -> Unit
     ) {
+        val permissionType = if (isCamera) "Camera" else "Microphone"
         if (granted) {
-            graph.analytics.track(AnalyticsEvents.PERMISSION_GRANTED)
+            // App HomeScreen.kt:423/485, ChatScreen.kt:599 — Attempt is always 1 on success.
+            graph.analytics.track(
+                AnalyticsEvents.PERMISSION_GRANTED,
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to screenName,
+                    AnalyticsProps.PERMISSION_TYPE to permissionType,
+                    AnalyticsProps.ATTEMPT to "1"
+                )
+            )
             prefs.putInt(denyKey, 0)
             onGranted()
         } else {
-            graph.analytics.track(AnalyticsEvents.PERMISSION_DENIED)
             val denies = prefs.getInt(denyKey, 0) + 1
+            // App HomeScreen.kt:463/500, ChatScreen.kt:652 — Attempt is the NEXT deny count.
+            graph.analytics.track(
+                AnalyticsEvents.PERMISSION_DENIED,
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to screenName,
+                    AnalyticsProps.PERMISSION_TYPE to permissionType,
+                    AnalyticsProps.ATTEMPT to denies.toString()
+                )
+            )
             prefs.putInt(denyKey, denies)
             if (denies >= 2) showSettingsDialog(isCamera)
         }
     }
 
     private fun showSettingsDialog(isCamera: Boolean) {
-        graph.analytics.track(AnalyticsEvents.PERMISSION_FALLBACK_SETTING_SHOWN)
+        // App PermissionSettingsDialog.kt:98 — `{Permission_type, screen_name}`.
+        graph.analytics.track(
+            AnalyticsEvents.PERMISSION_FALLBACK_SETTING_SHOWN,
+            mapOf(
+                AnalyticsProps.PERMISSION_TYPE to if (isCamera) "Camera" else "Microphone",
+                AnalyticsProps.SCREEN_NAME to screenName
+            )
+        )
         val title = if (isCamera) {
             label(Labels.CAMERA_PERMISSION_REQUIRED, "Camera Permission Required")
         } else {
@@ -360,21 +449,23 @@ internal class InputOverlaysController(
         val message = if (isCamera) {
             label(
                 Labels.PLEASE_ENABLE_CAMERA_SETTINGS,
-                "Camera permission is needed to take photos of your crops and get instant " +
-                    "advice. Please enable it in your device settings."
+                "Camera permission is needed to take photos of your crops and get instant advice. Please enable it in your device settings."
             )
         } else {
             label(
                 Labels.PLEASE_ENABLE_MICROPHONE_SETTINGS,
-                "Microphone permission is needed to record your voice questions. Please " +
-                    "enable it in your device settings."
+                "Microphone permission is needed to record your voice questions. Please enable it in your device settings."
             )
         }
         AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(label(Labels.GO_TO_SETTINGS, "Go to Settings")) { _, _ ->
-                graph.analytics.track(AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CLICKED)
+                // App PermissionSettingsDialog.kt:218 — `screen_name` only.
+                graph.analytics.track(
+                    AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CLICKED,
+                    mapOf(AnalyticsProps.SCREEN_NAME to screenName)
+                )
                 runCatching {
                     context.startActivity(
                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -384,7 +475,11 @@ internal class InputOverlaysController(
                 }
             }
             .setNegativeButton(label(Labels.CANCEL, "Cancel")) { dialog, _ ->
-                graph.analytics.track(AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CANCELED)
+                // App PermissionSettingsDialog.kt:242 — `screen_name` only.
+                graph.analytics.track(
+                    AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CANCELED,
+                    mapOf(AnalyticsProps.SCREEN_NAME to screenName)
+                )
                 dialog.dismiss()
             }
             .show()

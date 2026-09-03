@@ -39,7 +39,19 @@ class SdkPreferences(context: Context) {
         const val KEY_NAME_SCREEN_SEEN = "is_name_screen_seen_once"
         const val USER_NAME_ADDED = "is_user_name_added"
         const val BUILD_VERSION_API_CALLED = "is_build_version_api_called"
+        /**
+         * One-shot gate for the `FirstTimeOnboardingCompleted` event (app
+         * `PreferenceKeys.First_Time_Onboarding_Completed`). App semantics: default **true**,
+         * flipped to false after the event fires once.
+         */
         const val FIRST_TIME_ONBOARDING_COMPLETED = "PREF_FirstTimeOnboardingCompleted"
+
+        /**
+         * One-shot gate for the `FirstTimeDashboardViewed` event (app
+         * `PreferenceKeys.FIRST_TIME_DASHBOARD_VIEWED`) — a SEPARATE key from the onboarding
+         * gate above, which earlier SDK builds reused by mistake.
+         */
+        const val FIRST_TIME_DASHBOARD_VIEWED = "FirstTimeDashboardViewed"
         const val APP_INSTALL_FIRST = "is_fc_app_install"
 
         // ---- language / labels ----
@@ -50,6 +62,13 @@ class SdkPreferences(context: Context) {
         const val LANGUAGE_LABELS_LOADED = "is_language_labels_loaded"
         const val ASR_ENABLED = "is_asr_enabled"
         const val TTS_ENABLED = "is_tts_enabled"
+
+        /**
+         * Per-language `streaming_required` from the language API, persisted under the app's own
+         * key name and sent on every text-prompt request (2.0.0, docs/02 §#27a). Defaults to true
+         * when unset, so an existing install keeps current behaviour.
+         */
+        const val STREAMING_REQUIRED = "is_streaming_required"
 
         // ---- crops ----
         const val SELECTED_CROP_ID = "crop_selected_id"

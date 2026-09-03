@@ -69,8 +69,9 @@ export function HomeScreen(props: {
 
   // 2.0.0: the floating composer replaces the sticky Photo/Speak/Type row and the text overlay,
   // and Home switches to the agentic visual treatment. Compose gates all of it on the same
-  // `isComposerUi = config.enableAgenticChat` (HomeScreen.kt:159).
-  const isComposerUi = services.config.enableAgenticChat;
+  // `config.resolvedComposerUi` — the host's `enableComposerUi`, or `enableAgenticChat` when
+  // omitted (the app's `v2_composer_ui_enabled` flag, which it treats as independent).
+  const isComposerUi = services.config.composerUi;
   const composerRef = useRef<InputComposerHandle | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   // Re-runs the terms-of-use wait effect when its timeout expires with no URL in hand.

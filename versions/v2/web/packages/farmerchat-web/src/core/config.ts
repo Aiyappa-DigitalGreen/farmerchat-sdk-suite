@@ -221,6 +221,20 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
    */
   enableAgenticChat?: boolean;
 
+  /**
+   * Show the unified floating InputComposer in Home and Chat instead of the legacy
+   * Photo/Speak/Type row.
+   *
+   * Mirrors the app's `v2_composer_ui_enabled` Remote Config flag, which the app documents as
+   * **independent** of `v2_agentic_chat_enabled`: it only controls the input surface, not which
+   * API the query is routed to.
+   *
+   * **Omitted (the default) means "follow `enableAgenticChat`"** — exactly the collapse every
+   * screen hardcoded before this knob existed, so an existing host sees no change. Set it to
+   * decouple the two. Read it through `resolvedConfig.composerUi`, never directly.
+   */
+  enableComposerUi?: boolean;
+
   // --- FAB customization (config-level defaults; per-instance props win) ---
   /** FAB default label; omitted → round icon-only FAB. */
   fabLabel?: string;
@@ -289,6 +303,11 @@ export interface ResolvedConfig {
   enableImages: boolean;
   enableWeather: boolean;
   enableAgenticChat: boolean;
+  /**
+   * Resolved composer decision: the host's `enableComposerUi` when set, else
+   * `enableAgenticChat` (the historical collapse). Screens read THIS, never the raw option.
+   */
+  composerUi: boolean;
   theme?: FarmerChatTheme;
   authMode: AuthMode;
   accessToken?: string;
@@ -339,6 +358,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     enableWeather: config.enableWeather ?? true,
     // 2.0.0 streaming chat is opt-in: default false keeps v1 behaviour.
     enableAgenticChat: config.enableAgenticChat ?? false,
+    // `enableComposerUi` omitted ⇒ follow enableAgenticChat, preserving today's behaviour.
+    composerUi: config.enableComposerUi ?? config.enableAgenticChat ?? false,
     theme: config.theme,
     authMode: config.authMode ?? 'SDK_OTP',
     accessToken: config.accessToken,

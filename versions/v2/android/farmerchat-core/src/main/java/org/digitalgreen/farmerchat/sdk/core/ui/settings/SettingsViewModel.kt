@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsApis
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.base.toUiError
@@ -49,10 +51,16 @@ class SettingsViewModel(
         val stateName = prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
             .takeIf { it.isNotBlank() } ?: config.defaultStateCode
         scope.launch {
+            // App SettingsViewModel.kt:53 — attributed to the Select Language screen.
+            analytics.trackApiInitiated(AnalyticsApis.GET_LANGUAGES, AnalyticsScreens.LANGUAGE)
             getSupportedLanguagesUseCase.getSupportedLanguages(countryCode, stateName)
                 .collect { result ->
                     when (result) {
                         is ApiResult.Success -> {
+                            // App SettingsViewModel.kt:70.
+                            analytics.trackApiSuccess(
+                                AnalyticsApis.GET_LANGUAGES, AnalyticsScreens.LANGUAGE
+                            )
                             val groups = result.data
                             val priority = groups.flatMap { it.priorityView }
                             val expanded = groups.flatMap { it.expandedView }
@@ -70,6 +78,12 @@ class SettingsViewModel(
                             }
                         }
                         is ApiResult.Error -> {
+                            // App SettingsViewModel.kt:107/119.
+                            analytics.trackApiError(
+                                AnalyticsApis.GET_LANGUAGES,
+                                AnalyticsScreens.LANGUAGE,
+                                result.isTimeout
+                            )
                             _state.update { it.copy(languageState = result.toUiError()) }
                         }
                     }
@@ -121,11 +135,19 @@ class SettingsViewModel(
         val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
         _state.update { it.copy(isSubmittingLanguage = true, submitErrorMessage = null) }
         scope.launch {
+            // App SettingsViewModel.kt:215 — attributed to the Language Settings screen.
+            analytics.trackApiInitiated(
+                AnalyticsApis.SET_LANGUAGE, AnalyticsScreens.LANGUAGE_SETTINGS
+            )
             getSupportedLanguagesUseCase.setPreferredLanguage(
                 SetPreferredLanguageRequest(user_id = userId, language_id = languageId.toString())
             ).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
+                        // App SettingsViewModel.kt:234.
+                        analytics.trackApiSuccess(
+                            AnalyticsApis.SET_LANGUAGE, AnalyticsScreens.LANGUAGE_SETTINGS
+                        )
                         val language = allLanguages.firstOrNull { it.id == languageId }
                         prefs.putInt(SdkPreferences.Keys.SELECTED_LANGUAGE_ID, languageId)
                         language?.let {
@@ -133,16 +155,30 @@ class SettingsViewModel(
                             prefs.putString(SdkPreferences.Keys.SELECTED_LANGUAGE_DISPLAY_NAME, it.displayName)
                             prefs.putBoolean(SdkPreferences.Keys.ASR_ENABLED, it.isAsrEnabled)
                             prefs.putBoolean(SdkPreferences.Keys.TTS_ENABLED, it.isTtsEnabled)
+                            // Per-language; sent as TextPromptRequest.streaming_required (app parity).
+                            prefs.putBoolean(
+                                SdkPreferences.Keys.STREAMING_REQUIRED, it.streaming_required
+                            )
                         }
                         analytics.track(
                             AnalyticsEvents.SAVE_LANGUAGE_CLICK,
-                            mapOf(AnalyticsProps.LANGUAGE_CODE to _state.value.languageCode)
+                            // App LanguageChooserScreen.kt:295 — Language Settings Screen.
+                            mapOf(
+                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE_SETTINGS,
+                                AnalyticsProps.LANGUAGE_CODE to _state.value.languageCode
+                            )
                         )
                         _state.update {
                             it.copy(isSubmittingLanguage = false, languageSubmitSuccess = true)
                         }
                     }
                     is ApiResult.Error -> {
+                        // App SettingsViewModel.kt:290/302.
+                        analytics.trackApiError(
+                            AnalyticsApis.SET_LANGUAGE,
+                            AnalyticsScreens.LANGUAGE_SETTINGS,
+                            result.isTimeout
+                        )
                         _state.update {
                             it.copy(isSubmittingLanguage = false, submitErrorMessage = result.message)
                         }

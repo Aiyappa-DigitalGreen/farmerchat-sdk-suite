@@ -119,6 +119,264 @@ Programmatic methods on the entry singleton/object: `sendQuestion(text)`, `openC
 - `config.stringOverrides: Map<labelKey, String>` — highest precedence, wins over server labels and English fallback. Resolution order becomes: host override → server `${key}_${lang}` → server `${key}_en` → built-in English → raw key.
 - `config.locale: String?` — force a language code regardless of device/onboarding.
 
+## Part D — Third-party SDKs: the host owns them (Firebase / MoEngage / Plotline / Adjust)
+
+### Why the SDK embeds none of them
+
+The production app fans every analytics event out to four vendor SDKs at once
+(`core/analytics/AnalyticsManager.kt:23-26`) and reads feature flags from Firebase Remote Config
+(`core/firebase/OnboardingRemoteConfig.kt`). **None of that ships inside the SDK packages**, by
+rule (root `CLAUDE.md` §6). Three concrete reasons, so the next reader does not "fix" it:
+
+1. **Version collision.** A host app almost always already has Firebase. Two `firebase-bom`
+   versions, or a library-imposed one, is a dependency conflict the host cannot resolve without
+   forking us.
+2. **`google-services.json` becomes mandatory.** The Firebase Gradle plugin fails the build when
+   the file is missing, and the file is *per-project* — bundling Firebase would force every host
+   to adopt Digital Green's Firebase project or wire a second one. The app's own
+   `core/firebase/FirebaseConfigGuard.kt` exists precisely because a blank API key in that file
+   used to crash it — and the app ships with `firebase_performance_collection_enabled=false` in the
+   manifest (`AndroidManifest.xml:141-143`), flipped on in code only after that guard passes.
+3. **Vendor keys are ours, not the host's.** `MOENGAGE_APP_ID`, `ADJUST_APP_TOKEN` and the
+   Plotline API keys are hardcoded Digital Green account credentials in the app
+   (`core/constants/RemoteConfigKeys.kt:36-46` — note they are *constants*, not Remote Config
+   values, despite the filename). Shipping them in a distributed SDK would post every host's
+   traffic into our analytics accounts.
+
+So the boundary is: **the SDK raises events; the host forwards them.** Nothing is lost — the SDK
+emits the same event names and property keys the app tracks. Forwarding is a few lines.
+
+### Forwarding SDK events to your own Firebase / Crashlytics / MoEngage
+
+`config.onEvent(name, props)` fires for every analytics event, on the caller's thread, wrapped in
+`runCatching` by the SDK — a throw in your handler can never break a user flow.
+
+**Android** (the host already has Firebase + MoEngage on its own classpath):
+
+```kotlin
+import android.os.Bundle
+import com.google.firebase.analytics.ktx.analytics
+import com.google.firebase.crashlytics.ktx.crashlytics
+import com.google.firebase.ktx.Firebase
+import com.moengage.core.Properties
+import com.moengage.core.analytics.MoEAnalyticsHelper
+import org.digitalgreen.farmerchat.sdk.FarmerChatConfig
+import org.digitalgreen.farmerchat.sdk.FarmerChatEnvironment
+
+val config = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    .geoApiKey(BuildConfig.GEO_API_KEY)
+    .onEvent { name, props ->
+        // --- Firebase Analytics -------------------------------------------------
+        val bundle = Bundle()
+        props.forEach { (k, v) ->
+            when (v) {
+                is String -> bundle.putString(k, v)
+                is Int -> bundle.putInt(k, v)
+                is Long -> bundle.putLong(k, v)
+                is Boolean -> bundle.putBoolean(k, v)
+                is Double -> bundle.putDouble(k, v)
+                null -> Unit
+                else -> bundle.putString(k, v.toString())
+            }
+        }
+        Firebase.analytics.logEvent(name, bundle)
+
+        // --- Crashlytics breadcrumb (so a crash shows the last SDK screens) -----
+        Firebase.crashlytics.log("fc:$name ${props["screen_name"] ?: ""}")
+
+        // --- MoEngage -----------------------------------------------------------
+        val moe = Properties()
+        props.forEach { (k, v) ->
+            when (v) {
+                is String -> moe.addAttribute(k, v)
+                is Int -> moe.addAttribute(k, v)
+                is Boolean -> moe.addAttribute(k, v)
+                is Double -> moe.addAttribute(k, v)
+                null -> Unit
+                else -> moe.addAttribute(k, v.toString())
+            }
+        }
+        MoEAnalyticsHelper.trackEvent(applicationContext, name, moe)
+    }
+    .onError { code, message ->
+        Firebase.crashlytics.recordException(IllegalStateException("FarmerChat $code: $message"))
+    }
+    .build()
+```
+
+The `Bundle`/`Properties` type switches above are the app's own conversions verbatim
+(`AnalyticsManager.kt:31-41` and `:46-55`) — copy them rather than reinventing the coercions.
+
+**iOS**:
+
+```swift
+import FirebaseAnalytics
+import FirebaseCrashlytics
+import FarmerChatCore
+
+let config = FarmerChatConfig(
+    environment: .prod,
+    onEvent: { name, props in
+        Analytics.logEvent(name, parameters: props.compactMapValues { $0 as? NSObject })
+        Crashlytics.crashlytics().log("fc:\(name)")
+    }
+)
+```
+
+**React Native** (`@react-native-firebase/analytics`):
+
+```ts
+import analytics from '@react-native-firebase/analytics';
+import crashlytics from '@react-native-firebase/crashlytics';
+import type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-react-native';
+
+export const config: FarmerChatConfig = {
+  environment: 'prod',
+  onEvent: (name, props) => {
+    void analytics().logEvent(name, props as Record<string, string | number | boolean>);
+    crashlytics().log(`fc:${name}`);
+  },
+};
+```
+
+**Web** (`firebase/analytics`):
+
+```ts
+import { getAnalytics, logEvent } from 'firebase/analytics';
+import type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-web';
+
+const fa = getAnalytics();
+export const config: FarmerChatConfig = {
+  environment: 'prod',
+  onEvent: (name, props) => logEvent(fa, name, props),
+};
+```
+
+### Two things `onEvent(name, props)` structurally cannot carry
+
+Both are limits of the listener contract, not bugs in a call site. Recorded in
+`docs/04-parity-matrix.md`.
+
+**1. Per-sink routing.** The app deliberately sends `Screen_Viewed` / `Screen_Exited` to Firebase,
+Adjust and Plotline but **not** to MoEngage (`AnalyticsManager.kt:96-137`, comments say so
+explicitly). Every other event goes to all four. A flat `onEvent` cannot express that, so a host
+that wants app-identical routing must filter on its own side:
+
+```kotlin
+// App-identical routing: MoEngage skips the two screen-lifecycle events.
+private val MOENGAGE_EXCLUDED = setOf("Screen_Viewed", "Screen_Exited")
+
+.onEvent { name, props ->
+    Firebase.analytics.logEvent(name, props.toBundle())        // all events
+    if (name !in MOENGAGE_EXCLUDED) {
+        MoEAnalyticsHelper.trackEvent(applicationContext, name, props.toMoEProperties())
+    }
+}
+```
+
+**2. Adjust event tokens.** The app carries an `adjustToken` on every event
+(`AnalyticsEvent.adjustToken` → `AnalyticsManager.trackAdjust`, `:73-85`) and Adjust rejects an
+event without one. The SDK's `onEvent` hands you the *name*, not a token — deliberately: the 81
+tokens in the app's `core/analytics/AdjustEventTokens.kt` are opaque 6-character ids issued by
+**Digital Green's** Adjust app, and they are meaningless in a host's own Adjust account. A host
+forwarding to its own Adjust supplies its own map:
+
+```kotlin
+// Your own Adjust dashboard's tokens, keyed by the SDK event name.
+private val ADJUST_TOKENS = mapOf(
+    "Screen_Viewed" to "abc123",
+    "Send_Query" to "def456",
+    // ... one row per event you care about; unmapped events are simply not sent to Adjust.
+)
+
+.onEvent { name, props ->
+    ADJUST_TOKENS[name]?.let { token ->
+        val e = AdjustEvent(token)
+        props.forEach { (k, v) -> v?.let { e.addPartnerParameter(k, it.toString()) } }
+        Adjust.trackEvent(e)
+    }
+}
+```
+
+If you need Digital Green's own token values (i.e. you are reporting into our Adjust app), take
+them from `core/analytics/AdjustEventTokens.kt` in the app repo — they are not duplicated here,
+because a copy would silently rot.
+
+### Not yet forwardable: user identity and user attributes
+
+The app also sets user *identity* and *attributes* on all four vendors —
+`AnalyticsUserIdentityManager.identifyUser()` (MoEngage `identifyUser`, Firebase `setUserId`,
+Plotline `init`/`initAnonymousUser`, Adjust global params) and `UserAttributeTracker.track()`
+(MoEngage `setUserAttribute`, Firebase `setUserProperty`, Plotline `identify`, Adjust global
+partner param), over the 54 keys in `core/analytics/UserAttributeKeys.kt`.
+
+`onEvent(name, props)` cannot express either: identity is not an event, and a user property is not
+an event property. **There is no `onUserIdentified` / `onUserAttribute` callback in
+`FarmerChatConfig` today.** Until there is, a host that needs Firebase `setUserId` must set it
+itself from its own login state; SDK-derived attributes (resolved country/state/district, preferred
+language, carrier, `Mobile_No_Verified`, …) are not reachable. Tracked in `docs/04-parity-matrix.md`.
+
+### Supplying your own Remote Config values
+
+The app reads five boolean flags from Firebase Remote Config. The SDK carries no Remote Config
+client — it takes the *resolved values* from the host at `initialize()`, so a host that already
+fetches Remote Config (or LaunchDarkly, or its own backend) just passes them in.
+
+| App Remote Config key | SDK knob | SDK default |
+|---|---|---|
+| `v2_show_name_screen_onboarding` | `showNameScreen` | `true` |
+| `v2_agentic_chat_enabled` | `enableAgenticChat` | `false` |
+| `v2_composer_ui_enabled` | `enableComposerUi` | `null` → follows `enableAgenticChat` |
+| `v2_wobble_animation_enabled` | *none* — the SDK has no home-card attention animation | n/a |
+| `v2_stop_animation_on_first_card_click` | *none* — same reason | n/a |
+
+```kotlin
+// Host already owns Firebase Remote Config; hand the SDK the resolved values.
+val rc = FirebaseRemoteConfig.getInstance()
+rc.fetchAndActivate().addOnCompleteListener {
+    FarmerChat.initialize(
+        context = this,
+        config = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+            .geoApiKey(BuildConfig.GEO_API_KEY)
+            .showNameScreen(rc.getBoolean("v2_show_name_screen_onboarding"))
+            .enableAgenticChat(rc.getBoolean("v2_agentic_chat_enabled"))
+            .enableComposerUi(rc.getBoolean("v2_composer_ui_enabled"))
+            .build()
+    )
+}
+```
+
+`enableComposerUi` is nullable on purpose. Omit it and the SDK keeps the historical collapse
+(`composer == enableAgenticChat`), so an existing host sees no change; set it and the two decouple,
+which is how the app documents them (`RemoteConfigKeys.kt:22-27`: the composer flag "only controls
+the composer UI, not which API the query is routed to").
+
+**One divergence to know about.** In the app today, `getAgenticChatEnabled()` and
+`getComposerUiEnabled()` are hardcoded `= true` with the Remote Config read commented out
+(`OnboardingRemoteConfig.kt:72-73`, `:81-82`) — the app ships agentic chat and the composer
+unconditionally on. The SDK defaults both to **off**, because root `CLAUDE.md` §3 freezes the
+synchronous #27 chat contract for a host that opts into nothing. That is deliberate; do not
+"align" the default without changing §3.
+
+Config is immutable after `initialize()`, so there is no SDK analogue of the app's post-fetch
+re-read (`OnboardingRemoteConfig.refresh()` on the Language screen and on every Home feed state
+change). A host needing a live flip re-initializes.
+
+### Optional platform SDKs — absence must never crash (verified)
+
+`android/CLAUDE.md` requires SMS Retriever and the WhatsApp OTP SDK to stay optional. Verified
+against the code:
+
+| Integration | How the SDK depends on it | Guard |
+|---|---|---|
+| SMS Retriever (`play-services-auth-api-phone`) | hard `implementation` in both UI modules, so it reaches the host transitively via the POM | every call inside `runCatching`, receiver nulled on failure — `AuthScreen.kt:129-166`, `AuthFragment.kt:240-273` |
+| Fused location + Location Settings (`play-services-location`) | hard `implementation` in both UI modules | `runCatching` with an explicit "Play Services absent — proceed as if GPS is enabled" fallback — `views/.../LocationPromptHost.kt:282-305`, `compose/.../LocationPromptHost.kt:110-130` |
+| WhatsApp OTP SDK | **no dependency at all** (the app reaches it by `Class.forName` in `utils/whatsapp/WhatsAppOtpSdk.kt`) | not integrated in the SDK; endpoint #19 OTP-less verification is present, the vendor SDK handoff is not |
+
+Because both Play Services artifacts are hard `implementation` deps, their classes are normally
+present; absence only arises if a host `exclude`s them. The `runCatching` guards make that case
+degrade (no OTP autofill, GPS treated as already enabled) rather than crash.
+
 ## Verification bar for this workstream
 1. A coordinate/package-consuming sample builds on every platform (not `project(...)`/local path).
 2. A themed sample (host palette, e.g. blue) renders the Language + Home screens in the host colors — screenshot-verified on emulator/simulator where one is available.

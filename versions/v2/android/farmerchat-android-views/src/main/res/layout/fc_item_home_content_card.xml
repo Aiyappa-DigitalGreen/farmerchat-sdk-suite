@@ -10,18 +10,32 @@
     android:background="@drawable/fc_bg_card"
     android:orientation="vertical">
 
-    <com.google.android.material.imageview.ShapeableImageView
-        android:id="@+id/fcCardImage"
+    <FrameLayout
+        android:id="@+id/fcCardImageFrame"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp"
         android:layout_marginTop="8dp"
-        android:adjustViewBounds="true"
-        android:scaleType="centerCrop"
-        android:importantForAccessibility="no"
-        android:visibility="gone"
-        app:shapeAppearanceOverlay="@style/FcShapeRounded16" />
+        android:visibility="gone">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/fcCardImage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="centerCrop"
+            android:importantForAccessibility="no"
+            app:shapeAppearanceOverlay="@style/FcShapeRounded16" />
+
+        <!-- AI image placeholders (app parity: AIGeneratingImageOverlay / AIGeneratedGradient) -->
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.AiImageOverlayView
+            android:id="@+id/fcCardImageOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/fcCardTitle"

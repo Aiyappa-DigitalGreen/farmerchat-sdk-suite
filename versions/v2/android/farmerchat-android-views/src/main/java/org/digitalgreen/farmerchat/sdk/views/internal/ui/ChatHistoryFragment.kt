@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.ConversationListItem
 import org.digitalgreen.farmerchat.sdk.core.ui.history.ChatHistoryViewModel
@@ -109,7 +110,14 @@ internal class ChatHistoryFragment : BaseFragment(R.layout.fc_fragment_chat_hist
     }
 
     private fun openChat(conversationId: String) {
-        graph.analytics.track(AnalyticsEvents.NEW_CHAT_CLICK_EVENT)
+        // App ChatHistoryScreen.kt:187.
+        graph.analytics.track(
+            AnalyticsEvents.NEW_CHAT_CLICK_EVENT,
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT_HISTORY_LITERAL,
+                AnalyticsProps.CONVERSATION_ID_SPACED to conversationId
+            )
+        )
         findNavController().navigate(
             R.id.fc_dest_chat,
             NavRoutes.chatArgs(source = "history", conversationId = conversationId)

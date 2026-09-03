@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsApis
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.base.toUiError
@@ -49,6 +51,7 @@ class HomeViewModel(
             is HomeAction.NewConversation -> newConversation(action)
             is HomeAction.TranscribeAudio -> transcribeAudio(action)
             is HomeAction.AcceptTerms -> acceptTerms(action.userId)
+            is HomeAction.FetchPolicyAcceptanceStatus -> fetchPolicyAcceptanceStatus(action.userId)
             is HomeAction.FetchPrivacyPolicy -> fetchPrivacyPolicy()
             is HomeAction.MarkImageViewed -> markImageViewed(action)
             is HomeAction.FetchImageStatement -> fetchImageStatement(action)
@@ -76,18 +79,28 @@ class HomeViewModel(
         if (!action.skipLoadingCheck && _state.value.homeFeedState is UiState.Loading) return
         _state.update { it.copy(homeFeedState = UiState.Loading) }
         scope.launch {
+            // App HomeViewModel.kt:326 — API_Name = "Dashboard Content".
+            analytics.trackApiInitiated(AnalyticsApis.HOME_FEED, AnalyticsScreens.HOME)
             homeUseCase.getDailyHomeSections(action.userDeviceTime, action.userId)
                 .collect { result ->
                     when (result) {
                         is ApiResult.Success -> {
+                            // App HomeViewModel.kt:351.
+                            analytics.trackApiSuccess(AnalyticsApis.HOME_FEED, AnalyticsScreens.HOME)
                             _state.update { it.copy(homeFeedState = UiState.Success(result.data)) }
                             analytics.track(AnalyticsEvents.DASHBOARD_VIEWED)
-                            if (!prefs.getBoolean(SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, false)) {
-                                prefs.putBoolean(SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, true)
+                            // App HomeScreen.kt:2016 — gated on its OWN key
+                            // (DashboardPreferenceManager), not the onboarding one.
+                            if (!prefs.getBoolean(SdkPreferences.Keys.FIRST_TIME_DASHBOARD_VIEWED, false)) {
+                                prefs.putBoolean(SdkPreferences.Keys.FIRST_TIME_DASHBOARD_VIEWED, true)
                                 analytics.track(AnalyticsEvents.FIRST_TIME_DASHBOARD_VIEWED)
                             }
                         }
                         is ApiResult.Error -> {
+                            // App HomeViewModel.kt:404 — Timeout vs Failed by isTimeout.
+                            analytics.trackApiError(
+                                AnalyticsApis.HOME_FEED, AnalyticsScreens.HOME, result.isTimeout
+                            )
                             // 204 → empty feed is delivered by Retrofit as a null-body success;
                             // executeApiCall treats null body as an error, so surface an empty
                             // feed for 204s and a real error otherwise.
@@ -109,15 +122,66 @@ class HomeViewModel(
     }
 
     /**
-     * Accepts the terms of use (#7). Best-effort, matching the app: the dialog closes on tap and
-     * a failure never blocks the farmer — acceptance is recorded server-side when it succeeds.
+     * Accepts the terms of use (#7), from either the dismissible `TermsOfUseDialog` or the
+     * mandatory acceptance gate's two CTAs. 1:1 port of the app's `HomeViewModel.acceptTerms`
+     * (`HomeViewModel.kt:146`).
+     *
+     * **This must write [HomeState.acceptTermsState].** The gate's dismissal condition is
+     * `requires_acceptance == true && acceptTermsState !is UiState.Success`, so a
+     * fire-and-forget call here would leave the non-cancellable sheet on screen forever.
+     * The `UiState.Error` branch is what re-enables its buttons for a retry.
+     *
+     * Guest / not-yet-provisioned users (blank or the literal `"null"` userId) are skipped so
+     * the SDK never POSTs `user_id="null"` — same guard as [fetchPolicyAcceptanceStatus].
      */
     private fun acceptTerms(userId: String) {
-        if (userId.isBlank()) return
+        val isGuest = userId.isBlank() || userId.equals("null", ignoreCase = true)
+        if (isGuest) return
+        _state.update { it.copy(acceptTermsState = UiState.Loading) }
         scope.launch {
             legalUseCase.acceptTerms(
                 org.digitalgreen.farmerchat.sdk.core.model.AcceptPPandTCRequest(user_id = userId)
-            ).collect { /* best-effort: acceptance is recorded, failure never blocks the farmer */ }
+            ).collect { result ->
+                when (result) {
+                    is ApiResult.Success ->
+                        _state.update { it.copy(acceptTermsState = UiState.Success(result.data)) }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(acceptTermsState = result.toUiError()) }
+                }
+            }
+        }
+    }
+
+    /**
+     * #7a — checks whether the user must (re-)accept the Terms of Use. Dispatched on every Home
+     * entry so an updated policy version re-prompts. Drives the mandatory
+     * `TermsOfUseUpdatedBottomSheet` via [HomeState.policyAcceptanceState]. 1:1 port of the
+     * app's `HomeViewModel.fetchPolicyAcceptanceStatus` (`HomeViewModel.kt:176`).
+     *
+     * `acceptTermsState` is reset to `Idle` in the same update, verbatim from the app: a stale
+     * `Success` left over from the dismissible `TermsOfUseDialog` earlier in this session would
+     * otherwise suppress a freshly-required re-acceptance.
+     *
+     * Guests are skipped exactly as the app skips them — a *missing* userId only. Note that
+     * `initialize_user` does persist a `user_id` for guests, and the backend answers
+     * `requires_acceptance: true` for it (verified live, doc 02 §Endpoint #7a), so the gate
+     * legitimately fires for guest sessions. That is app behaviour, not an SDK divergence.
+     */
+    private fun fetchPolicyAcceptanceStatus(userId: String) {
+        val isGuest = userId.isBlank() || userId.equals("null", ignoreCase = true)
+        if (isGuest) return
+        _state.update {
+            it.copy(policyAcceptanceState = UiState.Loading, acceptTermsState = UiState.Idle)
+        }
+        scope.launch {
+            legalUseCase.fetchPolicyAcceptanceStatus(userId).collect { result ->
+                when (result) {
+                    is ApiResult.Success ->
+                        _state.update { it.copy(policyAcceptanceState = UiState.Success(result.data)) }
+                    is ApiResult.Error ->
+                        _state.update { it.copy(policyAcceptanceState = result.toUiError()) }
+                }
+            }
         }
     }
 
@@ -142,12 +206,20 @@ class HomeViewModel(
         if (!action.skipLoadingCheck && _state.value.weatherState is UiState.Loading) return
         _state.update { it.copy(weatherState = UiState.Loading) }
         scope.launch {
+            // App HomeViewModel.kt:468 — API_Name = "Weather".
+            analytics.trackApiInitiated(AnalyticsApis.WEATHER, AnalyticsScreens.HOME)
             homeUseCase.getWeatherForecast(action.userId).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
+                        // App HomeViewModel.kt:489.
+                        analytics.trackApiSuccess(AnalyticsApis.WEATHER, AnalyticsScreens.HOME)
                         _state.update { it.copy(weatherState = UiState.Success(result.data)) }
                     }
                     is ApiResult.Error -> {
+                        // App HomeViewModel.kt:504.
+                        analytics.trackApiError(
+                            AnalyticsApis.WEATHER, AnalyticsScreens.HOME, result.isTimeout
+                        )
                         // Weather chip failures are silent (chip just hides).
                         _state.update { it.copy(weatherState = result.toUiError()) }
                     }
@@ -182,9 +254,10 @@ class HomeViewModel(
                     is ApiResult.Success -> {
                         analytics.track(
                             AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
+                            // App HomeScreen.kt:1462 — `{screen_name, crops}`.
                             mapOf(
-                                AnalyticsProps.CARD_TYPE to "crop",
-                                AnalyticsProps.VALUE to action.cropIds.joinToString(",")
+                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                                AnalyticsProps.CROPS to action.cropIds.joinToString(",")
                             )
                         )
                         _state.update { it.copy(cropUpdateState = UiState.Success(result.data)) }
@@ -222,6 +295,17 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * `{screen_name, Input_type, Source}` (+ `Confidence_Score` when supplied) — the app's
+     * Home voice-overlay payload (app HomeScreen.kt:1670-1723).
+     */
+    private fun micProps(confidenceScore: String? = null): Map<String, Any?> = buildMap {
+        put(AnalyticsProps.SCREEN_NAME, AnalyticsScreens.HOME)
+        put(AnalyticsProps.INPUT_TYPE, "Audio")
+        put(AnalyticsProps.SOURCE, "Mic")
+        if (confidenceScore != null) put(AnalyticsProps.CONFIDENCE_SCORE, confidenceScore)
+    }
+
     private fun transcribeAudio(action: HomeAction.TranscribeAudio) {
         _state.update { it.copy(voiceTranscribeState = UiState.Loading) }
         scope.launch {
@@ -240,21 +324,21 @@ class HomeViewModel(
                         val accepted = !data.error &&
                             (data.confidence_score ?: 0.0) > 0.7 &&
                             !data.heard_input_query.isNullOrBlank()
+                        // App HomeScreen.kt:1684 / :1698 — always
+                        // `{screen_name, Input_type, Source}`; `Confidence_Score` is added
+                        // on FAILURE only, as a String ("N/A" when unavailable). The app
+                        // never puts `audio_format` on a transcription event.
                         analytics.track(
                             if (accepted) AnalyticsEvents.TRANSCRIPTION_SUCCESS
                             else AnalyticsEvents.TRANSCRIPTION_FAILED,
-                            mapOf(
-                                AnalyticsProps.CONFIDENCE_SCORE to (data.confidence_score ?: 0.0),
-                                AnalyticsProps.AUDIO_FORMAT to action.audioFormat
-                            )
+                            if (accepted) micProps()
+                            else micProps(data.confidence_score?.toString() ?: "N/A")
                         )
                         _state.update { it.copy(voiceTranscribeState = UiState.Success(data)) }
                     }
                     is ApiResult.Error -> {
-                        analytics.track(
-                            AnalyticsEvents.TRANSCRIPTION_FAILED,
-                            mapOf(AnalyticsProps.CONFIDENCE_SCORE to "N/A")
-                        )
+                        // App HomeScreen.kt:1698 — "N/A" when the API itself failed.
+                        analytics.track(AnalyticsEvents.TRANSCRIPTION_FAILED, micProps("N/A"))
                         _state.update { it.copy(voiceTranscribeState = result.toUiError()) }
                     }
                 }
@@ -271,10 +355,8 @@ class HomeViewModel(
             ).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
-                        analytics.track(
-                            AnalyticsEvents.CARD_VIEWED,
-                            mapOf(AnalyticsProps.SENTENCE_ID to action.statementId)
-                        )
+                        // Card_Viewed is emitted by the UI layer on 50% visibility with the
+                        // full HomeCardAnalytics payload (app HomeScreen.kt:2074), not here.
                         _state.update { it.copy(imageViewedState = UiState.Success(result.data)) }
                     }
                     is ApiResult.Error ->

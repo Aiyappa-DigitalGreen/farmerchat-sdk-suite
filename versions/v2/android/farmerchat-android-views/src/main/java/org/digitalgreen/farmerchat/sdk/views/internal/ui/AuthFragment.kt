@@ -7,6 +7,13 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.BulletSpan
+import android.text.style.ClickableSpan
+import android.text.style.UnderlineSpan
 import android.view.View
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
@@ -18,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.ui.auth.AuthStep
@@ -50,7 +58,13 @@ internal class AuthFragment : BaseFragment(R.layout.fc_fragment_auth) {
         binding = FcFragmentAuthBinding.bind(view)
 
         graph.analytics.trackScreenView(AnalyticsScreens.AUTH)
-        graph.analytics.track(AnalyticsEvents.MOBILE_VERIFICATION_STARTED)
+        graph.analytics.track(
+            AnalyticsEvents.MOBILE_VERIFICATION_STARTED,
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.AUTH,
+                AnalyticsProps.TRIGGER_LOWER to "Signup button"
+            )
+            )
 
         renderStaticTexts()
 
@@ -159,35 +173,100 @@ internal class AuthFragment : BaseFragment(R.layout.fc_fragment_auth) {
         binding.fcPhoneSubtitle.text =
             label(Labels.SEND_OTP_SIGNIN, "We'll send a one-time code to sign you in")
         binding.fcPhoneInput.hint = label(Labels.ENTER_PHONE_NUMBER, "Enter phone number")
-        binding.fcAuthLegal.text =
-            label(
-                Labels.BY_CONTINUING_TO_VERIFICATION_YOU_ARE_ACCEPTING_OUR,
-                "By Continuing to Verification, you're accepting our "
-            ) + label(Labels.TERMS_OF_USE, "Terms of Use") +
-            label(Labels.PLEASE_ALSO_SEE_OUR, ". Please also see our ") +
-            label(Labels.PRIVACY_POLICY, "Privacy Policy") + "."
-        binding.fcAuthLegal.setOnClickListener {
-            val links = vm.state.value.legalLinks
-            val url = links?.termsOfUseUrl ?: links?.privacyPolicyUrl
-            if (url != null) {
-                findNavController().navigate(
-                    R.id.fc_dest_legal_content,
-                    NavRoutes.legalArgs(url, label(Labels.TERMS_OF_USE, "Terms of Use")),
-                    NavRoutes.singleTop()
-                )
-            } else {
-                binding.fcAuthToast.show(
-                    label(Labels.UNABLE_TO_LOAD_LEGAL_LINKS, "Unable to load legal links"),
-                    ToastView.Type.ERROR
-                )
-            }
-        }
+        renderAgreementCard()
+        renderAuthConsent()
+        // The app REMOVED this legacy "By Continuing to Verification…" terms+privacy line:
+        // its call site is commented out at ui/auth/AuthScreen.kt:492 and has been since before
+        // c0524dd6. Commit 9966b905 replaced it with the agreement card + consent text rendered
+        // just above, which link Privacy Policy only. Terms-of-Use consent moved to the MANDATORY
+        // Home gate (TermsOfUseUpdatedBottomSheet, docs/02 #7a). The view stays in the layout as
+        // GONE so a host that needs the old combined link can re-enable it in one line.
+        binding.fcAuthLegal.visibility = android.view.View.GONE
         binding.fcOtpTitle.text = label(Labels.ENTER_CODE_WE_SENT, "Enter the code we sent")
         binding.fcOtpSubtitle.text =
             label(Labels.CHECK_YOUR_MESSAGES_CODE, "Check your messages for the code")
         binding.fcVerifyButton.text = label(Labels.VERIFY, "Verify")
         binding.fcResendButton.text = label(Labels.RESEND_CODE, "Resend code")
         binding.fcStartOverButton.text = label(Labels.START_OVER, "Start over")
+    }
+
+    /**
+     * "What you are agreeing to:" card — port of the app's `AgreementCard`
+     * (ui/auth/AuthScreen.kt, commit 9966b905). `BulletSpan` reproduces the app's 16 dp bullet
+     * column with the hanging indent for wrapped lines.
+     */
+    private fun renderAgreementCard() {
+        binding.fcAgreementTitle.text =
+            label(Labels.AGREEMENT_CARD_TITLE, "What you are agreeing to:")
+        binding.fcAgreementPoint1.text = bulletLine(
+            label(
+                Labels.AGREEMENT_POINT_VERIFICATION_CODE,
+                "A verification code by SMS, phone, or WhatsApp"
+            )
+        )
+        binding.fcAgreementPoint2.text = bulletLine(
+            label(Labels.AGREEMENT_POINT_UPDATES, "FarmerChat updates and farming information")
+        )
+        binding.fcAgreementPoint3.text = bulletLine(
+            label(
+                Labels.AGREEMENT_POINT_SURVEYS,
+                "Occasional surveys or research by Digital Green or trusted partners"
+            )
+        )
+    }
+
+    private fun bulletLine(text: String): CharSequence {
+        val gap = (BULLET_GAP_DP * resources.displayMetrics.density).toInt()
+        return SpannableStringBuilder(text).apply {
+            setSpan(BulletSpan(gap), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /**
+     * Consent copy below the send-code buttons with only the "Privacy Policy" span clickable —
+     * port of the app's `AuthConsentText`. The app underlines the span without recolouring it,
+     * so `updateDrawState` keeps the TextView's own colour.
+     */
+    private fun renderAuthConsent() {
+        val prefix = label(
+            Labels.AUTH_CONSENT_PREFIX,
+            "By continuing, you agree to these communications.\nSee our "
+        )
+        val privacy = label(Labels.PRIVACY_POLICY, "Privacy Policy")
+
+        val builder = SpannableStringBuilder(prefix)
+        val start = builder.length
+        builder.append(privacy)
+        builder.setSpan(UnderlineSpan(), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(
+            object : ClickableSpan() {
+                override fun onClick(widget: View) = openPrivacyPolicy(privacy)
+                override fun updateDrawState(ds: TextPaint) {
+                    ds.isUnderlineText = true
+                }
+            },
+            start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        builder.append(".")
+
+        binding.fcAuthConsent.text = builder
+        binding.fcAuthConsent.movementMethod = LinkMovementMethod.getInstance()
+    }
+
+    /** App AuthScreen.kt:474 — track first, navigate only when the URL resolved. */
+    private fun openPrivacyPolicy(title: String) {
+        graph.analytics.track(
+            AnalyticsEvents.PRIVACY_POLICY_OPENED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.AUTH)
+        )
+        val url = vm.state.value.legalLinks?.privacyPolicyUrl.orEmpty()
+        if (url.isNotBlank()) {
+            findNavController().navigate(
+                R.id.fc_dest_legal_content,
+                NavRoutes.legalArgs(url, title),
+                NavRoutes.singleTop()
+            )
+        }
     }
 
     private fun onStepChanged(step: AuthStep) {
@@ -308,3 +387,6 @@ internal class AuthFragment : BaseFragment(R.layout.fc_fragment_auth) {
         super.onDestroyView()
     }
 }
+
+/** App parity: the agreement bullet sits in a 16 dp column (AuthScreen.kt AgreementBulletPoint). */
+private const val BULLET_GAP_DP = 16

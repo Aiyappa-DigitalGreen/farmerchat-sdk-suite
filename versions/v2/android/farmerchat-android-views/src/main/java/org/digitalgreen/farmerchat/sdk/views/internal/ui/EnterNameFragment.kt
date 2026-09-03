@@ -42,7 +42,7 @@ internal class EnterNameFragment : BaseFragment(R.layout.fc_fragment_enter_name)
         graph.routeDecider.markNameScreenSeen()
 
         binding.fcNameTitle.text = label(Labels.WHAT_SHOULD_WE_CALL_YOU, "What should we call you?")
-        binding.fcNameSubtitle.text = label(Labels.WE_GREET_YOU_NAME, "We'll greet you by your name")
+        binding.fcNameSubtitle.text = label(Labels.WE_GREET_YOU_NAME, "So we can greet you by name")
         binding.fcNameInput.hint = label(Labels.YOUR_NAME_OR_NICKNAME, "Your name or nickname")
         binding.fcNameSaveButton.text = label(Labels.SAVE_NAME, "Save name")
         binding.fcNameSkipButton.text = label(Labels.SKIP_FOR_NOW, "Skip for now")

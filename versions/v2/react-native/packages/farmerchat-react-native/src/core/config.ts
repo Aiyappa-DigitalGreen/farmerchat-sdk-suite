@@ -194,6 +194,20 @@ export interface FarmerChatConfig {
    */
   enableAgenticChat?: boolean;
 
+  /**
+   * Show the unified floating InputComposer in Home and Chat instead of the legacy
+   * Photo/Speak/Type row.
+   *
+   * Mirrors the app's `v2_composer_ui_enabled` Remote Config flag, which the app documents as
+   * **independent** of `v2_agentic_chat_enabled`: it only controls the input surface, not which
+   * API the query is routed to.
+   *
+   * **Omitted (the default) means "follow `enableAgenticChat`"** — exactly the collapse every
+   * screen hardcoded before this knob existed, so an existing host sees no change. Set it to
+   * decouple the two. Read it through `resolvedConfig.composerUi`, never directly.
+   */
+  enableComposerUi?: boolean;
+
   /** FAB default label; omitted → round icon-only FAB (per-instance `label` wins). */
   fabLabel?: string;
   /** FAB default background color (hex); omitted → theme brand (per-instance `backgroundColor` wins). */
@@ -261,6 +275,11 @@ export interface ResolvedFarmerChatConfig {
   showHistory: boolean;
   showDrawer: boolean;
   enableAgenticChat: boolean;
+  /**
+   * Resolved composer decision: the host's `enableComposerUi` when set, else
+   * `enableAgenticChat` (the historical collapse). Screens read THIS, never the raw option.
+   */
+  composerUi: boolean;
   fabLabel: string | null;
   fabBackgroundColor: string | null;
   fabContentColor: string | null;
@@ -316,6 +335,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     showDrawer: config.showDrawer ?? true,
     // 2.0.0 opt-in; false keeps the synchronous #27 path (root CLAUDE.md §3 no-regression).
     enableAgenticChat: config.enableAgenticChat ?? false,
+    // `enableComposerUi` omitted ⇒ follow enableAgenticChat, preserving today's behaviour.
+    composerUi: config.enableComposerUi ?? config.enableAgenticChat ?? false,
     fabLabel: config.fabLabel ?? null,
     fabBackgroundColor: config.fabBackgroundColor ?? null,
     fabContentColor: config.fabContentColor ?? null,

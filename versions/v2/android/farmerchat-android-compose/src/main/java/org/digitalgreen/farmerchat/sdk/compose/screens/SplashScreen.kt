@@ -104,7 +104,7 @@ fun SplashScreen(
         )
 
         Toast(
-            message = label(Labels.FARMERCHAT_STARTING, "FarmerChat is starting…"),
+            message = label(Labels.FARMERCHAT_STARTING, "FarmerChat is starting..."),
             state = ToastState.Loading,
             visible = showStartingToast && !hasPendingError,
             onDismiss = { showStartingToast = false }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
 import org.digitalgreen.farmerchat.sdk.core.analytics.SendQueryProperties
@@ -64,7 +65,9 @@ private const val ALIGN_CHIP_SEL = "align_chip_sel"
  * Also cuts a still-streaming, not-yet-terminated token: mid-stream the text may end in a partial
  * `<<comm` or an unclosed fence, which must not be shown either.
  *
- * Internal (not private) so it can be unit-tested — the live stream cannot be exercised yet.
+ * Internal (not private) so it can be unit-tested, including against the checked-in live
+ * captures (`AgenticCaptureReplayTest`), where the captured prose needs no stripping at all —
+ * the sanitizer must be a pure trim on a clean answer.
  */
 internal fun sanitizeAgenticStreamText(raw: String): String {
     var text = FOLLOWUPS_BLOCK_REGEX.replace(raw, "")
@@ -139,6 +142,7 @@ class ChatViewModel(
                 pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
                 sendFollowUpQuestion(action.question, action.transcriptionId, action.audioUri, action.followUpQuestionId)
             }
+            is ChatAction.SendAlignmentChip -> sendAlignmentChip(action)
             is ChatAction.SendLocationSharedQuery ->
                 sendLocationSharedQuery(action.sourceMessageId, action.address)
             is ChatAction.SendQuestionWithImage -> {
@@ -174,7 +178,11 @@ class ChatViewModel(
             is ChatAction.SetAudioPlaying -> {
                 if (action.isPlaying) {
                     audioPlaybackStartedAtMs = System.currentTimeMillis()
-                    analytics.track(AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO)
+                    analytics.track(
+                        AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO,
+                        // App ChatScreen.kt:1306.
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+                    )
                 } else {
                     trackStoppedPlaying()
                 }
@@ -183,12 +191,29 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * `Transcription_Success` / `Transcription_Failed` payload, ported from the app's
+     * `ChatViewModel.trackTranscriptionResult` (app ChatViewModel.kt:181): always
+     * `{screen_name, Input_type, Source, Confidence_Score}`, and `Confidence_Score` is
+     * a **String** — the score itself, or "N/A" when the API failed.
+     */
+    private fun transcriptionProps(confidenceScore: Double?): Map<String, Any?> = mapOf(
+        AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT,
+        AnalyticsProps.INPUT_TYPE to "Audio",
+        AnalyticsProps.SOURCE to "Mic",
+        AnalyticsProps.CONFIDENCE_SCORE to (confidenceScore?.toString() ?: "N/A")
+    )
+
     private fun trackStoppedPlaying() {
         if (audioPlaybackStartedAtMs > 0 && _state.value.isAudioPlaying) {
             val seconds = (System.currentTimeMillis() - audioPlaybackStartedAtMs) / 1000
             analytics.track(
                 AnalyticsEvents.STOPPED_PLAYING_RESPONSE_AUDIO,
-                mapOf("No_of_seconds_played" to seconds)
+                // App ChatScreen.kt:1083.
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT,
+                    AnalyticsProps.NO_OF_SECONDS_PLAYED to seconds
+                )
             )
             audioPlaybackStartedAtMs = 0L
         }
@@ -598,7 +623,8 @@ class ChatViewModel(
                     if (accepted) {
                         analytics.track(
                             AnalyticsEvents.TRANSCRIPTION_SUCCESS,
-                            mapOf("Confidence_Score" to (data.confidence_score ?: 0.0))
+                            // App ChatViewModel.kt:181 (trackTranscriptionResult).
+                            transcriptionProps(data.confidence_score)
                         )
                         val text = data.heard_input_query.orEmpty()
                         // Update the voice bubble with the heard text.
@@ -629,13 +655,14 @@ class ChatViewModel(
                     } else {
                         analytics.track(
                             AnalyticsEvents.TRANSCRIPTION_FAILED,
-                            mapOf("Confidence_Score" to (data.confidence_score ?: 0.0))
+                            // App ChatViewModel.kt:181 (trackTranscriptionResult).
+                            transcriptionProps(data.confidence_score)
                         )
                         failVoiceBubble(
                             userMessageId, placeholderId,
                             labelManager.getLabel(
                                 Labels.TRANSCRIPTION_UNCLEAR,
-                                "We couldn't hear that clearly. Please try again."
+                                "Transcription unclear"
                             )
                         )
                     }
@@ -643,7 +670,8 @@ class ChatViewModel(
                 is ApiResult.Error -> {
                     analytics.track(
                         AnalyticsEvents.TRANSCRIPTION_FAILED,
-                        mapOf("Confidence_Score" to "N/A")
+                        // App ChatViewModel.kt:181 — "N/A" when the API itself failed.
+                        transcriptionProps(null)
                     )
                     failVoiceBubble(
                         userMessageId, placeholderId,
@@ -738,13 +766,24 @@ class ChatViewModel(
         triggeredInputTypeOverride: String? = null,
         weatherCtaTriggered: Boolean = false,
         statementIdOverride: String? = null,
-        ssfrCrop: String? = null
+        ssfrCrop: String? = null,
+        /** Server `message_id` of the alignment surface this query answers (2.0.0). */
+        parentMessageId: String? = null,
+        /** True on a GPS_PROMPT decline: the backend answers from an approximate location. */
+        locationDeclined: Boolean = false,
+        /** True on an UPLOAD_PHOTO decline: the backend proceeds without an image. */
+        photoDeclined: Boolean = false
     ) {
         val triggeredInputType = triggeredInputTypeOverride ?: when (inputType) {
             InputType.TEXT -> "text"
             InputType.AUDIO -> "voice"
             InputType.IMAGE -> "image"
         }
+
+        // Per-LANGUAGE, from the language API's `streaming_required` (persisted on language
+        // selection); defaults true when unset so an existing install keeps current behaviour.
+        // It does NOT gate the stream — docs/02 §#27a — the app sends it, so the SDK does too.
+        val streamingRequired = prefs.getBoolean(SdkPreferences.Keys.STREAMING_REQUIRED, true)
 
         val request = TextPromptRequest(
             conversation_id = conversationId(),
@@ -756,7 +795,12 @@ class ChatViewModel(
             ssfr_crop = ssfrCrop,
             use_entity_extraction = true,
             transcription_id = transcriptionId,
-            retry = retry
+            retry = retry,
+            streaming_required = streamingRequired,
+            parent_message_id = parentMessageId,
+            // Only ever sent as true (else null → Gson omits it), exactly as the app does.
+            location_declined = if (locationDeclined) true else null,
+            photo_declined = if (photoDeclined) true else null
         )
 
         if (config.enableAgenticChat) {
@@ -777,9 +821,14 @@ class ChatViewModel(
      * [FarmerChatConfig.enableAgenticChat]). Faithful port of the app's
      * `consumeAgenticStream` (fc-compose-agentic @ c0524dd6, ChatViewModel.kt:1444).
      *
-     * Accumulates [AgenticEvent.TextDelta]s into the answer bubble for live typing, surfaces tool
-     * status labels while tools run, and finalizes on [AgenticEvent.Metadata]. If the stream ends
-     * without one, falls back to [AgenticEvent.Done], then to the accumulated text.
+     * Accumulates [AgenticEvent.TextDelta]s into the answer bubble for live typing, surfaces
+     * [AgenticEvent.Status] and tool status labels while the agent works, renders an
+     * [AgenticEvent.Surface] the moment it arrives, and finalizes on [AgenticEvent.Metadata]. If
+     * the stream ends without one, falls back to [AgenticEvent.Done], then to a rendered surface,
+     * then to the accumulated text.
+     *
+     * Live event order (docs/02 §#27a): `status` → tools → deltas → `done` → `surface` →
+     * `metadata`, or `status` → `surface` → `done` → `metadata` for a blocking surface.
      */
     private fun streamAgenticAnswer(
         request: org.digitalgreen.farmerchat.sdk.core.model.TextPromptRequest,
@@ -794,6 +843,13 @@ class ChatViewModel(
             // Captured but NOT finalized on arrival: a `metadata` normally follows `done` and is
             // richer (message_id, follow-up ids), so it wins. `done` is only a fallback.
             var pendingDone: AgenticEvent.Done? = null
+            // A surface already RENDERED from an `event: surface`. Threaded through every finalize
+            // path: without it a mid-stream surface is silently destroyed by the first exit that
+            // rebuilds the bubble — and for a blocking `gps-prompt` (no deltas, `done.answer` null)
+            // every branch fell through to `interruptAgentic`, replacing the farmer's question with
+            // an error card. The dedupe against the later `metadata.alignments` needs nothing extra:
+            // both write the SAME message id, and `handleTextPromptResult` replaces in place.
+            var renderedSurface: org.digitalgreen.farmerchat.sdk.core.model.Alignment? = null
 
             // Single exit for every "no terminal metadata" outcome — clean EOF, a Failure event, or
             // a thrown exception. Runs at most once (guarded + latches [finalized]).
@@ -802,6 +858,7 @@ class ChatViewModel(
                 finalized = true
                 val fallbackText = sanitizeStreamingText(builder.toString())
                 val done = pendingDone
+                val surface = renderedSurface
                 when {
                     // A `done` means the model actually finished → a complete answer, not an
                     // interruption, even if the transport dropped right after.
@@ -810,8 +867,13 @@ class ChatViewModel(
                             text = done.answer?.takeIf { it.isNotBlank() } ?: fallbackText,
                             followUps = done.followUps.takeIf { it.isNotEmpty() },
                             messageId = null,
-                            streamId = streamId
+                            streamId = streamId,
+                            surface = surface
                         )
+                    // A surface was rendered and no metadata came: settle it as it stands. It is a
+                    // real, answerable question — never an error — and the chips are the only way
+                    // the conversation continues.
+                    surface != null -> settleStreamSurface(streamId, surface)
                     // Genuine error after some text arrived: keep the partial and mark it
                     // interrupted so the UI can offer retry.
                     errorKind != null && fallbackText.isNotEmpty() ->
@@ -829,6 +891,34 @@ class ChatViewModel(
             try {
                 agenticChatDataSource.stream(request).collect { event: AgenticEvent ->
                     when (event) {
+                        // Progress ping, the FIRST event on both live captures and the only sign
+                        // of life during time-to-first-delta (6.7 s on the captured answer). Shown
+                        // the same way as a tool status; `stage` is a machine token, so it is
+                        // mapped to a LabelManager string and never rendered raw.
+                        // Deliberately NO dwell here, unlike the tool branches. The dwell exists
+                        // to stop StateFlow conflating back-to-back tool statuses; this ping
+                        // resolves to the same copy the UI already shows by default, so it has
+                        // nothing to lose to conflation — and on the gps capture `status` and
+                        // `surface` arrive in ONE flush, so a dwell would delay the blocking
+                        // question by 700 ms, the exact opposite of the point.
+                        is AgenticEvent.Status -> updateStreamingResponse(
+                            streamId,
+                            sanitizeStreamingText(builder.toString()),
+                            streamingStatusLabel()
+                        )
+
+                        // Alignment surface delivered MID-STREAM: render it now instead of waiting
+                        // for the terminal `metadata` to carry the same surface. For a BLOCKING
+                        // surface the backend is waiting on the farmer, so it settles immediately
+                        // and its chips become tappable; an additive nudge attaches to the still
+                        // streaming answer and unlocks when the stream finalizes.
+                        is AgenticEvent.Surface -> {
+                            renderedSurface = event.alignment
+                            applyStreamSurface(
+                                streamId, event.alignment, sanitizeStreamingText(builder.toString())
+                            )
+                        }
+
                         is AgenticEvent.ToolCall ->
                             if (!event.statusText.isNullOrBlank()) {
                                 updateStreamingResponse(
@@ -857,10 +947,10 @@ class ChatViewModel(
                             finalized = true
                             // metadata carries a TextPromptResponse — the same shape #27 returns —
                             // so finalize through the shared synchronous path and inherit its
-                            // analytics, TTS gating and follow-up handling for free.
-                            _state.update { st ->
-                                st.copy(messages = st.messages.filterNot { it.id == streamId })
-                            }
+                            // analytics, TTS gating and follow-up handling for free. It replaces
+                            // the streaming bubble IN PLACE (see handleTextPromptResult), which is
+                            // what makes a mid-stream `surface` and the terminal
+                            // `metadata.alignments` one message rather than two.
                             handleTextPromptResult(
                                 ApiResult.Success(event.response), placeholderId, reuseId = streamId
                             )
@@ -886,6 +976,88 @@ class ChatViewModel(
     }
 
     /**
+     * The farmer tapped an alignment chip. 1:1 port of the app's `sendAlignmentChip`
+     * (`ui/chat/ChatViewModel.kt:1015`), the last of the app's 18 `ChatAction`s to be ported.
+     *
+     * It does four things the plain follow-up path cannot:
+     *  1. resolves `parent_message_id` from the SOURCE message's SERVER
+     *     [ChatMessage.AiResponse.messageId] — `sourceMessageId` is the local list id, and sending
+     *     that would correlate the answer to nothing;
+     *  2. appends the pick (by VALUE) to that surface's `alignmentSelectedValues`, so the tapped
+     *     chip highlights and locks while the others fade back;
+     *  3. echoes a user bubble with `displayLabel ?: query`, so the tap reads like a typed turn;
+     *  4. sends with `triggered_input_type = "align_chip_sel"` plus `location_declined` /
+     *     `photo_declined` when the chip was a capability decline.
+     *
+     * Analytics: `isAlignmentChip = true` plus `agenticChipType/Value/Label` from the action and
+     * `agenticChipStatus = "selected"`, matching the app's
+     * `buildMinimalSendQueryProps(...).copy(...)` at `ChatViewModel.kt:1105`. `click_type` becomes
+     * `align_chip_sel`, mirroring the request's `triggered_input_type` on the same tap.
+     */
+    private fun sendAlignmentChip(action: ChatAction.SendAlignmentChip) {
+        if (action.query.isBlank()) return
+        if (_state.value.isLoading) return
+        clearAudioPlayback()
+        // The response that showed the chips: its SERVER message_id is the parent_message_id.
+        val parentMessageId = (_state.value.messages
+            .firstOrNull { it.id == action.sourceMessageId } as? ChatMessage.AiResponse)
+            ?.messageId
+        val placeholderId = UUID.randomUUID().toString()
+        _state.update { current ->
+            val marked = current.messages.map { m ->
+                if (m.id == action.sourceMessageId && m is ChatMessage.AiResponse &&
+                    !m.alignmentSelectedValues.contains(action.selectionValue)
+                ) {
+                    m.copy(
+                        alignmentSelectedValues =
+                            m.alignmentSelectedValues + action.selectionValue
+                    )
+                } else {
+                    m
+                }
+            }
+            current.copy(
+                messages = marked +
+                    ChatMessage.UserMessage(action.displayLabel ?: action.query) +
+                    ChatMessage.LoadingPlaceholder(id = placeholderId),
+                isLoading = true,
+                errorMessage = null,
+                failedMessageId = null,
+                chatResponseState = UiState.Loading,
+                suggestedQuestions = null
+            )
+        }
+        rememberForRetry(
+            action.query, InputType.TEXT, null, null, ALIGN_CHIP_SEL, false, null, null
+        )
+        pendingSendQueryProperties = SendQueryProperties(
+            screenName = AnalyticsScreens.CHAT,
+            isFollowupPrompt = true,
+            isImageQuery = false,
+            isTextQuery = true,
+            isVoiceQuery = false,
+            lengthOfTextQuery = action.query.length,
+            isAlignmentChip = true,
+            agenticChipType = action.chipType,
+            agenticChipValue = action.chipValue,
+            agenticChipLabel = action.chipLabel,
+            agenticChipStatus = AnalyticsProps.CHIP_STATUS_SELECTED
+        )
+        pendingSendQueryProperties?.let {
+            analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties())
+        }
+        fetchTextPromptResponse(
+            action.query,
+            InputType.TEXT,
+            placeholderId,
+            triggeredInputTypeOverride = ALIGN_CHIP_SEL,
+            parentMessageId = parentMessageId,
+            locationDeclined = action.locationDeclined,
+            photoDeclined = action.photoDeclined
+        )
+    }
+
+    /**
      * The GPS_PROMPT "Share my location" chip succeeded: show the resolved address as a
      * `LocationMessage` bubble and re-send the surface's original query.
      *
@@ -893,14 +1065,10 @@ class ChatViewModel(
      * text bubble a normal send would add — the farmer never typed anything, they shared a
      * location — and a blank address yields no bubble at all, matching the app.
      *
-     * Two deliberate deltas from the app, both recorded in docs/04:
-     *  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
-     *    backend correlates the answer to the prompt. The SDK's `TextPromptRequest` has no such
-     *    field, so no alignment chip send carries it — an SDK-wide gap, not specific to this path.
-     *  - **no `agentic_chip_*` analytics properties.** `SendQueryProperties` has no
-     *    `isAlignmentChip` / chip type-value-label-status fields, so this reports as an ordinary
-     *    text query. `triggered_input_type` IS sent as `align_chip_sel` (app parity) because the
-     *    existing override parameter already carries it.
+     * `parent_message_id` and the `agentic_chip_*` analytics are both sent as of 2026-09-03, so
+     * this path is now full app parity: the app reports a SUCCESSFUL "share my location" as a chip
+     * pick (`ChatViewModel.kt:1105`) so it carries the same funnel fields as every other chip tap,
+     * which the location path would otherwise bypass entirely.
      */
     private fun sendLocationSharedQuery(sourceMessageId: String, address: String) {
         if (_state.value.isLoading) return
@@ -947,7 +1115,13 @@ class ChatViewModel(
             isImageQuery = false,
             isTextQuery = true,
             isVoiceQuery = false,
-            lengthOfTextQuery = query.length
+            lengthOfTextQuery = query.length,
+            isAlignmentChip = true,
+            agenticChipType = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+                .GPS_PROMPT.analyticsType,
+            agenticChipValue = AlignmentChip.VALUE_SHARE_LOCATION,
+            agenticChipLabel = labelManager.getLabel(Labels.SHARE_LOCATION, "Share my location"),
+            agenticChipStatus = AnalyticsProps.CHIP_STATUS_SELECTED
         )
         pendingSendQueryProperties?.let {
             analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties())
@@ -956,7 +1130,9 @@ class ChatViewModel(
             query,
             InputType.TEXT,
             placeholderId,
-            triggeredInputTypeOverride = ALIGN_CHIP_SEL
+            triggeredInputTypeOverride = ALIGN_CHIP_SEL,
+            // Correlate the answer to the gps-prompt that asked (mirrors sendAlignmentChip).
+            parentMessageId = source.messageId
         )
     }
 
@@ -1023,21 +1199,38 @@ class ChatViewModel(
         }
     }
 
-    /** Settles a streamed answer that finished without a `metadata` event. */
+    /**
+     * Settles a streamed answer that finished without a `metadata` event.
+     *
+     * [surface] is a surface already rendered from an `event: surface`. It MUST be carried onto the
+     * settled message: this path builds a fresh [ChatMessage.AiResponse], so anything not passed
+     * here is destroyed — and on the live prose capture `done` carries a full answer, so this is
+     * the branch a dropped `metadata` lands in with a `commodity-confirm` on screen.
+     */
     private fun finalizeAgenticAnswer(
         text: String,
         followUps: List<String>?,
         messageId: String?,
-        streamId: String
+        streamId: String,
+        surface: org.digitalgreen.farmerchat.sdk.core.model.Alignment? = null
     ) {
         markFirstQueryAsked()
+        val kind = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+            .fromType(surface?.type)
         _state.update { st ->
             val settled = ChatMessage.AiResponse(
-                text = text,
+                text = if (kind != null && !kind.isAdditive && text.isBlank()) {
+                    surface?.message.orEmpty()
+                } else text,
                 followUpQuestions = followUps,
                 id = streamId,
                 messageId = messageId,
-                isAgentic = true
+                isAgentic = true,
+                alignmentKind = kind,
+                alignmentChips = surface?.chips,
+                alignmentMessage = if (kind?.isAdditive == true) surface?.message else null,
+                alignmentOriginalQuery = surface?.effectiveOriginalQuery,
+                alignmentBlocking = surface?.blocking == true
             )
             val idx = st.messages.indexOfFirst { it.id == streamId }
             val updated = if (idx >= 0) {
@@ -1053,6 +1246,102 @@ class ChatViewModel(
                 chatResponseState = UiState.Success(text),
                 suggestedQuestions = followUps,
                 suggestedQuestionIds = null
+            )
+        }
+    }
+
+    /**
+     * Farmer-facing copy for an `event: status` ping.
+     *
+     * [AgenticEvent.Status.stage] is deliberately NOT mapped: it is a backend machine token
+     * (`"thinking"` is the only value observed live) and endpoint #3 serves no per-stage label
+     * keys, so mapping it would mean inventing copy or showing the raw token — both barred by
+     * CLAUDE.md §2. The ping's value is that it exists at all: it turns the loading placeholder
+     * into a live bubble before the first delta. The stage is carried on the event, ready to map
+     * the moment real label keys exist.
+     */
+    private fun streamingStatusLabel(): String =
+        labelManager.getLabel(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
+
+    /**
+     * Renders an alignment surface that arrived MID-STREAM onto the stream's own bubble, so it is
+     * one message that `metadata` later replaces in place rather than a second copy.
+     *
+     * A BLOCKING surface settles at once — the backend is waiting on the farmer, and while
+     * `state.isLoading` stays true the flavours keep every chip disabled, so leaving it loading
+     * would render the question and refuse the taps. An ADDITIVE nudge attaches to the still
+     * streaming answer and unlocks when the stream finalizes.
+     */
+    private fun applyStreamSurface(
+        streamId: String,
+        surface: org.digitalgreen.farmerchat.sdk.core.model.Alignment,
+        streamedText: String,
+        /**
+         * Force the settled state regardless of [Alignment.blocking]. Passed by
+         * [settleStreamSurface]: the stream is over, so a NON-blocking additive surface must lose
+         * `isStreaming` too — left true it is a bubble stuck in the streaming state forever, with
+         * no action row and a stall hint that fires on a timer and never clears.
+         */
+        settle: Boolean = false
+    ) {
+        val kind = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+            .fromType(surface.type) ?: return
+        val settleNow = settle || surface.blocking == true || !kind.isAdditive
+        _state.update { st ->
+            val existing = st.messages.firstOrNull { it.id == streamId } as? ChatMessage.AiResponse
+            val text = when {
+                // Exclusive surface: its prompt IS the message (the answer is empty on purpose).
+                !kind.isAdditive -> streamedText.ifBlank { surface.message.orEmpty() }
+                // Additive: keep the real answer, the nudge goes in alignmentMessage.
+                else -> streamedText
+            }
+            val updated = ChatMessage.AiResponse(
+                text = text,
+                followUpQuestions = existing?.followUpQuestions ?: emptyList(),
+                id = streamId,
+                messageId = existing?.messageId,
+                isStreaming = !settleNow,
+                streamingStatus = null,
+                isAgentic = true,
+                alignmentKind = kind,
+                alignmentChips = surface.chips,
+                alignmentMessage = if (kind.isAdditive) surface.message else null,
+                alignmentSelectedValues = existing?.alignmentSelectedValues.orEmpty(),
+                alignmentOriginalQuery = surface.effectiveOriginalQuery,
+                alignmentBlocking = surface.blocking == true
+            )
+            val idx = st.messages.indexOfFirst { it.id == streamId }
+            val messages = if (idx >= 0) {
+                st.messages.toMutableList().also { it[idx] = updated }
+            } else {
+                st.messages.filterNot { it is ChatMessage.LoadingPlaceholder } + updated
+            }
+            st.copy(
+                messages = messages,
+                isLoading = !settleNow,
+                errorMessage = null,
+                failedMessageId = null
+            )
+        }
+    }
+
+    /**
+     * Settles a surface rendered from `event: surface` when no `metadata` ever arrived. The surface
+     * is a real question, so it must NOT become an error card — it is the only thing that lets the
+     * conversation continue.
+     */
+    private fun settleStreamSurface(
+        streamId: String,
+        surface: org.digitalgreen.farmerchat.sdk.core.model.Alignment
+    ) {
+        markFirstQueryAsked()
+        val existing = _state.value.messages
+            .firstOrNull { it.id == streamId } as? ChatMessage.AiResponse
+        applyStreamSurface(streamId, surface, existing?.text.orEmpty(), settle = true)
+        _state.update {
+            it.copy(
+                isLoading = false,
+                chatResponseState = UiState.Success(surface.message.orEmpty())
             )
         }
     }
@@ -1120,22 +1409,37 @@ class ChatViewModel(
                 markFirstQueryAsked()
                 val aiId = reuseId ?: UUID.randomUUID().toString()
                 _state.update { current ->
+                    val settled = ChatMessage.AiResponse(
+                        text = answerText,
+                        id = aiId,
+                        messageId = data.message_id,
+                        // 2.0.0: an alignment surface asks the user to clarify/confirm
+                        // instead of (or alongside) answering. Exclusive surfaces replace
+                        // the answer, additive ones sit below it — see AlignmentKind.
+                        alignmentKind = alignmentKind,
+                        alignmentChips = data.alignments?.chips,
+                        alignmentMessage = if (alignmentKind?.isAdditive == true) {
+                            data.alignments?.message
+                        } else null,
+                        // The live payload carries the triggering query at BOTH the top level and
+                        // inside `context`; taking only the former loses it on a surface that fills
+                        // in just `context`, and with it the capability re-send.
+                        alignmentOriginalQuery = data.alignments?.effectiveOriginalQuery,
+                        alignmentBlocking = data.alignments?.blocking == true
+                    )
+                    // Replace in place when the id already exists — the agentic path passes its
+                    // stream id, so a bubble that streamed (or already rendered a mid-stream
+                    // `surface`) becomes the settled answer where it sits. Removing and appending
+                    // instead re-ordered it behind anything added meanwhile and duplicated a
+                    // surface the farmer had already answered.
+                    val idx = current.messages.indexOfFirst { it.id == aiId }
+                    val messages = if (idx >= 0) {
+                        current.messages.toMutableList().also { it[idx] = settled }
+                    } else {
+                        current.messages.filterNot { it.id == placeholderId } + settled
+                    }
                     current.copy(
-                        messages = current.messages.filterNot { it.id == placeholderId } +
-                            ChatMessage.AiResponse(
-                                text = answerText,
-                                id = aiId,
-                                messageId = data.message_id,
-                                // 2.0.0: an alignment surface asks the user to clarify/confirm
-                                // instead of (or alongside) answering. Exclusive surfaces replace
-                                // the answer, additive ones sit below it — see AlignmentKind.
-                                alignmentKind = alignmentKind,
-                                alignmentChips = data.alignments?.chips,
-                                alignmentMessage = if (alignmentKind?.isAdditive == true) {
-                                    data.alignments?.message
-                                } else null,
-                                alignmentOriginalQuery = data.alignments?.original_query
-                            ),
+                        messages = messages,
                         isLoading = false,
                         errorMessage = null,
                         failedMessageId = null,
@@ -1447,7 +1751,11 @@ class ChatViewModel(
                         val url = result.data.audio
                         if (!result.data.error && !url.isNullOrBlank()) {
                             audioPlaybackStartedAtMs = System.currentTimeMillis()
-                            analytics.track(AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO)
+                            analytics.track(
+                        AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO,
+                        // App ChatScreen.kt:1306.
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+                    )
                             _state.update {
                                 it.copy(
                                     isLoadingSynthesiseAudio = false,

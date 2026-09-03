@@ -197,3 +197,129 @@ appends nothing; (3) not ported, same `TODO(location-history)` reason.
 **Producer status: every platform that defines the variant now produces it** (android core,
 react-native, web, iOS core). Question 3 — chat-history persistence and its `message_type_id` — is
 the only part still open, and it is a **backend** question, not a platform gap.
+
+---
+
+## Q: what is the SDK's equivalent of the app's "app was updated" signal? (2026-09-03)
+
+docs/01 §2 has a nav edge the SDK deliberately does not implement:
+
+| From | Trigger | To | Backstack |
+|---|---|---|---|
+| Home (post-update, non-Kenya) | `AppInstallUpdateTracker.isUpdateLanguageScreenPending` | `SettingsLanguage` | singleTop |
+
+The app shows the language chooser **once** after an app update (excluding Kenya) by comparing the
+stored versionCode against the running one (`utils/AppInstallUpdateTracker`,
+`shouldShowLanguageScreen(countryCode, languageCode)`).
+
+**Why it is not ported:** an embedded SDK has no meaningful "the app was updated" event. The host's
+`versionCode` is the *host's*, and it moves for reasons that have nothing to do with FarmerChat; the
+SDK's own artifact version moves only when the host bumps a Gradle coordinate, which is not a user
+event and not observable at the point the edge fires. Reusing either signal would pop a language
+chooser over the host's Home for reasons the host never asked for.
+
+**Conservative reading implemented:** the edge is omitted on every platform and recorded in docs/04.
+
+**Open question for product:** should this become an explicit host-driven API — e.g.
+`FarmerChat.openScreen(context, "language")`, which the SDK **already supports** and which the host
+can call from its own post-update logic where the signal genuinely exists — or should the SDK track
+its own `fc_sdk_last_seen_sdk_version` pref and re-prompt on an SDK-version change? The first needs
+no new code; the second needs a new preference key and a decision on whether the Kenya exclusion
+(a FarmerChat product rule) belongs inside an SDK a third party embeds.
+
+---
+
+## Q: what should happen when `phone_length` is 0 or absent? (2026-09-03)
+
+The app's `isPhoneValid` (`ui/auth/AuthViewModel.kt:867`) gates on the country's `phone_length`
+unconditionally:
+
+```kotlin
+if (country != null && digits.length != country.phone_length) return false
+```
+
+and `setPhoneLocal` caps typed input at `selectedCountry?.phone_length ?: 15`. If endpoint #16 ever
+returned `phone_length: 0` for a country, the app would cap the input at zero characters and reject
+every number — the field would be permanently unusable for that country. `CountryItem.phone_length`
+is a non-null `Int`, so a missing key deserialises to `0` rather than throwing.
+
+**Conservative reading implemented:** the SDK guards both sites with `phone_length > 0`, so a
+`0`/absent length falls through to the pattern gate and then the `6..15` fallback instead of locking
+the field. Everything else is 1:1 with the app.
+
+**Open question for the backend team:** is `phone_length: 0` a value #16 can actually return, and if
+so is "reject everything" the intended behaviour, or is the SDK's degrade-gracefully reading correct?
+If `phone_length` is guaranteed `> 0` for every row, the guard is dead code and the two readings are
+indistinguishable.
+
+---
+
+## `gps-prompt`'s decline chip: `use_approximate_location` vs the app's `not_now` (2026-09-03)
+
+**Status: discrepancy CONFIRMED against the live wire; SDK accepts both. Open for the backend team.**
+
+`AlignmentChip.VALUE_NOT_NOW = "not_now"` comes from app source
+(`domain/model/chat/TextPromptResponse.kt:104`), where it is documented as "the decline chip on a
+capability prompt". The first live capture of a `gps-prompt` surface (docs/02 §#27a,
+`docs/captures/agentic_stream_gps_surface_20260903.sse`) sends something else:
+
+| | app constant | live `gps-prompt` | live `commodity-confirm` |
+|---|---|---|---|
+| `value` | `not_now` | **`use_approximate_location`** | `not_now` |
+| `action` | `decline` | **`continue`** | `decline` |
+| `behavior` | — (not modelled) | **`continue`** | — (absent) |
+| `capability` | — | `location` | — |
+
+So `not_now` is real — the additive `commodity-confirm` surface sends exactly it — but it is **not**
+what `gps-prompt` sends. `VALUE_NOT_NOW` was therefore kept (it is app source and live-confirmed
+elsewhere) and treated as **unconfirmed for `gps-prompt`**.
+
+**Why it matters.** The decline chip is what sets `location_declined = true` on the next request. A
+client that recognises only `not_now` routes the live decline chip as an unrecognised text chip: the
+farmer's "Continue without location" reaches the backend with no decline flag, and a `blocking`
+surface can be re-asked (`budget: {asked: 1, max: 2}`) instead of answered from an approximate
+location.
+
+**Conservative reading implemented** (per CLAUDE.md §2 — accept the union, invent nothing):
+`routeAlignmentChip` treats a chip as a decline when **any** of these holds —
+`behavior == "continue"`, `value == "use_approximate_location"`, `value == "not_now"`,
+`action == "decline"`, `action == "continue"` — and prefers `behavior`/`capability` over
+`action`/`value` when the newer fields are present. Both spellings decline; neither is normalized
+away. `AlignmentChip.VALUE_USE_APPROXIMATE_LOCATION` was added alongside `VALUE_NOT_NOW`.
+
+**Open questions for the backend team:**
+1. Is `use_approximate_location` now the canonical `gps-prompt` decline value, and is `not_now`
+   retired there (or still emitted by some path)?
+2. Is `behavior` (`invoke_capability` / `continue`) the field clients should key on going forward,
+   with `action` retained only for older clients? The two disagree on the live decline chip —
+   `action: "continue"` is neither the app's `decline` nor its `invoke`.
+3. Is there a `capability` string for the photo capability, matching `capability: "location"`? None
+   has been observed, so `upload-photo` chips are still matched on `take_photo` /
+   `choose_from_gallery` by value alone, which is the fragile half of the routing table.
+
+---
+
+## Does `blocking` mean "no escape hatch" on a non-capability surface? (2026-09-03)
+
+**Status: implemented on the conservative reading for android v2; unobserved on the wire.**
+
+`versions/v2/android` now withholds the alignment surfaces' "Don't see your option? Type or say it."
+escape hatch when the surface's wire `blocking` is `true`. The reasoning: `blocking` is the backend
+saying it cannot proceed until this is answered, so offering a way past it sends the farmer down a
+path the backend will only re-ask (`budget: {asked, max}`).
+
+The only `blocking: true` ever OBSERVED is on `gps-prompt` (docs/02 §#27a), where the hatch was
+already suppressed because it is a capability prompt — so on the one surface there is evidence for,
+the change is a no-op. It only bites on `alignment-clarify` / `alignment-confirm` /
+`alignment-escalate`, and no capture of those surfaces exists at all. The pre-existing comment on
+the hatch says it is there because "a farmer whose answer is not among the chips has no way
+forward", so this trades one stranding risk for another on unobserved data.
+
+**Open questions for the backend team:**
+1. Is `blocking` ever `true` on `alignment-clarify` / `alignment-confirm` / `alignment-escalate`?
+2. If so, is suppressing the type-instead escape hatch the intended client behaviour, or is
+   `blocking` meant only to describe capability prompts — i.e. should a blocking clarify surface
+   still let the farmer type a free-text answer?
+
+A capture of any non-capability alignment surface would settle both, and is the single most useful
+next capture to take.

@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsApis
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.base.toUiError
@@ -38,9 +39,13 @@ class EnterNameViewModel(
     private fun updateUserName(action: UserNameAction.UpdateUserName, screenName: String) {
         _state.update { it.copy(updateUserNameState = UiState.Loading) }
         scope.launch {
+            // App EnterNameViewModel.kt:53 — API_Name = "Update Profile".
+            analytics.trackApiInitiated(AnalyticsApis.UPDATE_PROFILE, screenName)
             updateUserNameUseCase.updateUserName(action.body).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
+                        // App EnterNameViewModel.kt:71.
+                        analytics.trackApiSuccess(AnalyticsApis.UPDATE_PROFILE, screenName)
                         action.body.name?.takeIf { it.isNotBlank() }?.let { name ->
                             prefs.putString(SdkPreferences.Keys.USER_NAME, name)
                             prefs.putBoolean(SdkPreferences.Keys.USER_NAME_ADDED, true)
@@ -54,6 +59,10 @@ class EnterNameViewModel(
                         }
                     }
                     is ApiResult.Error -> {
+                        // App EnterNameViewModel.kt:109/122.
+                        analytics.trackApiError(
+                            AnalyticsApis.UPDATE_PROFILE, screenName, result.isTimeout
+                        )
                         _state.update { it.copy(updateUserNameState = result.toUiError()) }
                     }
                 }
@@ -63,17 +72,27 @@ class EnterNameViewModel(
 
     companion object {
         /**
-         * Port of the app's normalizeNameInput: letters and single spaces only.
+         * 1:1 port of the app's `normalizeNameInput` (ui/onboarding/name/EnterNameScreen.kt):
+         * letters and whitespace only, no leading space, any whitespace run collapsed to a
+         * single space. Keeping `isWhitespace()` (not just `' '`) matters for pasted text —
+         * "John\tDoe" must normalise to "John Doe", not "JohnDoe".
          */
         fun normalizeNameInput(raw: String): String {
-            val filtered = raw.filter { it.isLetter() || it == ' ' }
-            return filtered.replace(Regex(" {2,}"), " ").trimStart()
+            val lettersAndSpaces = raw.filter { c -> c.isLetter() || c.isWhitespace() }
+            val noLeading = lettersAndSpaces.trimStart()
+            return noLeading.replace(Regex("\\s+"), " ")
         }
 
-        /** Sanitizes backend placeholder names ("No Name" / "null"). */
+        /**
+         * Port of the app's `sanitizeNameForUi` (EnterNameRoute.kt): trims, blanks the
+         * backend placeholders ("No Name" / "null") and caps at [MAX_NAME_LENGTH].
+         */
         fun sanitizeName(value: String?): String {
             val v = value?.trim().orEmpty()
-            return if (v.equals("No Name", ignoreCase = true) || v.equals("null", ignoreCase = true)) "" else v
+            if (v.equals("No Name", ignoreCase = true) || v.equals("null", ignoreCase = true)) {
+                return ""
+            }
+            return v.take(MAX_NAME_LENGTH)
         }
 
         const val MIN_NAME_LENGTH = 3

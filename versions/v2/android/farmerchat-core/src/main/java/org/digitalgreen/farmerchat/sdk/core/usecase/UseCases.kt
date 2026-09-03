@@ -34,6 +34,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
 import org.digitalgreen.farmerchat.sdk.core.model.NewConversationResponse
 import org.digitalgreen.farmerchat.sdk.core.model.PlantixRequest
 import org.digitalgreen.farmerchat.sdk.core.model.PlantixResponse
+import org.digitalgreen.farmerchat.sdk.core.model.PolicyAcceptanceStatusResponse
 import org.digitalgreen.farmerchat.sdk.core.model.SendOtpRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SendOtpResponse
 import org.digitalgreen.farmerchat.sdk.core.model.SetCultivatedCropsRequest
@@ -155,6 +156,21 @@ class GetSupportedLanguagesUseCase(
                 apiName = "accept_terms",
                 priority = ApiPriority.PRIORITY_2_NO_FALLBACK
             ) { repo.acceptTerms(request) }
+        )
+    }
+
+    /**
+     * #7a — whether the user must (re-)accept the Terms of Use. Drives the mandatory
+     * `TermsOfUseUpdatedBottomSheet` gate on Home. App parity: `HomeUseCase.kt:238`
+     * (`apiName = "policy_acceptance_status"`, P2). Lives here rather than in [HomeUseCase]
+     * because the SDK already owns the paired #7 `accept_terms` call in this use case.
+     */
+    fun fetchPolicyAcceptanceStatus(userId: String): Flow<ApiResult<PolicyAcceptanceStatusResponse>> = flow {
+        emit(
+            executeApiCall(
+                apiName = "policy_acceptance_status",
+                priority = ApiPriority.PRIORITY_2_NO_FALLBACK
+            ) { repo.fetchPolicyAcceptanceStatus(userId) }
         )
     }
 

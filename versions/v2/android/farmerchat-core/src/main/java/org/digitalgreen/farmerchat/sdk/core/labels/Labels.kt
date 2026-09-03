@@ -41,6 +41,13 @@ object Labels {
     const val SENDING_CODE = "fc_v2_app_label_sending_code"
     const val PLEASE_CHECK_TRY_AGAIN = "fc_v2_app_label_please_check_try_again"
     const val BY_CONTINUING_TO_VERIFICATION_YOU_ARE_ACCEPTING_OUR = "fc_v2_app_label_by_continuing_to_verification_you_are_accepting_our"
+    // Agreement info card + privacy consent (app 9966b905, ui/auth/AuthScreen.kt AgreementCard /
+    // AuthConsentText). All five verified served by endpoint #3.
+    const val AGREEMENT_CARD_TITLE = "fc_v2_app_label_agreement_card_title"
+    const val AGREEMENT_POINT_VERIFICATION_CODE = "fc_v2_app_label_agreement_point_verification_code"
+    const val AGREEMENT_POINT_UPDATES = "fc_v2_app_label_agreement_point_updates"
+    const val AGREEMENT_POINT_SURVEYS = "fc_v2_app_label_agreement_point_surveys"
+    const val AUTH_CONSENT_PREFIX = "fc_v2_app_label_auth_consent_prefix"
 
     const val PLEASE_ALSO_SEE_OUR = "fc_v2_app_label_please_also_see_our"
     const val UNKNOWN_ERROR = "fc_v2_app_label_unknown_error"
@@ -365,4 +372,23 @@ object Labels {
 
     /** "Your location:" — label above the address on the location chat bubble (2.0.0). */
     const val YOUR_LOCATION = "fc_v2_app_label_your_location"
+
+    // ---- Mandatory Terms-of-Use acceptance gate (2.0.0, endpoint #7a) ----
+    // App keys copied character-for-character from the app's core/labels/Labels.kt:352-358.
+    // Note these deliberately LACK the `_label_` infix the rest of this file uses — that is how
+    // the app declares them, and root CLAUDE.md §2 forbids inventing a key name.
+    /** "Our Terms of Use have changed" — gate sheet title. */
+    const val TERMS_OF_USE_CHANGED = "fc_v2_app_terms_of_use_changed"
+    /** Gate sheet body copy. */
+    const val TERMS_OF_USE_DESCRIPTION = "fc_v2_app_terms_of_use_description"
+    /** "Read terms" — gate sheet secondary CTA. */
+    const val TERMS_OF_USE_READ_TERMS = "fc_v2_app_terms_of_use_read_terms"
+    /** "Accept" — gate sheet primary CTA. */
+    const val TERMS_OF_USE_ACCEPT = "fc_v2_app_terms_of_use_accept"
+    /** "Accept terms" — gate content screen CTA (idle). */
+    const val TERMS_OF_USE_ACCEPT_TERMS = "fc_v2_app_terms_of_use_accept_terms"
+    /** "Accepted" — gate content screen CTA (success). */
+    const val TERMS_OF_USE_ACCEPTED = "fc_v2_app_terms_of_use_accepted"
+    /** "One second" — gate content screen CTA (in flight). */
+    const val TERMS_OF_USE_ACCEPTING_ONE_SECOND = "fc_v2_app_terms_of_use_accepting_one_second"
 }

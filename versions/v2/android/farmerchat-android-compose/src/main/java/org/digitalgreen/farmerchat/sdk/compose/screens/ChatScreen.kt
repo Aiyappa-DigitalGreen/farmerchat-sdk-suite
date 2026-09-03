@@ -120,8 +120,10 @@ import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioPlayback
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.AlignmentChipRoute
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.routeAlignmentChip
 import java.io.File
 import androidx.compose.ui.platform.LocalConfiguration
 import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
@@ -167,10 +169,11 @@ fun ChatScreen(
 
     // 2.0.0 composer UI. The app gates this on its own Firebase Remote Config flag
     // (`OnboardingRemoteConfig.getComposerUiEnabled()`), which is separate from the agentic
-    // API flag. The SDK carries no Remote Config, and exposes exactly one host-set switch, so
-    // both app flags collapse onto `enableAgenticChat` (see versions/v2/README.md). Read once —
-    // SDK config is immutable after initialize(), so the app's post-fetch re-read has no analogue.
-    val isComposerUi = graph.config.enableAgenticChat
+    // API flag. The SDK carries no Remote Config, so the host supplies it via
+    // `enableComposerUi` (null ⇒ follow `enableAgenticChat`) — see versions/v2/README.md. Read
+    // once — SDK config is immutable after initialize(), so the app's post-fetch re-read has no
+    // analogue.
+    val isComposerUi = graph.config.resolvedComposerUi
 
     // ------------------------------------------------------------------ audio playback (voice bubbles + TTS)
     val voicePlayback = remember { AudioPlayback() }
@@ -504,7 +507,7 @@ fun ChatScreen(
             cameraTempUri = uri
             cameraLauncher.launch(uri)
         }.onFailure {
-            toast.show(label(Labels.NO_CAMERA_APP_AVAILABLE, "No camera app available"), ToastState.Error)
+            toast.show(label(Labels.NO_CAMERA_APP_AVAILABLE, "No camera app available on this device"), ToastState.Error)
         }
     }
 
@@ -583,60 +586,100 @@ fun ChatScreen(
                     )
                 )
             } else {
-                // Denied / cancelled / fetch failed: still answer the blocking question, by sending
-                // the decline text as an ordinary follow-up. The app sends this through
-                // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
-                // neither, so the correlation and the chip analytics are lost (docs/04).
+                // Denied / cancelled / fetch failed: still answer the blocking question. Sent as a
+                // chip pick exactly as the app does, so it carries `location_declined = true` and
+                // the surface's `parent_message_id` — the backend can then answer from an
+                // approximate location instead of waiting for coordinates.
                 val declineText = label(
                     Labels.LOCATION_PERMISSION_DECLINED,
                     "Continue without sharing my location"
                 )
-                vm.onAction(ChatAction.SendFollowUpQuestion(question = declineText))
+                vm.onAction(
+                    ChatAction.SendAlignmentChip(
+                        query = declineText,
+                        selectionValue = declineText,
+                        sourceMessageId = srcId,
+                        locationDeclined = true,
+                        chipType = AlignmentKind.GPS_PROMPT.analyticsType,
+                        chipValue = AlignmentChip.VALUE_NOT_NOW,
+                        chipLabel = declineText
+                    )
+                )
             }
         }
     }
 
     /**
-     * Routes an alignment chip tap: capability chips invoke a capability, everything else sends
-     * text. Port of the app's `onAlignmentChipClick`.
+     * Routes an alignment chip tap. The decision table itself lives in core
+     * (`routeAlignmentChip`) so this screen, the Views fragment and the unit tests exercise ONE
+     * function — an inline copy passes the test while drifting from it (docs/04).
      */
     val handleAlignmentChip: (String, AlignmentKind?, AlignmentChip) -> Unit =
         { messageId, kind, chip ->
-            val isInvoke = chip.action == AlignmentChip.ACTION_SELECT
-            val isShareLocation = kind == AlignmentKind.GPS_PROMPT && isInvoke &&
-                chip.value == AlignmentChip.VALUE_SHARE_LOCATION
-            val isPhotoCapability = kind == AlignmentKind.UPLOAD_PHOTO && isInvoke
-            when {
-                isShareLocation -> {
+            when (val route = routeAlignmentChip(kind, chip)) {
+                AlignmentChipRoute.ShareLocation ->
                     // Permission dialog / GPS fetch / recovery are owned by LocationPromptHost;
                     // the outcome arrives on the collector above. Only start when no other
                     // location flow is running (mirrors Home's guard).
                     if (graph.locationPromptManager.state.value is LocationPromptState.Idle) {
                         pendingLocationSourceId = messageId
-                        graph.locationPromptManager.triggerFromLocalContext()
+                        // fromAgenticChip = true → the whole GPS funnel is attributed to Chat and
+                        // carries agentic_chip_type = gps-prompt (app parity).
+                        graph.locationPromptManager.triggerFromLocalContext(fromAgenticChip = true)
                     }
-                }
-                isPhotoCapability && chip.value == AlignmentChip.VALUE_TAKE_PHOTO -> requestCamera()
-                isPhotoCapability && chip.value == AlignmentChip.VALUE_CHOOSE_FROM_GALLERY ->
+                AlignmentChipRoute.TakePhoto -> requestCamera()
+                AlignmentChipRoute.ChooseFromGallery ->
                     runCatching { galleryLauncher.launch("image/*") }
-                else -> vm.onAction(
-                    ChatAction.SendFollowUpQuestion(
-                        question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
+                AlignmentChipRoute.Ignore -> Unit
+                is AlignmentChipRoute.SendText -> vm.onAction(
+                    ChatAction.SendAlignmentChip(
+                        query = route.query,
+                        selectionValue = route.selectionValue,
+                        sourceMessageId = messageId,
+                        displayLabel = route.displayLabel,
+                        locationDeclined = route.locationDeclined,
+                        photoDeclined = route.photoDeclined,
+                        chipType = kind?.analyticsType,
+                        chipValue = chip.value,
+                        chipLabel = chip.label
                     )
                 )
             }
         }
 
+    /** `Chat_Icon_Clicked` with `Icon` = Text / Voice / Image (app ChatScreen.kt:837/868/884). */
+    fun trackChatIconClick(iconType: String) {
+        graph.analytics.track(
+            AnalyticsEvents.CHAT_ICON_CLICKED,
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT,
+                AnalyticsProps.ICON_TYPE to iconType
+            )
+        )
+    }
+
+    /** `Content_Try_Again_Clicked` on the Chat screen (app InlineErrorContent.kt:97). */
+    fun trackChatRetry() {
+        graph.analytics.track(
+            AnalyticsEvents.CONTENT_TRY_AGAIN_CLICKED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+        )
+    }
+
     fun requestMicThenOpenVoice() {
         graph.analytics.track(
             AnalyticsEvents.MICROPHONE_CLICK_EVENT,
-            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT)
+            // App ChatScreen.kt:857.
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.CHAT,
+                AnalyticsProps.ICON_TYPE to "Voice"
+            )
         )
         if (!graph.prefs.getBoolean(SdkPreferences.Keys.ASR_ENABLED, true)) {
             toast.show(
                 label(
                     Labels.ASR_IS_DISABLED_FOR_YOUR_SELECTED_LANGUAGE,
-                    "Voice input is not available for your selected language"
+                    "ASR is disabled for your selected language"
                 ),
                 ToastState.Error
             )
@@ -758,7 +801,10 @@ fun ChatScreen(
                         }
                         InlineErrorContent(
                             message = state.errorMessage.orEmpty(),
-                            onRetry = { vm.onAction(ChatAction.RetryLastRequest) }
+                            onRetry = {
+                                trackChatRetry()
+                                vm.onAction(ChatAction.RetryLastRequest)
+                            }
                         )
                     }
                 }
@@ -787,7 +833,7 @@ fun ChatScreen(
                                     ) {
                                         LogoSpinner(
                                             type = LogoSpinnerType.Horizontal,
-                                            label = label(Labels.LOADING_MORE, "Loading more…")
+                                            label = label(Labels.LOADING_MORE, "Loading more...")
                                         )
                                     }
                                 }
@@ -880,6 +926,7 @@ fun ChatScreen(
                                                     selectedValues = message.alignmentSelectedValues,
                                                     isLoading = state.isLoading,
                                                     isLatest = isLastAi,
+                                                    blocking = message.alignmentBlocking,
                                                     onChipClick = { chip ->
                                                         handleAlignmentChip(message.id, alignmentKind, chip)
                                                     },
@@ -970,6 +1017,7 @@ fun ChatScreen(
                                                             ?: StreamErrorKind.UNKNOWN,
                                                         hasPartial = message.text.isNotBlank(),
                                                         onRetry = {
+                                                            trackChatRetry()
                                                             vm.onAction(ChatAction.RetryLastRequest)
                                                         }
                                                     )
@@ -1058,7 +1106,10 @@ fun ChatScreen(
                                 item(key = "inline_error") {
                                     InlineErrorContent(
                                         message = state.errorMessage.orEmpty(),
-                                        onRetry = { vm.onAction(ChatAction.RetryLastRequest) }
+                                        onRetry = {
+                                            trackChatRetry()
+                                            vm.onAction(ChatAction.RetryLastRequest)
+                                        }
                                     )
                                 }
                             }
@@ -1067,8 +1118,19 @@ fun ChatScreen(
                             val followUps = state.suggestedQuestions.orEmpty()
                             val lastAnswerRevealed =
                                 lastAiMessage != null && lastAiMessage.id in revealedIds
+                            // An ADDITIVE alignment surface owns the space under the answer: while
+                            // its chips are on screen the follow-up list and the "ask a follow-up"
+                            // prompt are hidden, so the farmer answers the nudge instead of being
+                            // offered two competing lists. App parity — `fc-compose-agentic`
+                            // 43ba5de4 "no follow up in case of chips"
+                            // (`ChatThreadContent.kt`, `showFollowUps = ...`). The backend agrees:
+                            // the live prose capture's metadata carries
+                            // `"followups_gated_by": "commodity-confirm"` with `followups: []`.
+                            val additiveSurfaceOpen = lastAiMessage?.alignmentKind?.isAdditive == true &&
+                                !lastAiMessage.alignmentChips.isNullOrEmpty()
                             if (followUps.isNotEmpty() && !state.isLoading &&
-                                state.errorMessage == null && lastAnswerRevealed
+                                state.errorMessage == null && lastAnswerRevealed &&
+                                !additiveSurfaceOpen
                             ) {
                                 item(key = "followups") {
                                     Column {
@@ -1084,7 +1146,7 @@ fun ChatScreen(
                                                 title = if (state.clarificationRequired)
                                                     label(
                                                         Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW,
-                                                        "Choose a follow-up option below"
+                                                        "Choose an option from the below"
                                                     )
                                                 else
                                                     label(
@@ -1146,9 +1208,9 @@ fun ChatScreen(
                 )
                 PrimaryInputButtons(
                     type = PrimaryInputButtonsType.ChatScreen,
-                    onPhotoClick = { openPhotoInput?.invoke() },
-                    onSpeakClick = { requestMicThenOpenVoice() },
-                    onTypeClick = { focusTextInput?.invoke() },
+                    onPhotoClick = { trackChatIconClick("Image"); openPhotoInput?.invoke() },
+                    onSpeakClick = { trackChatIconClick("Voice"); requestMicThenOpenVoice() },
+                    onTypeClick = { trackChatIconClick("Text"); focusTextInput?.invoke() },
                     modifier = Modifier.offset(y = inputRowOffset)
                 )
             }
@@ -1203,8 +1265,8 @@ fun ChatScreen(
                 onFocusRequest = { requester -> focusTextInput = requester },
                 onClearRequest = { clear -> clearTextInput = clear },
                 onFocusChange = { focused -> textComposerActive = focused },
-                onPhotoClick = { openPhotoInput?.invoke() },
-                onVoiceClick = { requestMicThenOpenVoice() },
+                onPhotoClick = { trackChatIconClick("Image"); openPhotoInput?.invoke() },
+                onVoiceClick = { trackChatIconClick("Voice"); requestMicThenOpenVoice() },
                 // InputComposer's onSend is (String) -> Unit; the single attached image, if
                 // any, comes from photoUris — matching the Home composer.
                 onSend = { query -> sendFromComposer(query, photoUris.firstOrNull()) }
@@ -1218,8 +1280,8 @@ fun ChatScreen(
                 // gesture bar when the keyboard is closed.
                 modifier = Modifier.imePadding().navigationBarsPadding(),
                 onSend = sendFromComposer,
-                onPhotoClick = { openPhotoInput?.invoke() },
-                onVoiceClick = { requestMicThenOpenVoice() },
+                onPhotoClick = { trackChatIconClick("Image"); openPhotoInput?.invoke() },
+                onVoiceClick = { trackChatIconClick("Voice"); requestMicThenOpenVoice() },
                 onFocusRequest = { requester -> focusTextInput = requester },
                 onClearRequest = { clear -> clearTextInput = clear },
                 onFocusChange = { focused -> textComposerActive = focused },

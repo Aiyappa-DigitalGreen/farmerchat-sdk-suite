@@ -143,17 +143,79 @@
                     android:visibility="gone"
                     tools:text="Please enter a valid number..." />
 
+                <!-- Agreement info card (app 9966b905, AuthScreen.kt AgreementCard):
+                     sits between the phone row and the send-code buttons. -->
+                <LinearLayout
+                    android:id="@+id/fcAgreementCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:background="@drawable/fc_bg_agreement_card"
+                    android:orientation="vertical"
+                    android:paddingStart="18dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="18dp"
+                    android:paddingBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/fcAgreementTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        tools:text="What you are agreeing to:" />
+
+                    <TextView
+                        android:id="@+id/fcAgreementPoint1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="15sp"
+                        tools:text="\u2022  A verification code by SMS, phone, or WhatsApp" />
+
+                    <TextView
+                        android:id="@+id/fcAgreementPoint2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="15sp"
+                        tools:text="\u2022  FarmerChat updates and farming information" />
+
+                    <TextView
+                        android:id="@+id/fcAgreementPoint3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/fc_foreground_primary"
+                        android:textSize="15sp"
+                        tools:text="\u2022  Occasional surveys or research by Digital Green or trusted partners" />
+                </LinearLayout>
+
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                     android:id="@+id/fcWhatsappButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp" />
+                    android:layout_marginTop="12dp" />
 
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                     android:id="@+id/fcSmsButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp" />
+
+                <!-- Consent copy with a clickable Privacy Policy span (app AuthConsentText). -->
+                <TextView
+                    android:id="@+id/fcAuthConsent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:textColor="@color/fc_foreground_secondary"
+                    android:textSize="15sp"
+                    tools:text="By continuing, you agree to these communications.\nSee our Privacy Policy." />
 
                 <TextView
                     android:id="@+id/fcAuthLegal"

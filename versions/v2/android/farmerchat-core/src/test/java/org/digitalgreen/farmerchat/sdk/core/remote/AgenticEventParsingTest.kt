@@ -11,11 +11,16 @@ import org.junit.Test
 /**
  * Covers [AgenticChatDataSource.parseEvent] — the agentic wire mapping.
  *
- * These exist because the framing **cannot currently be verified against a live stream**: the
- * endpoint opens (200, `text/event-stream`, chunked) but delivers 0 bytes to a guest on dev,
- * stage and prod (docs/05-open-questions.md). The reader is therefore deliberately permissive,
- * and these tests pin down what "permissive" actually means so a future backend change that
- * breaks an assumption fails here rather than silently showing farmers "Something went wrong".
+ * These were written when the framing could not be verified against a live stream (the endpoint
+ * opened but delivered 0 bytes to a guest). It CAN be now — see `AgenticCaptureReplayTest`, which
+ * replays the two checked-in live captures through the real reader and is the authority on the
+ * real contract.
+ *
+ * This class is still the right place for everything the captures do NOT exercise: the reader is
+ * deliberately permissive (NDJSON framing, `type`-inside-the-payload, the delta aliases, typeless
+ * recovery, malformed JSON), and these tests pin down what "permissive" means so a future backend
+ * change that breaks an assumption fails here rather than silently showing farmers "Something went
+ * wrong".
  */
 class AgenticEventParsingTest {
 

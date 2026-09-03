@@ -13,6 +13,7 @@ import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.appearanceAnalyticsValue
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.network.NetworkUtils
@@ -59,6 +60,11 @@ internal class SettingsFragment : BaseFragment(R.layout.fc_fragment_settings) {
             if (graph.sessionManager.isAuthenticated.value) {
                 logout()
             } else {
+                // App SettingsScreen.kt:353 — `option` only, no `value`.
+                graph.analytics.track(
+                    AnalyticsEvents.SETTINGS_OPTION_SELECTED,
+                    mapOf(AnalyticsProps.OPTION_LOWER to "Signup")
+                )
                 handleSignUpClick()
             }
         }
@@ -112,7 +118,12 @@ internal class SettingsFragment : BaseFragment(R.layout.fc_fragment_settings) {
         graph.prefs.putString(SdkPreferences.Keys.APPEARANCE_MODE, mode)
         graph.analytics.track(
             AnalyticsEvents.SETTINGS_OPTION_SELECTED,
-            mapOf(AnalyticsProps.OPTION to mode)
+            // App SettingsScreen.kt:150 — lowercase `option`/`value` keys, and the
+            // value is the app's AppearanceMode label (Light / Dark / Default).
+            mapOf(
+                AnalyticsProps.OPTION_LOWER to "Appearance",
+                AnalyticsProps.VALUE_LOWER to appearanceAnalyticsValue(mode)
+            )
         )
         journeyHost()?.applyAppearance(mode)
         renderAppearanceSelection()
@@ -141,7 +152,11 @@ internal class SettingsFragment : BaseFragment(R.layout.fc_fragment_settings) {
 
     /** Logout (doc 01 §2): clear session → Splash, popUpTo(0){inclusive}. */
     private fun logout() {
-        graph.analytics.track(AnalyticsEvents.LOGOUT_CLICK_EVENT)
+        graph.analytics.track(
+            AnalyticsEvents.LOGOUT_CLICK_EVENT,
+            // App AppNavGraph.kt:586.
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SETTINGS)
+        )
         val nav = findNavController()
         FarmerChat.logout {
             if (isAdded) {

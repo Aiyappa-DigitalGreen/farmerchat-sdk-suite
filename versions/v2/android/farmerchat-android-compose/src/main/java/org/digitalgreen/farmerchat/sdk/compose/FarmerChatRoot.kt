@@ -537,10 +537,18 @@ fun FarmerChatRoot(
             composable<Destination.AccountBenefits> {
                 AccountBenefitsScreen(
                     onSignUp = {
+                        // Don't take the user into the Auth (phone input) screen when offline.
+                        // Route through ErrorNavigationManager so a retry action is REGISTERED —
+                        // navigating to Destination.Error directly leaves retryLastAction() a
+                        // no-op (app parity, AppNavGraph.kt AccountBenefits onPrimaryCta).
                         if (!isNetworkAvailable(context)) {
-                            navController.navigate(
-                                Destination.Error(isNetworkError = true, fromScreen = "auth")
-                            ) { launchSingleTop = true }
+                            scope.launch {
+                                graph.errorNavigationManager.navigateToError(
+                                    isNetworkError = true,
+                                    fromScreen = "auth",
+                                    retry = { navController.navigate(Destination.Auth) }
+                                )
+                            }
                         } else {
                             navController.navigate(Destination.Auth)
                         }
@@ -568,22 +576,70 @@ fun FarmerChatRoot(
             }
 
             composable<Destination.AccountSuccess> {
-                AccountSuccessScreen(
-                    onContinue = {
-                        navController.navigate(Destination.Home) {
-                            popUpTo<Destination.Home> { inclusive = false }
-                            launchSingleTop = true
-                        }
+                // Back from success goes to Home (the user is already logged in); do not
+                // return into the auth back stack (doc 01 §2 / §3.6).
+                val toHomeClearingAuth: () -> Unit = {
+                    navController.navigate(Destination.Home) {
+                        popUpTo<Destination.AccountBenefits> { inclusive = true }
+                        launchSingleTop = true
                     }
-                )
+                }
+                androidx.activity.compose.BackHandler { toHomeClearingAuth() }
+                AccountSuccessScreen(onContinue = toHomeClearingAuth)
             }
 
             composable<Destination.Error> { backStackEntry ->
                 val args = backStackEntry.toRoute<Destination.Error>()
+                // Display copy uses only args.isNetworkError so the message does not change
+                // when the user reconnects (app parity, AppNavGraph.kt:316).
                 ErrorScreen(
                     errorType = if (args.isNetworkError) ErrorType.NO_INTERNET else ErrorType.API_ERROR,
                     onTryAgain = {
-                        navController.popBackStack()
+                        // Per-fromScreen retry semantics — doc 01 §2 "Error | onTryAgain".
+                        // Identical tree to android-views ErrorFragment.onTryAgain.
+
+                        // Still offline → stay on the No Internet screen.
+                        if (args.isNetworkError && !isNetworkAvailable(context)) {
+                            return@ErrorScreen
+                        }
+
+                        when (args.fromScreen.lowercase()) {
+                            // Drawer history strip: refresh in place, no re-navigation.
+                            "drawer" -> {
+                                chatHistoryVm.refresh()
+                                navController.popBackStack()
+                                return@ErrorScreen
+                            }
+                            // ChatHistory retries on load, so re-enter it.
+                            "chathistory" -> {
+                                navController.popBackStack()
+                                navController.navigate(Destination.ChatHistory) {
+                                    launchSingleTop = true
+                                }
+                                return@ErrorScreen
+                            }
+                            // Weather / content-card taps triggered no API — only pop back to
+                            // Home; deliberately no retryLastAction().
+                            "home_weather", "home_card" -> {
+                                navController.popBackStack()
+                                return@ErrorScreen
+                            }
+                        }
+
+                        val popped = navController.popBackStack()
+                        if (!popped) {
+                            when (args.fromScreen.lowercase()) {
+                                "language" -> navController.navigate(Destination.Language) {
+                                    launchSingleTop = true
+                                }
+                                "name" -> navController.navigate(Destination.Name) {
+                                    launchSingleTop = true
+                                }
+                                "auth" -> navController.navigate(Destination.Auth) {
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
                         graph.errorNavigationManager.retryLastAction()
                     }
                 )

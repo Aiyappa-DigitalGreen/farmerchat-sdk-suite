@@ -47,6 +47,7 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.util.rememberDebouncedAction
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
+import org.digitalgreen.farmerchat.sdk.core.ui.settings.LanguageDisplayOrder
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
@@ -137,7 +138,16 @@ fun LanguageChooserScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        languageState.data.forEach { language ->
+                        // App parity (ui/settings/LanguageChooserScreen.kt `displayedLanguages`):
+                        // pin the selection to the top when it lives only in the collapsed
+                        // "All languages" list.
+                        val rows = LanguageDisplayOrder.rowsToShow(
+                            priority = languageState.data,
+                            expanded = state.expandedLanguages,
+                            selectedId = state.selectedLanguageId,
+                            isExpanded = showAllLanguages
+                        )
+                        rows.forEach { language ->
                             RadioButton(
                                 label = language.displayName.ifBlank { language.name },
                                 selected = state.selectedLanguageId == language.id,
@@ -218,7 +228,7 @@ fun LanguageChooserScreen(
                     ) {
                         LogoSpinner(
                             type = LogoSpinnerType.Vertical,
-                            label = label(Labels.LOADING_LANGUAGES, "Loading languages…")
+                            label = label(Labels.LOADING_LANGUAGES, "Loading languages...")
                         )
                     }
                 }

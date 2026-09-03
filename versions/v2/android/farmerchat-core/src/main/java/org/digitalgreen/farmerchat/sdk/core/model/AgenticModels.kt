@@ -12,11 +12,40 @@ import com.google.gson.annotations.SerializedName
  * The terminal [Metadata] event reuses [TextPromptResponse] — its payload is field-compatible —
  * so the final UI state is built with exactly the same logic as the non-agentic path.
  *
- * Event ordering observed by the app: `tool_call`/`tool_result` → `text_delta`* → `done` →
- * `metadata`. The stream finalizes on [Metadata] (the richest payload). [Done] is a non-terminal
- * fallback used only if the stream ends WITHOUT a [Metadata], so the answer is never lost.
+ * **Event ordering, captured live from stage 2026-09-03** (docs/02 §#27a, raw captures under
+ * `docs/captures/`) — SEVEN event names, not the six the app handles:
+ *
+ * - prose answer: `status` → `tool_call` → `tool_result` → `text_delta`×9 → `done` → `surface`
+ *   → `metadata`
+ * - alignment surface: `status` → `surface` → `done` → `metadata`
+ *
+ * `metadata` arrives LAST and is the terminal event; [Done] is a non-terminal fallback used only
+ * if the stream ends WITHOUT a [Metadata], so the answer is never lost. [Status] and [Surface] are
+ * ahead of the app, which drops both into its typeless fallback.
  */
 sealed class AgenticEvent {
+
+    /**
+     * Progress ping (`event: status`, payload `{"stage": "thinking"}`) — the FIRST event on both
+     * live captures, well before any `text_delta`. Surfaced the same way as
+     * [ToolCall.statusText]: it turns the loading placeholder into a live bubble so the farmer sees
+     * activity immediately instead of a bare spinner (time-to-first-delta was 6.7 s on the
+     * captured prose answer).
+     *
+     * [stage] is a machine token, never shown raw — the ViewModel maps it to a LabelManager
+     * string.
+     */
+    data class Status(val stage: String?) : AgenticEvent()
+
+    /**
+     * An alignment surface delivered MID-STREAM (`event: surface`, payload `{id, type, payload}`).
+     * The same surface arrives again on the terminal `metadata.alignments`; rendering on this
+     * event is what stops a blocking question from waiting for the whole stream.
+     *
+     * [alignment] is the `payload` object with its `type` lifted in from the envelope (the payload
+     * itself carries no `type`), so it is field-identical to `metadata.alignments`.
+     */
+    data class Surface(val id: String?, val alignment: Alignment) : AgenticEvent()
 
     /** A tool the agent decided to invoke. [statusText] is a short human-readable progress label. */
     data class ToolCall(val name: String?, val statusText: String?) : AgenticEvent()
@@ -63,6 +92,30 @@ enum class StreamErrorKind { NETWORK, SERVER, TOOL, UNKNOWN }
 data class AgenticTextDeltaPayload(
     @SerializedName(value = "delta", alternate = ["text", "content", "token", "chunk"])
     val delta: String?
+)
+
+/**
+ * `status` payload. Live value: `{"stage": "thinking"}`.
+ */
+data class AgenticStatusPayload(
+    @SerializedName(value = "stage", alternate = ["status", "state", "phase"])
+    val stage: String?
+)
+
+/**
+ * `surface` payload envelope: `{"id": "srf_…", "type": "gps-prompt", "payload": {…}}`.
+ *
+ * [payload] deliberately deserializes into [Alignment] — the surface payload and
+ * `metadata.alignments` are the same object except that `alignments` carries `type` inline while
+ * here it sits on the envelope. The reader copies it across so both paths produce one shape.
+ */
+data class AgenticSurfacePayload(
+    @SerializedName("id")
+    val id: String? = null,
+    @SerializedName("type")
+    val type: String? = null,
+    @SerializedName("payload")
+    val payload: Alignment? = null
 )
 
 /** `tool_call` / `tool_result` payload. */

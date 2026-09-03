@@ -70,6 +70,48 @@ sealed class ChatAction {
     ) : ChatAction()
 
     /**
+     * The farmer tapped a chip on an alignment surface. 1:1 port of the app's
+     * `ChatAction.SendAlignmentChip` (`ui/chat/udf/ChatAction.kt:108`) — same nine parameters, same
+     * meanings. Every non-capability chip tap goes through here; the two capability chips run their
+     * capability first and come back through here (decline) or through [SendLocationSharedQuery] /
+     * [SendQuestionWithImage] (success). See `routeAlignmentChip`.
+     *
+     * @param query what is sent to the API as the next query on the same conversation. The chip
+     *   LABEL for most chips; for GENDER_SELECT the chip VALUE (the backend expects the raw gender
+     *   value). When [displayLabel] is null, [query] is also the user-bubble text.
+     * @param selectionValue the chip VALUE — used only to mark/highlight the chosen chip on the
+     *   source AI response ([sourceMessageId]); never sent as the query.
+     * @param sourceMessageId local list id of the AI response that showed the surface. Its SERVER
+     *   `messageId` is what goes out as `parent_message_id`.
+     * @param displayLabel optional user-bubble override (GENDER_SELECT): the bubble shows this
+     *   LABEL while [query] (the VALUE) is what gets sent. Null = the bubble uses [query].
+     * @param locationDeclined true only for a GPS_PROMPT decline (the farmer chose not to share, or
+     *   denied/cancelled the OS permission); sets `location_declined = true` on the request.
+     * @param photoDeclined true only for an UPLOAD_PHOTO decline; sets `photo_declined = true`.
+     * @param chipType the surface kind in wire format ([AlignmentKind.analyticsType], e.g.
+     *   "gps-prompt"); destined for analytics as `agentic_chip_type`.
+     * @param chipValue stable machine value of the tapped chip — language-independent, best for
+     *   funnels; destined for `agentic_chip_value`.
+     * @param chipLabel localized display text of the tapped chip; destined for
+     *   `agentic_chip_label`.
+     *
+     * The three chip properties are carried and forwarded, but `SendQueryProperties` has no
+     * `isAlignmentChip` / `agenticChip*` fields yet, so nothing emits them — the wire half
+     * (`triggered_input_type = "align_chip_sel"`, `parent_message_id`) ships regardless. docs/04.
+     */
+    data class SendAlignmentChip(
+        val query: String,
+        val selectionValue: String,
+        val sourceMessageId: String,
+        val displayLabel: String? = null,
+        val locationDeclined: Boolean = false,
+        val photoDeclined: Boolean = false,
+        val chipType: String? = null,
+        val chipValue: String? = null,
+        val chipLabel: String? = null
+    ) : ChatAction()
+
+    /**
      * The GPS_PROMPT surface's "Share my location" chip was satisfied (2.0.0).
      *
      * The chip does not send its own text: the flavour runs the location flow, and on success

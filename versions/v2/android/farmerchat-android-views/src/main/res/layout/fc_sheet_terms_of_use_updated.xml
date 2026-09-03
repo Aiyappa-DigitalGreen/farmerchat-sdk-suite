@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mandatory Terms-of-Use acceptance gate sheet (SDK 2.0.0, endpoint #7a). Views port of the
+  Compose `TermsOfUseUpdatedBottomSheet`, which is a 1:1 port of the app's
+  components/dialogs/TermsOfUseUpdatedBottomSheet.kt.
+
+  Non-cancellable — the hosting BottomSheetDialog sets setCancelable(false),
+  setCanceledOnTouchOutside(false) and behavior.isDraggable = false. There is NO close button
+  here by design: the only ways out are the two CTAs.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/fc_bg_rounded_top"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="24dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="20dp">
+
+    <ImageView
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:contentDescription="@null"
+        android:src="@drawable/fc_ic_tou_info" />
+
+    <TextView
+        android:id="@+id/fcTouTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textColor="@color/fc_foreground_primary"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        tools:text="Our Terms of Use have changed" />
+
+    <TextView
+        android:id="@+id/fcTouMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textColor="@color/fc_foreground_primary"
+        android:textSize="16sp"
+        tools:text="We changed how we keep your farm details safe…" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/fcTouReadTerms"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:background="@drawable/fc_bg_outlined_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            tools:text="Read terms" />
+
+        <Space
+            android:layout_width="12dp"
+            android:layout_height="1dp" />
+
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+            android:id="@+id/fcTouAccept"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+</LinearLayout>

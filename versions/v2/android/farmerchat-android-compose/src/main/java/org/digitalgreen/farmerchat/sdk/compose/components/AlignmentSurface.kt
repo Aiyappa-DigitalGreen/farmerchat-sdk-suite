@@ -63,7 +63,14 @@ fun AlignmentSurface(
      */
     fetchingProgressLabel: String? = null,
     /** True when rendering below a real answer; suppresses the heading and escape hatch. */
-    additive: Boolean = kind.isAdditive
+    additive: Boolean = kind.isAdditive,
+    /**
+     * The surface's wire `blocking` flag (2.0.0). True means the backend cannot proceed until this
+     * is answered, so the escape hatch is withheld — offering "type or say it" on a blocking
+     * surface invites the farmer down a path the backend will just re-ask. Live `gps-prompt`
+     * sends `blocking: true`; absent on the wire → false, the pre-2026-09-03 behaviour.
+     */
+    blocking: Boolean = false
 ) {
     val colors = LocalContentColors.current
     val brand = LocalBrandColors.current
@@ -91,7 +98,7 @@ fun AlignmentSurface(
                 text = when (kind) {
                     AlignmentKind.GPS_PROMPT -> label(Labels.SHARE_LOCATION_TITLE, "Share location")
                     AlignmentKind.UPLOAD_PHOTO -> label(Labels.ADD_ONE_CLEAR_PHOTO, "Add one clear photo")
-                    AlignmentKind.CONFIRM -> label(Labels.PLEASE_CONFIRM, "Please Confirm")
+                    AlignmentKind.CONFIRM -> label(Labels.PLEASE_CONFIRM, "Please confirm")
                     else -> label(Labels.CHOOSE_ONE, "Choose one")
                 },
                 style = MaterialTheme.typography.titleMedium,
@@ -134,7 +141,7 @@ fun AlignmentSurface(
         // Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
         // Without it a farmer whose answer is not among the chips has no way forward.
         if (chips.isNotEmpty() && !isEscalate && !isCapabilityPrompt && !additive &&
-            !hasPick && isLatest && !effectiveLoading
+            !hasPick && isLatest && !effectiveLoading && !blocking
         ) {
             Spacer(Modifier.height(12.dp))
             Row(

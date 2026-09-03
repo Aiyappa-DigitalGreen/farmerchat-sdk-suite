@@ -27,6 +27,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
 import org.digitalgreen.farmerchat.sdk.core.model.NewConversationResponse
 import org.digitalgreen.farmerchat.sdk.core.model.PlantixRequest
 import org.digitalgreen.farmerchat.sdk.core.model.PlantixResponse
+import org.digitalgreen.farmerchat.sdk.core.model.PolicyAcceptanceStatusResponse
 import org.digitalgreen.farmerchat.sdk.core.model.PrivacyPolicyResponse
 import org.digitalgreen.farmerchat.sdk.core.model.SendOtpRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SendOtpResponse
@@ -104,6 +105,12 @@ interface ApiServices {
     suspend fun acceptTerms(
         @Body request: AcceptPPandTCRequest
     ): Response<AcceptPPandTCResponse>
+
+    // #7a Terms-of-Use acceptance gate (2.0.0)
+    @GET(ApiConstants.POLICY_ACCEPTANCE_STATUS)
+    suspend fun fetchPolicyAcceptanceStatus(
+        @Query("user_id") userId: String
+    ): Response<PolicyAcceptanceStatusResponse>
 
     // #8 Update name/profile
     @POST(ApiConstants.UPDATE_USER_NAME)

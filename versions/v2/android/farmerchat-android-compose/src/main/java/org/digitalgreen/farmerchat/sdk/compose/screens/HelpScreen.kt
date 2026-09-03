@@ -39,6 +39,7 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.HelpSupportResponse
@@ -141,7 +142,15 @@ fun HelpScreen(
                                 ListItem(
                                     textLeft = faq.title,
                                     onClick = {
-                                        graph.analytics.track(AnalyticsEvents.FAQ_CLICKED)
+                                        graph.analytics.track(
+                                            AnalyticsEvents.FAQ_CLICKED,
+                                            // App HelpScreen.kt:201.
+                                            mapOf(
+                                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL,
+                                                AnalyticsProps.QUESTION to faq.title,
+                                                AnalyticsProps.ID to faq.id
+                                            )
+                                        )
                                         val url = faq.webviewUrl
                                         if (!url.isNullOrBlank()) {
                                             onOpenUrl("faq_terms", url)
@@ -169,6 +178,11 @@ fun HelpScreen(
                 ListItem(
                     textLeft = termsTitle,
                     onClick = {
+                        // App HelpScreen.kt:245.
+                        graph.analytics.track(
+                            AnalyticsEvents.TERMS_OF_USE_OPENED,
+                            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL)
+                        )
                         val url = legal?.termsOfUse?.webviewUrl
                         if (!url.isNullOrBlank()) onOpenUrl(termsTitle, url)
                     },
@@ -177,6 +191,11 @@ fun HelpScreen(
                 ListItem(
                     textLeft = privacyTitle,
                     onClick = {
+                        // App HelpScreen.kt:263.
+                        graph.analytics.track(
+                            AnalyticsEvents.PRIVACY_POLICY_OPENED,
+                            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HELP_LITERAL)
+                        )
                         val url = legal?.privacyPolicy?.webviewUrl
                         if (!url.isNullOrBlank()) onOpenUrl(privacyTitle, url)
                     }

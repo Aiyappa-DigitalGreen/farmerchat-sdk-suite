@@ -83,7 +83,10 @@ fun Chip(
     }
     val labelColor = when {
         selected -> colors.foregroundPrimary
-        !enabled -> colors.foregroundTertiary
+        // Muted but readable: foregroundTertiary collides with surfaceTertiary in dark mode
+        // (both Neutral700 = #3F3F46), which made disabled chip text invisible. App
+        // components/chips/Chip.kt @ 0c8c740f (e335413b).
+        !enabled -> colors.foregroundSecondary
         isEscalate -> colors.buttonPrimaryForeground
         else -> colors.foregroundPrimary
     }
@@ -164,12 +167,18 @@ private fun ChipNumberBadge(number: Int, type: ChipType, enabled: Boolean) {
     val brand = LocalBrandColors.current
     val isEscalate = type == ChipType.Escalate
     val bg = when {
-        !enabled -> colors.surfaceTertiary
+        // The disabled badge circle used to be surfaceTertiary — exactly the disabled chip
+        // surface — so the circle vanished into the chip in BOTH themes. It now uses the
+        // muted-but-distinct secondary foreground, as the app does (97832e9a).
+        !enabled -> colors.foregroundSecondary
         isEscalate -> colors.buttonPrimaryForeground.copy(alpha = 0.22f)
         else -> colors.buttonPrimaryAccent
     }
     val fg = when {
-        !enabled -> colors.foregroundTertiary
+        // Echo the chip surface on the muted disabled badge so the numeral stays legible in
+        // both themes (light numeral over the dark light-mode circle, dark numeral over the
+        // light dark-mode one). foregroundTertiary here was the same Neutral700 as the circle.
+        !enabled -> colors.surfaceTertiary
         isEscalate -> colors.buttonPrimaryForeground
         else -> colors.buttonPrimaryForeground
     }

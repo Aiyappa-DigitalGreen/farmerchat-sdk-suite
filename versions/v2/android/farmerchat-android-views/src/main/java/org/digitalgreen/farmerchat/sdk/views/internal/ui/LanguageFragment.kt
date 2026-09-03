@@ -11,6 +11,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.GeoRequestBody
@@ -125,26 +126,32 @@ internal class LanguageFragment : BaseFragment(R.layout.fc_fragment_language) {
         adapter.expanderLabel = label(Labels.ALL_LANGUAGES, "All languages")
         binding.fcLanguageTagline.text = label(
             Labels.FARMERCHAT_TAGLINE,
-            "Practical advice for your crops and animals"
+            "FarmerChat: Practical advice\nfor your crops & livestock"
         )
     }
 
     /** Two centered lines: prefix + underlined "Terms of use · Privacy policy". */
     private fun renderLegal(termsUrl: String?, privacyUrl: String?) {
         binding.fcLanguageLegal.text =
-            label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing you agree to our")
+            label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing, you agree to our")
 
         val terms = label(Labels.TERMS_OF_USE, "Terms of use")
         val privacy = label(Labels.PRIVACY_POLICY, "Privacy policy")
 
         val builder = SpannableStringBuilder()
         appendLink(builder, terms, termsUrl) { url ->
-            graph.analytics.track(AnalyticsEvents.TERMS_OF_USE_OPENED)
+            graph.analytics.track(
+                AnalyticsEvents.TERMS_OF_USE_OPENED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE)
+            ) // app LanguageScreen.kt:315
             openLegal(url, terms)
         }
         builder.append(" · ")
         appendLink(builder, privacy, privacyUrl) { url ->
-            graph.analytics.track(AnalyticsEvents.PRIVACY_POLICY_OPENED)
+            graph.analytics.track(
+                AnalyticsEvents.PRIVACY_POLICY_OPENED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE)
+            ) // app LanguageScreen.kt:339
             openLegal(url, privacy)
         }
         binding.fcLanguageLegalLinks.text = builder

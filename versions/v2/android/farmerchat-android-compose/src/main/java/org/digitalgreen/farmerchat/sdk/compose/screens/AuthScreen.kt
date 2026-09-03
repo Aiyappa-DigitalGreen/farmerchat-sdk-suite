@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,15 +39,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import org.digitalgreen.farmerchat.sdk.FarmerChat
@@ -62,10 +74,13 @@ import org.digitalgreen.farmerchat.sdk.compose.components.Toast
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
 import org.digitalgreen.farmerchat.sdk.compose.components.rememberToastState
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
+import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.CountryItem
@@ -97,7 +112,13 @@ fun AuthScreen(
 
     LaunchedEffect(Unit) {
         graph.analytics.trackScreenView(AnalyticsScreens.AUTH)
-        graph.analytics.track(AnalyticsEvents.MOBILE_VERIFICATION_STARTED)
+        graph.analytics.track(
+                    AnalyticsEvents.MOBILE_VERIFICATION_STARTED,
+                    mapOf(
+                        AnalyticsProps.SCREEN_NAME to AnalyticsScreens.AUTH,
+                        AnalyticsProps.TRIGGER_LOWER to "Signup button"
+                    )
+                )
         graph.errorNavigationManager.setActiveScreen("auth")
         vm.fetchCountries()
         vm.fetchLegalLinks()
@@ -321,14 +342,18 @@ private fun PhoneEntryContent(
                 )
             }
 
+            // App parity (ui/auth/AuthScreen.kt PhoneEntryContent): the agreement card sits
+            // between the phone row and the send-code buttons.
+            AgreementCard()
+
             val isSending = state.sendOtpState is UiState.Loading
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (state.availableChannels.whatsappEnabled) {
                     PrimaryButton(
                         label = if (isSending && state.selectedChannel == "whatsapp")
-                            label(Labels.SENDING_CODE, "Sending code")
-                        else label(Labels.SEND_VIA_WHATSAPP, "Send code on WhatsApp"),
+                            label(Labels.SENDING_CODE, "Sending code...")
+                        else label(Labels.SEND_VIA_WHATSAPP, "Send via WhatsApp"),
                         state = if (isSending && state.selectedChannel == "whatsapp")
                             PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
                         enabled = !isSending,
@@ -341,8 +366,8 @@ private fun PhoneEntryContent(
                     if (state.availableChannels.whatsappEnabled) {
                         SecondaryButton(
                             label = if (isSending && state.selectedChannel == "sms")
-                                label(Labels.SENDING_CODE, "Sending code")
-                            else label(Labels.SEND_VIA_SMS, "Send code via SMS"),
+                                label(Labels.SENDING_CODE, "Sending code...")
+                            else label(Labels.SEND_VIA_SMS, "Send via SMS"),
                             isLoading = isSending && state.selectedChannel == "sms",
                             enabled = !isSending,
                             onClick = { vm.sendOtp("sms") },
@@ -351,7 +376,7 @@ private fun PhoneEntryContent(
                     } else {
                         PrimaryButton(
                             label = if (isSending && state.selectedChannel == "sms")
-                                label(Labels.SENDING_CODE, "Sending code")
+                                label(Labels.SENDING_CODE, "Sending code...")
                             else label(Labels.SEND_ONE_TIME_CODE, "Send one-time code"),
                             state = if (isSending && state.selectedChannel == "sms")
                                 PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
@@ -364,44 +389,144 @@ private fun PhoneEntryContent(
                 }
             }
 
-            // Legal
-            val terms = state.legalLinks?.termsOfUseUrl
-            val privacy = state.legalLinks?.privacyPolicyUrl
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = label(
-                        Labels.BY_CONTINUING_TO_VERIFICATION_YOU_ARE_ACCEPTING_OUR,
-                        "By continuing to verification you are accepting our"
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.foregroundSecondary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = label(Labels.TERMS_OF_USE, "Terms of use"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.foregroundPrimary,
-                        modifier = Modifier.clickableNoIndication {
-                            terms?.let { onOpenLegal(it, label(Labels.TERMS_OF_USE, "Terms of use")) }
-                        }
+            // App parity: consent copy with a clickable Privacy Policy link, immediately below
+            // the send-code buttons.
+            AuthConsentText(
+                onOpenPrivacyPolicy = {
+                    // App AuthScreen.kt:474 — track first, navigate only when the URL resolved.
+                    FarmerChat.requireGraph().analytics.track(
+                        AnalyticsEvents.PRIVACY_POLICY_OPENED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.AUTH)
                     )
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.foregroundSecondary
-                    )
-                    Text(
-                        text = label(Labels.PRIVACY_POLICY, "Privacy policy"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.foregroundPrimary,
-                        modifier = Modifier.clickableNoIndication {
-                            privacy?.let { onOpenLegal(it, label(Labels.PRIVACY_POLICY, "Privacy policy")) }
-                        }
-                    )
+                    val url = state.legalLinks?.privacyPolicyUrl.orEmpty()
+                    if (url.isNotBlank()) {
+                        onOpenLegal(url, label(Labels.PRIVACY_POLICY, "Privacy Policy"))
+                    }
                 }
-            }
+            )
+
+            // The app REMOVED this legacy "By Continuing to Verification…" terms+privacy row:
+            // its call site is commented out at ui/auth/AuthScreen.kt:492 and has been since
+            // before c0524dd6. Commit 9966b905 replaced it with AgreementCard + AuthConsentText
+            // above, which link Privacy Policy only. Terms-of-Use consent did not disappear — it
+            // moved to the MANDATORY Home gate (TermsOfUseUpdatedBottomSheet, docs/02 #7a), so
+            // signup collects communications consent and the gate collects ToU acceptance.
+            // Keeping this row active was an SDK-only divergence that showed the farmer two
+            // consent blurbs at once.
         }
     }
+}
+
+/**
+ * "What you are agreeing to:" card — 1:1 port of the app's `AgreementCard`
+ * (ui/auth/AuthScreen.kt, commit 9966b905). Colours come from the SDK theme tokens
+ * (`surfaceTertiary` == the app's literal `Neutral200`, `foregroundPrimary` == its black) so a
+ * themed host and dark mode both work; the light-mode pixels are identical to the app.
+ */
+@Composable
+private fun AgreementCard() {
+    val colors = LocalContentColors.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color = colors.surfaceTertiary, shape = SmoothShapes.rounded(Radius.LG))
+            .padding(horizontal = 18.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = label(Labels.AGREEMENT_CARD_TITLE, "What you are agreeing to:"),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = colors.foregroundPrimary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            AgreementBulletPoint(
+                label(
+                    Labels.AGREEMENT_POINT_VERIFICATION_CODE,
+                    "A verification code by SMS, phone, or WhatsApp"
+                )
+            )
+            AgreementBulletPoint(
+                label(Labels.AGREEMENT_POINT_UPDATES, "FarmerChat updates and farming information")
+            )
+            AgreementBulletPoint(
+                label(
+                    Labels.AGREEMENT_POINT_SURVEYS,
+                    "Occasional surveys or research by Digital Green or trusted partners"
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun AgreementBulletPoint(text: String) {
+    val colors = LocalContentColors.current
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "\u2022",
+            fontWeight = FontWeight.Normal,
+            fontSize = 15.sp,
+            color = colors.foregroundPrimary,
+            modifier = Modifier.width(16.dp)
+        )
+        Text(
+            text = text,
+            fontWeight = FontWeight.Normal,
+            fontSize = 15.sp,
+            color = colors.foregroundPrimary,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
+ * Consent copy with a clickable "Privacy Policy" link — port of the app's `AuthConsentText`.
+ * The app's `remember {}` takes no keys; the SDK resolves labels asynchronously through
+ * `LabelManager`, so the annotated string is keyed on the resolved strings — otherwise it would
+ * freeze on the English fallback whenever the card composes before endpoint #3 lands.
+ */
+@Composable
+private fun AuthConsentText(onOpenPrivacyPolicy: () -> Unit) {
+    val colors = LocalContentColors.current
+    val currentOnOpenPrivacyPolicy by rememberUpdatedState(onOpenPrivacyPolicy)
+
+    val prefix = label(
+        Labels.AUTH_CONSENT_PREFIX,
+        "By continuing, you agree to these communications.\nSee our "
+    )
+    val privacyLabel = label(Labels.PRIVACY_POLICY, "Privacy Policy")
+
+    val annotated = remember(prefix, privacyLabel) {
+        buildAnnotatedString {
+            append(prefix)
+            withLink(
+                LinkAnnotation.Clickable(
+                    tag = "PRIVACY",
+                    linkInteractionListener = { currentOnOpenPrivacyPolicy() }
+                )
+            ) {
+                withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
+                    append(privacyLabel)
+                }
+            }
+            append(".")
+        }
+    }
+
+    BasicText(
+        text = annotated,
+        style = TextStyle(
+            fontWeight = FontWeight.Normal,
+            fontSize = 15.sp,
+            color = colors.foregroundSecondary,
+            textAlign = TextAlign.Center
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -422,8 +547,9 @@ private fun OtpEntryContent(
         )
 
         Text(
-            text = "${label(Labels.CHECK_YOUR_MESSAGES_CODE, "Check your messages for the code sent to")} " +
-                "${state.countryCode} ${state.phoneLocal}",
+            // App parity (ui/auth/AuthScreen.kt OtpEntryContent): the label stands alone —
+            // the app does NOT append the phone number here.
+            text = label(Labels.CHECK_YOUR_MESSAGES_CODE, "Check your messages for the code"),
             style = MaterialTheme.typography.bodyMedium,
             color = colors.foregroundSecondary
         )

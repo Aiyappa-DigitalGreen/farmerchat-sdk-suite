@@ -7,7 +7,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsApis
+import org.digitalgreen.farmerchat.sdk.core.analytics.DeviceUserAttributes
 import org.digitalgreen.farmerchat.sdk.core.auth.SessionManager
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
@@ -98,8 +101,22 @@ class OnboardingSharedViewModel(
             var lng: Double? = null
             var accuracy: Double? = null
 
+            // App OnboardingSharedViewModel.kt:205/273 — the geolocate call is tracked both as
+            // an API_Call_* triple and as the Device_Location_Fetch_* triple (the latter always
+            // attributed to the Splash screen).
+            analytics.trackApiInitiated(AnalyticsApis.IP_GEO, action.fromScreen)
+            analytics.track(
+                AnalyticsEvents.DEVICE_LOCATION_FETCH_INITIATED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SPLASH)
+            )
             when (val geo = fetchGeoLocationUseCase.fetchGeoLocation(action.body).first()) {
                 is ApiResult.Success -> {
+                    // App OnboardingSharedViewModel.kt:222/291.
+                    analytics.trackApiSuccess(AnalyticsApis.IP_GEO, action.fromScreen)
+                    analytics.track(
+                        AnalyticsEvents.DEVICE_LOCATION_FETCH_SUCCEEDED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SPLASH)
+                    )
                     lat = geo.data.location?.lat
                     lng = geo.data.location?.lng
                     accuracy = geo.data.accuracy
@@ -111,6 +128,14 @@ class OnboardingSharedViewModel(
                     // (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and accepts it only when
                     // `lat != 0.0 && lng != 0.0`. A locale with no region yields (0.0, 0.0), which
                     // must stay unresolved — sending it would place the farmer off West Africa.
+                    // App OnboardingSharedViewModel.kt:239/257/307.
+                    analytics.trackApiError(
+                        AnalyticsApis.IP_GEO, action.fromScreen, geo.isTimeout
+                    )
+                    analytics.track(
+                        AnalyticsEvents.DEVICE_LOCATION_FETCH_FAILED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.SPLASH)
+                    )
                     _state.update { it.copy(geoState = geo.toUiError()) }
                     val (_, localeLat, localeLng) = resolveFallbackCoordinates()
                     if (CountryLatLngProvider.isResolved(localeLat, localeLng)) {
@@ -122,9 +147,23 @@ class OnboardingSharedViewModel(
             }
 
             _state.update { it.copy(guestInitState = UiState.Loading) }
+            // App OnboardingSharedViewModel.kt:354 — API_Name = "Initialise user".
+            analytics.trackApiInitiated(AnalyticsApis.INITIALIZE_GUEST, action.fromScreen)
             when (val init = sessionManager.initializeGuestUser(lat, lng, accuracy)) {
                 is ApiResult.Success -> {
+                    // App OnboardingSharedViewModel.kt:370.
+                    analytics.trackApiSuccess(AnalyticsApis.INITIALIZE_GUEST, action.fromScreen)
                     _state.update { it.copy(guestInitState = UiState.Success(init.data)) }
+                    // App OnboardingSharedViewModel.kt:392 — identity is set here, on the id the
+                    // guest-init response just issued (SessionManager persisted it). Not an
+                    // event, so it goes out through config.onUserIdentified, not onEvent.
+                    analytics.identifyUser(
+                        init.data.user_id?.takeIf { !it.equals("null", ignoreCase = true) }
+                            ?: prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
+                    )
+                    // App OnboardingSharedViewModel.kt:457-482 — the 7 device/carrier user
+                    // attributes, raised at the same point in the flow.
+                    DeviceUserAttributes.report(appContext, analytics)
                     // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an
                     // unresolvable IP comes back with country_code == null. Fall through to the
                     // persisted value, then to the host-configured default, never to "".
@@ -148,6 +187,10 @@ class OnboardingSharedViewModel(
                     fetchSupportedLanguages(countryCode, stateName)
                 }
                 is ApiResult.Error -> {
+                    // App OnboardingSharedViewModel.kt:505/518.
+                    analytics.trackApiError(
+                        AnalyticsApis.INITIALIZE_GUEST, action.fromScreen, init.isTimeout
+                    )
                     _state.update {
                         it.copy(
                             guestInitState = init.toUiError(),
@@ -214,10 +257,17 @@ class OnboardingSharedViewModel(
     private fun fetchSupportedLanguages(countryCode: String, stateName: String) {
         _state.update { it.copy(languageState = UiState.Loading) }
         scope.launch {
+            // App OnboardingSharedViewModel.kt:560 — API_Name = "Get Supported Languages",
+            // attributed to the Select Language screen.
+            analytics.trackApiInitiated(AnalyticsApis.GET_LANGUAGES, AnalyticsScreens.LANGUAGE)
             getSupportedLanguagesUseCase.getSupportedLanguages(countryCode, stateName)
                 .collect { result ->
                     when (result) {
                         is ApiResult.Success -> {
+                            // App OnboardingSharedViewModel.kt:577.
+                            analytics.trackApiSuccess(
+                                AnalyticsApis.GET_LANGUAGES, AnalyticsScreens.LANGUAGE
+                            )
                             val groups = result.data
                             val priority = groups.flatMap { it.priorityView }
                             val expanded = groups.flatMap { it.expandedView }
@@ -235,6 +285,12 @@ class OnboardingSharedViewModel(
                             }
                         }
                         is ApiResult.Error -> {
+                            // App OnboardingSharedViewModel.kt:617/630.
+                            analytics.trackApiError(
+                                AnalyticsApis.GET_LANGUAGES,
+                                AnalyticsScreens.LANGUAGE,
+                                result.isTimeout
+                            )
                             _state.update { it.copy(languageState = result.toUiError()) }
                         }
                     }
@@ -263,6 +319,10 @@ class OnboardingSharedViewModel(
                         prefs.putString(SdkPreferences.Keys.SELECTED_LANGUAGE_DISPLAY_NAME, language.displayName)
                         prefs.putBoolean(SdkPreferences.Keys.ASR_ENABLED, language.isAsrEnabled)
                         prefs.putBoolean(SdkPreferences.Keys.TTS_ENABLED, language.isTtsEnabled)
+                        // Per-language; sent as TextPromptRequest.streaming_required (app parity).
+                        prefs.putBoolean(
+                            SdkPreferences.Keys.STREAMING_REQUIRED, language.streaming_required
+                        )
                         _state.update {
                             it.copy(
                                 isFetchingLabels = false,
@@ -290,7 +350,18 @@ class OnboardingSharedViewModel(
     private fun fetchLegalLinks() {
         if (_state.value.privacyPolicyUrl != null && _state.value.termsOfUseUrl != null) return
         scope.launch {
+            // App OnboardingSharedViewModel.kt:931 — API_Name = "Privacy Policy".
+            analytics.trackApiInitiated(AnalyticsApis.GET_LEGAL_LINKS, AnalyticsScreens.LANGUAGE)
             getSupportedLanguagesUseCase.fetchPrivacyPolicy().collect { result ->
+                // App OnboardingSharedViewModel.kt:948/970/982.
+                when (result) {
+                    is ApiResult.Success -> analytics.trackApiSuccess(
+                        AnalyticsApis.GET_LEGAL_LINKS, AnalyticsScreens.LANGUAGE
+                    )
+                    is ApiResult.Error -> analytics.trackApiError(
+                        AnalyticsApis.GET_LEGAL_LINKS, AnalyticsScreens.LANGUAGE, result.isTimeout
+                    )
+                }
                 if (result is ApiResult.Success) {
                     _state.update {
                         it.copy(
@@ -322,21 +393,54 @@ class OnboardingSharedViewModel(
         _state.update { it.copy(isSubmittingLanguage = true, submitErrorMessage = null) }
         analytics.track(
             AnalyticsEvents.SAVE_LANGUAGE_CLICK,
-            mapOf(AnalyticsProps.LANGUAGE_CODE to _state.value.langauge_code)
+            // App LanguageScreen.kt:137 — Select Language Screen.
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE,
+                AnalyticsProps.LANGUAGE_CODE to _state.value.langauge_code
+            )
         )
         scope.launch {
+            // App OnboardingSharedViewModel.kt:739 — API_Name = "Set Language Preference".
+            analytics.trackApiInitiated(AnalyticsApis.SET_LANGUAGE, AnalyticsScreens.LANGUAGE)
             getSupportedLanguagesUseCase.setPreferredLanguage(
                 SetPreferredLanguageRequest(user_id = userId, language_id = languageId.toString())
             ).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
                         prefs.putBoolean(SdkPreferences.Keys.LANGUAGE_DONE, true)
-                        analytics.track(AnalyticsEvents.ONBOARDING_COMPLETED_STEP1)
+                        // App OnboardingSharedViewModel.kt:762.
+                        analytics.trackApiSuccess(
+                            AnalyticsApis.SET_LANGUAGE, AnalyticsScreens.LANGUAGE
+                        )
+                        // App OnboardingSharedViewModel.kt:825/835/849 — all three carry
+                        // screen_name = Select Language Screen; FirstTimeOnboardingCompleted
+                        // fires only once per install.
+                        val langScreen = mapOf(
+                            AnalyticsProps.SCREEN_NAME to AnalyticsScreens.LANGUAGE
+                        )
+                        analytics.track(AnalyticsEvents.ONBOARDING_COMPLETED_STEP1, langScreen)
+                        analytics.track(AnalyticsEvents.ONBOARDING_COMPLETED, langScreen)
+                        // App gate: default TRUE, flipped false after the first fire.
+                        if (prefs.getBoolean(
+                                SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, true
+                            )
+                        ) {
+                            prefs.putBoolean(
+                                SdkPreferences.Keys.FIRST_TIME_ONBOARDING_COMPLETED, false
+                            )
+                            analytics.track(
+                                AnalyticsEvents.FIRST_TIME_ONBOARDING_COMPLETED, langScreen
+                            )
+                        }
                         _state.update {
                             it.copy(isSubmittingLanguage = false, languageSubmitSuccess = true)
                         }
                     }
                     is ApiResult.Error -> {
+                        // App OnboardingSharedViewModel.kt:872/884.
+                        analytics.trackApiError(
+                            AnalyticsApis.SET_LANGUAGE, AnalyticsScreens.LANGUAGE, result.isTimeout
+                        )
                         _state.update {
                             it.copy(
                                 isSubmittingLanguage = false,

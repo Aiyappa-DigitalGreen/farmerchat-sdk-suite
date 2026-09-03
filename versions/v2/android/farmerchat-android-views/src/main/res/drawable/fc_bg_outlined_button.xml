@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Read terms" secondary CTA on the mandatory Terms-of-Use acceptance gate sheet.
+  Views port of the Compose `OutlinedActionButton` in TermsOfUseGate.kt (which is itself the
+  app's private OutlinedActionButton): surfacePrimary fill, Radius.MD = 12dp.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_surface_primary" />
+    <corners android:radius="12dp" />
+</shape>

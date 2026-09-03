@@ -14,6 +14,12 @@ object ApiConstants {
     const val GET_ALL_COUNTRY_LISTS = "api/geography/get_all_countries/"
     const val POST_SET_PREFERRED_LANGUAGE = "api/user/set_preferred_language/"
     const val ACCEPT_PP_AND_TC = "api/user/accept_terms/"
+
+    /**
+     * #7a — mandatory Terms-of-Use acceptance gate (2.0.0). GET, `user_id` required
+     * (omitted → 400 `{"error":"user_id is required"}`). See doc 02 §Endpoint #7a.
+     */
+    const val POLICY_ACCEPTANCE_STATUS = "api/user/policy_acceptance_status/"
     const val UPDATE_USER_NAME = "api/user/update_user_profile/"
     const val GET_USER_PROFILE = "api/user/view_user_profile/"
     const val UPDATE_BUILD_VERSION = "api/user/v2/update_build_version/"

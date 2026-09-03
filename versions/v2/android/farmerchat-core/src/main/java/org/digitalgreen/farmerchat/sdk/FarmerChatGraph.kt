@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import org.digitalgreen.farmerchat.sdk.core.analytics.DeviceUserAttributes
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
 import org.digitalgreen.farmerchat.sdk.core.auth.AuthApi
 import org.digitalgreen.farmerchat.sdk.core.auth.PreferenceTokenStore
@@ -104,7 +105,12 @@ class FarmerChatGraph internal constructor(
         stringOverrides = config.stringOverrides,
         localeOverride = config.locale?.takeIf { it.isNotBlank() }
     )
-    val analytics: FarmerChatAnalytics = FarmerChatAnalytics(config.onEvent, config.hooks)
+    val analytics: FarmerChatAnalytics = FarmerChatAnalytics(
+        configOnEvent = config.onEvent,
+        hooks = config.hooks,
+        configOnUserIdentified = config.onUserIdentified,
+        configOnUserAttribute = config.onUserAttribute
+    )
     val errorNavigationManager: ErrorNavigationManager = ErrorNavigationManager()
 
     private val guestApiKey: String =
@@ -433,6 +439,14 @@ class FarmerChatGraph internal constructor(
             // `initializeGuestUser lat=null long=null acc=null`.
             val (lat, lng, accuracy) = resolveBootstrapCoordinates()
             runCatching { sessionManager.initializeGuestUser(lat, lng, accuracy) }
+            // Onboarding is where the app identifies the user and raises the device/carrier
+            // user attributes; CHAT_ONLY never runs it, so a host embedding just the chat would
+            // otherwise get no identity and no attributes at all. Best-effort, like the rest of
+            // this bootstrap.
+            runCatching {
+                analytics.identifyUser(sessionManager.currentUserId())
+                DeviceUserAttributes.report(appContext, analytics)
+            }
         }
         // CHAT_ONLY skips the language screen, which is the only other caller of #3
         // get_labels — without this the chat UI would render hardcoded English fallbacks.

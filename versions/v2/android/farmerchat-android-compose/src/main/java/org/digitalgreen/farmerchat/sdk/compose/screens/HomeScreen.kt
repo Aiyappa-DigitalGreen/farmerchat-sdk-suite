@@ -79,6 +79,8 @@ import org.digitalgreen.farmerchat.sdk.compose.components.PrimaryInputButtonsTyp
 import org.digitalgreen.farmerchat.sdk.compose.components.SingleSelectCard
 import org.digitalgreen.farmerchat.sdk.compose.components.SsfrCard
 import org.digitalgreen.farmerchat.sdk.compose.components.TermsOfUseDialog
+import org.digitalgreen.farmerchat.sdk.compose.components.TermsOfUseContentDialog
+import org.digitalgreen.farmerchat.sdk.compose.components.TermsOfUseUpdatedBottomSheet
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInputOverlay
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
@@ -97,6 +99,8 @@ import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.cardPositionLabels
+import org.digitalgreen.farmerchat.sdk.core.analytics.toHomeCardAnalytics
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioRecorder
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
@@ -105,6 +109,8 @@ import org.digitalgreen.farmerchat.sdk.core.model.SectionDto
 import org.digitalgreen.farmerchat.sdk.core.model.UserNameRequest
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.home.HomeAction
+import org.digitalgreen.farmerchat.sdk.core.ui.home.latestTermsOfServiceUrl
+import org.digitalgreen.farmerchat.sdk.core.ui.home.requiresTermsAcceptance
 import org.digitalgreen.farmerchat.sdk.core.ui.home.isAcceptedTranscription
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptManager
@@ -152,11 +158,12 @@ fun HomeScreen(
 
     // 2.0.0 composer/agentic Home. The app gates this on two independent Firebase Remote
     // Config flags (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()`
-    // for the visual theme + card-tap API routing). The SDK carries no Remote Config and
-    // exposes exactly one host-set switch, so both collapse onto `enableAgenticChat`. Read
-    // once — SDK config is immutable after initialize(), so the app's post-fetch re-read
-    // (`OnboardingRemoteConfig.refresh()` on every feed state change) has no analogue here.
-    val isComposerUi = graph.config.enableAgenticChat
+    // for the visual theme + card-tap API routing). The SDK carries no Remote Config, so the
+    // host supplies both: `enableComposerUi` (null ⇒ follow `enableAgenticChat`, the historical
+    // collapse) resolved through `resolvedComposerUi`. Read once — SDK config is immutable after
+    // initialize(), so the app's post-fetch re-read (`OnboardingRemoteConfig.refresh()` on every
+    // feed state change) has no analogue here; a host that needs a live flip re-initializes.
+    val isComposerUi = graph.config.resolvedComposerUi
 
     val userId = remember { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
     val isAuthenticated = remember {
@@ -179,6 +186,8 @@ fun HomeScreen(
     // Content-card tap bookkeeping (FetchImageStatement then navigate).
     var pendingCardSection by remember { mutableStateOf<SectionDto?>(null) }
     val markedViewed = remember { mutableSetOf<String>() }
+    /** Card_Viewed is emitted at most once per card id (app HomeScreen.kt:2072 viewedCardIds). */
+    val viewedCardIds = remember { mutableSetOf<String>() }
 
     // ------------------------------------------------------------------ launchers
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -233,7 +242,7 @@ fun HomeScreen(
             cameraTempUri = uri
             cameraLauncher.launch(uri)
         }.onFailure {
-            toast.show(label(Labels.NO_CAMERA_APP_AVAILABLE, "No camera app available"), ToastState.Error)
+            toast.show(label(Labels.NO_CAMERA_APP_AVAILABLE, "No camera app available on this device"), ToastState.Error)
         }
     }
 
@@ -310,7 +319,7 @@ fun HomeScreen(
             toast.show(
                 label(
                     Labels.ASR_IS_DISABLED_FOR_YOUR_SELECTED_LANGUAGE,
-                    "Voice input is not available for your selected language"
+                    "ASR is disabled for your selected language"
                 ),
                 ToastState.Error
             )
@@ -363,10 +372,23 @@ fun HomeScreen(
         // when the dialog is asked for — farmerchatTermsOfUse has to already be in state by the
         // time an open request arrives. Best-effort in core; a failure only leaves it null.
         vm.onAction(HomeAction.FetchPrivacyPolicy)
+        // App parity (HomeScreen.kt:858): the mandatory Terms-of-Use gate (#7a) is re-checked on
+        // EVERY Home entry so an updated policy version re-prompts. Guests with no provisioned
+        // userId are skipped inside the ViewModel.
+        vm.onAction(HomeAction.FetchPolicyAcceptanceStatus(userId))
     }
 
     // ------------------------------------------------------------------ terms-of-use dialog
     var showTermsOfUseDialog by remember { mutableStateOf(false) }
+
+    // Mandatory Terms-of-Use acceptance gate (#7a). Separate from the dismissible dialog above:
+    // this one blocks Home until accepted. "Read terms" opens a local full-screen overlay rather
+    // than a nav destination, matching the app.
+    var showTermsContentScreen by remember { mutableStateOf(false) }
+    // Which CTA (sheet "Accept" vs content screen "Accept terms") most recently dispatched
+    // AcceptTerms — read once #7 succeeds so Terms_Of_Use_Accept_Click_Event carries the right
+    // screen_name despite both CTAs sharing one acceptTermsState.
+    var pendingAcceptSource by remember { mutableStateOf<String?>(null) }
 
     // The terms URL is fetched on Home entry, so an open request can arrive before the fetch
     // completes. Wait briefly for a non-blank URL, then open — otherwise toast and consume the
@@ -378,7 +400,10 @@ fun HomeScreen(
         }
         onTermsOfUseRequestConsumed()
         if (!termsUrl.isNullOrBlank()) {
-            graph.analytics.track(AnalyticsEvents.TERMS_OF_USE_OPENED)
+            graph.analytics.track(
+                AnalyticsEvents.TERMS_OF_USE_OPENED,
+                mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+            )
             showTermsOfUseDialog = true
         } else {
             toast.show(
@@ -448,7 +473,7 @@ fun HomeScreen(
                     toast.show(
                         label(
                             Labels.TRANSCRIPTION_UNCLEAR,
-                            "We couldn't hear that clearly. Please try again."
+                            "Transcription unclear"
                         ),
                         ToastState.Error
                     )
@@ -499,7 +524,10 @@ fun HomeScreen(
 
     // ------------------------------------------------------------------ weather click
     fun onWeatherClick() {
-        graph.analytics.track(AnalyticsEvents.WEATHER_FORECAST_VIEWED)
+        graph.analytics.track(
+            AnalyticsEvents.WEATHER_FORECAST_VIEWED,
+            mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+        ) // app HomeScreen.kt:559
         val weatherQuestion = label(Labels.WHAT_IS_THE_PRESENT_WEATHER, "What is the present weather?")
         if (graph.locationPromptManager.hasStoredLocation()) {
             onNavigateToChat(
@@ -602,7 +630,10 @@ fun HomeScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             HomeAppBar(
                 openDrawer = {
-                    graph.analytics.track(AnalyticsEvents.HAMBURGER_MENU_CLICKED)
+                    graph.analytics.track(
+                    AnalyticsEvents.HAMBURGER_MENU_CLICKED,
+                    mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+                ) // app HomeScreen.kt:1072
                     openDrawer()
                 },
                 weatherState = if (weatherState is UiState.Loading) WeatherButtonState.Loading
@@ -643,7 +674,10 @@ fun HomeScreen(
                     ) {
                         HomeFeedErrorUI(
                             onRetry = {
-                                graph.analytics.track(AnalyticsEvents.CONTENT_TRY_AGAIN_CLICKED)
+                                graph.analytics.track(
+                        AnalyticsEvents.CONTENT_TRY_AGAIN_CLICKED,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+                    ) // app HomeScreen.kt:1239
                                 val deviceTime = SimpleDateFormat(
                                     "yyyy-MM-dd'T'HH:mm:ss", Locale.US
                                 ).format(Date())
@@ -667,6 +701,18 @@ fun HomeScreen(
                     // as a blank ContentCard (14 of 21 prod sections on 2026-09-01).
                     val visibleSections = feed.renderableSections().filter {
                         it.stableId() !in homeState.dismissedCardIds
+                    }
+                    // App HomeScreen.kt:2023-2040 — "image 1" / "statement 2" per type.
+                    val positionLabels = cardPositionLabels(visibleSections)
+                    // App HomeScreen.kt:925-935 — one Card_Shown per visible section when the
+                    // feed response arrives.
+                    LaunchedEffect(feed) {
+                        visibleSections.forEachIndexed { i, section ->
+                            graph.analytics.trackHomeCardEvent(
+                                AnalyticsEvents.CARD_SHOWN,
+                                section.toHomeCardAnalytics(positionLabels.getOrElse(i) { "" })
+                            )
+                        }
                     }
 
                     LazyColumn(
@@ -745,7 +791,7 @@ fun HomeScreen(
                             val greetingText = feed.greeting?.takeIf { it.isNotBlank() }
                                 ?: label(
                                     Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
-                                    "Ask by Voice, Photo or Text"
+                                    "Tap a button to ask a question"
                                 ).takeIf { it.isNotBlank() }
                             Crossfade(
                                 targetState = greetingText,
@@ -797,7 +843,7 @@ fun HomeScreen(
                                             Destination.Chat(
                                                 question = label(
                                                     Labels.SSFR_WHEAT_QUESTION,
-                                                    "Give me fertilizer recommendation for my wheat farm"
+                                                    "What is the recommended quantity of fertiliser for wheat?"
                                                 ),
                                                 isSSFR = true,
                                                 ssfrCrop = "wheat"
@@ -809,7 +855,7 @@ fun HomeScreen(
                                             Destination.Chat(
                                                 question = label(
                                                     Labels.SSFR_MAIZE_QUESTION,
-                                                    "Give me fertilizer recommendation for my maize farm"
+                                                    "What is the recommended quantity of fertiliser for maize?"
                                                 ),
                                                 isSSFR = true,
                                                 ssfrCrop = "maize"
@@ -842,12 +888,11 @@ fun HomeScreen(
                                     isFetchingStatement = pendingCardSection?.stableId() == section.stableId() &&
                                         homeState.imageStatementState is UiState.Loading,
                                     onCardClick = onCardClick@{
-                                        graph.analytics.track(
+                                        // App HomeScreen.kt:610 — full HomeCardAnalytics payload.
+                                        graph.analytics.trackHomeCardEvent(
                                             AnalyticsEvents.CARD_CLICKED,
-                                            mapOf(
-                                                AnalyticsProps.CARD_POSITION to index,
-                                                AnalyticsProps.SENTENCE_ID to
-                                                    (section.statement_id ?: section.id)?.toString()
+                                            section.toHomeCardAnalytics(
+                                                positionLabels.getOrElse(index) { "" }
                                             )
                                         )
                                         // App parity (HomeScreen.kt:633): with agentic chat on,
@@ -894,6 +939,18 @@ fun HomeScreen(
                                             )
                                         )
                                     },
+                                    onCardVisible = {
+                                        // App HomeScreen.kt:2074 — Card_Viewed once per card,
+                                        // with the full HomeCardAnalytics payload.
+                                        if (viewedCardIds.add(section.stableId())) {
+                                            graph.analytics.trackHomeCardEvent(
+                                                AnalyticsEvents.CARD_VIEWED,
+                                                section.toHomeCardAnalytics(
+                                                    positionLabels.getOrElse(index) { "" }
+                                                )
+                                            )
+                                        }
+                                    },
                                     onMarkViewed = { statementId ->
                                         if (markedViewed.add(statementId) && userId.isNotBlank()) {
                                             vm.onAction(HomeAction.MarkImageViewed(statementId, userId))
@@ -901,11 +958,27 @@ fun HomeScreen(
                                     },
                                     onSingleConfirmed = { optionId, optionText ->
                                         // Gender question card
+                                        val genderValue = optionId ?: optionText
+                                        // App HomeScreen.kt:1401 — Card_Clicked carries the
+                                        // selection as `Value`.
+                                        graph.analytics.trackHomeCardEvent(
+                                            AnalyticsEvents.CARD_CLICKED,
+                                            section.toHomeCardAnalytics(""),
+                                            value = genderValue
+                                        )
+                                        // App HomeScreen.kt:1407 — `{screen_name, gender}`.
+                                        graph.analytics.track(
+                                            AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
+                                            mapOf(
+                                                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                                                AnalyticsProps.GENDER to genderValue
+                                            )
+                                        )
                                         vmProfile.onAction(
                                             UserNameAction.UpdateUserName(
                                                 UserNameRequest(
                                                     user_id = userId,
-                                                    gender = optionId ?: optionText
+                                                    gender = genderValue
                                                 )
                                             ),
                                             AnalyticsScreens.HOME
@@ -917,7 +990,25 @@ fun HomeScreen(
                                         val isLivestock =
                                             statementType.contains("livestock", ignoreCase = true) ||
                                                 ids.any { it.contains("livestock", ignoreCase = true) }
+                                        // App HomeScreen.kt:1454 — Card_Clicked carries the
+                                        // selected ids as `Value`.
+                                        graph.analytics.trackHomeCardEvent(
+                                            AnalyticsEvents.CARD_CLICKED,
+                                            section.toHomeCardAnalytics(""),
+                                            value = ids.joinToString(",")
+                                        )
                                         if (isLivestock) {
+                                            // App HomeScreen.kt:1492 —
+                                            // `{screen_name, livestock}`.
+                                            graph.analytics.track(
+                                                AnalyticsEvents.QUESTION_CARD_DATA_SUBMITTED,
+                                                mapOf(
+                                                    AnalyticsProps.SCREEN_NAME to
+                                                        AnalyticsScreens.HOME,
+                                                    AnalyticsProps.LIVESTOCK to
+                                                        ids.joinToString(",")
+                                                )
+                                            )
                                             vmProfile.onAction(
                                                 UserNameAction.UpdateUserName(
                                                     UserNameRequest(
@@ -1064,12 +1155,133 @@ fun HomeScreen(
                     onDismiss = { showTermsOfUseDialog = false },
                     onAcceptAndContinue = {
                         // accept_terms (#7) — best-effort in core; the dialog closes either way.
-                        // The app also tracks a Plotline ToS event here; the SDK emits no
-                        // Plotline-named event (root CLAUDE.md §2 forbids new event names), so
-                        // only the existing TERMS_OF_USE_OPENED above reaches the host.
+                        // App TermsOfUseDialog.kt:161 — `ToS_Aug26_Accept_Terms` with
+                        // `{screen_name: "TermsOfUseDialog", Accepted: true}`. The app's
+                        // constant is named after Plotline but the EVENT NAME is an app
+                        // constant, so emitting it is parity, not a new event; it reaches the
+                        // host through FarmerChatAnalytics with no Plotline dependency
+                        // (root CLAUDE.md §6).
+                        graph.analytics.track(
+                            AnalyticsEvents.PLOTLINE_ACCEPT_TERMS_CLICK_EVENT,
+                            mapOf(
+                                AnalyticsProps.SCREEN_NAME to
+                                    AnalyticsScreens.TERMS_OF_USE_DIALOG_LITERAL,
+                                AnalyticsProps.ACCEPTED to true
+                            )
+                        )
                         vm.onAction(HomeAction.AcceptTerms(userId))
                         showTermsOfUseDialog = false
                     }
+                )
+            }
+        }
+
+        // ---------------------------------------------------------------- ToU acceptance gate
+        // App parity (HomeScreen.kt:1818): a non-cancellable bottom sheet shown whenever #7a
+        // reports requires_acceptance=true, overlaying Home until the user accepts from either
+        // the sheet's "Accept" or the content screen's "Accept terms" — both dispatch the same
+        // HomeAction.AcceptTerms, and both are gated on the same acceptTermsState.
+        // Both predicates live in core so this flavour and Views cannot drift on them.
+        val requiresTermsAcceptance = homeState.requiresTermsAcceptance()
+        // The gate loads latest_policy_version.terms_of_service_url from #7a — NOT
+        // farmerchatTermsOfUse (#4), which belongs to the dismissible dialog above.
+        val latestTermsOfServiceUrl = homeState.latestTermsOfServiceUrl()
+
+        if (requiresTermsAcceptance) {
+            // The app self-tracks this inside the sheet via AnalyticsManager; the SDK raises it
+            // here through FarmerChatAnalytics instead (root CLAUDE.md §6).
+            LaunchedEffect(Unit) {
+                graph.analytics.track(
+                    AnalyticsEvents.TERMS_OF_USE_SHEET_SHOWN,
+                    mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+                )
+            }
+            TermsOfUseUpdatedBottomSheet(
+                acceptState = homeState.acceptTermsState,
+                onReadTerms = {
+                    graph.analytics.track(
+                        AnalyticsEvents.TERMS_OF_USE_READ_TERMS_CLICK_EVENT,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
+                    )
+                    showTermsContentScreen = true
+                },
+                onAccept = {
+                    // Which CTA initiated this accept — read once #7 succeeds below, since
+                    // Terms_Of_Use_Accept_Click_Event only fires on a successful response.
+                    pendingAcceptSource = AnalyticsScreens.HOME
+                    vm.onAction(HomeAction.AcceptTerms(userId))
+                }
+            )
+        }
+
+        // TermsOfUseContentDialog is a Dialog (separate window), so it visually covers the sheet
+        // above regardless of composition order — no need to also hide the sheet here.
+        if (showTermsContentScreen && !latestTermsOfServiceUrl.isNullOrBlank()) {
+            LaunchedEffect(Unit) {
+                graph.analytics.track(
+                    AnalyticsEvents.TERMS_OF_USE_CONTENT_SCREEN_VIEWED,
+                    mapOf(
+                        AnalyticsProps.SCREEN_NAME to AnalyticsScreens.TERMS_OF_USE_CONTENT_SCREEN
+                    )
+                )
+            }
+            DisposableEffect(Unit) {
+                onDispose {
+                    graph.analytics.track(
+                        AnalyticsEvents.TERMS_OF_USE_CONTENT_SCREEN_EXITED,
+                        mapOf(
+                            AnalyticsProps.SCREEN_NAME to AnalyticsScreens.TERMS_OF_USE_CONTENT_SCREEN
+                        )
+                    )
+                }
+            }
+            TermsOfUseContentDialog(
+                url = latestTermsOfServiceUrl,
+                title = label(Labels.TERMS_OF_USE, "Terms of Use"),
+                acceptState = homeState.acceptTermsState,
+                onClose = { showTermsContentScreen = false },
+                onAcceptTerms = {
+                    pendingAcceptSource = AnalyticsScreens.TERMS_OF_USE_CONTENT_SCREEN
+                    vm.onAction(HomeAction.AcceptTerms(userId))
+                }
+            )
+        }
+
+        // App parity (HomeScreen.kt:1856): Terms_Of_Use_Accept_Click_Event fires only once #7
+        // actually succeeds (not on the raw tap); pendingAcceptSource, set right before
+        // dispatching AcceptTerms, says which of the two CTAs triggered this success.
+        LaunchedEffect(homeState.acceptTermsState) {
+            val source = pendingAcceptSource
+            if (homeState.acceptTermsState is UiState.Success<*> && source != null) {
+                pendingAcceptSource = null
+                graph.analytics.track(
+                    AnalyticsEvents.TERMS_OF_USE_ACCEPT_CLICK_EVENT,
+                    mapOf(AnalyticsProps.SCREEN_NAME to source)
+                )
+            }
+        }
+
+        // App parity (HomeScreen.kt:1874): let the user briefly see the "Accepted" checkmark
+        // before the content screen closes (requiresTermsAcceptance flips false immediately, so
+        // the sheet goes with it).
+        LaunchedEffect(homeState.acceptTermsState) {
+            if (homeState.acceptTermsState is UiState.Success<*> && showTermsContentScreen) {
+                delay(1200)
+                showTermsContentScreen = false
+            }
+        }
+
+        // A failed #7 must not leave the gate inert: the sheet's buttons re-enable on
+        // UiState.Error (acceptState is no longer Loading) so the farmer can retry. Surface the
+        // reason too, since the sheet itself has no error slot in the app either.
+        LaunchedEffect(homeState.acceptTermsState) {
+            val error = homeState.acceptTermsState as? UiState.Error
+            if (error != null && requiresTermsAcceptance) {
+                toast.show(
+                    error.message.ifBlank {
+                        label(Labels.SOMETHING_WENT_WRONG, "Something went wrong")
+                    },
+                    ToastState.Error
                 )
             }
         }
@@ -1199,12 +1411,18 @@ private fun HomeFeedSection(
     userId: String,
     isFetchingStatement: Boolean,
     onCardClick: () -> Unit,
+    /** Fired once when the card first composes — the SDK's Card_Viewed trigger. */
+    onCardVisible: () -> Unit,
     onMarkViewed: (String) -> Unit,
     onSingleConfirmed: (optionId: String?, optionText: String) -> Boolean,
     onMultiConfirmed: (ids: List<String>, texts: List<String>) -> Boolean,
     onDismissed: () -> Unit
 ) {
     val type = section.type?.lowercase().orEmpty()
+
+    // App HomeScreen.kt:2059-2080 — the app's trackCardVisibility modifier is applied to
+    // every feed card, not just content cards.
+    LaunchedEffect(section.stableId()) { onCardVisible() }
 
     when {
         type == "question" || !section.options.isNullOrEmpty() -> {

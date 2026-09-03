@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import org.digitalgreen.farmerchat.sdk.core.ui.settings.LanguageDisplayOrder
 import org.digitalgreen.farmerchat.sdk.core.model.SupportedLanguage
 import org.digitalgreen.farmerchat.sdk.views.R
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemLanguageExpanderBinding
@@ -54,16 +55,22 @@ internal class LanguageListAdapter(
         expanded = expandedLanguages
         selectedId = selectedLanguageId
         fetchingForId = fetchingLabelsForId
-        if (selectedLanguageId != null && expandedLanguages.any { it.id == selectedLanguageId }) {
-            isExpanded = true
-        }
         rebuild()
     }
 
     private fun rebuild() {
+        // App parity (LanguageScreen.kt / LanguageChooserScreen.kt `displayedLanguages`):
+        // while collapsed, a selection that lives only in the "All languages" list is
+        // pinned to the top of the priority rows rather than force-expanding the list.
+        val rows = LanguageDisplayOrder.rowsToShow(
+            priority = priority,
+            expanded = expanded,
+            selectedId = selectedId,
+            isExpanded = isExpanded
+        )
         items = buildList {
             if (showHeader) add(Item.Header)
-            priority.forEach { add(Item.Row(it)) }
+            rows.forEach { add(Item.Row(it)) }
             if (expanded.isNotEmpty()) {
                 if (isExpanded) {
                     expanded.forEach { add(Item.Row(it)) }

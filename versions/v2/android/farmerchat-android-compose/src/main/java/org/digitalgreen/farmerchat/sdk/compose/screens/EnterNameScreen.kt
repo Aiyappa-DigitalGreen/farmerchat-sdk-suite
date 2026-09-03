@@ -53,6 +53,7 @@ import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
+import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.UserNameRequest
@@ -187,7 +188,7 @@ fun EnterNameScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = label(Labels.WE_GREET_YOU_NAME, "We'll greet you by your name"),
+                text = label(Labels.WE_GREET_YOU_NAME, "So we can greet you by name"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.foregroundSecondary,
                 textAlign = TextAlign.Center
@@ -233,7 +234,10 @@ fun EnterNameScreen(
                 SecondaryButton(
                     label = label(Labels.SKIP_FOR_NOW, "Skip for now"),
                     onClick = {
-                        graph.analytics.track(AnalyticsEvents.NAME_SKIP_CLICK)
+                        graph.analytics.track(
+                        AnalyticsEvents.NAME_SKIP_CLICK,
+                        mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.NAME)
+                    ) // app EnterNameRoute.kt:148
                         graph.routeDecider.markProfileDone()
                         onDone()
                     },

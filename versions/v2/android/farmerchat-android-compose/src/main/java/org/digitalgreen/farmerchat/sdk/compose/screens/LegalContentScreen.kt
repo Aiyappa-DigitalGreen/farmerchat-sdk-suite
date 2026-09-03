@@ -40,7 +40,10 @@ fun LegalContentScreen(
     val colors = LocalContentColors.current
     var isLoading by remember { mutableStateOf(true) }
 
-    val displayTitle = if (title == "faq_terms") label(Labels.FAQ, "FAQ") else title
+    // "faq_terms" is the SDK sentinel for the app's `faq_terms = (args.title == "faq")`
+    // toggle (HelpScreen passes it). Matched case-insensitively, as android-views does.
+    val displayTitle =
+        if (title.equals("faq_terms", ignoreCase = true)) label(Labels.FAQ, "FAQ") else title
 
     Column(
         modifier = Modifier

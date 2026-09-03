@@ -124,10 +124,29 @@ class FarmerChatConfig private constructor(
      * chat contract (#27) unchanged. When true, text queries stream — the answer accretes from
      * `text_delta` events and tool progress is surfaced as it happens.
      *
-     * See versions/v2/README.md. Note the wire framing is not yet confirmed against a real
-     * stream (docs/05-open-questions.md), so treat this as preview until it is.
+     * See versions/v2/README.md. The wire framing IS confirmed against a real stream as of
+     * 2026-09-03 (docs/02 §#27a; the two captures under `docs/captures/` are replayed through the
+     * production reader by `AgenticCaptureReplayTest`).
      */
     val enableAgenticChat: Boolean,
+    /**
+     * Whether Home and Chat use the unified floating InputComposer instead of the legacy
+     * Photo/Speak/Type button row.
+     *
+     * Mirrors the app's `v2_composer_ui_enabled` RemoteConfig flag
+     * (`core/constants/RemoteConfigKeys.kt`), which the app documents as **independent** of
+     * `v2_agentic_chat_enabled`: it "only controls the composer UI, not which API the query is
+     * routed to".
+     *
+     * **`null` (the default) means "follow [enableAgenticChat]"** — exactly what every UI
+     * artifact hardcoded before this knob existed, so an existing host sees no change. Set it
+     * explicitly to decouple the two: composer UI with synchronous #27 chat
+     * (`enableComposerUi(true)` + `enableAgenticChat(false)`), or the legacy input row with
+     * agentic streaming (`enableComposerUi(false)` + `enableAgenticChat(true)`).
+     *
+     * Read it through [resolvedComposerUi], never directly.
+     */
+    val enableComposerUi: Boolean?,
     /**
      * Minimum time the splash/loading screen stays visible, in milliseconds.
      *
@@ -143,6 +162,30 @@ class FarmerChatConfig private constructor(
     val minSplashDurationMs: Long,
     /** Analytics fan-out callback (same payloads as [FarmerChatAnalyticsListener]). */
     val onEvent: ((name: String, props: Map<String, Any?>) -> Unit)?,
+    /**
+     * User IDENTITY callback. Invoked with the FarmerChat user id whenever the SDK resolves or
+     * changes it (guest init, CHAT_ONLY bootstrap, OTP verification) — the app's
+     * `AnalyticsUserIdentityManager.identifyUser()` moment.
+     *
+     * Identity is not an event, so [onEvent] structurally cannot carry it: a host wiring
+     * MoEngage `identifyUser` / Firebase `setUserId` / Plotline `init` needs this hook. The SDK
+     * bundles no vendor SDK (root CLAUDE.md §6) — it only hands over the id.
+     * Never called with a blank id. Exceptions thrown by the host are swallowed.
+     */
+    val onUserIdentified: ((userId: String) -> Unit)?,
+    /**
+     * User ATTRIBUTE callback — a user PROPERTY, not an event property, so again outside what
+     * [onEvent] can express. Keys are the app's own
+     * (`core/analytics/UserAttributeKeys.kt`, mirrored in
+     * [org.digitalgreen.farmerchat.sdk.core.analytics.UserAttributeKeys]); a host forwards them
+     * to MoEngage `setUserAttribute` / Firebase `setUserProperty` / whatever it uses.
+     *
+     * Values are `String` deliberately: everything the SDK raises today is a string. The app
+     * also tracks booleans/ints on OTHER keys, so a future lane widening this to `Any?` is a
+     * source-breaking change — see docs/04-parity-matrix.md. Never called with a blank key or
+     * value. Exceptions thrown by the host are swallowed.
+     */
+    val onUserAttribute: ((key: String, value: String) -> Unit)?,
     /** Invoked when both token refresh and the guest-token fallback fail (session unrecoverable). */
     val onSessionExpired: (() -> Unit)?,
     /** Enables OkHttp body logging. Never enable in production builds. */
@@ -209,6 +252,16 @@ class FarmerChatConfig private constructor(
     val resolvedBaseUrl: String
         get() = customBaseUrl?.takeIf { it.isNotBlank() } ?: environment.baseUrl
 
+    /**
+     * Whether the unified InputComposer is shown: the host's explicit [enableComposerUi], else
+     * [enableAgenticChat] (the historical collapse).
+     *
+     * Every UI call site MUST read this rather than [enableComposerUi] directly — that field
+     * defaults to `null` meaning "derive", and a raw read is a nullable Boolean, not a decision.
+     */
+    val resolvedComposerUi: Boolean
+        get() = enableComposerUi ?: enableAgenticChat
+
     fun newBuilder(): Builder = Builder(environment)
         .customBaseUrl(customBaseUrl)
         .geoApiKey(geoApiKey)
@@ -218,7 +271,14 @@ class FarmerChatConfig private constructor(
         .enableVoice(enableVoice)
         .enableImages(enableImages)
         .enableWeather(enableWeather)
+        // RC-mirroring knobs: these MUST round-trip or newBuilder() silently resets a host's
+        // feature gating back to the defaults.
+        .enableAgenticChat(enableAgenticChat)
+        .enableComposerUi(enableComposerUi)
+        .showNameScreen(showNameScreen)
         .onEvent(onEvent)
+        .onUserIdentified(onUserIdentified)
+        .onUserAttribute(onUserAttribute)
         .onSessionExpired(onSessionExpired)
         .debugLogging(debugLogging)
         .theme(theme)
@@ -264,8 +324,11 @@ class FarmerChatConfig private constructor(
         private var enableImages: Boolean = true
         private var enableWeather: Boolean = true
         private var enableAgenticChat: Boolean = false
+        private var enableComposerUi: Boolean? = null
         private var minSplashDurationMs: Long = DEFAULT_MIN_SPLASH_DURATION_MS
         private var onEvent: ((String, Map<String, Any?>) -> Unit)? = null
+        private var onUserIdentified: ((String) -> Unit)? = null
+        private var onUserAttribute: ((String, String) -> Unit)? = null
         private var onSessionExpired: (() -> Unit)? = null
         private var debugLogging: Boolean = false
         private var theme: FarmerChatTheme? = null
@@ -324,11 +387,25 @@ class FarmerChatConfig private constructor(
         fun enableAgenticChat(enabled: Boolean) = apply { enableAgenticChat = enabled }
 
         /**
+         * Show the unified InputComposer in Home/Chat, independently of [enableAgenticChat]
+         * (the app's `v2_composer_ui_enabled` flag). `null` = follow [enableAgenticChat],
+         * which is the historical behaviour.
+         */
+        fun enableComposerUi(enabled: Boolean?) = apply { enableComposerUi = enabled }
+
+        /**
          * Keep the splash/loading screen up for at least [ms] milliseconds (a floor, not an
          * added delay). Negative values are clamped to 0.
          */
         fun minSplashDurationMs(ms: Long) = apply { minSplashDurationMs = ms.coerceAtLeast(0L) }
         fun onEvent(callback: ((String, Map<String, Any?>) -> Unit)?) = apply { onEvent = callback }
+
+        /** Host sink for user IDENTITY (see [FarmerChatConfig.onUserIdentified]). */
+        fun onUserIdentified(callback: ((String) -> Unit)?) = apply { onUserIdentified = callback }
+
+        /** Host sink for user ATTRIBUTES (see [FarmerChatConfig.onUserAttribute]). */
+        fun onUserAttribute(callback: ((String, String) -> Unit)?) =
+            apply { onUserAttribute = callback }
         fun onSessionExpired(callback: (() -> Unit)?) = apply { onSessionExpired = callback }
         fun debugLogging(enabled: Boolean) = apply { debugLogging = enabled }
         /** Supply a host [FarmerChatTheme] to recolor/restyle the whole journey. */
@@ -393,8 +470,11 @@ class FarmerChatConfig private constructor(
             enableImages = enableImages,
             enableWeather = enableWeather,
             enableAgenticChat = enableAgenticChat,
+            enableComposerUi = enableComposerUi,
             minSplashDurationMs = minSplashDurationMs,
             onEvent = onEvent,
+            onUserIdentified = onUserIdentified,
+            onUserAttribute = onUserAttribute,
             onSessionExpired = onSessionExpired,
             debugLogging = debugLogging,
             theme = theme,

@@ -18,7 +18,11 @@ data class AnalyticsEvent(
 class FarmerChatAnalytics(
     private val configOnEvent: ((String, Map<String, Any?>) -> Unit)? = null,
     /** C4: semantic host hooks, dispatched from the same event stream. */
-    private val hooks: FarmerChatHooks? = null
+    private val hooks: FarmerChatHooks? = null,
+    /** User IDENTITY sink — see [org.digitalgreen.farmerchat.sdk.FarmerChatConfig.onUserIdentified]. */
+    private val configOnUserIdentified: ((String) -> Unit)? = null,
+    /** User ATTRIBUTE sink — see [org.digitalgreen.farmerchat.sdk.FarmerChatConfig.onUserAttribute]. */
+    private val configOnUserAttribute: ((String, String) -> Unit)? = null
 ) {
 
     @Volatile
@@ -28,6 +32,30 @@ class FarmerChatAnalytics(
         runCatching { listener?.onEvent(event.name, event.properties) }
         runCatching { configOnEvent?.invoke(event.name, event.properties) }
         runCatching { dispatchHooks(event) }
+    }
+
+    /**
+     * Identity, not an event: the app's `AnalyticsUserIdentityManager.identifyUser()` moment.
+     * Blank ids are dropped (the app returns early on an empty id too), and a throwing host
+     * callback is swallowed — identity reporting must never break the session it describes.
+     *
+     * Deliberately NOT routed through [FarmerChatAnalyticsListener]: that is a `fun interface`
+     * and a second abstract method would break every host's SAM lambda.
+     */
+    fun identifyUser(userId: String) {
+        val id = userId.trim()
+        if (id.isEmpty()) return
+        runCatching { configOnUserIdentified?.invoke(id) }
+    }
+
+    /**
+     * A user PROPERTY (MoEngage `setUserAttribute` / Firebase `setUserProperty` in the app), not
+     * an event property. Blank keys/values are dropped, matching the app's own
+     * `if (name.isNotBlank())` guards at the carrier call site.
+     */
+    fun setUserAttribute(key: String, value: String) {
+        if (key.isBlank() || value.isBlank()) return
+        runCatching { configOnUserAttribute?.invoke(key, value) }
     }
 
     /**
@@ -80,6 +108,131 @@ class FarmerChatAnalytics(
             mapOf(AnalyticsProps.SCREEN_NAME to screenName) + extra
         )
     }
+
+    // ------------------------------------------------------------------ API_Call_* family
+    //
+    // The app inlines these four at every ViewModel call site with exactly
+    // `{screen_name, API_Name}` (see app OnboardingSharedViewModel.kt:205/222/239/257,
+    // HomeViewModel.kt:326/351/404, SettingsViewModel.kt:53/70/107/119,
+    // EnterNameViewModel.kt:53/71/109/122, LocationPromptHost.kt:456/487/627/661).
+    // The helpers below keep the emitted payload identical while removing the
+    // copy-paste; `API_Call_Timeout` vs `API_Call_Failed` is selected by
+    // `ApiResult.Error.isTimeout`, as the app does.
+
+    fun trackApiInitiated(apiName: String, screenName: String) {
+        track(
+            AnalyticsEvents.API_CALL_INITIATED,
+            mapOf(AnalyticsProps.SCREEN_NAME to screenName, AnalyticsProps.API_NAME to apiName)
+        )
+    }
+
+    fun trackApiSuccess(apiName: String, screenName: String) {
+        track(
+            AnalyticsEvents.API_CALL_SUCCESS,
+            mapOf(AnalyticsProps.SCREEN_NAME to screenName, AnalyticsProps.API_NAME to apiName)
+        )
+    }
+
+    fun trackApiFailed(apiName: String, screenName: String) {
+        track(
+            AnalyticsEvents.API_CALL_FAILED,
+            mapOf(AnalyticsProps.SCREEN_NAME to screenName, AnalyticsProps.API_NAME to apiName)
+        )
+    }
+
+    fun trackApiTimeout(apiName: String, screenName: String) {
+        track(
+            AnalyticsEvents.API_CALL_TIMEOUT,
+            mapOf(AnalyticsProps.SCREEN_NAME to screenName, AnalyticsProps.API_NAME to apiName)
+        )
+    }
+
+    /** `API_Call_Timeout` when the error was a timeout, else `API_Call_Failed` (app parity). */
+    fun trackApiError(apiName: String, screenName: String, isTimeout: Boolean) {
+        if (isTimeout) trackApiTimeout(apiName, screenName) else trackApiFailed(apiName, screenName)
+    }
+
+    // ------------------------------------------------------------------ home feed cards
+
+    /**
+     * Card_Shown / Card_Viewed / Card_Clicked, ported from the app's
+     * `AnalyticsManager.trackHomeCardEvent` (app AnalyticsManager.kt:186-226).
+     *
+     * Quirks preserved verbatim from the app:
+     * - `screen_name` is always the Dashboard screen, whatever surface raised the card.
+     * - the `State` key carries `data.county` (`AnalyticsProps.STATE to data.county`);
+     *   the app declares `County` but never emits it.
+     * - `Value` is appended only when a value is supplied (question-card Card_Clicked).
+     */
+    fun trackHomeCardEvent(
+        eventName: String,
+        data: HomeCardAnalytics,
+        value: String? = null
+    ) {
+        val baseProps = mapOf(
+            AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+            AnalyticsProps.CARD_TYPE to data.cardType,
+            AnalyticsProps.CARD_CATEGORY to data.cardCategory,
+            AnalyticsProps.IMAGE_ID to data.imageId,
+            AnalyticsProps.SENTENCE_ID to data.sentenceId,
+            AnalyticsProps.TEXT to data.text,
+            AnalyticsProps.VIEWS to data.views,
+            AnalyticsProps.COUNTRY to data.country,
+            AnalyticsProps.STATE to data.county,
+            AnalyticsProps.ASSET_TYPE to data.assetType,
+            AnalyticsProps.ASSET_NAME to data.assetName,
+            AnalyticsProps.STAGE to data.stage,
+            AnalyticsProps.CONCERN to data.concern,
+            AnalyticsProps.DATE_RANGE to data.dateRange,
+            AnalyticsProps.CARD_POSITION to data.cardPosition
+        )
+        track(
+            eventName,
+            if (value != null) baseProps + (AnalyticsProps.VALUE to value) else baseProps
+        )
+    }
+}
+
+/**
+ * Home-feed card analytics payload, a 1:1 port of the app's `HomeCardAnalytics`
+ * (app core/analytics/HomeCardAnalytics.kt).
+ */
+data class HomeCardAnalytics(
+    val cardType: String,
+    val cardCategory: String,
+    val imageId: String? = null,
+    val sentenceId: String? = null,
+    val text: String? = null,
+    val views: String? = null,
+    val country: String? = null,
+    val county: String? = null,
+    val assetType: String = "",
+    val assetName: String? = null,
+    val stage: String? = null,
+    val concern: String? = null,
+    val dateRange: String? = null,
+    /** e.g. `"image 1"`, `"statement 2"` along the visible feed; empty for other card types. */
+    val cardPosition: String = ""
+)
+
+/**
+ * `API_Name` property values, a 1:1 port of the app's `AnalyticsApis`
+ * (app core/analytics/AnalyticsApis.kt). These strings are what the host's
+ * dashboards group by — do not paraphrase them.
+ */
+object AnalyticsApis {
+    const val IP_GEO = "IP Geolocation"
+    const val INITIALIZE_GUEST = "Initialise user"
+    const val SET_LANGUAGE = "Set Language Preference"
+    const val GET_LANGUAGES = "Get Supported Languages"
+    const val UPDATE_PROFILE = "Update Profile"
+    const val GET_LEGAL_LINKS = "Privacy Policy"
+    const val HOME_FEED = "Dashboard Content"
+    const val WEATHER = "Weather"
+
+    // GPS / Location
+    const val GPS_FETCH_FRESH_LOCATION = "GPS Fetch fresh location"
+    const val UPDATE_USER_LOCATION = "Update user location"
 }
 
 /** Screen names, mirroring the app's AnalyticsScreens. */
@@ -97,11 +250,38 @@ object AnalyticsScreens {
     const val ACCOUNT_BENEFIT = "Account Benefit Screen"
     const val ACCOUNT_SUCCESS = "Account Success Screen"
     const val CHAT = "Chat Screen"
-    const val CHAT_HISTORY = "Chat History Screen"
     const val HELP = "Help & Support Screen"
     const val SETTINGS = "Settings Screen"
+
+    /** "Read Terms" content screen opened from the mandatory Terms-of-Use acceptance gate on Home. */
+    const val TERMS_OF_USE_CONTENT_SCREEN = "Terms of Use Content Screen"
+
+    // ---------------------------------------------------------------- SDK-only screen names
+    // The app's AnalyticsScreens has no constant for these three surfaces (the app's
+    // Chat-History / Settings-Name screens never call trackScreenView, and it has no
+    // error screen). They are SDK additions, recorded in docs/04-parity-matrix.md.
+    const val CHAT_HISTORY = "Chat History Screen"
     const val SETTINGS_NAME = "Settings Name Screen"
     const val ERROR = "Error Screen"
+
+    // ---------------------------------------------------------------- app call-site literals
+    // The app passes these as raw string literals rather than through AnalyticsScreens,
+    // and they are NOT the same strings as the constants above. Kept character-for-character.
+
+    /** `screen_name` on `Chat_History_Click_Event` (app DrawerContent.kt:133). */
+    const val MENU_LITERAL = "Menu"
+
+    /** `screen_name` on `Chat_History_Click` (app DrawerContent.kt:368). */
+    const val SIDE_MENU_LITERAL = "Side Menu"
+
+    /** `screen_name` on `New_Chat_Click_Event` (app ChatHistoryScreen.kt:187). */
+    const val CHAT_HISTORY_LITERAL = "Chat History screen"
+
+    /** `screen_name` on `FAQ_Clicked` (app HelpScreen.kt:201). */
+    const val HELP_LITERAL = "Help and support screen"
+
+    /** `screen_name` on `ToS_Aug26_Accept_Terms` from the dialog (app TermsOfUseDialog.kt:161). */
+    const val TERMS_OF_USE_DIALOG_LITERAL = "TermsOfUseDialog"
 }
 
 /** Property keys, mirroring the app's AnalyticsProps (including sheet typos, kept intentionally). */
@@ -151,11 +331,96 @@ object AnalyticsProps {
     const val ONBOARDING_QUERY = "isOnnboarding_query" // typo kept as per analytics sheet
     const val TYPE = "type"
     const val CLICK_TYPE = "click_type"
+    // ---- agentic alignment chips (2.0.0). Values copied character-for-character from the app's
+    // `core/analytics/AnalyticsProps.kt`. The four status values come from the CONSTANTS, not from
+    // that file's KDoc: the doc comment says "skipped_manual" / "shown" / "not_shown" while the
+    // constants say "skipped" / "available" / "none", and `toAnalyticsProperties()` compares
+    // against the constants — so the KDoc is what the app never actually sends.
+    const val AGENTIC_CHIP_STATUS = "agentic_chip_status"
+    /** The user tapped a chip. */
+    const val CHIP_STATUS_SELECTED = "selected"
+    /** A chip was on screen and unselected; the user typed / spoke / uploaded instead. */
+    const val CHIP_STATUS_SKIPPED = "skipped"
+    /** This query's RESPONSE presented a chip the user has not reacted to yet. */
+    const val CHIP_STATUS_AVAILABLE = "available"
+    /** No chip involved: none pending when sent, none in the response. */
+    const val CHIP_STATUS_NONE = "none"
+    const val AGENTIC_CHIP_SKIPPED_TYPE = "agentic_chip_skipped_type"
+    const val AGENTIC_CHIP_SHOWN_TYPE = "agentic_chip_shown_type"
+    const val AGENTIC_CHIP_TYPE = "agentic_chip_type"
+    const val AGENTIC_CHIP_VALUE = "agentic_chip_value"
+    const val AGENTIC_CHIP_LABEL = "agentic_chip_label"
     const val INTENT = "intent"
     const val ASSET_TYPE_QUERY = "asset_type"
     const val ASSET_NAME_QUERY = "asset_name"
     const val CONCERN_QUERY = "concern"
     const val STAGE_QUERY = "stage"
+
+    // ---------------------------------------------------------------- app call-site literals
+    // Keys the app passes as raw string literals at the call site rather than through its
+    // AnalyticsProps object. Values are taken verbatim from the app source; note that several
+    // are lowercase or contain a space and are therefore NOT the same key as the
+    // similarly-named constants above (`option` != `Option`, `Conversation ID` != `conversation_id`).
+
+    /** `Country_selected` (app AuthScreen.kt:227) — carries the ISO country code, not the name. */
+    const val COUNTRY_CODE = "country_code"
+
+    /** `Send_OTP_Click_Event` / `Resend_OTP_Click_Event` / `OTP_Lockout_Reached` (app AuthScreen.kt:161/178/198, AuthViewModel.kt:479/494). */
+    const val CHANNEL = "channel"
+
+    /** `Mobile_verification_Started` (app AuthScreen.kt:320) — lowercase, unlike `Trigger`. */
+    const val TRIGGER_LOWER = "trigger"
+
+    /** `Login_Completed` (app AuthViewModel.kt:635). */
+    const val USER_ID = "user_id"
+
+    /** `Login_Completed` (app AuthViewModel.kt:635) — emitted as a String, not a Boolean. */
+    const val IS_NEW_USER = "is_new_user"
+
+    /** `Submit_OTP` (app AuthViewModel.kt:724/798). */
+    const val VERIFICATION_STATUS = "verification_status"
+
+    /** `Submit_OTP` / `OTP_Lockout_Reached` (app AuthViewModel.kt:479/724/798). */
+    const val ERROR_MESSAGE = "error_message"
+
+    /** `Submit_OTP` failure branch (app AuthViewModel.kt:798). */
+    const val ATTEMPT_NUMBER = "attempt_number"
+
+    /** `OTP_Lockout_Reached` (app AuthViewModel.kt:479/494). */
+    const val LOCKOUT_TYPE = "lockout_type"
+
+    /** `Menu_Option_Click_Event` / `Settings_Option_Selected` (app DrawerContent.kt:120, SettingsScreen.kt:150) — lowercase, unlike `Option`. */
+    const val OPTION_LOWER = "option"
+
+    /** `Settings_Option_Selected` (app SettingsScreen.kt:150) — lowercase, unlike `Value`. */
+    const val VALUE_LOWER = "value"
+
+    /** `Chat_History_Click` (app DrawerContent.kt:368). */
+    const val CONVERSATION_ID = "conversation_id"
+
+    /** `Chat_History_Click` (app DrawerContent.kt:368). */
+    const val QUESTION_INDEX = "question_index"
+
+    /** `New_Chat_Click_Event` (app ChatHistoryScreen.kt:187) — capitalised, with a space. */
+    const val CONVERSATION_ID_SPACED = "Conversation ID"
+
+    /** `FAQ_Clicked` (app HelpScreen.kt:201). */
+    const val QUESTION = "Question"
+
+    /** `FAQ_Clicked` (app HelpScreen.kt:201). */
+    const val ID = "ID"
+
+    /** `ToS_Aug26_Accept_Terms` (app HomeScreen.kt:729, TermsOfUseDialog.kt:161) — emitted as a Boolean. */
+    const val ACCEPTED = "Accepted"
+
+    /** `question_card_data_Submitted` (app HomeScreen.kt:1462). */
+    const val CROPS = "crops"
+
+    /** `question_card_data_Submitted` (app HomeScreen.kt:1492). */
+    const val LIVESTOCK = "livestock"
+
+    /** `question_card_data_Submitted` (app HomeScreen.kt:1407). */
+    const val GENDER = "gender"
 }
 
 /** Event names, mirroring the app's analytics constant objects (~90+ events). */
@@ -274,6 +539,22 @@ object AnalyticsEvents {
     // Settings / help
     const val FAQ_CLICKED = "FAQ_Clicked"
     const val SETTINGS_OPTION_SELECTED = "Settings_Option_Selected"
+
+    // Mandatory Terms-of-Use acceptance gate (driven by GET policy_acceptance_status).
+    // Names mirror the app's OnboardingAnalyticsEvents.TERMS_OF_USE_* block.
+    const val TERMS_OF_USE_SHEET_SHOWN = "Terms_Of_Use_Sheet_Shown"
+    const val TERMS_OF_USE_CONTENT_SCREEN_VIEWED = "Terms_Of_Use_Content_Screen_Viewed"
+    const val TERMS_OF_USE_CONTENT_SCREEN_EXITED = "Terms_Of_Use_Content_Screen_Exited"
+    const val TERMS_OF_USE_ACCEPT_CLICK_EVENT = "Terms_Of_Use_Accept_Click_Event"
+    const val TERMS_OF_USE_READ_TERMS_CLICK_EVENT = "Terms_Of_Use_Read_Terms_Click_Event"
+
+    /**
+     * The app's `OnboardingAnalyticsEvents.Plotline_Accept_Terms_Click_Event`. The
+     * constant name references Plotline but the emitted event goes through the normal
+     * analytics fan-out, so the SDK raises it to the host listener like any other event
+     * (no Plotline dependency — root CLAUDE.md §6).
+     */
+    const val PLOTLINE_ACCEPT_TERMS_CLICK_EVENT = "ToS_Aug26_Accept_Terms"
 }
 
 /**
@@ -299,6 +580,38 @@ data class SendQueryProperties(
     val isImageCard: Boolean = false,
     val isTextCard: Boolean = false,
     val isReadFullAdvice: Boolean = false,
+    // ---- agentic alignment chips (2.0.0) ----
+    /** True when the query came from tapping an alignment surface chip. */
+    val isAlignmentChip: Boolean = false,
+    /**
+     * The surface kind the tapped chip belongs to, in WIRE format
+     * ([org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind.analyticsType], e.g.
+     * "gps-prompt"). Sent as `agentic_chip_type`; "" when the query is not a chip pick.
+     */
+    val agenticChipType: String? = null,
+    /**
+     * Stable machine value of the tapped chip (e.g. "confirm", "male",
+     * "use_approximate_location") — language-independent, so this is the one to build funnels on.
+     */
+    val agenticChipValue: String? = null,
+    /** Localized display text of the tapped chip, i.e. what the farmer actually read. */
+    val agenticChipLabel: String? = null,
+    /**
+     * Chip interaction outcome: [AnalyticsProps.CHIP_STATUS_SELECTED] / `_SKIPPED` / `_AVAILABLE` /
+     * `_NONE`. Null lets [toAnalyticsProperties] derive selected-or-none from [isAlignmentChip];
+     * the skipped and available cases are stamped explicitly by the caller.
+     */
+    val agenticChipStatus: String? = null,
+    /**
+     * The surface kind that was on screen but bypassed. Emitted ONLY for
+     * [AnalyticsProps.CHIP_STATUS_SKIPPED]; "" otherwise.
+     */
+    val agenticChipSkippedType: String? = null,
+    /**
+     * The surface kind the RESPONSE presented. Emitted ONLY for
+     * [AnalyticsProps.CHIP_STATUS_AVAILABLE]; "" otherwise.
+     */
+    val agenticChipShownType: String? = null,
     // Send_Query only (from API response)
     val isValidQuery: Boolean? = null,
     val assetType: String? = null,
@@ -319,6 +632,10 @@ data class SendQueryProperties(
             else -> "text"
         }
         val clickType = when {
+            // FIRST, exactly as in the app: a chip tap that also came from an advice card must
+            // report align_chip_sel, not read_full_advice. Appending this branch instead of
+            // prepending it would silently invert that.
+            isAlignmentChip -> "align_chip_sel"
             isReadFullAdvice -> "read_full_advice"
             isFollowupPrompt -> "follow-up"
             isImageCard -> "Image_Card"
@@ -345,6 +662,30 @@ data class SendQueryProperties(
             put(AnalyticsProps.ONBOARDING_QUERY, isOnboardingQuery)
             put(AnalyticsProps.TYPE, type)
             put(AnalyticsProps.CLICK_TYPE, clickType)
+            // All seven chip keys go on EVERY Send_Query / Send_Query_Initiated, chip or not —
+            // that is what the app does, and a key that appears only on chip payloads is a
+            // different schema. Status defaults to "none", the five string keys to "".
+            put(
+                AnalyticsProps.AGENTIC_CHIP_STATUS,
+                agenticChipStatus?.takeIf { it.isNotBlank() }
+                    ?: if (isAlignmentChip) AnalyticsProps.CHIP_STATUS_SELECTED
+                    else AnalyticsProps.CHIP_STATUS_NONE
+            )
+            put(
+                AnalyticsProps.AGENTIC_CHIP_SKIPPED_TYPE,
+                if (agenticChipStatus == AnalyticsProps.CHIP_STATUS_SKIPPED) {
+                    agenticChipSkippedType?.takeIf { it.isNotBlank() } ?: ""
+                } else ""
+            )
+            put(
+                AnalyticsProps.AGENTIC_CHIP_SHOWN_TYPE,
+                if (agenticChipStatus == AnalyticsProps.CHIP_STATUS_AVAILABLE) {
+                    agenticChipShownType?.takeIf { it.isNotBlank() } ?: ""
+                } else ""
+            )
+            put(AnalyticsProps.AGENTIC_CHIP_TYPE, agenticChipType?.takeIf { it.isNotBlank() } ?: "")
+            put(AnalyticsProps.AGENTIC_CHIP_VALUE, agenticChipValue?.takeIf { it.isNotBlank() } ?: "")
+            put(AnalyticsProps.AGENTIC_CHIP_LABEL, agenticChipLabel?.takeIf { it.isNotBlank() } ?: "")
             isValidQuery?.let { put(AnalyticsProps.VALID_QUERY, it) }
             put(AnalyticsProps.ASSET_TYPE_QUERY, assetType?.takeIf { it.isNotBlank() } ?: "")
             put(AnalyticsProps.ASSET_NAME_QUERY, assetName?.takeIf { it.isNotBlank() } ?: "")
@@ -355,4 +696,63 @@ data class SendQueryProperties(
             put(AnalyticsProps.CLARIFICATION_NEEDED_CONCERN, clarificationNeededConcern)
         }
     }
+}
+
+/**
+ * Builds the [HomeCardAnalytics] payload for a home-feed section, a 1:1 port of the app's
+ * private `sectionToAnalytics` (app ui/home/HomeScreen.kt:2042-2057). Every fallback chain
+ * below is the app's, in the app's order.
+ */
+fun org.digitalgreen.farmerchat.sdk.core.model.SectionDto.toHomeCardAnalytics(
+    cardPosition: String = ""
+): HomeCardAnalytics = HomeCardAnalytics(
+    cardType = type ?: "",
+    cardCategory = meta?.asset_name?.takeIf { it.isNotBlank() }
+        ?: title ?: id?.toString() ?: "",
+    imageId = id?.toString() ?: "",
+    sentenceId = statement_id?.toString() ?: "",
+    text = question_text ?: title ?: statement ?: "",
+    views = badge?.count ?: "",
+    country = meta?.country ?: meta?.user_country ?: "",
+    county = meta?.geography_level2 ?: meta?.user_county ?: "",
+    assetType = meta?.asset_category?.takeIf { it.isNotBlank() } ?: type ?: "",
+    assetName = meta?.asset_name?.takeIf { it.isNotBlank() }
+        ?: title ?: id?.toString() ?: "",
+    stage = meta?.growth_stage ?: "",
+    concern = meta?.concern ?: "",
+    dateRange = meta?.date_range ?: "",
+    cardPosition = cardPosition
+)
+
+/**
+ * `Card_Position` labels for a visible feed, a 1:1 port of the app's private
+ * `buildImageStatementSequences` (app ui/home/HomeScreen.kt:2023-2040): image and
+ * statement cards get `"<type> <n>"` counted per type in feed order; every other
+ * card type gets `""`.
+ */
+fun cardPositionLabels(
+    sections: List<org.digitalgreen.farmerchat.sdk.core.model.SectionDto>
+): List<String> {
+    val counters = mutableMapOf<String, Int>()
+    return sections.map { s ->
+        val type = s.type ?: ""
+        if (type == "image" || type == "statement") {
+            val n = (counters[type] ?: 0) + 1
+            counters[type] = n
+            "$type $n"
+        } else ""
+    }
+}
+
+/**
+ * The `value` on `Settings_Option_Selected` for the appearance row, mapping the SDK's
+ * persisted mode ids onto the app's `AppearanceMode` labels
+ * (app ui/settings/SettingsScreen.kt:145-150): Day→"Light", Night→"Dark", Auto→"Default".
+ *
+ * Shared by both UI artifacts so the compose and views rows cannot drift.
+ */
+fun appearanceAnalyticsValue(mode: String): String = when (mode) {
+    "day" -> "Light"
+    "night" -> "Dark"
+    else -> "Default"
 }

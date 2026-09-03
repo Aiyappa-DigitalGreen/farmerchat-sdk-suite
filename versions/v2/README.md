@@ -3,13 +3,20 @@
 A complete, self-contained SDK: `android/`, `ios/`, `react-native/`, `web/` in this folder are
 buildable and publishable independently of v1.
 
-Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at `c0524dd6`
-(app v4.1.2, versionCode 107), which descends from the v1 source of truth `fc-compose` @ `9f5e4ca`
-(v4.0.3). Same repo lineage, so v2 is a delta — 104 commits, 83 files, +6,705 / −580.
+Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at **`0c8c740f`**
+(branch `features/dev_v2.3`, merged from `origin/dev/v2.4`; was `c0524dd6` / app v4.1.2,
+versionCode 107 — 21 commits newer as of 2026-09-03), which descends from the v1 source of truth
+`fc-compose` @ `9f5e4ca` (v4.0.3). Same repo lineage, so v2 is a delta.
+
+The chat/alignment part of the `c0524dd6 → 0c8c740f` delta is folded in: **43ba5de4** "no follow up
+in case of chips" (an additive alignment surface suppresses the follow-up list) and the chat-history
+`isAgentic` mirroring, which the SDK already had. The rest of that delta — auth agreement card, chip
+colours, device/carrier user attributes, new labels — is tracked separately in
+`docs/04-parity-matrix.md`.
 
 ## What v2 changes
 
-Two things, both in chat.
+Three things: two in chat, one on Home.
 
 ### 1. Chat streams
 
@@ -28,7 +35,11 @@ host on 2.0.0 artifacts that does nothing keeps v1 behaviour exactly.
 | Timeouts | ApiPriority P1/P2/P3 | **none** — answers stream for minutes |
 | Rendering | answer appears complete | accretes from `text_delta` events |
 
-Six events: `ToolCall`, `ToolResult`, `TextDelta`, `Metadata`, `Done`, `Failure`.
+**Seven** wire events, confirmed against a live capture 2026-09-03 (docs/02 §#27a):
+`status`, `tool_call`, `tool_result`, `text_delta`, `surface`, `done`, `metadata` — modelled as
+`Status`, `ToolCall`, `ToolResult`, `TextDelta`, `Surface`, `Done`, `Metadata` plus a client-side
+`Failure`. `status` and `surface` are handled on **android only**; ios/react-native/web still drop
+them (docs/04).
 `Metadata` is terminal and carries a `TextPromptResponse` — field-compatible with #27, so
 finalization reuses the synchronous path and inherits its analytics, TTS gating and follow-ups
 rather than reimplementing them.
@@ -43,6 +54,25 @@ are **additive** (they accompany a real answer), the rest **exclusive** (they re
 > `alignments.message`. Any client that treats a blank `response` as an error will show the farmer
 > "Failed to get response" instead of the question.
 
+### 3. Home has a mandatory policy-acceptance gate
+
+New in app v4.1.2 and **absent from v1 entirely** (`fc-compose` has no
+`policy_acceptance_status` anywhere). On every Home entry the app calls
+`GET api/user/policy_acceptance_status/?user_id=…` (**#7a**); while `requires_acceptance` is true a
+**non-cancellable** bottom sheet overlays Home until the farmer accepts through #7 `accept_terms`.
+Swipe-down, back press and scrim taps are all rejected — the only exits are "Accept" and the
+"Read terms" content screen's own accept CTA.
+
+> This is **not** the Plotline-triggered `TermsOfUseDialog` already in the table below. The app's
+> own comment (`HomeScreen.kt:331`) says the gate is "driven by GET policy_acceptance_status
+> rather than a campaign card", and the two load different URLs: the gate uses
+> `latest_policy_version.terms_of_service_url` from #7a, the dialog uses
+> `farmerchat_terms_of_use` from #4. Both now exist on android and are independent.
+
+Verified live on stage 2026-09-03 (guest token): 200 with the app's exact field set; no `user_id`
+→ 400 `{"error":"user_id is required"}`. All seven of its label keys are served by #3 in **en, hi
+and sw**. Details, deltas and the guest consequence: `docs/02` §Endpoint #7a and `docs/04`.
+
 ## Status
 
 | Piece | android core | compose | views | ios | react-native | web |
@@ -56,7 +86,8 @@ are **additive** (they accompany a real answer), the rest **exclusive** (they re
 | **Capability chips** (`gps-prompt`, `upload-photo`) | ✅ | ✅ | ✅ | ✅ both | ✅ | ✅ |
 | `InputComposer` wired into Home + Chat | n/a | ✅ | ✅ | ⛔ | ✅ | ✅ |
 | Home agentic layout (surface, gradient, header) | n/a | ✅ | 🟡 header title only | ⛔ | 🟡 no sunbeams | 🟡 no sunbeams |
-| `TermsOfUseDialog` | n/a | ✅ | ⛔ | ⛔ | ✅ | ✅ |
+| `TermsOfUseDialog` (dismissible, #4) | n/a | ✅ | ⛔ | ⛔ | ✅ | ✅ |
+| **Mandatory ToU gate** (#7a, blocking) | ✅ | ✅ | ✅ | ⛔ | ⛔ | ⛔ |
 | Settings "My Farm" | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
 | UIKit 2.0.0 UI | — | — | — | ✅ | — | — |
 
@@ -118,6 +149,17 @@ timeout on a request that has none would be a lie.
   `PlotlineConstants` hooks are stripped from `InputComposer`, and `TermsOfUseDialog`'s
   `AnalyticsManager` call is replaced by a plain `onAcceptAndContinue` callback — the host owns
   tracking, and events reach it through `config.onEvent`.
+  The **mandatory ToU gate carries the identical deviation**: its sheet and content screen
+  self-track five events through `AnalyticsManager` in the app, and in the SDK those five names
+  are raised verbatim from the caller through `FarmerChatAnalytics` instead. The app's sixth,
+  `Plotline_Accept_Terms_Click_Event` (`"ToS_Aug26_Accept_Terms"`), is **not** ported, and no
+  Adjust tokens are. The app's timing quirk is kept — `Terms_Of_Use_Accept_Click_Event` fires on
+  API success, not on the tap.
+- **The gate fires for guests, and that is app behaviour, not an SDK bug.** `initialize_user`
+  persists a `user_id` in both the app and the SDK; the app's guard skips only a *missing* one
+  (`isBlank() || equals("null")`), which is ported literally, and the backend answers
+  `requires_acceptance: true` for a guest token. A guest-only host (e.g. a `CHAT_ONLY` bootstrap
+  that reaches Home) will therefore see the sheet.
 - **iOS names the model `AlignmentSurface`**, not `Alignment`: `SwiftUI.Alignment` owns that name,
   and a public `Alignment` in Core made `FarmerChatFabButton` ambiguous for any host importing both
   modules. The wire key is still `alignments`.

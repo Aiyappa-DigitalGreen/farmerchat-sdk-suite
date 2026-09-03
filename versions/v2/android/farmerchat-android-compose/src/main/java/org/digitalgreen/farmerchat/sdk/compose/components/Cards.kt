@@ -164,8 +164,12 @@ fun ContentCard(
                             .clip(SmoothShapes.rounded(Radius.LG)),
                     ) {
                         when (painter.state) {
+                            // App parity (components/cards/ContentCard.kt): the loading and
+                            // error placeholders are DIFFERENT animations, not one shared
+                            // gradient. Loading = fog + orbiting bubbles; error = the
+                            // magic-eraser dissolve.
                             is AsyncImagePainter.State.Loading -> {
-                                AiGeneratedGradient(Modifier.fillMaxSize())
+                                AIGeneratingImageOverlay(isLoading = true)
                             }
 
                             is AsyncImagePainter.State.Success -> {
@@ -178,7 +182,7 @@ fun ContentCard(
                             }
 
                             is AsyncImagePainter.State.Error -> {
-                                AiGeneratedGradient(Modifier.fillMaxSize())
+                                AIGeneratedGradient(Modifier.fillMaxSize())
                             }
 
                             else -> {
@@ -238,21 +242,6 @@ fun ContentCard(
 }
 
 /** Green gradient placeholder used while the AI-generated image loads / fails. */
-@Composable
-private fun AiGeneratedGradient(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.background(
-            Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF093D1F),
-                    Color(0xFF69C46C),
-                    Color(0xFF093D1F)
-                )
-            )
-        )
-    )
-}
-
 @Composable
 private fun ViewCountBadge(
     count: String?,

@@ -4,7 +4,6 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -14,8 +13,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSource
 import org.digitalgreen.farmerchat.sdk.core.model.AgenticDonePayload
 import org.digitalgreen.farmerchat.sdk.core.model.AgenticEvent
+import org.digitalgreen.farmerchat.sdk.core.model.AgenticStatusPayload
+import org.digitalgreen.farmerchat.sdk.core.model.AgenticSurfacePayload
 import org.digitalgreen.farmerchat.sdk.core.model.AgenticTextDeltaPayload
 import org.digitalgreen.farmerchat.sdk.core.model.AgenticToolPayload
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
@@ -38,13 +40,16 @@ import java.io.IOException
  *   never be the ApiPriority timeout client. It still carries the auth interceptors, so
  *   `Authorization` and 401 refresh apply exactly as on every other call.
  *
- * ⚠ **The wire framing is not yet confirmed against a real stream.** A guest with language,
- * location and a conversation received 0 bytes on all three environments; agentic answers are
- * likely gated on an OTP-verified user or a server flag (docs/05-open-questions.md). The reader
- * below is therefore deliberately permissive — it accepts BOTH `data:`-prefixed SSE framing and
- * bare NDJSON, and resolves the event type from an SSE `event:` line when present, else a `type`
- * field inside the JSON. If the real framing differs, only [readStream] and [parseEvent] change;
- * the [AgenticEvent] contract holds.
+ * **The framing is CONFIRMED against a real stream** (captured live from stage 2026-09-03,
+ * docs/02 §#27a; the raw captures are checked in under `docs/captures/` and are fed through
+ * [readEvents] verbatim by `AgenticCaptureReplayTest`). Real SSE: an `event:` line, a `data:`
+ * line of JSON, blank-line separated. Seven event names: `status`, `tool_call`, `tool_result`,
+ * `text_delta` (payload key `delta`), `surface`, `done` (NON-terminal) and `metadata` (last, and
+ * terminal).
+ *
+ * The reader stays permissive beyond that — it also accepts bare NDJSON and resolves the event
+ * type from a `type` field inside the JSON when no `event:` line came — because that costs
+ * nothing and a dropped `text_delta` is a silently truncated answer.
  */
 class AgenticChatDataSource internal constructor(
     private val client: OkHttpClient,
@@ -87,42 +92,12 @@ class AgenticChatDataSource internal constructor(
                         return@use
                     }
 
-                    var eventType: String? = null
-                    val dataBuffer = StringBuilder()
-
-                    while (isActive) {
-                        val line = source.readUtf8Line() ?: break
-                        when {
-                            // Event boundary: dispatch whatever has accumulated.
-                            line.isBlank() -> {
-                                if (producer.dispatch(eventType, dataBuffer.toString())) return@use
-                                eventType = null
-                                dataBuffer.setLength(0)
-                            }
-                            // SSE comment / keep-alive.
-                            line.startsWith(":") -> Unit
-                            // SSE event name.
-                            line.startsWith("event:") ->
-                                eventType = line.substringAfter("event:").trim()
-                            // SSE data. Per the spec multiple data: lines in one event join with a
-                            // newline (harmless whitespace inside a JSON payload).
-                            line.startsWith("data:") -> {
-                                if (dataBuffer.isNotEmpty()) dataBuffer.append('\n')
-                                dataBuffer.append(line.substringAfter("data:").trim())
-                            }
-                            // Bare JSON object on its own line (NDJSON): dispatch immediately.
-                            line.trimStart().startsWith("{") -> {
-                                if (producer.dispatch(eventType, line.trim())) return@use
-                                eventType = null
-                                dataBuffer.setLength(0)
-                            }
-                            // Any other non-blank line: continuation of the payload.
-                            else -> dataBuffer.append(line)
-                        }
-                    }
-
-                    // Flush a final event not terminated by a trailing blank line.
-                    producer.dispatch(eventType, dataBuffer.toString())
+                    // `isActive` here is the READER coroutine's, so a cancelled collector stops
+                    // the loop rather than draining the rest of the stream.
+                    readEvents(source, isActive = { isActive }) { producer.trySend(it) }
+                    // Close on EVERY exit, terminal `metadata` included. The previous version
+                    // returned out of the reader on metadata and left the callbackFlow channel
+                    // open, so the collector suspended until its scope was cancelled.
                     producer.close()
                 }
             } catch (e: Exception) {
@@ -144,11 +119,60 @@ class AgenticChatDataSource internal constructor(
         }
     }
 
-    /** Parses and emits one event. Returns true once the terminal metadata event was emitted. */
-    private fun SendChannel<AgenticEvent>.dispatch(type: String?, data: String): Boolean {
-        val event = parseEvent(type, data) ?: return false
-        trySend(event)
-        return event is AgenticEvent.Metadata
+    /**
+     * Reads the SSE / NDJSON framing off [source], handing every parsed event to [emit]. Returns
+     * when the terminal `metadata` event has been emitted, when [isActive] goes false, or when the
+     * source is exhausted.
+     *
+     * Internal so the CHECKED-IN captures (the two `.sse` files under `docs/captures/`) can be replayed through the real
+     * reader byte-for-byte — see `AgenticCaptureReplayTest`. That is the strongest available test
+     * of the framing and it only became possible once the stream was captured (2026-09-03).
+     */
+    internal fun readEvents(
+        source: BufferedSource,
+        isActive: () -> Boolean = { true },
+        emit: (AgenticEvent) -> Unit
+    ) {
+        var eventType: String? = null
+        val dataBuffer = StringBuilder()
+
+        /** Parses + emits what has accumulated. Returns true once `metadata` went out. */
+        fun flush(): Boolean {
+            val event = parseEvent(eventType, dataBuffer.toString())
+            eventType = null
+            dataBuffer.setLength(0)
+            if (event != null) emit(event)
+            return event is AgenticEvent.Metadata
+        }
+
+        while (isActive()) {
+            val line = source.readUtf8Line() ?: break
+            when {
+                // Event boundary: dispatch whatever has accumulated.
+                line.isBlank() -> if (flush()) return
+                // SSE comment / keep-alive.
+                line.startsWith(":") -> Unit
+                // SSE event name.
+                line.startsWith("event:") -> eventType = line.substringAfter("event:").trim()
+                // SSE data. Per the spec multiple data: lines in one event join with a
+                // newline (harmless whitespace inside a JSON payload).
+                line.startsWith("data:") -> {
+                    if (dataBuffer.isNotEmpty()) dataBuffer.append('\n')
+                    dataBuffer.append(line.substringAfter("data:").trim())
+                }
+                // Bare JSON object on its own line (NDJSON): dispatch immediately.
+                line.trimStart().startsWith("{") -> {
+                    dataBuffer.setLength(0)
+                    dataBuffer.append(line.trim())
+                    if (flush()) return
+                }
+                // Any other non-blank line: continuation of the payload.
+                else -> dataBuffer.append(line)
+            }
+        }
+
+        // Flush a final event not terminated by a trailing blank line.
+        flush()
     }
 
     /** `TOOL_CALL`, `tool_call` and `toolCall` all normalize to the same key. */
@@ -168,8 +192,8 @@ class AgenticChatDataSource internal constructor(
     }
 
     /**
-     * Visible for tests: the wire framing cannot be verified against a live stream yet
-     * (docs/05), so this mapping is covered by unit tests instead.
+     * Maps one `event:` name + `data:` JSON payload to an [AgenticEvent]. Visible for tests; the
+     * checked-in captures pin every branch down to the exact live payloads (docs/02 §#27a).
      */
     internal fun parseEvent(type: String?, data: String): AgenticEvent? {
         if (data.isBlank()) return null
@@ -180,6 +204,25 @@ class AgenticChatDataSource internal constructor(
                     gson.fromJson(data, AgenticTextDeltaPayload::class.java)?.delta
                         ?.takeIf { it.isNotEmpty() }
                         ?.let { AgenticEvent.TextDelta(it) }
+
+                // Progress ping. Emitted BEFORE the first delta on both live captures — the
+                // only signal the farmer has during time-to-first-token (6.7 s on the capture).
+                "status" -> gson.fromJson(data, AgenticStatusPayload::class.java)
+                    ?.let { AgenticEvent.Status(it.stage) }
+
+                // Alignment surface delivered mid-stream. `type` lives on the envelope while the
+                // rest of the surface lives in `payload`, so lift it across: the result is
+                // field-identical to `metadata.alignments` and both feed one rendering path.
+                "surface" -> gson.fromJson(data, AgenticSurfacePayload::class.java)
+                    ?.let { envelope ->
+                        val payload = envelope.payload ?: return@let null
+                        AgenticEvent.Surface(
+                            id = envelope.id,
+                            alignment = payload.copy(
+                                type = payload.type ?: envelope.type
+                            )
+                        )
+                    }
 
                 "toolcall" -> gson.fromJson(data, AgenticToolPayload::class.java).let {
                     AgenticEvent.ToolCall(name = it?.name, statusText = it?.statusText)

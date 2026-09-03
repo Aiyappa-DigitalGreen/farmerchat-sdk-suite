@@ -14,7 +14,7 @@ farmerchat-sdk-suite-fcs2026/
 | Version | Chat transport | Source of truth |
 |---|---|---|
 | **1.0.0** | Synchronous JSON — endpoint #27 | `fc-compose` @ `9f5e4ca` (app v4.0.3) |
-| **2.0.0** | Agentic SSE streaming — endpoint #27a | `fc-compose-agentic` @ `c0524dd6` (app v4.1.2) |
+| **2.0.0** | Agentic SSE streaming — endpoint #27a | `fc-compose-agentic` @ `0c8c740f` (app v4.1.3, versionCode 108) |
 
 ## Picking a version
 

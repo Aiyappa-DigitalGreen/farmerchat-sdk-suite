@@ -57,6 +57,8 @@ FarmerChat.initialize(
         .enableWeather(true)
         .debugLogging(BuildConfig.DEBUG)                   // OkHttp body logs; never in release
         .onEvent { name, props -> /* analytics fan-out */ }
+        .onUserIdentified { userId -> /* your vendor's setUserId / identifyUser */ }
+        .onUserAttribute { key, value -> /* your vendor's setUserProperty / setUserAttribute */ }
         .onSessionExpired { /* token refresh + guest fallback both failed */ }
         .build()
 )
@@ -91,6 +93,8 @@ Embedding instead of launching an Activity:
 | `defaultStateCode` | `"Karnataka"` | State/region paired with `defaultCountryCode`. Endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages. |
 | `enableVoice` / `enableImages` / `enableWeather` | true | Hide the corresponding inputs/CTAs. |
 | `onEvent` | null | Receives every analytics event (same names/props as the production app). |
+| `onUserIdentified` | null | The FarmerChat user id, whenever the SDK resolves or changes it (guest init, `verify_otp`, CHAT_ONLY bootstrap). Identity is not an event, so `onEvent` cannot carry it. Never blank. |
+| `onUserAttribute` | null | User ATTRIBUTES (user properties, not event properties), with the production app's own keys. Today: `Carrier_Name`, `Carrier_Code`, `Device_Type` (`emulator`/`physical_device`), `Brand`, `Model`, `Manufacturer`, `OS`. Never blank. |
 | `onSessionExpired` | null | Both refresh and guest-token fallback failed. |
 
 ## Analytics
@@ -104,6 +108,25 @@ FarmerChat.setAnalyticsListener { name, properties ->
 ```
 
 `FarmerChatConfig.onEvent` receives the same stream (both fire).
+
+### User identity and attributes
+
+Two things an event stream structurally cannot carry, so they are separate callbacks:
+
+```kotlin
+FarmerChatConfig.builder(env)
+    .onUserIdentified { userId -> MoEAnalyticsHelper.identifyUser(context, userId) }   // host-side
+    .onUserAttribute { key, value -> Firebase.analytics.setUserProperty(key, value) }  // host-side
+```
+
+`onUserIdentified` fires on guest init, on `verify_otp` success, and on the CHAT_ONLY bootstrap.
+`onUserAttribute` currently raises the app's 7 device/carrier attributes — `Carrier_Name`,
+`Carrier_Code` (the SIM operator, not the network operator, so roaming doesn't misattribute it;
+no runtime permission, and telephony being absent yields nothing rather than an error),
+`Device_Type` (`emulator` / `physical_device`, to exclude QA traffic), `Brand`, `Model`,
+`Manufacturer`, `OS`. Blank keys/values are dropped, and an exception thrown by either callback is
+swallowed. The app defines 54 attribute keys in total; the rest have no raise site yet
+(docs/04-parity-matrix.md).
 
 ## Permissions
 
@@ -209,6 +232,25 @@ With it on, both UI flavours replace the Photo / Speak / Type row on **Home and 
 unified `InputComposer` — one bar carrying camera, text field, and mic-or-send — and the chat
 answer streams instead of arriving whole. With it off, neither screen changes.
 
+### Decoupling the composer from streaming
+
+The app gates these on **two** independent Firebase Remote Config flags —
+`v2_composer_ui_enabled` for the input surface, `v2_agentic_chat_enabled` for the API routing.
+`enableComposerUi` exposes the first separately:
+
+```kotlin
+FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    .enableComposerUi(true)      // unified composer bar…
+    .enableAgenticChat(false)    // …but keep the synchronous #27 reply
+    .build()
+```
+
+It is **nullable and defaults to `null`, meaning "follow `enableAgenticChat`"** — the collapse
+every screen hardcoded before the knob existed — so omitting it changes nothing, including for a
+host that already sets `enableAgenticChat(true)`. Read it in SDK code through
+`config.resolvedComposerUi`, never the raw field. A host that fetches its own Remote Config just
+passes the resolved booleans in; see `docs/07-customization-and-distribution.md` Part D.
+
 Flavour parity for the composer:
 
 | | compose | views |
@@ -230,9 +272,81 @@ adb shell am start -n org.digitalgreen.farmerchat.sample.views/.MainActivity -e 
 # then force-stop + relaunch so Application.onCreate rebuilds the graph
 ```
 
-**Nothing in 2.0.0 has run on a device**, and the agentic endpoint has never delivered a byte —
-see `versions/v2/README.md` and `docs/04-parity-matrix.md`.
+**Nothing in 2.0.0 has run on a device.** The agentic endpoint HAS now delivered bytes: two
+streams were captured live from stage on 2026-09-03 and are checked in under `docs/captures/`,
+replayed through the production reader by `AgenticCaptureReplayTest`. The wire contract is
+therefore verified; the *UI* built on it is still build- and test-verified only. See docs/02 §#27a
+and `docs/04-parity-matrix.md` §"#27a real wire contract".
+
+### What the live capture changed (2026-09-03)
+
+- Two more wire events are handled: `status` (a progress ping, shown as a tool-style status label
+  so the farmer sees activity during the ~7 s before the first token) and `surface` (an alignment
+  surface delivered mid-stream, rendered on arrival instead of waiting for the terminal
+  `metadata.alignments`; both events write ONE message, so nothing duplicates).
+- `TextPromptRequest` now sends the six fields the app sends and the SDK lacked:
+  `parent_message_id`, `location_declined`, `photo_declined`, `streaming_required`, `image_name`,
+  `image`. `streaming_required` comes from the language API per language
+  (`SupportedLanguage.streaming_required`) and is persisted under `is_streaming_required` — nothing
+  for a host to configure. It does **not** gate the stream.
+- Alignment chips carry `label_key`, `label_en`, `behavior`, `capability`, `request` and a `submit`
+  object. Chip routing lives in ONE place — `core/ui/chat/AlignmentChipRouting.kt`
+  (`routeAlignmentChip`) — used by both flavours; it prefers the backend's explicit
+  `behavior`/`capability` and keeps the older `action`/`value` match working.
+- A surface's `blocking` flag now suppresses the "type or say it" escape hatch, because the backend
+  cannot proceed until such a surface is answered.
+- `ChatAction.SendAlignmentChip` completes the port of the app's `ChatAction` (18 of 18). Every chip
+  tap and both location-decline paths go through it, so a chip pick carries the source surface's
+  `parent_message_id` and marks itself on that surface by value.
+- Chip analytics: every `Send_Query` / `Send_Query_Initiated` now carries the app's seven
+  `agentic_chip_*` keys (defaults `"none"` / `""`), `click_type` becomes `align_chip_sel` on a chip
+  tap, and a share-location chip re-attributes the whole GPS funnel to Chat with
+  `agentic_chip_type = gps-prompt`.
+- An ADDITIVE alignment surface (`gender-select` / `commodity-confirm`) now hides the follow-up
+  list while its chips are on screen, matching app commit `43ba5de4` — and the backend, which sends
+  `followups_gated_by: "commodity-confirm"` with `followups: []` for exactly this case.
+
+## Mandatory Terms-of-Use gate (#7a) — 2.0.0
+
+On every Home entry both flavours dispatch `HomeAction.FetchPolicyAcceptanceStatus(userId)`
+(endpoint **#7a**, `api/user/policy_acceptance_status/`, P2). While the response carries
+`requires_acceptance: true` and #7 `accept_terms` has not yet succeeded, Home is overlaid by a
+**non-cancellable** sheet:
+
+| | compose | views |
+|---|---|---|
+| Sheet + content screen | `components/TermsOfUseGate.kt` | `internal/ui/TermsOfUseGateController.kt` |
+| Rendered from | `screens/HomeScreen.kt` | `internal/ui/HomeFragment.kt` (`termsGate.render(state)`) |
+
+Both read one predicate from core — `HomeState.requiresTermsAcceptance()` /
+`latestTermsOfServiceUrl()` — so the flavours cannot drift on the condition. `HomeViewModel`
+writes `HomeState.policyAcceptanceState` and `HomeState.acceptTermsState`; a successful #7 is the
+gate's **only** exit, so `acceptTerms` writing state is load-bearing, not cosmetic.
+
+Hosts need do nothing to get this — unlike the dismissible `TermsOfUseDialog`, the gate is fully
+server-driven and needs no `openTermsOfUseRequested` / host callback. Note it **will show for a
+guest session** (see `versions/v2/README.md` §"Known deviations").
+
+Views-only visual delta: the content screen's bottom action bar uses `fc_bg_rounded_top`
+(white/`surface_secondary`) where compose and the app use `brand.foregroundPrimary`.
 
 ## Verification status
 
 See `docs/04-parity-matrix.md` for the honest per-feature ledger. Anything not covered by `compileDebugKotlin` (on-device flows, backend contract drift) is marked UNVERIFIED there.
+
+**Terms-of-Use gate lane, 2026-09-03.** Verified:
+
+```
+./gradlew :farmerchat-core:assembleDebug :farmerchat-android-compose:assembleDebug \
+          :farmerchat-android-views:assembleDebug :sample-compose:assembleDebug \
+          :sample-views:assembleDebug :farmerchat-core:testDebugUnitTest
+→ BUILD SUCCESSFUL   (core unit tests: 76 total, 0 failures — 9 new in TermsOfUseGateTest)
+```
+
+Also verified live against stage: endpoint #7a's response shape, its `user_id`-required 400, and
+all seven gate label keys present on #3 in en/hi/sw.
+
+**NOT verified: nothing was run on a device or emulator.** The gate has never been seen on a
+screen. `TermsOfUseGateTest` pins the show/hide predicate given a state; that the ViewModel
+actually writes that state, and that both flavours actually construct the sheet, is
+build-and-inspection evidence only.

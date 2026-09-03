@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Read terms" content screen of the mandatory Terms-of-Use acceptance gate (endpoint #7a).
+  Views port of the Compose `TermsOfUseContentDialog` (itself a 1:1 port of the app's
+  components/dialogs/TermsOfUseContentDialog.kt).
+
+  Deliberately NOT fc_fragment_legal_dialog.xml: the close (X) sits on the RIGHT here, and the
+  bottom carries a single stateful accept button (idle -> loading -> accepted) instead of nothing.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fc_surface_secondary"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp">
+
+        <TextView
+            android:id="@+id/fcTouContentTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            tools:text="Terms of Use" />
+
+        <ImageButton
+            android:id="@+id/fcTouContentClose"
+            style="@style/FcAppBarIcon"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/fc_ic_close"
+            app:tint="@color/fc_foreground_primary" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/fcTouContentWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ProgressBar
+            android:id="@+id/fcTouContentProgress"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <!-- Bottom action bar: rounded-top elevated footer, single stateful accept button. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/fc_bg_rounded_top"
+        android:elevation="12dp"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
+
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+            android:id="@+id/fcTouContentAccept"
+            android:layout_width="match_parent"
+            android:layout_height="54dp" />
+    </FrameLayout>
+</LinearLayout>

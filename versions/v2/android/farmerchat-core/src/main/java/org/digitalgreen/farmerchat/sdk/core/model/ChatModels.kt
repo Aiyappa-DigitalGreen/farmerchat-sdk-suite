@@ -29,7 +29,43 @@ data class TextPromptRequest(
     @SerializedName("use_entity_extraction") val use_entity_extraction: Boolean = true,
     @SerializedName("transcription_id") val transcription_id: String? = null,
     /** True when user taps retry from the inline error on the chat screen. */
-    @SerializedName("retry") val retry: Boolean = false
+    @SerializedName("retry") val retry: Boolean = false,
+    // ---- 2.0.0 fields, all present in the app's `domain/model/chat/TextPromptRequest.kt` ----
+    /**
+     * Per-LANGUAGE flag from the language API (`SupportedLanguage.streaming_required`), persisted
+     * under [org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences.Keys.STREAMING_REQUIRED]
+     * and sent on every text-prompt request, exactly as the app does.
+     *
+     * It does **not** gate the stream: #27a returned a full stream both with and without it
+     * (docs/02 §#27a). It is sent for wire fidelity.
+     */
+    @SerializedName("streaming_required") val streaming_required: Boolean = true,
+    /**
+     * Unique name for an image-based agentic query (e.g. `image_<uuid>.jpg`). Null for text/voice,
+     * and Gson omits it, so those requests are unchanged on the wire. The SDK's image questions
+     * still go through #26 (`PlantixRequest`), so nothing populates this yet — it exists so the
+     * request model matches the app's (docs/04).
+     */
+    @SerializedName("image_name") val image_name: String? = null,
+    /** Base64 image for an image-based agentic query. Null (omitted) for text/voice. */
+    @SerializedName("image") val image: String? = null,
+    /**
+     * The server `message_id` of the alignment surface this query answers, so the backend can
+     * correlate a chip pick to the surface that asked. Null (omitted) on an ordinary query.
+     */
+    @SerializedName("parent_message_id") val parent_message_id: String? = null,
+    /**
+     * True when the farmer refused a `gps-prompt` surface — tapped its decline chip
+     * ([AlignmentChip.VALUE_USE_APPROXIMATE_LOCATION] on the live wire), or denied/cancelled the
+     * OS permission. Only ever sent as `true` (else null → omitted by Gson) so the backend answers
+     * from an approximate location instead of waiting for coordinates.
+     */
+    @SerializedName("location_declined") val location_declined: Boolean? = null,
+    /**
+     * True when the farmer refused an `upload-photo` surface. Only ever sent as `true` (else null →
+     * omitted) so the backend proceeds without an image.
+     */
+    @SerializedName("photo_declined") val photo_declined: Boolean? = null
 )
 
 data class TextPromptResponse(
@@ -276,7 +312,80 @@ data class Alignment(
     val blocking: Boolean? = null,
     /** Backend intent tag (e.g. "capability", "profile"); informational for the client. */
     @SerializedName("intent")
-    val intent: String? = null
+    val intent: String? = null,
+    /**
+     * How the surface expects to be interacted with (live value: `"capability"`). Informational —
+     * [type] already selects the visual treatment. Captured live 2026-09-03 (docs/02 §#27a).
+     */
+    @SerializedName("interaction_kind")
+    val interaction_kind: String? = null,
+    /** Extra context the backend attached to the surface. */
+    @SerializedName("context")
+    val context: AlignmentContext? = null,
+    /** How many times the backend may re-ask this surface. */
+    @SerializedName("budget")
+    val budget: AlignmentBudget? = null
+) : java.io.Serializable {
+    /**
+     * The query that triggered the surface. The live payload carries it BOTH at the top level and
+     * inside [context], and a surface that only populates `context` would otherwise lose it — with
+     * it goes the capability flow, which re-sends this query once the capability is satisfied.
+     */
+    val effectiveOriginalQuery: String?
+        get() = original_query?.takeIf { it.isNotBlank() }
+            ?: context?.original_query?.takeIf { it.isNotBlank() }
+}
+
+/**
+ * `payload.context` on an alignment surface. Captured live 2026-09-03: a `gps-prompt` carries
+ * `required_precision: "coordinates"` and `original_query`; a `commodity-confirm` carries
+ * `subject: "maize"`.
+ */
+data class AlignmentContext(
+    @SerializedName("required_precision")
+    val required_precision: String? = null,
+    @SerializedName("original_query")
+    val original_query: String? = null,
+    @SerializedName("subject")
+    val subject: String? = null
+) : java.io.Serializable
+
+/**
+ * `payload.budget` — how many times the backend may re-ask this surface ([asked] of [max]). A
+ * client that keeps re-showing an exhausted prompt is the failure mode this guards against.
+ */
+data class AlignmentBudget(
+    @SerializedName("asked")
+    val asked: Int? = null,
+    @SerializedName("max")
+    val max: Int? = null
+) : java.io.Serializable
+
+/**
+ * A chip's `submit` object — what the backend wants sent when the chip is tapped. Two observed
+ * shapes (docs/02 §#27a):
+ * - `{"kind":"message","surface_type":"commodity-confirm","text":"Yes, save my maize crop…"}`
+ * - `{"kind":"action","surface_type":"gps-prompt","action":"grant","data":{},"requires":"location"}`
+ *
+ * Modelled for fidelity; the SDK's routing still keys off [AlignmentChip.behavior] /
+ * [AlignmentChip.capability] / [AlignmentChip.value], never off this object (docs/04).
+ */
+data class AlignmentChipSubmit(
+    @SerializedName("kind")
+    val kind: String? = null,
+    @SerializedName("surface_type")
+    val surface_type: String? = null,
+    @SerializedName("action")
+    val action: String? = null,
+    /** Present on `kind == "message"`: the exact text the backend wants as the next query. */
+    @SerializedName("text")
+    val text: String? = null,
+    /** Free-form action arguments; `{}` in both live captures. */
+    @SerializedName("data")
+    val data: Map<String, Any?>? = null,
+    /** The device capability the action needs (live value: `"location"`). */
+    @SerializedName("requires")
+    val requires: String? = null
 ) : java.io.Serializable
 
 /**
@@ -294,7 +403,32 @@ data class AlignmentChip(
     @SerializedName("value")
     val value: String? = null,
     @SerializedName("action")
-    val action: String? = null
+    val action: String? = null,
+    // ---- fields captured live 2026-09-03 (docs/02 §#27a); all nullable, all informational
+    // except [behavior] / [capability], which routing prefers over [action] + [value]. ----
+    /** Server-side label key for the chip text (live: `"gps.button"`). */
+    @SerializedName("label_key")
+    val label_key: String? = null,
+    /** English text of the chip, whatever the answer language (live: `"Give permission"`). */
+    @SerializedName("label_en")
+    val label_en: String? = null,
+    /**
+     * The backend's EXPLICIT intent for the chip, and the most robust routing signal:
+     * [BEHAVIOR_INVOKE_CAPABILITY] means "run a device capability and send only the outcome",
+     * [BEHAVIOR_CONTINUE] means "carry on without it" (i.e. a decline). Preferred over
+     * [action] + [value] when present — see `routeAlignmentChip`.
+     */
+    @SerializedName("behavior")
+    val behavior: String? = null,
+    /** WHICH capability [behavior] refers to (live: [CAPABILITY_LOCATION]). */
+    @SerializedName("capability")
+    val capability: String? = null,
+    /** How the capability should be satisfied (live: `"gps"` / `"use_current"`). */
+    @SerializedName("request")
+    val request: String? = null,
+    /** What the backend wants submitted on tap. Modelled for fidelity; routing ignores it. */
+    @SerializedName("submit")
+    val submit: AlignmentChipSubmit? = null
 ) : java.io.Serializable {
     /**
      * Wire values for the capability chips, copied verbatim from the app's
@@ -309,6 +443,12 @@ data class AlignmentChip(
         /** `action` marking a chip that invokes a capability rather than sending text. */
         const val ACTION_SELECT = "invoke"
 
+        /** `action` on a decline chip. From app source; `commodity-confirm` sends it live. */
+        const val ACTION_DECLINE = "decline"
+
+        /** `action` on the live `gps-prompt` decline chip — NOT [ACTION_DECLINE]. */
+        const val ACTION_CONTINUE = "continue"
+
         /** GPS_PROMPT: start the location flow, then send the original query. */
         const val VALUE_SHARE_LOCATION = "share_precise_location"
 
@@ -316,8 +456,25 @@ data class AlignmentChip(
         const val VALUE_TAKE_PHOTO = "take_photo"
         const val VALUE_CHOOSE_FROM_GALLERY = "choose_from_gallery"
 
-        /** The decline chip on a capability prompt. */
+        /**
+         * The decline chip on a capability prompt, per app source. **Unconfirmed for `gps-prompt`**:
+         * the live 2026-09-03 capture sends [VALUE_USE_APPROXIMATE_LOCATION] there instead. The
+         * constant is kept (it is app source, and `commodity-confirm` really does send `not_now`)
+         * and the decline path recognises both. See docs/05-open-questions.md.
+         */
         const val VALUE_NOT_NOW = "not_now"
+
+        /** The live `gps-prompt` decline value, captured 2026-09-03 (docs/02 §#27a). */
+        const val VALUE_USE_APPROXIMATE_LOCATION = "use_approximate_location"
+
+        /** [behavior]: run a device capability, send only the outcome. */
+        const val BEHAVIOR_INVOKE_CAPABILITY = "invoke_capability"
+
+        /** [behavior]: proceed without the capability — a decline. */
+        const val BEHAVIOR_CONTINUE = "continue"
+
+        /** [capability] naming the location capability. */
+        const val CAPABILITY_LOCATION = "location"
     }
 }
 

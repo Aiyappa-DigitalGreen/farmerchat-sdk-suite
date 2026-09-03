@@ -104,6 +104,12 @@ internal class AlignmentSurfaceView @JvmOverloads constructor(
         isLoading: Boolean,
         isLatest: Boolean,
         additive: Boolean,
+        /**
+         * The surface's wire `blocking` flag (2.0.0): true withholds the escape hatch, because the
+         * backend cannot proceed until this surface is answered. Live `gps-prompt` sends
+         * `blocking: true`; absent on the wire → false, the pre-2026-09-03 behaviour.
+         */
+        blocking: Boolean = false,
         labelFor: (String, String) -> String,
         onChipClick: (AlignmentChip) -> Unit,
         onTypeInstead: () -> Unit
@@ -198,7 +204,7 @@ internal class AlignmentSurfaceView @JvmOverloads constructor(
         // Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
         // Without it a farmer whose answer is not among the chips has no way forward.
         val showEscape = chips.isNotEmpty() && !isEscalate && !isCapabilityPrompt && !additive &&
-            !hasPick && isLatest && !isLoading
+            !hasPick && isLatest && !isLoading && !blocking
         escapeRow.isVisible = showEscape
         if (showEscape) {
             val accent = FcTokens.accent(context)

@@ -51,6 +51,10 @@ class LanguageRepository(private val api: ApiServices) {
         api.setPreferredLanguage(request)
 
     suspend fun acceptTerms(request: AcceptPPandTCRequest) = api.acceptTerms(request)
+
+    /** #7a — Terms-of-Use acceptance gate (2.0.0). */
+    suspend fun fetchPolicyAcceptanceStatus(userId: String) =
+        api.fetchPolicyAcceptanceStatus(userId)
 }
 
 class NameRepository(private val api: ApiServices) {
