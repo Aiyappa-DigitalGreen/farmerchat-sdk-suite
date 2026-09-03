@@ -26,7 +26,11 @@ yarn-error.log
 # ---- Android / Gradle ----
 .gradle/
 build/
+# Android Studio profiler dumps. NOTE: this pattern also matched `docs/captures/` and silently
+# left the live #27a wire captures — the ground truth for the agentic contract (docs/02 §#27a) —
+# untracked. Re-included below; keep the negation if this rule is ever touched.
 captures/
+!docs/captures/
 .cxx/
 *.apk
 *.aar
