@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Location chat bubble row (2.0.0) — Views port of Compose components/LocationChatBubble.kt.
+
+  The farmer's resolved location, standing in for the text bubble they would otherwise have
+  sent in reply to a GPS_PROMPT alignment chip. Right-aligned like a user bubble (Compose wraps
+  it in a fillMaxWidth Box with contentAlignment = CenterEnd).
+
+  Figma card: fixed 290 x 184 — a Green500_16 map band with a centred pin over a soft ellipse
+  "shadow", then a footer with the "Your location:" label above the bold address.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="end"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <LinearLayout
+        android:id="@+id/fcLocationBubble"
+        android:layout_width="290dp"
+        android:layout_height="184dp"
+        android:background="@drawable/fc_bg_location_bubble"
+        android:orientation="vertical">
+
+        <!-- Map band: fills whatever height is left above the footer. -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@drawable/fc_bg_location_bubble_map">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/fcLocationPin"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_location"
+                    app:tint="@color/fc_green500" />
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="8dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_ellipse_icon" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Footer: label + resolved address -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:id="@+id/fcLocationLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/fc_foreground_secondary"
+                android:textSize="17sp"
+                tools:text="Your location:" />
+
+            <TextView
+                android:id="@+id/fcLocationAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/fc_foreground_primary"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                tools:text="Nandi Hills, Nandi County, Kenya" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

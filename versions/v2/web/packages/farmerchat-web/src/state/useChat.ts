@@ -23,7 +23,13 @@ import type { VoiceRecording } from './useVoiceRecorder';
 import { sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
-import { alignmentKindFromType, isAdditiveAlignment } from '../core/alignment';
+import {
+  alignmentAnalyticsType,
+  alignmentKindFromType,
+  CapabilityChip,
+  isAdditiveAlignment,
+  recordAlignmentPick,
+} from '../core/alignment';
 import type { AlignmentKind } from '../core/alignment';
 
 // ---------------------------------------------------------------------------
@@ -103,7 +109,25 @@ export interface LoadingPlaceholder {
   id: string;
 }
 
-export type ChatMessage = UserMessage | AiResponse | LoadingPlaceholder;
+/**
+ * The farmer's resolved location, shown in the thread in place of a text bubble once a GPS_PROMPT
+ * alignment chip has been satisfied (2.0.0). Rendered by `LocationChatBubble`.
+ *
+ * Port of Kotlin `ChatMessage.LocationMessage(address, id)` (`core/ui/chat/ChatModels.kt:95`).
+ *
+ * Constructed by {@link ChatActions.sendLocationSharedQuery} — the ONLY producer, exactly as on
+ * Android, where `ChatViewModel.sendLocationSharedQuery` is the only `LocationMessage(` in the
+ * tree. A blank address yields no bubble at all (app parity), so the variant is real but not
+ * guaranteed on every share-location success.
+ */
+export interface LocationMessage {
+  kind: 'location';
+  id: string;
+  /** Human-readable address, e.g. `display_address` from the location response. */
+  address: string;
+}
+
+export type ChatMessage = UserMessage | AiResponse | LoadingPlaceholder | LocationMessage;
 
 export type ChatEntrySource = 'home' | 'history';
 
@@ -114,6 +138,11 @@ export interface SendQueryProperties {
   ssfrCrop?: string | null;
   statementId?: number | null;
   channel?: string | null;
+  /**
+   * 2.0.0: which alignment surface a tapped chip came from (`AlignmentKind.analyticsType`).
+   * Reported as the `agentic_chip_type` property on the existing SEND_QUERY_INITIATED event.
+   */
+  agenticChipType?: string | null;
 }
 
 export interface ChatState {
@@ -177,8 +206,44 @@ export interface ChatActions {
   initializeVoicePrototype: (recording: VoiceRecording, originScreenName: string) => Promise<void>;
   sendFollowUpQuestion: (
     question: string,
-    opts?: { followUpQuestionId?: string | number | null; transcriptionId?: string | null; audioUri?: string | null },
+    opts?: {
+      followUpQuestionId?: string | number | null;
+      transcriptionId?: string | null;
+      audioUri?: string | null;
+      /** 2.0.0: set when the question came from an alignment chip (see [selectAlignmentChip]). */
+      agenticChipType?: string | null;
+    },
   ) => Promise<void>;
+  /**
+   * A tapped alignment chip (2.0.0). Records the pick on [messageId]'s own surface — so the chip
+   * renders selected/locked and the unpicked chips fade back — then sends the chip's value as a
+   * follow-up.
+   *
+   * A dedicated action rather than a branch inside [sendFollowUpQuestion], because that one is
+   * ALSO the plain text composer's send path: recording there would mark a chip as chosen whenever
+   * the farmer happened to type a string matching one.
+   */
+  selectAlignmentChip: (messageId: string, kind: AlignmentKind, chip: AlignmentChip) => Promise<void>;
+  /**
+   * The GPS_PROMPT "Share my location" chip succeeded (2.0.0): show [address] as a
+   * `LocationMessage` bubble and re-send the surface's `alignmentOriginalQuery`.
+   *
+   * Port of Kotlin `ChatViewModel.sendLocationSharedQuery`. The location bubble takes the place of
+   * the user text bubble an ordinary send would add — the farmer never typed anything, they shared
+   * a location — and a blank [address] yields no bubble at all while the query is still re-sent,
+   * matching the app.
+   *
+   * The capability flow itself belongs to the screen: `ChatScreen` runs the browser location flow
+   * and calls this only on a `location_fetched` outcome. A declined / cancelled / failed outcome
+   * sends the decline label through [sendFollowUpQuestion] instead.
+   *
+   * Two deliberate deltas from the app, both mirrored from Android and recorded in docs/04:
+   *  - **no `parent_message_id`.** `TextPromptRequest` has no such field, so no alignment-chip
+   *    send carries it — an SDK-wide gap, not specific to this path.
+   *  - **no `agentic_chip_*` analytics properties.** This reports as an ordinary text query;
+   *    `triggered_input_type` IS sent as `align_chip_sel` (app parity).
+   */
+  sendLocationSharedQuery: (sourceMessageId: string, address: string) => Promise<void>;
   sendQuestionWithImage: (question: string, imageBlob: Blob, imageObjectUrl: string) => Promise<void>;
   sendFollowUpVoiceQuestion: (recording: VoiceRecording) => Promise<void>;
   replacePreGeneratedWithQuestion: (question: string, triggerInputType?: string) => Promise<void>;
@@ -199,6 +264,12 @@ export interface ChatActions {
  * `TOOL_STATUS_MIN_DWELL_MS`.
  */
 const TOOL_STATUS_MIN_DWELL_MS = 700;
+
+/**
+ * `triggered_input_type` for a query re-sent after an alignment capability chip was satisfied.
+ * Kotlin `ChatViewModel.ALIGN_CHIP_SEL` — the app's own string, sent verbatim.
+ */
+const ALIGN_CHIP_SEL = 'align_chip_sel';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
 
@@ -620,6 +691,16 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         properties?: SendQueryProperties;
         retry?: boolean;
         reuseUserMessageId?: string;
+        /**
+         * Skip the user text bubble this normally appends. Set by
+         * {@link ChatActions.sendLocationSharedQuery}, whose caller has already appended a
+         * `LocationMessage` bubble in its place — Kotlin gets this for free because its
+         * `fetchTextPromptResponse` never adds a bubble of its own.
+         *
+         * Carried through the retry closure below (it spreads `opts`), so a retry does not
+         * suddenly grow the bubble the first attempt suppressed.
+         */
+        suppressUserMessage?: boolean;
       },
     ) => {
       const userMsgId = opts.reuseUserMessageId ?? nextLocalId('user');
@@ -628,7 +709,11 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
       setState((s) => {
         let messages = s.messages;
-        if (opts.reuseUserMessageId) {
+        if (opts.suppressUserMessage) {
+          // No bubble to add, and none to un-fail on retry. `failAnswer(ctx.userMsgId)` then
+          // matches no message and degrades to a no-op — the inline error card is the retry
+          // affordance, as it is on Android where this path has no user bubble either.
+        } else if (opts.reuseUserMessageId) {
           messages = messages.map((m) => (m.id === userMsgId && m.kind === 'user' ? { ...m, isFailed: false } : m));
         } else {
           const userMsg: UserMessage = {
@@ -654,6 +739,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
       analytics.track(Events.SEND_QUERY_INITIATED, {
         triggered_input_type: props.triggeredInputType ?? 'text',
+        // Only present for an alignment-chip tap, so ordinary sends keep their v1 payload.
+        ...(props.agenticChipType ? { agentic_chip_type: props.agenticChipType } : {}),
       });
       analytics.messageSent(question);
 
@@ -800,10 +887,79 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       await runTextQuery(question, {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
-        properties: { triggeredInputType: opts.audioUri ? 'mic' : 'card' },
+        properties: {
+          triggeredInputType: opts.audioUri ? 'mic' : 'card',
+          agenticChipType: opts.agenticChipType ?? null,
+        },
       });
     },
     [analytics, api, runTextQuery],
+  );
+
+  const selectAlignmentChip = useCallback<ChatActions['selectAlignmentChip']>(
+    async (messageId, kind, chip) => {
+      // The chip's `value` is what the backend expects; `label` is the display text and only a
+      // fallback. Stored verbatim (never trimmed) so it still matches the untrimmed comparison
+      // `AlignmentSurface` makes against chip.value / chip.label.
+      const picked = chip.value ?? chip.label ?? '';
+      if (picked.trim().length === 0) return;
+      setState((s) => {
+        const messages = recordAlignmentPick(s.messages, messageId, picked);
+        return messages === s.messages ? s : { ...s, messages: messages as ChatMessage[] };
+      });
+      await sendFollowUpQuestion(picked, {
+        // Segments the funnel by which alignment surface was tapped. Existing event, existing
+        // property name (`AlignmentKind.analyticsType` on Android) — no new event is introduced.
+        agenticChipType: alignmentAnalyticsType(kind),
+      });
+    },
+    [sendFollowUpQuestion],
+  );
+
+  const sendLocationSharedQuery = useCallback<ChatActions['sendLocationSharedQuery']>(
+    async (sourceMessageId, address) => {
+      if (stateRef.current.isLoading) return;
+      const source = stateRef.current.messages.find(
+        (m): m is AiResponse => m.kind === 'ai' && m.id === sourceMessageId,
+      );
+      // No original query means nothing to ask — bail BEFORE mutating state (defensive; the
+      // gps-prompt contract always carries original_query).
+      const query = source?.alignmentOriginalQuery ?? '';
+      if (query.trim().length === 0) return;
+
+      setState((s) => {
+        // Mark share_precise_location as picked so the source chip locks/highlights exactly as a
+        // plain chip tap would. `selectAlignmentChip` cannot do it — the chip's text is never sent
+        // as the question, so there is nothing for it to match on.
+        const marked = recordAlignmentPick(
+          s.messages,
+          sourceMessageId,
+          CapabilityChip.VALUE_SHARE_LOCATION,
+        ) as ChatMessage[];
+        // A blank address yields no bubble at all (app parity); the query is still re-sent.
+        const additions: ChatMessage[] =
+          address.trim().length > 0
+            ? [{ kind: 'location', id: nextLocalId('location'), address } as LocationMessage]
+            : [];
+        return {
+          ...s,
+          messages: [...marked, ...additions],
+          errorMessage: null,
+          failedMessageId: null,
+          suggestedQuestions: null,
+          suggestedQuestionIds: null,
+        };
+      });
+
+      // `runTextQuery` adds the loading placeholder after the bubble above, sets isLoading and
+      // owns SEND_QUERY_INITIATED — deliberately with NO agenticChipType, so this reports as an
+      // ordinary text query (Android delta, docs/04).
+      await runTextQuery(query, {
+        properties: { triggeredInputType: ALIGN_CHIP_SEL },
+        suppressUserMessage: true,
+      });
+    },
+    [runTextQuery],
   );
 
   const sendQuestionWithImage = useCallback<ChatActions['sendQuestionWithImage']>(
@@ -1076,6 +1232,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       initializeWithPreGeneratedContent,
       initializeVoicePrototype,
       sendFollowUpQuestion,
+      selectAlignmentChip,
+      sendLocationSharedQuery,
       sendQuestionWithImage,
       sendFollowUpVoiceQuestion,
       replacePreGeneratedWithQuestion,

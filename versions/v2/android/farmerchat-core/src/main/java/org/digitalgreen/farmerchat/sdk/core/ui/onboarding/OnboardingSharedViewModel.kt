@@ -17,6 +17,7 @@ import org.digitalgreen.farmerchat.sdk.core.labels.LabelManager
 import org.digitalgreen.farmerchat.sdk.core.model.AcceptPPandTCRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SetPreferredLanguageRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SupportedLanguage
+import org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.FetchGeoLocationUseCase
@@ -36,6 +37,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.UpdateLocationRequest
  * AcceptTerms (best-effort).
  */
 class OnboardingSharedViewModel(
+    private val appContext: android.content.Context,
     private val fetchGeoLocationUseCase: FetchGeoLocationUseCase,
     private val getSupportedLanguagesUseCase: GetSupportedLanguagesUseCase,
     private val getLanguageLabelsUseCase: GetLanguageLabelsUseCase,
@@ -104,8 +106,18 @@ class OnboardingSharedViewModel(
                     _state.update { it.copy(geoState = UiState.Success(geo.data)) }
                 }
                 is ApiResult.Error -> {
-                    // P1 fallback endpoint — tolerated failure; guest init proceeds IP-based.
+                    // P1 fallback endpoint — tolerated failure. The app does NOT then proceed
+                    // with no coordinates: it falls back to the DEVICE LOCALE's country centroid
+                    // (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and accepts it only when
+                    // `lat != 0.0 && lng != 0.0`. A locale with no region yields (0.0, 0.0), which
+                    // must stay unresolved — sending it would place the farmer off West Africa.
                     _state.update { it.copy(geoState = geo.toUiError()) }
+                    val (_, localeLat, localeLng) = resolveFallbackCoordinates()
+                    if (CountryLatLngProvider.isResolved(localeLat, localeLng)) {
+                        lat = localeLat
+                        lng = localeLng
+                        accuracy = 0.0
+                    }
                 }
             }
 
@@ -119,7 +131,7 @@ class OnboardingSharedViewModel(
                     val countryCode = init.data.country_code?.takeIf { it.isNotBlank() }
                         ?: prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
                             .takeIf { it.isNotBlank() }
-                        ?: config.defaultCountryCode
+                        ?: config.resolvedFallbackCountryCode(appContext)
                     val stateName = init.data.state?.takeIf { it.isNotBlank() }
                         ?: prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
                             .takeIf { it.isNotBlank() }
@@ -150,6 +162,22 @@ class OnboardingSharedViewModel(
     }
 
     /**
+     * The coordinates to use when neither guest init nor GPS resolved a location.
+     *
+     * Order: the host's explicit config override, then the DEVICE LOCALE's country centroid —
+     * the app's own fallback (`CountryLatLngProvider.getLatLngFromDeviceLocale`). Returns
+     * (code, 0.0, 0.0) when neither is available, which callers must treat as "no location";
+     * see [CountryLatLngProvider.isResolved].
+     *
+     * There is deliberately NO hardcoded city here. A previous build defaulted to Bengaluru,
+     * so every guest the backend could not place — anywhere on earth — was told about Karnataka.
+     */
+    private fun resolveFallbackCoordinates(): Triple<String, Double, Double> {
+        val (lat, lng) = config.resolvedFallbackCoordinates(appContext)
+        return Triple(config.resolvedFallbackCountryCode(appContext), lat, lng)
+    }
+
+    /**
      * Posts the configured default coordinates to endpoint #11 so a guest with no resolvable
      * location still gets a home feed. Best-effort: a failure just leaves the feed empty, which
      * is the pre-existing behaviour, so it never blocks onboarding.
@@ -157,10 +185,15 @@ class OnboardingSharedViewModel(
     private suspend fun seedDefaultLocation() {
         val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
         if (userId.isBlank()) return
+        val (lat, lng) = resolveFallbackCoordinates().let { it.second to it.third }
+        // Nothing resolved — not the host's config, not the device locale. Send nothing rather
+        // than guess: an unplaceable guest gets an empty feed, which is honest, where a guessed
+        // city would silently give them another country's advice.
+        if (!CountryLatLngProvider.isResolved(lat, lng)) return
         val result = updateUserLocationUseCase.updateUserLocation(
             UpdateLocationRequest(
-                lat = config.defaultLatitude.toString(),
-                long = config.defaultLongitude.toString(),
+                lat = lat.toString(),
+                long = lng.toString(),
                 user_id = userId
             )
         ).first()

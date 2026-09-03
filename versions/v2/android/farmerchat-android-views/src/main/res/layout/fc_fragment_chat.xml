@@ -107,6 +107,23 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!--
+      Unified input composer (2.0.0) — camera / text field / mic-or-send.
+
+      Shown INSTEAD of fcChatInputButtons when `config.enableAgenticChat` is on (Compose parity:
+      ChatScreen's `isComposerUi` branch). It is a direct child of the root FrameLayout, i.e. the
+      SAME nesting level as fcChatOverlays below, because it seats itself from the ROOT window
+      insets — a sibling of the `fitsSystemWindows="true"` LinearLayout above sees zeroed
+      dispatched insets, which is exactly why InputOverlaysController reads root insets too.
+      Declared BEFORE the overlays so the photo/voice panels still draw over it.
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.InputComposerView
+        android:id="@+id/fcChatComposer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone" />
+
     <include
         android:id="@+id/fcChatOverlays"
         layout="@layout/fc_view_input_overlays" />

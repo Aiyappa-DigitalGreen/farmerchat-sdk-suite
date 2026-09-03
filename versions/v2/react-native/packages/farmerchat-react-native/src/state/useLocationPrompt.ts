@@ -10,6 +10,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { AnalyticsEvents } from '../core/analytics';
+import type {
+  LocationPromptEvent,
+  LocationPromptSource,
+} from '../core/locationOutcome';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
 
@@ -24,11 +28,17 @@ export type LocationPromptState =
   | { kind: 'Recovery' }
   | { kind: 'Error'; errorType: LocationErrorType };
 
-export type LocationPromptSource = 'weather' | 'widget';
-
-export type LocationPromptEvent =
-  | { kind: 'LocationUpdatedFromWidget' }
-  | { kind: 'LocationReady' };
+/**
+ * The trigger sources and the terminal event vocabulary live in `core/locationOutcome.ts` — a
+ * module with no runtime imports — so the "did we actually get a location?" rule can be
+ * exercised without React or `expo-location`. Re-exported here because every existing importer
+ * reads them from this module (Android's equivalent split: `LocationPromptModels.kt` vs
+ * `LocationPromptManager.kt`).
+ */
+export type {
+  LocationPromptEvent,
+  LocationPromptSource,
+} from '../core/locationOutcome';
 
 export interface UseLocationPromptResult {
   state: LocationPromptState;
@@ -37,6 +47,12 @@ export interface UseLocationPromptResult {
   triggerFromWeather: (onLocationReady: () => void) => void;
   /** Campaign/widget flow — silent (no interstitial during fetch). */
   triggerFromWidget: () => void;
+  /**
+   * 2.0.0 chat capability chip flow (Android core `triggerFromLocalContext`). Goes through the
+   * interstitial like the weather flow — the farmer asked a question, they did not ask for a
+   * permission dialog — and raises a terminal `Continue` / `Cancel` carrying this source.
+   */
+  triggerFromLocalContext: () => void;
   shareLocation: () => void;
   skip: () => void;
   dismissError: () => void;
@@ -64,8 +80,17 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
     };
   }, []);
 
+  /**
+   * Synchronous mirror of `state`. A terminal action must ask "was a flow actually ACTIVE?"
+   * before it clears it, and React state cannot be read back synchronously after a set — the
+   * Android core reads its `_state` StateFlow for exactly this (`dismiss()`'s
+   * capture-before-clearing). Written only through `set`, so it is authoritative.
+   */
+  const stateRef = useRef<LocationPromptState>({ kind: 'Idle' });
+
   const set = useCallback((next: LocationPromptState) => {
     if (!mounted.current) return;
+    stateRef.current = next;
     setState(next);
   }, []);
 
@@ -161,14 +186,20 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
       await saveLocation(location.coords.latitude, location.coords.longitude);
       if (!mounted.current) return;
       set({ kind: 'Idle' });
-      if (sourceRef.current === 'widget') {
+      const src = sourceRef.current;
+      if (src === 'widget') {
         emit({ kind: 'LocationUpdatedFromWidget' });
-      } else {
+      } else if (src === 'weather') {
         emit({ kind: 'LocationReady' });
-        const nav = pendingNavigation.current;
-        pendingNavigation.current = null;
-        nav?.();
       }
+      // Android parity (`LocationPromptManager.onLocationFetched`): a terminal Continue for
+      // EVERY source, carrying the `location_fetched` reason a chat capability chip arms on.
+      emit({ kind: 'Continue', source: src, reason: 'location_fetched' });
+      // Only the weather flow ever registers one (triggerFromWidget/LocalContext clear it), so
+      // hoisting this out of the branch above cannot fire a stray navigation.
+      const nav = pendingNavigation.current;
+      pendingNavigation.current = null;
+      nav?.();
     } else {
       sdk.analytics.track(AnalyticsEvents.LOCATION_FETCH_FAILED_TIMEOUT, {});
       set({ kind: 'Error', errorType: 'LocationFailed' });
@@ -216,9 +247,12 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
           AnalyticsEvents.PERMISSION_FALLBACK_DEFAULT_SETTING_SHOWN,
           { permission: 'location' },
         );
+        // Permanently denied → the recovery sheet owns the flow; no terminal event yet, exactly
+        // as in `LocationPromptManager.onPermissionResult`.
         set({ kind: 'Recovery' });
       } else {
         set({ kind: 'Idle' });
+        emit({ kind: 'Cancel', source: sourceRef.current });
       }
     }
   }, [fetchLocation, sdk, set]);
@@ -247,6 +281,22 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
     void requestPermissionAndFetch();
   }, [requestPermissionAndFetch, sdk]);
 
+  /**
+   * 2.0.0 chat capability chip. Mirrors Android's `triggerFromLocalContext`: straight to the
+   * interstitial, no pending navigation. `LocationPromptHost` already renders the interstitial
+   * for every non-widget source, so nothing there needs to change.
+   */
+  const triggerFromLocalContext = useCallback(() => {
+    sourceRef.current = 'localContext';
+    setSource('localContext');
+    pendingNavigation.current = null;
+    sdk.analytics.track(AnalyticsEvents.LOCATION_UPDATE_TRIGGERED, {
+      source: 'localContext',
+    });
+    set({ kind: 'Interstitial' });
+    trackStep('interstitial_shown');
+  }, [sdk, set, trackStep]);
+
   const shareLocation = useCallback(() => {
     trackStep('share_clicked');
     void requestPermissionAndFetch();
@@ -255,12 +305,31 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
   const skip = useCallback(() => {
     trackStep('skipped');
     pendingNavigation.current = null;
+    // Capture before clearing (Android's `wasActive`): emitting when no flow was running would
+    // hand an armed chat surface a decline it never asked for.
+    const wasActive = stateRef.current.kind !== 'Idle';
     set({ kind: 'Idle' });
-  }, [set, trackStep]);
+    // Android parity (`onSkipClicked`): a skip is a terminal Cancel for whichever surface
+    // started the flow.
+    if (wasActive) emit({ kind: 'Cancel', source: sourceRef.current });
+  }, [emit, set, trackStep]);
 
   const dismissError = useCallback(() => {
+    // Capture before clearing (Android's `wasActive`). `handleLogout` calls this on an already
+    // Idle machine, and an emission there would settle an armed chat surface with a decline the
+    // farmer never triggered.
+    const wasActive = stateRef.current.kind !== 'Idle';
     set({ kind: 'Idle' });
-  }, [set]);
+    // EVERY terminal exit must settle an armed caller, or a chat capability chip waits forever
+    // and the farmer's blocking question is never answered — the bug the Android core fixed by
+    // making `dismiss()` emit `Continue(reason = "dismissed")`. This is the only TERMINAL exit
+    // from the Error and Recovery states (their primary buttons re-enter the flow instead), so
+    // it emits: as `Cancel`, which is what Compose's own error card does (its buttons call
+    // `onSkipClicked`). Cancel and `Continue("dismissed")` are equally non-success under
+    // `isLocationObtained`, so the armed chat surface settles into its decline query either way
+    // (recorded in docs/04).
+    if (wasActive) emit({ kind: 'Cancel', source: sourceRef.current });
+  }, [emit, set]);
 
   const retryFromRecovery = useCallback(() => {
     sdk.analytics.track(
@@ -292,6 +361,7 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
     source,
     triggerFromWeather,
     triggerFromWidget,
+    triggerFromLocalContext,
     shareLocation,
     skip,
     dismissError,

@@ -51,9 +51,19 @@ are **additive** (they accompany a real answer), the rest **exclusive** (they re
 | Stream consumer + sanitizer | ✅ | n/a | n/a | ✅ | ✅ | ✅ |
 | Streaming UI + stall hint + error card | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
 | Alignment model + chip surfaces | ✅ | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
-| `InputComposer`, Home agentic layout | n/a | ✅ | 🟡 in progress | ⛔ | ⛔ | ⛔ |
-| `TermsOfUseDialog`, Settings "My Farm" | n/a | 🟡 in progress | ⛔ | ⛔ | ⛔ | ⛔ |
-| UIKit 2.0.0 UI | — | — | — | 🟡 in progress | — | — |
+| `LocationChatBubble` | n/a | ✅ | ✅ | ✅ both | ✅ | ✅ |
+| **Location bubble actually produced** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Capability chips** (`gps-prompt`, `upload-photo`) | ✅ | ✅ | ✅ | ✅ both | ✅ | ✅ |
+| `InputComposer` wired into Home + Chat | n/a | ✅ | ✅ | ⛔ | ✅ | ✅ |
+| Home agentic layout (surface, gradient, header) | n/a | ✅ | 🟡 header title only | ⛔ | 🟡 no sunbeams | 🟡 no sunbeams |
+| `TermsOfUseDialog` | n/a | ✅ | ⛔ | ⛔ | ✅ | ✅ |
+| Settings "My Farm" | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
+| UIKit 2.0.0 UI | — | — | — | ✅ | — | — |
+
+Until 2026-09-02 the `LocationChatBubble` row was ✅ on four platforms and **completely unreachable**
+— every alignment chip sent its own text, so `gps-prompt` never ran the location flow and nothing
+ever constructed the message the bubble renders. Hence the second row: a component that renders is
+not a feature until something produces its input. See "The capability-chip gap" in `docs/04`.
 
 `docs/04-parity-matrix.md` is the authoritative ledger for both versions.
 
@@ -72,10 +82,10 @@ Because the wire cannot be exercised, tests are the only guard:
 
 | Platform | Tests |
 |---|---|
-| android | 31 unit tests — parser 14, sanitizer 9, `AlignmentKind` 5, alignment pick 3 |
-| ios | 57 (`swift test`), including no-timeout session assertions |
-| web | 85 assertions, including a JSON object split one byte per chunk |
-| react-native | 46 assertions, run out-of-tree — the package has no test runner |
+| android | **43** unit tests — parser 14, sanitizer 9, `AlignmentKind` 5, alignment pick 3, capability chip 7, location outcome 5 |
+| ios | **79** (`swift test`), including no-timeout session assertions, capability chip 12, location outcome 7 |
+| web | **174** assertions (agentic 73, stream 12, alignment-pick 11, capability-chip 36, markdown 42), including a JSON object split one byte per chunk |
+| react-native | 86 assertions, run out-of-tree — the package has no test runner (46 agentic/alignment + 40 capability-chip / location-outcome) |
 
 **Nothing has run on a device or in a browser.** Everything is build- and test-verified only.
 

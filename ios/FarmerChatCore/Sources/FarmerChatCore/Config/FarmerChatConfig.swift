@@ -68,24 +68,63 @@ public struct FarmerChatConfig: Sendable {
         return environment.baseURL
     }
 
-    /// Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
-    /// The endpoint 400s on a blank value, so a non-empty default is required.
-    public static let defaultCountryCodeFallback = "IN"
-
-    /// Fallback state/region paired with `defaultCountryCodeFallback`.
+    /// LAST RESORT country for endpoint #2 — used ONLY when the server returned no `country_code`,
+    /// none is persisted, the host configured none, AND the device locale carries no region.
     ///
-    /// Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only to
-    /// rank languages. Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in
-    /// `priority_view`, while `state=KA` pushes it into `expanded_view` ("All languages").
-    public static let defaultStateCodeFallback = "Karnataka"
-
-    /// Coordinates representing the fallback region (Bengaluru, Karnataka).
+    /// The endpoint 400s on a blank value (verified live 2026-09-03: `country_code=` →
+    /// `{"error": "Country code is required"}`), so *something* non-blank must be sent. The app
+    /// does the same thing on its primary guest-init path, where the literal is `"KE"`. `"KE"`
+    /// also matches the live data: dev, stage, prod and eks all return Kenya only (verified live
+    /// 2026-09-03).
     ///
-    /// Endpoint #12 (home feed) is gated on the backend having a resolved location, and it
+    /// This is a floor, not a default. The normal answer comes from the device locale via
+    /// `CountryLatLngProvider` — see `resolvedFallbackCountryCode`.
+    public static let lastResortCountryCode = "KE"
+
+    /// No default state is invented.
+    ///
+    /// Endpoint #2's `state` is inert on every environment — dev, stage, prod and eks all return
+    /// the identical set for `state=Karnataka`, `state=KA`, `state=` and the parameter omitted
+    /// (verified live 2026-09-03). An earlier build shipped `"Karnataka"` as a default, which is
+    /// both unfaithful to the app and wrong for a Kenya-only backend.
+    public static let defaultStateCodeUnset = ""
+
+    /// Sentinel meaning "no coordinates configured — derive them from the device locale".
+    ///
+    /// The app has NO hardcoded coordinates: on IP-geolocation failure it calls
+    /// `CountryLatLngProvider.getLatLngFromDeviceLocale(context)` and uses that country's
+    /// centroid, accepting it only when `lat != 0.0 && lng != 0.0`. An earlier build of this SDK
+    /// shipped Bengaluru (12.9716, 77.5946) as a hardcoded default, which sent every unplaceable
+    /// guest advice for Karnataka regardless of where they actually are.
+    ///
+    /// Endpoint #12 (home feed) is gated on the backend having resolved a location, and it
     /// resolves one ONLY from coordinates — a country name alone is rejected (verified live
-    /// 2026-09-01). Seeding #11 with these keeps a guest's home screen populated.
-    public static let defaultLatitudeFallback = 12.9716
-    public static let defaultLongitudeFallback = 77.5946
+    /// 2026-09-01) — which is why coordinates are needed at all.
+    public static let coordinateUnset = 0.0
+
+    /// The country actually sent when neither the server nor the preferences supplied one:
+    /// the host's explicit config, else the DEVICE LOCALE's region, else `lastResortCountryCode`.
+    ///
+    /// Single source for both onboarding and the settings language chooser so the two cannot drift.
+    public var resolvedFallbackCountryCode: String {
+        defaultCountryCode.nonBlank
+            ?? CountryLatLngProvider.fromDeviceLocale().countryCode.nonBlank
+            ?? Self.lastResortCountryCode
+    }
+
+    /// The coordinates to use when neither guest init nor GPS resolved a location: the host's
+    /// explicit config override, else the DEVICE LOCALE's country centroid — the app's own
+    /// fallback. Returns (0.0, 0.0) when neither is available, which callers MUST treat as
+    /// "no location"; see `CountryLatLngProvider.isResolved`.
+    ///
+    /// There is deliberately NO hardcoded city here.
+    var resolvedFallbackCoordinates: (lat: Double, lng: Double) {
+        if CountryLatLngProvider.isResolved(lat: defaultLatitude, lng: defaultLongitude) {
+            return (defaultLatitude, defaultLongitude)
+        }
+        let locale = CountryLatLngProvider.fromDeviceLocale()
+        return (locale.lat, locale.lng)
+    }
 
     public var environment: FarmerChatEnvironment
     /// Optional custom base URL. When set (non-empty) it OVERRIDES `environment`'s
@@ -103,14 +142,25 @@ public struct FarmerChatConfig: Sendable {
     /// Preselect a language; skips the language screen when it resolves to a
     /// supported language.
     public var languageCode: String?
-    /// Country code used for the language list when `initialize_user` returns a null/blank
-    /// `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
-    /// Endpoint #2 rejects a blank `country_code` with HTTP 400, so this must never be empty.
+    /// OPTIONAL override for the country used in the language list when `initialize_user` returns
+    /// a null/blank `country_code` (the normal case for a fresh guest on an IP the backend cannot
+    /// resolve — verified live 2026-09-03 on prod).
+    ///
+    /// **Leave this empty (the default) and the SDK derives the country from the device locale**,
+    /// exactly as the app does. Endpoint #2 rejects a blank `country_code` with HTTP 400, so if
+    /// the locale carries no region either, `lastResortCountryCode` is sent.
+    ///
+    /// Set it only to pin the SDK to one region regardless of where the device is.
     public var defaultCountryCode: String
-    /// State/region paired with `defaultCountryCode` for the endpoint #2 `state` query param.
+    /// OPTIONAL `state` query param for endpoint #2. Empty by default and safe to leave empty:
+    /// the parameter is inert on every environment (verified live 2026-09-03).
     public var defaultStateCode: String
-    /// Coordinates for `defaultCountryCode`/`defaultStateCode`, used to seed endpoint #11 when
-    /// nothing else resolved a location so the home feed is never empty.
+    /// OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a
+    /// location. **Leave these at `coordinateUnset` (the default) and the SDK uses the device
+    /// locale's country centroid**, exactly as the app does on IP-geolocation failure.
+    ///
+    /// If both these and the device locale are unset, NO coordinates are sent — a guess would put
+    /// the farmer's advice in the wrong place. Set them to pin a region deliberately.
     public var defaultLatitude: Double
     public var defaultLongitude: Double
     public var enableVoice: Bool
@@ -179,10 +229,10 @@ public struct FarmerChatConfig: Sendable {
         appearance: FarmerChatAppearance = .auto,
         theme: FarmerChatTheme? = nil,
         languageCode: String? = nil,
-        defaultCountryCode: String = FarmerChatConfig.defaultCountryCodeFallback,
-        defaultStateCode: String = FarmerChatConfig.defaultStateCodeFallback,
-        defaultLatitude: Double = FarmerChatConfig.defaultLatitudeFallback,
-        defaultLongitude: Double = FarmerChatConfig.defaultLongitudeFallback,
+        defaultCountryCode: String = "",
+        defaultStateCode: String = FarmerChatConfig.defaultStateCodeUnset,
+        defaultLatitude: Double = FarmerChatConfig.coordinateUnset,
+        defaultLongitude: Double = FarmerChatConfig.coordinateUnset,
         enableVoice: Bool = true,
         enableImages: Bool = true,
         enableWeather: Bool = true,
@@ -221,10 +271,10 @@ public struct FarmerChatConfig: Sendable {
         self.appearance = appearance
         self.theme = theme
         self.languageCode = languageCode
-        self.defaultCountryCode = defaultCountryCode.isEmpty
-            ? FarmerChatConfig.defaultCountryCodeFallback : defaultCountryCode
-        self.defaultStateCode = defaultStateCode.isEmpty
-            ? FarmerChatConfig.defaultStateCodeFallback : defaultStateCode
+        // NO coercion: empty means "unset — derive from the device locale", not "substitute a
+        // hardcoded region". A host that passes a value explicitly still wins.
+        self.defaultCountryCode = defaultCountryCode
+        self.defaultStateCode = defaultStateCode
         self.defaultLatitude = defaultLatitude
         self.defaultLongitude = defaultLongitude
         self.enableVoice = enableVoice

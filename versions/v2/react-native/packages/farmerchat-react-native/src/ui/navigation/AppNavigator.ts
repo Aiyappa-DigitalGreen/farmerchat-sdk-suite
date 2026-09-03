@@ -27,6 +27,10 @@ function screenToRoute(destination: FarmerChatScreen): keyof RootStackParamList 
       return 'SettingsLanguage';
     case 'help':
       return 'Help';
+    // 2.0.0: the terms surface is a dialog owned by Home, not a route of its own — the
+    // request lands on Home and `onTermsOfUseRequested` raises the dialog there.
+    case 'termsofuse':
+      return 'Home';
   }
 }
 
@@ -150,6 +154,13 @@ export class AppNavigator {
     }
   }
 
+  /**
+   * Raised when a `'termsofuse'` screen target is routed, so the graph can open Home's in-app
+   * Terms-of-Use dialog. Set by `AppNavGraph`; mirrors Compose's `termsOfUseRequested` flag
+   * threaded from `FarmerChatRoot` into `HomeScreen`.
+   */
+  onTermsOfUseRequested: (() => void) | null = null;
+
   /** Programmatic C4 navigation to a top-level screen. */
   openScreenTarget(destination: FarmerChatScreen): void {
     if (destination === 'chat') {
@@ -157,6 +168,9 @@ export class AppNavigator {
       return;
     }
     this.navigateDrawerRoute(screenToRoute(destination));
+    // Home is already the route above; raising the flag AFTER the navigation means the
+    // dialog opens on the Home that is now on screen.
+    if (destination === 'termsofuse') this.onTermsOfUseRequested?.();
   }
 
   navigateToChat(params: ChatRouteParams): void {

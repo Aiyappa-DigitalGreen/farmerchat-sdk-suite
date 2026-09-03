@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Composer text field (2.0.0). Compose parity: Radius.LG = 16dp. The fill is animated at
+     runtime between content/surfaceSecondary (idle) and surfaceReadingTertiary (active). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_surface_secondary" />
+    <corners android:radius="16dp" />
+</shape>

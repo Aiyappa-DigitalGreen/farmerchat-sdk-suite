@@ -125,7 +125,13 @@ import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import java.io.File
 import androidx.compose.ui.platform.LocalConfiguration
 import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
+import org.digitalgreen.farmerchat.sdk.core.ui.location.isLocationObtained
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 import org.digitalgreen.farmerchat.sdk.compose.components.AlignmentSurface
 import org.digitalgreen.farmerchat.sdk.compose.components.LocationChatBubble
 
@@ -460,7 +466,15 @@ fun ChatScreen(
         val uri = cameraTempUri
         if (success && uri != null) {
             closePhotoInput?.invoke()
-            vm.onAction(ChatAction.SendQuestionWithImage(question = "", imageUri = uri))
+            if (isComposerUi) {
+                // App parity: in composer mode a picked photo is ATTACHED so it can be sent
+                // together with typed text (fc-compose-agentic ChatScreen.kt:499/550). Only one
+                // image is allowed, so a new pick replaces the old. Without this the composer's
+                // thumbnail strip and onRemovePhoto are unreachable and image+text is impossible.
+                photoUris = listOf(uri)
+            } else {
+                vm.onAction(ChatAction.SendQuestionWithImage(question = "", imageUri = uri))
+            }
         }
     }
 
@@ -469,7 +483,15 @@ fun ChatScreen(
     ) { uri ->
         if (uri != null) {
             closePhotoInput?.invoke()
-            vm.onAction(ChatAction.SendQuestionWithImage(question = "", imageUri = uri))
+            if (isComposerUi) {
+                // App parity: in composer mode a picked photo is ATTACHED so it can be sent
+                // together with typed text (fc-compose-agentic ChatScreen.kt:499/550). Only one
+                // image is allowed, so a new pick replaces the old. Without this the composer's
+                // thumbnail strip and onRemovePhoto are unreachable and image+text is impossible.
+                photoUris = listOf(uri)
+            } else {
+                vm.onAction(ChatAction.SendQuestionWithImage(question = "", imageUri = uri))
+            }
         }
     }
 
@@ -524,6 +546,86 @@ fun ChatScreen(
             else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
+
+    // ---------------------------------------------------------------- capability chips (2.0.0)
+    // GPS_PROMPT and UPLOAD_PHOTO chips do NOT send their text as a question — they invoke a
+    // device capability and only the OUTCOME is sent. Every other chip stays on the plain
+    // follow-up path.
+    var pendingLocationSourceId by remember { mutableStateOf<String?>(null) }
+
+    // The address shown in the location bubble, assembled exactly as the app does.
+    val composeResolvedAddress: () -> String = {
+        val best = graph.prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "")
+        val stateName = graph.prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
+        val country = graph.prefs.getString(SdkPreferences.Keys.USER_COUNTRY_NAME, "")
+        listOf(best, stateName, country).filter { it.isNotBlank() }.distinct().joinToString(", ")
+    }
+
+    // Observe location outcomes for the chat share-location flow. Subscribed for the life of the
+    // screen but inert until armed (pendingLocationSourceId != null), so an outcome belonging to
+    // Home or Settings is ignored.
+    LaunchedEffect(Unit) {
+        graph.locationPromptManager.events.collect { event ->
+            val srcId = pendingLocationSourceId ?: return@collect
+            val source = when (event) {
+                is LocationPromptEvent.Continue -> event.source
+                is LocationPromptEvent.Cancel -> event.source
+                else -> return@collect
+            }
+            if (source != LocationTriggerSource.LocalContext) return@collect
+            // A terminal event for our request — disarm before dispatching.
+            pendingLocationSourceId = null
+            if (event.isLocationObtained()) {
+                vm.onAction(
+                    ChatAction.SendLocationSharedQuery(
+                        sourceMessageId = srcId,
+                        address = composeResolvedAddress()
+                    )
+                )
+            } else {
+                // Denied / cancelled / fetch failed: still answer the blocking question, by sending
+                // the decline text as an ordinary follow-up. The app sends this through
+                // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
+                // neither, so the correlation and the chip analytics are lost (docs/04).
+                val declineText = label(
+                    Labels.LOCATION_PERMISSION_DECLINED,
+                    "Continue without sharing my location"
+                )
+                vm.onAction(ChatAction.SendFollowUpQuestion(question = declineText))
+            }
+        }
+    }
+
+    /**
+     * Routes an alignment chip tap: capability chips invoke a capability, everything else sends
+     * text. Port of the app's `onAlignmentChipClick`.
+     */
+    val handleAlignmentChip: (String, AlignmentKind?, AlignmentChip) -> Unit =
+        { messageId, kind, chip ->
+            val isInvoke = chip.action == AlignmentChip.ACTION_SELECT
+            val isShareLocation = kind == AlignmentKind.GPS_PROMPT && isInvoke &&
+                chip.value == AlignmentChip.VALUE_SHARE_LOCATION
+            val isPhotoCapability = kind == AlignmentKind.UPLOAD_PHOTO && isInvoke
+            when {
+                isShareLocation -> {
+                    // Permission dialog / GPS fetch / recovery are owned by LocationPromptHost;
+                    // the outcome arrives on the collector above. Only start when no other
+                    // location flow is running (mirrors Home's guard).
+                    if (graph.locationPromptManager.state.value is LocationPromptState.Idle) {
+                        pendingLocationSourceId = messageId
+                        graph.locationPromptManager.triggerFromLocalContext()
+                    }
+                }
+                isPhotoCapability && chip.value == AlignmentChip.VALUE_TAKE_PHOTO -> requestCamera()
+                isPhotoCapability && chip.value == AlignmentChip.VALUE_CHOOSE_FROM_GALLERY ->
+                    runCatching { galleryLauncher.launch("image/*") }
+                else -> vm.onAction(
+                    ChatAction.SendFollowUpQuestion(
+                        question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
+                    )
+                )
+            }
+        }
 
     fun requestMicThenOpenVoice() {
         graph.analytics.track(
@@ -779,12 +881,7 @@ fun ChatScreen(
                                                     isLoading = state.isLoading,
                                                     isLatest = isLastAi,
                                                     onChipClick = { chip ->
-                                                        vm.onAction(
-                                                            ChatAction.SendFollowUpQuestion(
-                                                                question = chip.value?.takeIf { it.isNotBlank() }
-                                                                    ?: chip.label.orEmpty()
-                                                            )
-                                                        )
+                                                        handleAlignmentChip(message.id, alignmentKind, chip)
                                                     },
                                                     onTypeInstead = { focusTextInput?.invoke() }
                                                 )
@@ -858,12 +955,7 @@ fun ChatScreen(
                                                         isLoading = state.isLoading,
                                                         isLatest = isLastAi,
                                                         onChipClick = { chip ->
-                                                            vm.onAction(
-                                                                ChatAction.SendFollowUpQuestion(
-                                                                    question = chip.value?.takeIf { it.isNotBlank() }
-                                                                        ?: chip.label.orEmpty()
-                                                                )
-                                                            )
+                                                            handleAlignmentChip(message.id, alignmentKind, chip)
                                                         }
                                                     )
                                                 }

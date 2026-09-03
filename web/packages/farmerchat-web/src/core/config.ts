@@ -29,23 +29,50 @@ export const GEOLOCATE_URL = 'https://www.googleapis.com/geolocation/v1/geolocat
 export const DEFAULT_GUEST_API_KEY = '';
 
 /**
- * Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
- * The endpoint 400s on a blank value, so a non-empty default is required.
+ * Sentinel meaning "no country configured — derive it from the device locale".
+ *
+ * The app has NO hardcoded country: it derives one from the device locale
+ * (`utils/CountryLatLngProvider.kt`). An earlier build of this SDK shipped `'IN'`, so every guest
+ * the backend could not place — anywhere on earth — was told about India.
  */
-export const DEFAULT_COUNTRY_CODE = 'IN';
+export const DEFAULT_COUNTRY_CODE = '';
 
 /**
- * Fallback state/region paired with {@link DEFAULT_COUNTRY_CODE}.
+ * Absolute floor for the endpoint #2 `country_code` param, used only when neither the backend,
+ * the store, the host config nor the device locale produced one.
  *
- * Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only to rank
- * languages. Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in `priority_view`,
- * while `state=KA` pushes it into `expanded_view` ("All languages").
+ * Endpoint #2 rejects a blank `country_code` with HTTP 400 (`{"error": "Country code is
+ * required"}`, verified live 2026-09-03 on prod), so a floor has to exist. `'KE'` is the app's own
+ * literal on its primary guest-init path, and dev/stage/prod/eks all return Kenya only (verified
+ * live 2026-09-03).
+ *
+ * This is a floor, not a default — the normal answer comes from the device locale.
  */
-export const DEFAULT_STATE_CODE = 'Karnataka';
+export const LAST_RESORT_COUNTRY_CODE = 'KE';
 
-/** Coordinates for {@link DEFAULT_COUNTRY_CODE}/{@link DEFAULT_STATE_CODE} (Bengaluru). */
-export const DEFAULT_LATITUDE = 12.9716;
-export const DEFAULT_LONGITUDE = 77.5946;
+/**
+ * No default state is invented.
+ *
+ * Endpoint #2's `state` is inert on every environment — dev, stage, prod and eks all return the
+ * identical set for `state=Karnataka`, `state=KA`, `state=` and the parameter omitted (verified
+ * live 2026-09-03). An earlier build shipped `'Karnataka'` as a default, which is both unfaithful
+ * to the app and wrong for a Kenya-only backend.
+ */
+export const DEFAULT_STATE_CODE = '';
+
+/**
+ * Sentinel meaning "no coordinates configured — derive them from the device locale".
+ *
+ * The app has NO hardcoded coordinates: on IP-geolocation failure it calls
+ * `CountryLatLngProvider.getLatLngFromDeviceLocale(context)`, takes that country's centroid and
+ * accepts it ONLY when `lat != 0.0 && lng != 0.0`. (0, 0) is a real point in the Gulf of Guinea,
+ * so it is a wrong answer, not a missing one — see `core/countryLatLng.ts`.
+ */
+export const COORDINATE_UNSET = 0;
+
+/** @see COORDINATE_UNSET — "unset, derive from the device locale", not a place. */
+export const DEFAULT_LATITUDE = COORDINATE_UNSET;
+export const DEFAULT_LONGITUDE = COORDINATE_UNSET;
 
 export type FarmerChatEventListener = (name: string, props: Record<string, unknown>) => void;
 
@@ -147,23 +174,34 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   /** Preselect a language; skips the language screen when the code is valid. */
   languageCode?: string;
   /**
-   * Country code used for the language list when `initialize_user` returns a null/blank
-   * `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
-   * Endpoint #2 rejects a blank `country_code` with HTTP 400, so this is never empty.
-   * @default 'IN'
+   * OPTIONAL override for the endpoint #2 `country_code` when `initialize_user` returns a
+   * null/blank one (the normal case for a fresh guest on an IP the backend cannot resolve).
+   *
+   * **Leave this unset (the default) and the SDK derives the country from the device locale**,
+   * exactly as the app does. Endpoint #2 rejects a blank `country_code` with HTTP 400, so if the
+   * browser locale carries no region either, {@link LAST_RESORT_COUNTRY_CODE} is sent.
+   *
+   * Set it only to pin the SDK to one region regardless of where the browser is.
+   * @default '' (unset — derive from the device locale)
    */
   defaultCountryCode?: string;
   /**
-   * State/region paired with {@link defaultCountryCode} for the endpoint #2 `state` param.
-   * @default 'KA'
+   * OPTIONAL `state` query param for endpoint #2. Empty by default and safe to leave empty:
+   * the parameter is inert on every environment (verified live 2026-09-03).
+   * @default '' (omit)
    */
   defaultStateCode?: string;
   /**
-   * Coordinates for {@link defaultCountryCode}/{@link defaultStateCode} (Bengaluru, Karnataka).
+   * OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a
+   * location. **Leave these at {@link COORDINATE_UNSET} (the default) and the SDK uses the device
+   * locale's country centroid**, exactly as the app does on IP-geolocation failure.
    *
    * Endpoint #12 (home feed) is gated on the backend having a resolved location, and it resolves
    * one ONLY from coordinates — a country name alone is rejected (verified live 2026-09-01).
-   * Seeding #11 with these keeps a guest's home screen populated instead of blank.
+   *
+   * If both these and the device locale are unset, NO coordinates are sent — a guess would put
+   * the farmer's advice in the wrong place. Set them to pin a region deliberately.
+   * @default 0 (unset — derive from the device locale)
    */
   defaultLatitude?: number;
   defaultLongitude?: number;
@@ -277,6 +315,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     guestApiKey: config.guestApiKey ?? DEFAULT_GUEST_API_KEY,
     appearance: config.appearance ?? 'auto',
     languageCode: config.languageCode,
+    // All four default to "unset" — resolved from the device locale at use time, the way the app
+    // does it (see core/fallbackLocation.ts). A host that sets one explicitly still wins.
     defaultCountryCode: config.defaultCountryCode?.trim() || DEFAULT_COUNTRY_CODE,
     defaultStateCode: config.defaultStateCode?.trim() || DEFAULT_STATE_CODE,
     defaultLatitude: config.defaultLatitude ?? DEFAULT_LATITUDE,

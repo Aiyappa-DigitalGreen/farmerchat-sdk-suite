@@ -282,10 +282,11 @@ data class Alignment(
 /**
  * One quick-reply chip. [label] is shown, [value] is sent on tap.
  *
- * [action] describes how the chip behaves: "select" invokes a capability (take a photo, share
- * location), "decline" lets the user opt out (use an approximate location). Today every chip's
- * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
- * "select" chips without another wire change.
+ * [action] describes how the chip behaves: the value of [ACTION_SELECT] —
+ * the string `"invoke"`, NOT `"select"` — marks a chip that invokes a device
+ * capability (take a photo, share location) rather than sending its text.
+ * Those capability flows ARE wired as of 2026-09-02; see the capability
+ * constants below and "The capability-chip gap" in docs/04.
  */
 data class AlignmentChip(
     @SerializedName("label")
@@ -294,7 +295,31 @@ data class AlignmentChip(
     val value: String? = null,
     @SerializedName("action")
     val action: String? = null
-) : java.io.Serializable
+) : java.io.Serializable {
+    /**
+     * Wire values for the capability chips, copied verbatim from the app's
+     * `domain/model/chat/TextPromptResponse.kt`. A capability chip does not send its text as a
+     * question — it invokes a device capability, and only its OUTCOME is sent.
+     *
+     * Note [ACTION_SELECT] is the string `"invoke"`, not `"select"`, and [VALUE_SHARE_LOCATION] is
+     * `"share_precise_location"` — the app has a `share_location` constant commented out directly
+     * above it. Do not "normalize" either one.
+     */
+    companion object {
+        /** `action` marking a chip that invokes a capability rather than sending text. */
+        const val ACTION_SELECT = "invoke"
+
+        /** GPS_PROMPT: start the location flow, then send the original query. */
+        const val VALUE_SHARE_LOCATION = "share_precise_location"
+
+        /** UPLOAD_PHOTO: open the camera / the gallery. */
+        const val VALUE_TAKE_PHOTO = "take_photo"
+        const val VALUE_CHOOSE_FROM_GALLERY = "choose_from_gallery"
+
+        /** The decline chip on a capability prompt. */
+        const val VALUE_NOT_NOW = "not_now"
+    }
+}
 
 /** The alignment surfaces the backend can ask for. */
 enum class AlignmentKind {

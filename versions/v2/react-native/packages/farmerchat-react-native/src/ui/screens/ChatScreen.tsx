@@ -31,6 +31,7 @@ import {
   useChat,
   type AiResponse,
   type ChatMessage,
+  type LocationMessage,
   type UserMessage,
 } from '../../state/useChat';
 import { PrimaryButton, ScrollToBottomButton } from '../components/Buttons';
@@ -43,19 +44,30 @@ import {
 } from '../components/AgenticSurfaces';
 import { Labels } from '../../core/labels';
 import { StreamErrorKinds } from '../../core/agenticModels';
-import { isAdditiveAlignment } from '../../core/types';
-import type { AlignmentChip } from '../../core/types';
+import {
+  AlignmentChipRoutes,
+  isAdditiveAlignment,
+  routeAlignmentChip,
+} from '../../core/types';
+import type { AlignmentChip, AlignmentKind } from '../../core/types';
+import { StorageKeys } from '../../core/sessionStore';
+import { isLocationObtained, isTerminalLocationOutcome } from '../../core/locationOutcome';
+import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
 import { LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
 import {
+  captureImageFromCamera,
   fileUriToBase64,
   PermissionSettingsDialog,
   PhotoInputSheet,
+  pickImageFromGallery,
   PrimaryInputButtons,
   TextInputOverlay,
   VoiceInputOverlay,
   type PickedImage,
   type RecordedAudio,
 } from '../components/InputOverlays';
+import { InputComposer, type InputComposerHandle } from '../components/InputComposer';
+import { LocationChatBubble } from '../components/LocationChatBubble';
 import { useShareCard } from '../components/ShareCard';
 import { stopAllVoiceClips, VoiceClip } from '../components/VoiceClip';
 import { FcIcon } from '../components/Icon';
@@ -66,6 +78,13 @@ export function ChatScreen(props: {
   params: ChatRouteParams;
   onClose: () => void;
   onOpenDrawer: () => void;
+  /**
+   * The SHARED location-prompt state machine (the same instance Home and the prompt host use).
+   * 2.0.0: a `gps-prompt` capability chip drives it, and the outcome comes back on its event
+   * listener — so this screen must not create its own, or the host overlay would never render
+   * the permission/fetch UI for it.
+   */
+  locationPrompt: UseLocationPromptResult;
 }): React.ReactElement {
   const theme = useTheme();
   const sdk = useSdk();
@@ -81,6 +100,17 @@ export function ChatScreen(props: {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const isHistoryEntry = props.params.source === 'history';
+
+  // 2.0.0 composer UI. The app gates this on two independent Firebase Remote Config flags
+  // (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()` for the visual
+  // theme + routing). The SDK carries no Remote Config and exposes exactly one host-set switch,
+  // so both collapse onto `enableAgenticChat` — the same collapse the Compose SDK makes
+  // (ChatScreen.kt:167). With it off, the 1.0.0 Photo/Speak/Type row + text overlay are
+  // untouched, so a host that has not opted in sees no change (root CLAUDE.md §3).
+  const isComposerUi = sdk.config.enableAgenticChat;
+  const composerRef = useRef<InputComposerHandle>(null);
+  // Single attached image per query — the composer renders the thumbnail, this screen owns it.
+  const [attachedImage, setAttachedImage] = useState<PickedImage | null>(null);
 
   // --- reveal tracking (pure UI, docs/01 §3.8 preserved) ----------------------
   // Which AI answers have finished the client-side typewriter reveal. This is
@@ -291,13 +321,175 @@ export function ChatScreen(props: {
     [],
   );
 
+  // --- capability chips (2.0.0) ---------------------------------------------------------
+  // GPS_PROMPT and UPLOAD_PHOTO chips do NOT send their text as a question — they invoke a
+  // device capability and only the OUTCOME is sent. Every other chip stays on the plain
+  // SelectAlignmentChip path. Port of the app's `onAlignmentChipClick`.
+
+  /**
+   * Which surface's chip armed the location flow. A REF, not state: the outcome listener below
+   * is registered once and would capture a stale `null` forever if this were `useState` — the
+   * exact way this producer dies silently while every type check still passes.
+   */
+  const pendingLocationSourceId = useRef<string | null>(null);
+
+  /**
+   * The address shown in the location bubble, assembled from the stored geography exactly as
+   * the app's `composeResolvedAddress` does: best-known place name, then state, then country,
+   * blank parts dropped, de-duplicated, joined with ", ".
+   *
+   * DEVIATION (documented in docs/04, same as the Home location pill): Android's first part is
+   * `APPROX_LOCATION_NAME`, which core writes from the #16 `display_address`. This store has no
+   * such key and inventing one is out of bounds (root CLAUDE.md §2), so `USER_DISTRICT` — which
+   * #11 fills — stands in for it. A guest has none of the three written, so the address is
+   * blank and NO bubble is appended; that is the app-parity branch, not a failure.
+   */
+  const composeResolvedAddress = (): string => {
+    const parts = [
+      sdk.store.getString(StorageKeys.USER_DISTRICT) ?? '',
+      sdk.store.getString(StorageKeys.USER_STATE) ?? '',
+      sdk.store.getString(StorageKeys.USER_COUNTRY_NAME) ?? '',
+    ].map((part) => part.trim());
+    return Array.from(new Set(parts.filter((part) => part.length > 0))).join(', ');
+  };
+
+  // Observe location outcomes for the chat share-location flow. Subscribed for the life of the
+  // screen but inert until armed (pendingLocationSourceId.current !== null), so an outcome
+  // belonging to Home or Settings is ignored.
+  useEffect(
+    () =>
+      props.locationPrompt.addEventListener((event) => {
+        const srcId = pendingLocationSourceId.current;
+        if (srcId === null) return;
+        // Only a TERMINAL event settles the request; `LocationReady` /
+        // `LocationUpdatedFromWidget` are Home's business.
+        if (!isTerminalLocationOutcome(event)) return;
+        if (event.source !== 'localContext') return;
+        // A terminal event for our request — disarm before dispatching.
+        pendingLocationSourceId.current = null;
+        // `Continue` alone is NOT success: a dismissed error also settles the caller, so the
+        // shared reason rule decides (core `isLocationObtained`), never an inline comparison.
+        if (isLocationObtained(event)) {
+          onAction({
+            type: 'SendLocationSharedQuery',
+            sourceMessageId: srcId,
+            address: composeResolvedAddress(),
+          });
+        } else {
+          // Denied / cancelled / fetch failed: still answer the blocking question, by sending
+          // the decline text as an ordinary follow-up. The app sends this through
+          // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
+          // neither, so the correlation and the chip analytics are lost (docs/04).
+          onAction({
+            type: 'SendFollowUpQuestion',
+            question: label(
+              Labels.LOCATION_PERMISSION_DECLINED,
+              'Continue without sharing my location',
+            ),
+          });
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.locationPrompt, label],
+  );
+
+  /**
+   * Hands a photo taken/picked FOR A CAPABILITY CHIP to the same place the Camera/Photos sheet
+   * hands its result: attached to the composer in 2.0.0 (so the farmer can add words to it,
+   * app parity), sent immediately on the 1.0.0 surface.
+   */
+  const deliverCapabilityImage = (image: PickedImage) => {
+    if (isComposerUi) {
+      setAttachedImage(image);
+      composerRef.current?.focus();
+    } else {
+      onAction({
+        type: 'SendQuestionWithImage',
+        question: '',
+        imageUri: image.uri,
+        imageBase64: image.base64,
+      });
+    }
+  };
+
+  /**
+   * Routes an alignment chip tap: a capability chip invokes its capability, everything else
+   * sends text through `SelectAlignmentChip`. Deliberately a plain function, NOT a
+   * `useCallback([])` like the sends above — it reads `locationPrompt.state` live, which a
+   * memoized closure would freeze at mount. Mirror of Compose's `val handleAlignmentChip`.
+   */
+  const handleAlignmentChip = (
+    messageId: string,
+    kind: AlignmentKind | null,
+    chip: AlignmentChip,
+  ) => {
+    switch (routeAlignmentChip(kind, chip)) {
+      case AlignmentChipRoutes.LOCATION:
+        // Permission dialog / GPS fetch / recovery are owned by LocationPromptHost; the outcome
+        // arrives on the listener above. Only start when no other location flow is running
+        // (mirrors Home's guard).
+        if (props.locationPrompt.state.kind === 'Idle') {
+          pendingLocationSourceId.current = messageId;
+          props.locationPrompt.triggerFromLocalContext();
+        }
+        return;
+      case AlignmentChipRoutes.CAMERA:
+        void captureImageFromCamera(sdk, {
+          onPermissionPermanentlyDenied: () => setPermissionDialog('camera'),
+        }).then((image) => {
+          if (image) deliverCapabilityImage(image);
+        });
+        return;
+      case AlignmentChipRoutes.GALLERY:
+        void pickImageFromGallery(sdk).then((image) => {
+          if (image) deliverCapabilityImage(image);
+        });
+        return;
+      case AlignmentChipRoutes.TEXT:
+        if (kind !== null) {
+          onAction({ type: 'SelectAlignmentChip', messageId, chip, kind });
+        }
+        return;
+    }
+  };
+
   // --- rendering ------------------------------------------------------------------------
   const uiState = deriveChatUiState(state);
+
+  /**
+   * Composer send — identical on both input surfaces, so it is defined once (Compose
+   * `sendFromComposer`, ChatScreen.kt:1082). An attached image routes through image analysis;
+   * otherwise a non-blank query is a plain follow-up.
+   */
+  const sendFromComposer = useCallback(
+    (text: string) => {
+      const image = attachedImage;
+      composerRef.current?.clear();
+      setAttachedImage(null);
+      if (image) {
+        onAction({
+          type: 'SendQuestionWithImage',
+          question: text,
+          imageUri: image.uri,
+          imageBase64: image.base64,
+        });
+      } else if (text.trim().length > 0) {
+        onAction({ type: 'SendFollowUpQuestion', question: text.trim() });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [attachedImage],
+  );
 
   const renderMessage = ({ item }: { item: ChatMessage }): React.ReactElement | null => {
     switch (item.kind) {
       case 'user':
         return <UserBubble message={item} />;
+      // 2.0.0: the farmer's resolved location, standing in for the text bubble they would
+      // otherwise have sent. Right-aligned because it is their reply to a GPS_PROMPT chip
+      // (Compose ChatScreen.kt:699).
+      case 'location':
+        return <LocationBubbleRow message={item} />;
       case 'ai': {
         const isLast = lastAi?.id === item.id;
         // Only a fresh answer animates: the newest AI message, not a history
@@ -319,14 +511,7 @@ export function ChatScreen(props: {
                 selectedValues={item.alignmentSelectedValues ?? []}
                 isLoading={state.isLoading}
                 isLatest={isLast}
-                onChipPress={(chip) =>
-                  onAction({
-                    type: 'SelectAlignmentChip',
-                    messageId: item.id,
-                    chip,
-                    kind: alignmentKind,
-                  })
-                }
+                onChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
                 onTypeInstead={() => setTextInputVisible(true)}
               />
             </View>
@@ -357,16 +542,7 @@ export function ChatScreen(props: {
                 : undefined
             }
             onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
-            onAlignmentChipPress={(chip) =>
-              alignmentKind !== null
-                ? onAction({
-                    type: 'SelectAlignmentChip',
-                    messageId: item.id,
-                    chip,
-                    kind: alignmentKind,
-                  })
-                : undefined
-            }
+            onAlignmentChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
             isThreadLoading={state.isLoading}
             onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
           />
@@ -464,6 +640,13 @@ export function ChatScreen(props: {
             }
             ListFooterComponent={
               <ThreadFooter
+                // App parity (ChatThreadContent.kt:100 / ChatScreen.kt:675): the composer UI
+                // reserves the composer bar's height at the bottom so the last bubble is not
+                // hidden behind it; the legacy input keeps the 96 that fits the
+                // Photo/Speak/Type row. The RN composer is a flow element rather than an
+                // overlay (see InputComposer's header), so it already occupies that space —
+                // only the small breathing gap is reserved here.
+                bottomPadding={isComposerUi ? spacing.xl : 96}
                 suggestedQuestions={state.suggestedQuestions}
                 clarificationRequired={state.clarificationRequired}
                 // An interrupted agentic stream renders its own inline StreamErrorCard (with
@@ -482,7 +665,13 @@ export function ChatScreen(props: {
             visible={showScrollToBottom}
             onPress={() => listRef.current?.scrollToEnd({ animated: true })}
           />
-          {!state.isLoading && !textInputVisible && !voiceInputVisible && !photoInputVisible ? (
+          {/* App parity (ChatThreadContent.kt:243 / ChatScreen.kt:1048): the composer UI drops
+              this row entirely — the InputComposer below already carries camera and mic. */}
+          {!isComposerUi &&
+          !state.isLoading &&
+          !textInputVisible &&
+          !voiceInputVisible &&
+          !photoInputVisible ? (
             <PrimaryInputButtons
               variant="chat"
               showPhoto={sdk.config.enableImages}
@@ -495,21 +684,65 @@ export function ChatScreen(props: {
         </View>
       )}
 
+      {/* App parity (ChatInputOverlays.kt:57 / ChatScreen.kt:1097): anchored + compact
+          composer. It handles the IME itself, so it must NOT be wrapped in the
+          KeyboardAvoidingView below — that would double the bottom inset and float the pill
+          too high, the RN counterpart of the Compose imePadding() double-inset note. The
+          SafeAreaView root has already consumed the bottom inset, hence bottomInset={0}. */}
+      {isComposerUi ? (
+        <InputComposer
+          ref={composerRef}
+          floating
+          isAnchored
+          compact
+          bottomInset={0}
+          // Slides off-screen while an answer is generating, then back — the same visibility
+          // rhythm PrimaryInputButtons has in the legacy layout.
+          visible={!(uiState.kind === 'thread' && state.isLoading)}
+          surfaceColor={theme.brand.surfacePrimary}
+          fadeColor={theme.content.surfaceReadingPrimary}
+          placeholder={label(Labels.ASK_ABOUT_YOUR_FARM, 'Ask about your farm...')}
+          showPhoto={sdk.config.enableImages}
+          showVoice={sdk.config.enableVoice}
+          attachedImageUri={attachedImage?.uri ?? null}
+          onRemoveAttachedImage={() => setAttachedImage(null)}
+          onPhotoPress={() => {
+            // Camera is only offered when no image is attached — the same guard the Compose
+            // composer applies (HomeScreen.kt:967).
+            if (!attachedImage) {
+              sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
+                screen_name: ScreenNames.CHAT,
+              });
+              setPhotoInputVisible(true);
+            }
+          }}
+          onVoicePress={() => {
+            sdk.analytics.track(AnalyticsEvents.MICROPHONE_CLICK_EVENT, {
+              screen_name: ScreenNames.CHAT,
+            });
+            setVoiceInputVisible(true);
+          }}
+          onSend={sendFromComposer}
+        />
+      ) : null}
+
       {shareCard.cardElement}
 
       {/* `undefined` on Android was a no-op, so the composer sat behind the IME exactly like the
           android-compose imePadding() bug. 'height' is the Android counterpart of iOS 'padding'.
           NOTE: this only works if the HOST activity uses windowSoftInputMode="adjustResize" —
           documented in the react-native README. */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TextInputOverlay
-          visible={textInputVisible}
-          placeholder={label('chat_text_hint', 'Ask a follow-up question…')}
-          sendLabel={label('home_text_send', 'Send')}
-          onSend={sendFollowUpText}
-          onClose={() => setTextInputVisible(false)}
-        />
-      </KeyboardAvoidingView>
+      {!isComposerUi ? (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TextInputOverlay
+            visible={textInputVisible}
+            placeholder={label('chat_text_hint', 'Ask a follow-up question…')}
+            sendLabel={label('home_text_send', 'Send')}
+            onSend={sendFollowUpText}
+            onClose={() => setTextInputVisible(false)}
+          />
+        </KeyboardAvoidingView>
+      ) : null}
       <VoiceInputOverlay
         visible={voiceInputVisible}
         onSend={sendFollowUpVoice}
@@ -518,7 +751,18 @@ export function ChatScreen(props: {
       />
       <PhotoInputSheet
         visible={photoInputVisible}
-        onPicked={sendFollowUpImage}
+        // Composer UI: a picked photo becomes the composer's single attachment (the farmer can
+        // type a question alongside it, or send it bare). The legacy sheet has nowhere to hold
+        // one, so it sends immediately, exactly as in 1.0.0.
+        onPicked={
+          isComposerUi
+            ? (image) => {
+                setPhotoInputVisible(false);
+                setAttachedImage(image);
+                composerRef.current?.focus();
+              }
+            : sendFollowUpImage
+        }
         onClose={() => setPhotoInputVisible(false)}
         onPermissionPermanentlyDenied={() => setPermissionDialog('camera')}
       />
@@ -581,6 +825,22 @@ function UserBubble(props: { message: UserMessage }): React.ReactElement {
           {label('chat_failed_to_send', 'Not sent')}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * The location bubble row — right-aligned, mirroring the Compose `Box(contentAlignment =
+ * CenterEnd)` wrapper around `LocationChatBubble` (ChatScreen.kt:701).
+ */
+function LocationBubbleRow(props: { message: LocationMessage }): React.ReactElement {
+  const label = useLabel();
+  return (
+    <View style={styles.userRow}>
+      <LocationChatBubble
+        address={props.message.address}
+        label={label(Labels.YOUR_LOCATION, 'Your location:')}
+      />
     </View>
   );
 }
@@ -827,6 +1087,8 @@ function ThreadFooter(props: {
   isLoading: boolean;
   revealed: boolean;
   askLabel: string;
+  /** Space kept below the thread so the input surface never covers the last bubble. */
+  bottomPadding: number;
   onFollowUp: (question: string) => void;
   onRetry: () => void;
 }): React.ReactElement | null {
@@ -836,7 +1098,7 @@ function ThreadFooter(props: {
   const hasFollowUps =
     props.revealed && props.suggestedQuestions != null && props.suggestedQuestions.length > 0;
   return (
-    <View style={styles.footer}>
+    <View style={[styles.footer, { paddingBottom: props.bottomPadding }]}>
       {props.errorMessage ? (
         <View style={styles.inlineError}>
           <Text style={[typography.bodySmall, { color: theme.error, textAlign: 'center' }]}>

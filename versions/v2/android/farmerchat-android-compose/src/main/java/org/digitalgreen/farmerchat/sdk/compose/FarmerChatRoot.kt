@@ -62,6 +62,15 @@ import org.digitalgreen.farmerchat.sdk.core.ui.history.ChatHistoryViewModel
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
 
 /**
+ * 2.0.0: extra screen key accepted by `FarmerChat.openScreen(context, screen)` — lands on Home
+ * and opens the in-app Terms-of-Use dialog (`TermsOfUseDialog`), the SDK's stand-in for the app's
+ * Plotline `open_terms_of_use=true` card CTA. Not in
+ * [org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens] because that object lives
+ * in farmerchat-core; it belongs there so android-views can honour the same key.
+ */
+private const val SCREEN_TERMS_OF_USE = "termsofuse"
+
+/**
  * The complete FarmerChat journey as a drop-in composable: nav graph per
  * doc 01 §2 (all popUpTo semantics), shared AppDrawer, global error routing,
  * LocationPromptHost overlay and global toast.
@@ -99,6 +108,26 @@ fun FarmerChatRoot(
     var showNameUpdatedToast by remember { mutableStateOf(false) }
     var currentRouteId by remember { mutableStateOf("splash") }
 
+    // When the splash first became visible. The minimum-splash floor is measured from here so it
+    // covers the session bootstrap too, rather than being added on top of it.
+    val splashStartedAt = remember { android.os.SystemClock.elapsedRealtime() }
+
+    /** Holds the splash until `config.minSplashDurationMs` have passed. A floor, not an added delay. */
+    suspend fun holdSplash() {
+        val elapsed = android.os.SystemClock.elapsedRealtime() - splashStartedAt
+        val remaining = graph.config.minSplashDurationMs - elapsed
+        if (remaining > 0) kotlinx.coroutines.delay(remaining)
+    }
+
+    // 2.0.0 in-app Terms-of-Use dialog. The app opens it from a Plotline card CTA
+    // (`open_terms_of_use=true` → `PlotlineHomeEvents.openTermsOfUse`, MainActivity.kt:600). The
+    // SDK carries no Plotline (root CLAUDE.md §6), so the request comes from the host through the
+    // EXISTING public entry point — `FarmerChat.openScreen(context, "termsofuse")` — which lands on
+    // Home and then raises this flag, exactly the app's "navigate Home + open Terms dialog".
+    // Deliberately not a new public API: `FarmerChatScreens` lives in core (off-limits here), so
+    // the key is a compose-module literal until core can host the constant. Reported as a gap.
+    var termsOfUseRequested by remember { mutableStateOf(false) }
+
     // ------------------------------------------------------------------ navigation helpers
 
     fun navigateClearingStack(destination: Destination) {
@@ -121,6 +150,7 @@ fun FarmerChatRoot(
             scope.launch {
                 // Guest session + conversation bootstrap (shared with android-views).
                 graph.ensureChatOnlySession()
+                holdSplash()
                 navigateClearingStack(Destination.Chat(source = "chat_only"))
             }
             return
@@ -130,6 +160,7 @@ fun FarmerChatRoot(
         // No-ops once labels exist, so a returning user routes immediately.
         scope.launch {
         graph.ensureSkippedOnboardingBootstrap()
+        holdSplash()
         when (val route = graph.routeDecider.routeFromSplash()) {
             is SplashRoute.Language -> navigateClearingStack(Destination.Language)
             is SplashRoute.Screen -> {
@@ -141,6 +172,7 @@ fun FarmerChatRoot(
                         navController.navigate(Destination.ChatHistory) { launchSingleTop = true }
                     org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP ->
                         navController.navigate(Destination.Help) { launchSingleTop = true }
+                    SCREEN_TERMS_OF_USE -> termsOfUseRequested = true
                     else -> { /* Home already shown */ }
                 }
             }
@@ -389,7 +421,9 @@ fun FarmerChatRoot(
                 WithDrawer { openDrawer ->
                     HomeScreen(
                         openDrawer = openDrawer,
-                        onNavigateToChat = { chat -> navController.navigate(chat) }
+                        onNavigateToChat = { chat -> navController.navigate(chat) },
+                        openTermsOfUseRequested = termsOfUseRequested,
+                        onTermsOfUseRequestConsumed = { termsOfUseRequested = false }
                     )
                 }
             }

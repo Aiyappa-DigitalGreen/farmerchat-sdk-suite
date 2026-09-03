@@ -168,6 +168,13 @@ export function VoiceInputOverlay(props: {
 export function PhotoInputOverlay(props: {
   onPicked: (file: File, objectUrl: string, question: string) => void;
   onClose: () => void;
+  /**
+   * 2.0.0 composer mode: pick and hand the image straight back as an ATTACHMENT, with no
+   * question step. Compose's `PhotoInput` behaves this way whenever the unified composer owns
+   * the input surface — the question is typed in the composer field alongside the thumbnail,
+   * so asking for it twice would be a dead end (see InputComposer.kt `photoUris`).
+   */
+  attachOnly?: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -179,8 +186,14 @@ export function PhotoInputOverlay(props: {
   const handleFile = (f: File | null) => {
     if (!f) return;
     if (objectUrl) URL.revokeObjectURL(objectUrl);
+    const url = URL.createObjectURL(f);
+    if (props.attachOnly) {
+      // Hand it back as an attachment; the composer renders the thumbnail and owns the question.
+      props.onPicked(f, url, '');
+      return;
+    }
     setFile(f);
-    setObjectUrl(URL.createObjectURL(f));
+    setObjectUrl(url);
   };
 
   return (

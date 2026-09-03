@@ -22,6 +22,7 @@ Each screenshot/verification must record WHICH backend served it (dev vs mock), 
 Built once at `tools/mock-server/` (Node, standard library only, no deps). Runs on `http://0.0.0.0:8899`. Implements every endpoint in `docs/02` with deterministic happy-path data. Key behaviors:
 
 - `POST api/user/initialize_user/` → tokens + `user_id`, `show_crops_livestocks:true`, `country_code:"IN"`, `country:"India"`, `state:"Karnataka"`.
+  - **The mock cannot exercise the fallback path.** It always returns a non-null `country_code`, whereas the real backend returns `null` for a guest whose IP it cannot place (verified live on prod 2026-09-01 and again 2026-09-03). The device-locale location fallback therefore never runs against the mock — a green mock E2E is NOT evidence that it works. Cover it with the `CountryLatLngProvider` unit tests and a real-backend run.
 - `GET country_wise_supported_languages/` → Kannada / English (India) / Hindi priority + a few in expanded.
 - `GET get_labels/` → the full English label map (same keys the app ships).
 - `POST generate_otp/` → `{message:"OTP sent"}`; `GET communication_channel/` → `[{sms_enabled:true, whatsapp_enabled:true}]`.

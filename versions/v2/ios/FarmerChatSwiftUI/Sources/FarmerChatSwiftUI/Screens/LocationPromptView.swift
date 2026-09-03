@@ -20,9 +20,10 @@ struct LocationPromptHostView: View {
                 interstitial(loading: false)
 
             case .requestPermission, .requestEnableGps, .fetchingLocation:
-                // Weather flow keeps the interstitial overlay (loading CTA);
-                // widget flow shows nothing.
-                if manager.source == .weather {
+                // Weather and the 2.0.0 chat capability chip keep the interstitial overlay
+                // (loading CTA) — Compose's host keeps it for every source; widget/deeplink are
+                // silent triggers by design and show nothing.
+                if manager.source == .weather || manager.source == .localContext {
                     interstitial(loading: true)
                 }
 

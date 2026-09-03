@@ -158,6 +158,21 @@
         </FrameLayout>
     </LinearLayout>
 
+    <!--
+      Unified input composer (2.0.0) — camera / text field / mic-or-send.
+
+      Shown INSTEAD of fcHomeInputButtons when `config.enableAgenticChat` is on (Compose parity:
+      HomeScreen's `isComposerUi` branch). Same nesting level as fcHomeOverlays and for the same
+      reason: it seats itself from the ROOT window insets, which a sibling of the
+      `fitsSystemWindows="true"` LinearLayout above must do to see the IME at all.
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.InputComposerView
+        android:id="@+id/fcHomeComposer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone" />
+
     <!-- Overlays -->
     <include
         android:id="@+id/fcHomeOverlays"

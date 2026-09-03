@@ -441,7 +441,12 @@ final class FCUILocationPromptHost: UIViewController {
         case .interstitial:
             showInterstitial(loading: false)
         case .requestPermission, .requestEnableGps, .fetchingLocation:
-            if manager.source == .weather { showInterstitial(loading: true) }
+            // Weather and the 2.0.0 chat capability chip keep the interstitial overlay (loading
+            // CTA) — Compose's host keeps it for every source; widget/deeplink are silent triggers
+            // by design and show nothing.
+            if manager.source == .weather || manager.source == .localContext {
+                showInterstitial(loading: true)
+            }
         case .recovery:
             showRecovery()
         case .error(let type):

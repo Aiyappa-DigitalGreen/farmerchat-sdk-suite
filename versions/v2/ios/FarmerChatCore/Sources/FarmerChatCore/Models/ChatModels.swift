@@ -639,10 +639,11 @@ public struct AlignmentSurface: Codable, Sendable, Equatable {
 
 /// One quick-reply chip. `label` is shown, `value` is sent on tap.
 ///
-/// `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
-/// location), "decline" lets the user opt out (use an approximate location). Today every chip's
-/// value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
-/// "select" chips without another wire change.
+/// `action` describes how the chip behaves: the value of ``actionSelect`` —
+/// the string `"invoke"`, NOT `"select"` — marks a chip that invokes a device
+/// capability (take a photo, share location) rather than sending its text.
+/// Those capability flows ARE wired as of 2026-09-02; see the capability
+/// constants below and "The capability-chip gap" in docs/04.
 public struct AlignmentChip: Codable, Sendable, Equatable, Identifiable {
     public var label: String?
     public var value: String?
@@ -658,10 +659,69 @@ public struct AlignmentChip: Codable, Sendable, Equatable, Identifiable {
     public var id: String { "\(label ?? "")|\(value ?? "")|\(action ?? "")" }
 
     /// What a tap sends: the chip's `value`, falling back to its visible `label`.
+    ///
+    /// Only meaningful for a NON-capability chip. A capability chip (see ``actionSelect``) must
+    /// never send this — it invokes a device capability and only the OUTCOME is sent, otherwise
+    /// the farmer asks the backend the literal question "share_precise_location".
     public var submittedQuery: String {
         if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return value }
         return label ?? ""
     }
+
+    // MARK: - Capability chip wire values
+    //
+    // Copied verbatim from the app's `domain/model/chat/TextPromptResponse.kt` (and mirrored from
+    // Android's `AlignmentChip` companion object). A capability chip does not send its text as a
+    // question — it invokes a device capability, and only its OUTCOME is sent.
+    //
+    // ``actionSelect`` is the string `"invoke"`, NOT `"select"`, and ``valueShareLocation`` is
+    // `"share_precise_location"` — the app has a `share_location` constant commented out directly
+    // above it. Do not "normalize" either one: a mismatch fails silently, falling the chip through
+    // to the text path.
+
+    /// `action` marking a chip that invokes a capability rather than sending text.
+    public static let actionSelect = "invoke"
+
+    /// GPS_PROMPT: start the location flow, then send the original query.
+    public static let valueShareLocation = "share_precise_location"
+
+    /// UPLOAD_PHOTO: open the camera.
+    public static let valueTakePhoto = "take_photo"
+
+    /// UPLOAD_PHOTO: open the gallery.
+    public static let valueChooseFromGallery = "choose_from_gallery"
+
+    /// The decline chip on a capability prompt. An ordinary text answer to the blocking question,
+    /// NOT a capability invocation.
+    public static let valueNotNow = "not_now"
+
+    /// True when this chip invokes the capability `kind` offers, rather than sending text.
+    ///
+    /// The single routing predicate both flavours branch on, so the rule lives in exactly one
+    /// place: the `action` must be `invoke` AND the `value` must belong to the surface's own kind.
+    /// A "not now" chip, a chip without the `invoke` action, a `take_photo` under `gps-prompt`,
+    /// and every non-capability surface all answer false and stay on the plain text path.
+    public func capability(for kind: AlignmentKind?) -> AlignmentCapability? {
+        guard action == AlignmentChip.actionSelect else { return nil }
+        switch (kind, value) {
+        case (.gpsPrompt, AlignmentChip.valueShareLocation): return .shareLocation
+        case (.uploadPhoto, AlignmentChip.valueTakePhoto): return .takePhoto
+        case (.uploadPhoto, AlignmentChip.valueChooseFromGallery): return .chooseFromGallery
+        default: return nil
+        }
+    }
+}
+
+/// The device capability a capability chip invokes. `nil` from
+/// ``AlignmentChip/capability(for:)`` means "send the chip's text as a question", the behaviour
+/// every non-capability chip keeps.
+public enum AlignmentCapability: Sendable, Equatable, CaseIterable {
+    /// GPS_PROMPT "Share my location": run the location flow, then re-send the original query.
+    case shareLocation
+    /// UPLOAD_PHOTO: open the camera directly (no composer).
+    case takePhoto
+    /// UPLOAD_PHOTO: open the gallery directly (no composer).
+    case chooseFromGallery
 }
 
 /// The alignment surfaces the backend can ask for.

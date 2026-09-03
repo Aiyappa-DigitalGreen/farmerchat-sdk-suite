@@ -64,18 +64,136 @@ does. If the real framing differs, only the reader changes; the `AgenticEvent` c
 
 ---
 
-## Ask: two 2.0.0 label keys are missing from endpoint #3 (2026-09-02)
+## Ask: TEN label keys are missing from endpoint #3 (2026-09-02, corrected)
 
-Every other label v2 introduces was verified present on `api/language/v2/get_labels/` before use.
-These two are absent, so they fall back to their hardcoded English on **all four platforms**:
+**This section previously said "two". That was an undercount** — the audit behind it compared bare
+SDK keys against server keys that carry a language suffix (`${key}_${lang}`, e.g.
+`fc_v2_app_label_my_farm_en`), which reports every key as missing and hides the real answer. Redone
+against a LIVE stage probe (guest token via `initialize_user`; `language=1` and `language=2` each
+return 283 entries): of the 256 keys the SDK declares, **246 are served and 10 are not**.
+
+The two originally listed, both user-facing during a failure or a slow answer — exactly when a
+farmer most needs to read it in their own language:
 
 | Key | English fallback in use | Where it shows |
 |---|---|---|
 | `fc_v2_app_label_response_paused_resuming` | "Paused, resuming…" | transient hint when a stream stalls mid-answer |
 | `fc_v2_app_label_connection_stopped_partial_saved` | "Connection stopped. Your partial answer is saved." | stream error card when a partial answer was preserved |
 
-Both are user-facing during a failure or a slow answer — exactly when a farmer most needs to read
-it in their own language. **Request:** add both keys to the label set for every supported language.
+And five more the undercount hid, all of them displayed to the farmer:
+
+| Key | Where it shows |
+|---|---|
+| `fc_v2_app_label_cant_load_right_now` | generic load failure |
+| `fc_v2_app_label_failed_to_load_chats` | conversation-list failure |
+| `fc_v2_app_label_no_camera_app_available` | no camera app installed |
+| `fc_v2_app_label_no_chats_yet` | empty conversation list |
+| `fc_v2_app_label_this_permission_is_needed_..._device_settings` | permission settings dialog |
+
+**So the actionable ask is SEVEN keys** — the two above plus these five.
+
+Three further keys are also unserved but are **declared-for-parity only and displayed nowhere**, so
+they are deliberately excluded from the request; no need to localize strings the SDK never shows:
+
+```
+fc_v2_app_label_permissions_are_required_to_auto_detect_sim_number.   (trailing "." is the app's own)
+fc_v2_app_label_storage_exceeded
+fc_v2_app_label_user_cancelled_or_provider_error
+```
+
+They are declared only in android `Labels.kt` and react-native `labels.ts` (a 1:1 copy of it),
+absent from iOS and web entirely, and referenced by zero call sites on any platform — verified.
+
+All ten appear in the app's own `Labels.kt`, so none is an SDK invention — the app falls back to
+English for them too. **Impact is localization only, never a raw key on screen:** every used key's
+call site passes an English fallback (each verified individually, including multi-line calls).
+That matters because `LabelManager.getLabel` ends in `englishFallback.ifBlank { baseKey }` — an
+omitted fallback would show a farmer the literal `fc_v2_app_label_storage_exceeded`.
+
+**Request:** add the **seven displayed keys** to the label set for every supported language. The
+three parity-only keys can be skipped.
+
+Also worth noting for whoever audits next: stage served 276 keys when the first count was taken and
+283 now, so **re-probe rather than trusting a cached response.**
 
 No client change is needed once they land; `LabelManager` resolves `${key}_${lang}` →
 `${key}_en` → the English fallback, so the strings switch over automatically.
+
+---
+
+## ~~Q: what should produce a `LocationMessage` chat bubble?~~ — ANSWERED, CLOSED (2026-09-02)
+
+**Answer: the `gps-prompt` alignment surface's "Share my location" chip.** The app has the producer
+all along (`ui/chat/ChatViewModel.kt` `sendLocationSharedQuery`, dispatched from
+`ChatScreen.onAlignmentChipClick`); the SDK had simply not ported it, because every alignment chip
+sent its own text as a follow-up. Now ported and reachable on **all four platforms** — see "The
+capability-chip gap" in `docs/04`. Fixing it also surfaced three producer bugs (single-consumer
+event channel, `dismiss()` emitting nothing, and the resulting "`Continue` no longer implies
+success" trap), all recorded there.
+
+**One related question stays OPEN** — the chat-history mapping, below: a location bubble does not
+survive a conversation reload, because the app's own `message_type_id 12 → location_shared` mapping
+is annotated `TODO(location-history)` with the type id and address field unconfirmed. Porting a
+guessed type id would risk mis-rendering real messages (§2).
+
+The original analysis is kept below for context.
+
+`ChatMessage.LocationMessage(address, id)` WAS **defined and rendered but never produced**, on
+every platform that has it:
+
+| Platform | Defines | Renders | Produces |
+|---|---|---|---|
+| android core | `ui/chat/ChatModels.kt`:95 | — | **nothing** |
+| android compose | — | `screens/ChatScreen.kt`:699 | — |
+| android views | — | `ChatAdapter.kt`:276 (`fc_item_chat_location`) | — |
+| react-native | `state/useChat.ts` (`kind: 'location'`) | `ui/screens/ChatScreen.tsx` `renderMessage` | ✅ `useChat.sendLocationSharedQuery` (2026-09-02) |
+| ios core | `ViewModels/ChatViewModel.swift` (`ChatMessage.location`) | — | ✅ `ChatViewModel.sendLocationSharedQuery` (2026-09-02) |
+| ios SwiftUI | — | `Components/ChatComponents.swift` `FCLocationChatBubble` | — |
+| ios UIKit | — | `ChatCells.swift` `FCUILocationBubbleCell` | — |
+
+The doc comment on the Android variant says it is shown "once a `GPS_PROMPT` alignment chip has
+been satisfied", but no code path appends it: a `GPS_PROMPT` chip tap goes down the same route as
+every other chip — `SendFollowUpQuestion` with the chip's `value`-or-label — so the farmer's reply
+appears as an ordinary text bubble and the location card never renders.
+
+This is the same hole as the unwired `chip.action == "select"` device-capability flows (docs/04
+"Still to do" item 4): satisfying a capability chip locally (take a photo / share location) and
+then re-sending the original query is not implemented anywhere, and the location bubble is the
+missing *visual* half of that flow.
+
+**Needed to close it:**
+1. Which address string goes in the bubble — the #16 response's `display_address`, or something
+   the agentic surface returns with the chip?
+2. Is the bubble appended when the capability is satisfied (before the re-sent query), or when the
+   backend acknowledges the location in its next turn?
+3. Does the location bubble persist in chat history (#28 / #31), and under what message type? If
+   not, a rehydrated conversation will silently lose it.
+
+**Conservative reading implemented meanwhile** (per CLAUDE.md §2): react-native mirrored Android
+exactly — the variant and its render path existed, nothing produced it. No producer was invented.
+
+**RESOLVED for react-native (2026-09-02).** The android reference now HAS a producer
+(`ChatViewModel.sendLocationSharedQuery` + `ChatAction.SendLocationSharedQuery`), so the flow no
+longer had to be invented — it was ported: `useChat.sendLocationSharedQuery` is the only
+constructor of the `'location'` variant, dispatched from `ChatScreen` when the armed location
+outcome reports `location_fetched`. That answers the three questions above as the app answers
+them: (1) the address is the stored geography (`display_address` on android, `USER_DISTRICT` in
+its place on RN, then state, then country), (2) the bubble is appended when the capability is
+satisfied, immediately before the re-sent query, and (3) it does **not** persist in chat history —
+the app's `message_type_id 12 → location_shared` mapping carries its own `TODO(location-history)`
+saying the type id and the address field are unconfirmed placeholders, so it was deliberately not
+ported and a rehydrated conversation still loses the bubble. Question 3 therefore stays open for
+the backend team; questions 1 and 2 are closed.
+
+**RESOLVED for iOS too (2026-09-02), on the same reading.** `ChatAction.sendLocationSharedQuery`
+→ `ChatViewModel.sendLocationSharedQuery` is the only constructor of `ChatMessage.location`,
+dispatched from both flavours when the armed location outcome reports success
+(`LocationPromptEvent.isLocationObtained`). Answers: (1) the address is
+`USER_DISTRICT, USER_STATE, USER_COUNTRY_NAME` — iOS's `#11` response gives district/state/country
+and no `display_address`-equivalent pref exists, the same substitution RN documents; (2) appended
+when the capability is satisfied, immediately before the re-sent query, and a blank address
+appends nothing; (3) not ported, same `TODO(location-history)` reason.
+
+**Producer status: every platform that defines the variant now produces it** (android core,
+react-native, web, iOS core). Question 3 — chat-history persistence and its `message_type_id` — is
+the only part still open, and it is a **backend** question, not a platform gap.

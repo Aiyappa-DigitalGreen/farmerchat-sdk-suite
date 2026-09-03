@@ -1,184 +1,192 @@
 /**
- * MarkdownText — tiny internal markdown renderer (no runtime deps, per
- * docs/03 web packaging). Supports headings, bold/italic, inline code, code
- * fences, ordered/unordered lists, links, blockquotes and paragraphs.
- * Renders React elements — never raw HTML injection.
+ * MarkdownText (**SDK 2.0.0**) — renders chat answers with no runtime deps (docs/03 web
+ * packaging). React elements only; raw HTML is never injected.
+ *
+ * Brought to parity with the Compose reference `components/MarkdownText.kt`. All parsing lives in
+ * the pure, unit-tested `./markdownParse`; this file is only the render half. What 2.0.0 adds over
+ * the 1.0.0 renderer:
+ *
+ * - **GFM tables** — 2-line look-ahead on a `| :--- | ---: |` separator, per-column alignment,
+ *   1–2 columns weighted to the full width / 3+ columns horizontally scrollable with a right-edge
+ *   fade hint, alternating row backgrounds.
+ * - **Dividers** — `---` / `***` / `___` as a 3px rounded rule.
+ * - **Nested emphasis** — `*italic **bold** italic*` and the reverse, via the recursive scanner
+ *   that replaced the old regex tokenizer (which structurally could not match it).
+ * - **The block-pair vertical rhythm** — 24 / 20 / 16 / 12 / 5px, per `blockTopSpacing`.
+ *
+ * Header levels clamp to 1..3 as in the Kotlin. Fenced code, blockquotes, links and inline code
+ * have no Compose counterpart but are pre-existing web behaviour, so they are kept (root
+ * CLAUDE.md §3 — parity here is additive, never a removal).
  */
 
 import { Fragment, ReactNode } from 'react';
+import {
+  InlineNode,
+  MarkdownBlock,
+  blockTopSpacing,
+  isTableScrollable,
+  parseInline,
+  parseMarkdownBlocks,
+} from './markdownParse';
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
-  const out: ReactNode[] = [];
-  // Tokenize: code spans, bold, italic, links.
-  const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)|(\[[^\]]+\]\([^)\s]+\))/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) out.push(text.slice(lastIndex, match.index));
-    const token = match[0];
-    const k = `${keyPrefix}-${key++}`;
-    if (token.startsWith('`')) {
-      out.push(<code key={k}>{token.slice(1, -1)}</code>);
-    } else if (token.startsWith('**') || token.startsWith('__')) {
-      out.push(<strong key={k}>{renderInline(token.slice(2, -2), k)}</strong>);
-    } else if (token.startsWith('*') || token.startsWith('_')) {
-      out.push(<em key={k}>{renderInline(token.slice(1, -1), k)}</em>);
-    } else if (token.startsWith('[')) {
-      const m = token.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
-      if (m) {
-        const href = m[2] ?? '';
-        const safe = /^https?:\/\//i.test(href);
-        out.push(
-          safe ? (
-            <a key={k} href={href} target="_blank" rel="noopener noreferrer">
-              {m[1]}
-            </a>
-          ) : (
-            <span key={k}>{m[1]}</span>
-          ),
+/** Renders one inline tree. Recurses, so emphasis nests to any depth. */
+function renderInline(nodes: readonly InlineNode[], keyPrefix: string): ReactNode[] {
+  return nodes.map((node, i) => {
+    const key = `${keyPrefix}-${i}`;
+    switch (node.type) {
+      case 'text':
+        return <Fragment key={key}>{node.text}</Fragment>;
+      case 'bold':
+        return <strong key={key}>{renderInline(node.children, key)}</strong>;
+      case 'italic':
+        return <em key={key}>{renderInline(node.children, key)}</em>;
+      case 'code':
+        return <code key={key}>{node.text}</code>;
+      case 'link':
+        return (
+          <a key={key} href={node.href} target="_blank" rel="noopener noreferrer">
+            {renderInline(node.children, key)}
+          </a>
         );
-      } else {
-        out.push(token);
-      }
     }
-    lastIndex = match.index + token.length;
-  }
-  if (lastIndex < text.length) out.push(text.slice(lastIndex));
-  return out;
+  });
 }
 
-interface Block {
-  type: 'p' | 'h' | 'ul' | 'ol' | 'code' | 'quote';
-  level?: number;
-  lines: string[];
+/** Convenience: parse + render a single string of inline markup. */
+function inline(text: string, keyPrefix: string): ReactNode[] {
+  return renderInline(parseInline(text), keyPrefix);
 }
 
-function parseBlocks(markdown: string): Block[] {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
-  const blocks: Block[] = [];
-  let current: Block | null = null;
-  let inFence = false;
+function MarkdownTable(props: { block: Extract<MarkdownBlock, { type: 'table' }>; keyPrefix: string }) {
+  const { headers, alignments, rows } = props.block;
+  if (headers.length === 0) return null;
+  const scrollable = isTableScrollable(headers.length);
 
-  const flush = () => {
-    if (current && current.lines.length > 0) blocks.push(current);
-    current = null;
-  };
+  return (
+    // The scroll container is the wrapper, never the page: wide tables must not make the whole
+    // thread scroll sideways.
+    <div className={'fcsdk-md-tablewrap' + (scrollable ? ' fcsdk-md-tablewrap--scroll' : '')}>
+      <table className={'fcsdk-md-table' + (scrollable ? ' fcsdk-md-table--wide' : '')}>
+        <thead>
+          <tr>
+            {headers.map((cell, idx) => (
+              <th key={idx} style={{ textAlign: alignments[idx] ?? 'start' }}>
+                {inline(cell.trim(), `${props.keyPrefix}-th${idx}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIdx) => (
+            <tr key={rowIdx}>
+              {headers.map((_, colIdx) => (
+                <td key={colIdx} style={{ textAlign: alignments[colIdx] ?? 'start' }}>
+                  {inline((row[colIdx] ?? '').trim(), `${props.keyPrefix}-td${rowIdx}-${colIdx}`)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {/* Right-edge scroll hint, only when the table can actually overflow. */}
+      {scrollable ? <span className="fcsdk-md-tablefade" aria-hidden /> : null}
+    </div>
+  );
+}
 
-  for (const line of lines) {
-    if (line.trim().startsWith('```')) {
-      if (inFence) {
-        inFence = false;
-        flush();
-      } else {
-        flush();
-        inFence = true;
-        current = { type: 'code', lines: [] };
-      }
-      continue;
+/** Renders one non-list block. */
+function renderBlock(block: MarkdownBlock, index: number): ReactNode {
+  const key = `b${index}`;
+  switch (block.type) {
+    case 'divider':
+      return <div key={key} className="fcsdk-md-divider" role="separator" />;
+    case 'header': {
+      const content = inline(block.text, `h${index}`);
+      if (block.level === 1) return <h1 key={key}>{content}</h1>;
+      if (block.level === 2) return <h2 key={key}>{content}</h2>;
+      return <h3 key={key}>{content}</h3>;
     }
-    if (inFence) {
-      current?.lines.push(line);
-      continue;
-    }
-    const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    if (heading) {
-      flush();
-      blocks.push({ type: 'h', level: Math.min(heading[1]!.length, 4), lines: [heading[2] ?? ''] });
-      continue;
-    }
-    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
-    if (ul) {
-      if (current?.type !== 'ul') {
-        flush();
-        current = { type: 'ul', lines: [] };
-      }
-      current.lines.push(ul[1] ?? '');
-      continue;
-    }
-    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
-    if (ol) {
-      if (current?.type !== 'ol') {
-        flush();
-        current = { type: 'ol', lines: [] };
-      }
-      current.lines.push(ol[1] ?? '');
-      continue;
-    }
-    const quote = line.match(/^\s*>\s?(.*)$/);
-    if (quote) {
-      if (current?.type !== 'quote') {
-        flush();
-        current = { type: 'quote', lines: [] };
-      }
-      current.lines.push(quote[1] ?? '');
-      continue;
-    }
-    if (line.trim() === '') {
-      flush();
-      continue;
-    }
-    if (current?.type !== 'p') {
-      flush();
-      current = { type: 'p', lines: [] };
-    }
-    current.lines.push(line.trim());
+    case 'table':
+      return <MarkdownTable key={key} block={block} keyPrefix={`t${index}`} />;
+    case 'code':
+      return (
+        <pre key={key}>
+          <code>{block.lines.join('\n')}</code>
+        </pre>
+      );
+    case 'quote':
+      return (
+        <blockquote key={key}>
+          {block.lines.map((line, j) => (
+            <Fragment key={j}>
+              {j > 0 ? <br /> : null}
+              {inline(line, `q${index}-${j}`)}
+            </Fragment>
+          ))}
+        </blockquote>
+      );
+    case 'paragraph':
+      return <p key={key}>{inline(block.text, `p${index}`)}</p>;
+    // Handled by the list grouping in MarkdownText; unreachable here.
+    case 'bullet':
+    case 'numbered':
+      return null;
   }
-  flush();
-  return blocks;
 }
 
 export function MarkdownText(props: { text: string }) {
-  const blocks = parseBlocks(props.text);
-  return (
-    <div className="fcsdk-md">
-      {blocks.map((block, i) => {
-        switch (block.type) {
-          case 'h': {
-            const content = renderInline(block.lines.join(' '), `h${i}`);
-            if (block.level === 1) return <h1 key={i}>{content}</h1>;
-            if (block.level === 2) return <h2 key={i}>{content}</h2>;
-            if (block.level === 3) return <h3 key={i}>{content}</h3>;
-            return <h4 key={i}>{content}</h4>;
-          }
-          case 'ul':
-            return (
-              <ul key={i}>
-                {block.lines.map((li, j) => (
-                  <li key={j}>{renderInline(li, `ul${i}-${j}`)}</li>
-                ))}
-              </ul>
-            );
-          case 'ol':
-            return (
-              <ol key={i}>
-                {block.lines.map((li, j) => (
-                  <li key={j}>{renderInline(li, `ol${i}-${j}`)}</li>
-                ))}
-              </ol>
-            );
-          case 'code':
-            return (
-              <pre key={i}>
-                <code>{block.lines.join('\n')}</code>
-              </pre>
-            );
-          case 'quote':
-            return <blockquote key={i}>{renderInline(block.lines.join(' '), `q${i}`)}</blockquote>;
-          case 'p':
-          default:
-            return (
-              <p key={i}>
-                {block.lines.map((l, j) => (
-                  <Fragment key={j}>
-                    {j > 0 ? <br /> : null}
-                    {renderInline(l, `p${i}-${j}`)}
-                  </Fragment>
-                ))}
-              </p>
-            );
-        }
-      })}
-    </div>
-  );
+  const blocks = parseMarkdownBlocks(props.text);
+  const out: ReactNode[] = [];
+
+  let i = 0;
+  while (i < blocks.length) {
+    const block = blocks[i]!;
+    const marginTop = blockTopSpacing(blocks, i);
+
+    // Consecutive list items regroup into ONE <ul>/<ol> so the list keeps its semantics for
+    // screen readers, while the parser's per-item blocks still supply the tighter 5px rhythm
+    // between them (applied by .fcsdk-md li + li). Compose has no such concern — it draws its
+    // own bullet glyphs into plain rows.
+    if (block.type === 'bullet' || block.type === 'numbered') {
+      const kind = block.type;
+      const items: MarkdownBlock[] = [];
+      const start = i;
+      while (i < blocks.length && blocks[i]!.type === kind) {
+        items.push(blocks[i]!);
+        i++;
+      }
+      const children = items.map((item, j) => (
+        <li key={j}>
+          {inline(item.type === 'bullet' || item.type === 'numbered' ? item.text : '', `li${start}-${j}`)}
+        </li>
+      ));
+      out.push(
+        kind === 'bullet' ? (
+          <ul key={`b${start}`} style={{ marginTop }}>
+            {children}
+          </ul>
+        ) : (
+          <ol
+            key={`b${start}`}
+            style={{ marginTop }}
+            // Honour the source's own first number, as Compose does by printing it verbatim.
+            start={Number((items[0] as Extract<MarkdownBlock, { type: 'numbered' }>).number) || 1}
+          >
+            {children}
+          </ol>
+        ),
+      );
+      continue;
+    }
+
+    const rendered = renderBlock(block, i);
+    out.push(
+      <div key={`w${i}`} className="fcsdk-md-block" style={{ marginTop }}>
+        {rendered}
+      </div>,
+    );
+    i++;
+  }
+
+  return <div className="fcsdk-md">{out}</div>;
 }

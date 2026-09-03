@@ -13,7 +13,9 @@ local.properties
 *.mobileprovision
 
 # ---- Node / JS (web + react-native) ----
-node_modules/
+# No trailing slash: v2's RN package symlinks node_modules at the v1 package's copy,
+# and a trailing slash matches directories only, so the symlink would be committed.
+node_modules
 dist/
 *.tgz
 npm-debug.log*

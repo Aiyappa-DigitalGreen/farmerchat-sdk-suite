@@ -246,9 +246,15 @@ export const Labels = {
   /** "Paused, resuming…" — transient stall hint while a stream is mid-answer. */
   RESPONSE_PAUSED_RESUMING: 'fc_v2_app_label_response_paused_resuming',
 
-  // ---- alignment surfaces (2.0.0) ----
+  // ---- alignment surfaces (2.0.0). All verified present on endpoint #3. ----
   /** "Share location" — GPS_PROMPT heading. */
   SHARE_LOCATION_TITLE: 'fc_v2_app_label_share_location_title',
+  /**
+   * Sent as the query when the farmer declines the GPS_PROMPT surface, so the blocking question
+   * still resolves. Verified present on endpoint #3; the English fallback
+   * "Continue without sharing my location" is kept as the usual safety net.
+   */
+  LOCATION_PERMISSION_DECLINED: 'fc_v2_app_label_location_permission_declined',
   /** "Add one clear photo" — UPLOAD_PHOTO heading. */
   ADD_ONE_CLEAR_PHOTO: 'fc_v2_app_label_add_one_clear_photo',
   /** "Please Confirm" — CONFIRM heading. */
@@ -259,6 +265,22 @@ export const Labels = {
   DONT_SEE_YOUR_OPTION: 'fc_v2_app_label_dont_see_your_option',
   /** "Type or say it." — escape-hatch action. */
   TYPE_OR_SAY_IT: 'fc_v2_app_label_type_or_say_it',
+
+  // ---- location + terms (2.0.0). Verbatim from the Android core `Labels.kt`
+  // (SET_YOUR_LOCATION..ACCEPT_AND_CONTINUE at :333-341, YOUR_LOCATION at :362),
+  // all verified present on endpoint #3. ----
+  /** "Set your location" — Home location pill, invite state. */
+  SET_YOUR_LOCATION: 'fc_v2_app_label_set_your_location',
+  /** "Location found" — Home location pill, success state. */
+  LOCATION_FOUND: 'fc_v2_app_label_location_found',
+  /** "Change" — trailing accent on the located pill. */
+  CHANGE: 'fc_v2_app_label_change',
+  /** "Allow location in Settings" — Home location pill, permission-blocked state. */
+  ALLOW_LOCATION_IN_SETTINGS: 'fc_v2_app_label_allow_location_in_settings',
+  /** "Accept and continue" — TermsOfUseDialog primary action. */
+  ACCEPT_AND_CONTINUE: 'fc_v2_app_label_accept_and_continue',
+  /** "Your location:" — caption above the address on the location chat bubble. */
+  YOUR_LOCATION: 'fc_v2_app_label_your_location',
 } as const;
 
 export type LabelKey = (typeof Labels)[keyof typeof Labels];

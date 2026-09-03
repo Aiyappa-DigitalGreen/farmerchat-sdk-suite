@@ -57,6 +57,12 @@ export function FarmerChatRoot(props: {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [legal, setLegal] = useState<{ url: string; title: string } | null>(null);
   const [showNameUpdatedToast, setShowNameUpdatedToast] = useState(false);
+  // 2.0.0 in-app Terms-of-Use dialog. The app opens it from a Plotline card CTA
+  // (`open_terms_of_use=true`); the SDK carries no Plotline (root CLAUDE.md §6), so the request
+  // comes from the host through the EXISTING public entry point — `openScreen('termsofuse')` —
+  // which lands on Home and then raises this flag, exactly the app's "navigate Home + open Terms
+  // dialog". Mirrors the Android compose `termsOfUseRequested` flag (FarmerChatRoot.kt:118).
+  const [termsOfUseRequested, setTermsOfUseRequested] = useState(false);
   const [authTick, setAuthTick] = useState(0);
   const retryActionRef = useRef<(() => void) | null>(null);
 
@@ -211,11 +217,26 @@ export function FarmerChatRoot(props: {
         case 'chat':
           controllerOpenChat();
           break;
+        // 2.0.0: land on Home, then ask it to open the in-app Terms-of-Use dialog. Same screen
+        // key android-compose accepts (`SCREEN_TERMS_OF_USE = "termsofuse"`).
+        //
+        // CHAT_ONLY has no Home (docs/07 C3 — `routeFromSplash` lands straight in chat and
+        // `ChatScreen.onClose` exits the SDK instead of popping to Home), and Home is what renders
+        // the dialog. `replaceAll` would happily blow the chat away and strand the user on a
+        // screen the mode excludes, so the request is ignored — the same silent-ignore the
+        // neighbouring `settings` / `chatHistory` cases use when their config flag is off.
+        // Recorded in docs/04.
+        case 'termsofuse':
+          if (services.config.mode !== 'CHAT_ONLY') {
+            navigator.replaceAll({ name: 'home' });
+            setTermsOfUseRequested(true);
+          }
+          break;
         default:
           break;
       }
     },
-    [controllerOpenChat, navigateDrawerRoute, navigator, services.config.showHistory, services.config.showSettings],
+    [controllerOpenChat, navigateDrawerRoute, navigator, services.config.mode, services.config.showHistory, services.config.showSettings],
   );
 
   // External controller (FarmerChat.openChat / logout / programmatic API).
@@ -343,12 +364,24 @@ export function FarmerChatRoot(props: {
       case 'name':
         return <EnterNameScreen onDone={() => navigator.routeFromSplash()} />;
       case 'home':
-        return <HomeScreen onOpenDrawer={() => setDrawerOpen(true)} onOpenChat={openChat} locationActions={locationActions} />;
+        return (
+          <HomeScreen
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onOpenChat={openChat}
+            locationActions={locationActions}
+            openTermsOfUseRequested={termsOfUseRequested}
+            onTermsOfUseRequestConsumed={() => setTermsOfUseRequested(false)}
+          />
+        );
       case 'chat':
         return (
           <ChatScreen
             params={current.params}
             onOpenDrawer={() => setDrawerOpen(true)}
+            // 2.0.0: the GPS_PROMPT capability chip runs the ONE shared location flow (Compose
+            // reads the same single `graph.locationPromptManager`), so its overlay and state
+            // machine stay here.
+            locationActions={locationActions}
             onClose={() => {
               // CHAT_ONLY has no Home — signal the host to exit/unmount the SDK
               // (host wires config.onExit); otherwise popUpTo(Home){!inclusive}.

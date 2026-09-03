@@ -26,8 +26,20 @@ final class FCUIChatViewController: UIViewController {
     private enum Row: Hashable {
         case loadEarlier
         case message(String) // ChatMessage.id
+        /// An EXCLUSIVE alignment surface (2.0.0) — a different cell class, so it gets its own
+        /// case: the row identifier must change if a message ever switched shape under a stable id.
+        case alignment(String) // ChatMessage.id
+        /// The farmer's shared location (2.0.0) — a fixed-size card, so its own cell class.
+        case location(String) // ChatMessage.id
         case followUp(String)
         case inlineError(String)
+
+        var messageId: String? {
+            switch self {
+            case .message(let id), .alignment(let id), .location(let id): return id
+            case .loadEarlier, .followUp, .inlineError: return nil
+            }
+        }
     }
 
     private let args: FCUIChatArgs
@@ -48,6 +60,23 @@ final class FCUIChatViewController: UIViewController {
     // newest message.
     private var prevMessageCount = 0
     private var prevLastMessageId: String?
+    // 2.0.0 streaming: a delta changes an existing message's CONTENT, not the thread's shape, so
+    // the diffable snapshot is identical and `apply` would be a no-op. These mirrors let `render`
+    // detect content-only changes and reconfigure exactly those rows in place.
+    private var prevRows: [Row] = []
+    private var prevMessagesById: [String: ChatMessage] = [:]
+    private var prevIsLoading = false
+    private var prevLastAiRowId: String?
+    /// `ChatMessage.id` of the last `.aiResponse` — SwiftUI's `lastAiMessage` predicate. Gates the
+    /// stream error card's retry and an alignment surface's escape hatch.
+    private var lastAiRowId: String?
+    /// Armed while a chat-initiated location flow is in progress; holds the raw `AiResponse.id` of
+    /// the GPS_PROMPT surface whose chip started it (2.0.0). Nil leaves the outcome subscription
+    /// inert, so an outcome belonging to Home or a widget trigger is ignored.
+    private var pendingLocationSourceId: String?
+    /// True once the location-outcome subscription is installed. Guards the share-location chip
+    /// from starting a flow nothing is listening to (see `observeLocationOutcomes`).
+    private var isObservingLocationOutcomes = false
 
     init(args: FCUIChatArgs) {
         self.args = args
@@ -80,6 +109,7 @@ final class FCUIChatViewController: UIViewController {
             .sink { [weak self] state in self?.render(state) }
             .store(in: &cancellables)
 
+        observeLocationOutcomes()
         initialize()
         FarmerChat.shared.analytics.screenViewed(ScreenNames.chat, extra: ["source": args.source])
     }
@@ -170,12 +200,48 @@ final class FCUIChatViewController: UIViewController {
             cell.configure(
                 message: message,
                 isTtsEnabled: self.viewModel.state.isTtsEnabled,
-                playback: self.playback
+                playback: self.playback,
+                isLatest: messageId == self.lastAiRowId,
+                isBusy: self.viewModel.state.isLoading
             )
             cell.onRetry = { self.viewModel.onAction(.retryLastRequest) }
             cell.onListen = { self.listenTapped() }
             cell.onShare = { text in self.share(text: text) }
             cell.onPlayClip = { url, id in self.toggleClip(url: url, id: id) }
+            // 2.0.0: the stream error card owns the retry for an interrupted stream (core
+            // deliberately leaves `state.errorMessage` nil there, so there is no second banner).
+            cell.onRetryStream = { [weak self] in self?.viewModel.onAction(.retryLastRequest) }
+            // ADDITIVE surface below a real answer: its chips route through the same capability
+            // handler, keyed on that answer's own id.
+            cell.onAlignmentChipTap = { [weak self] chip in
+                guard let self, case .aiResponse(let ai)? = self.messagesById[messageId] else { return }
+                self.handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
+            }
+            cell.onLayoutInvalidated = { [weak self] in
+                // The stall hint toggles on its own timer, outside a snapshot apply: nudge the
+                // collection view to re-measure this self-sizing cell.
+                self?.collectionView.performBatchUpdates(nil)
+            }
+        }
+        // 2.0.0: an EXCLUSIVE alignment surface replaces the answer bubble entirely.
+        let alignmentCell = UICollectionView.CellRegistration<FCUIAlignmentSurfaceCell, String> { [weak self] cell, _, messageId in
+            guard let self, case .aiResponse(let ai)? = self.messagesById[messageId] else { return }
+            cell.configure(
+                message: ai,
+                isLatest: messageId == self.lastAiRowId,
+                isBusy: self.viewModel.state.isLoading
+            )
+            cell.onChipTap = { [weak self] chip in
+                self?.handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
+            }
+            // The UIKit flavour's text input is a prompt sheet (there is no always-visible field
+            // to focus), so the escape hatch opens it — the same affordance the input bar uses.
+            cell.onTypeInstead = { [weak self] in self?.typeTapped() }
+        }
+        // 2.0.0: the farmer's shared location, standing in for the text bubble they never typed.
+        let locationCell = UICollectionView.CellRegistration<FCUILocationBubbleCell, String> { [weak self] cell, _, messageId in
+            guard let self, case .location(let location)? = self.messagesById[messageId] else { return }
+            cell.configure(message: location)
         }
         let chipCell = UICollectionView.CellRegistration<FCUIFollowUpChipCell, String> { [weak self] cell, _, question in
             cell.configure(question: question)
@@ -206,6 +272,10 @@ final class FCUIChatViewController: UIViewController {
                 return collectionView.dequeueConfiguredReusableCell(using: loadEarlierCell, for: indexPath, item: ())
             case .message(let id):
                 return collectionView.dequeueConfiguredReusableCell(using: bubbleCell, for: indexPath, item: id)
+            case .alignment(let id):
+                return collectionView.dequeueConfiguredReusableCell(using: alignmentCell, for: indexPath, item: id)
+            case .location(let id):
+                return collectionView.dequeueConfiguredReusableCell(using: locationCell, for: indexPath, item: id)
             case .followUp(let question):
                 return collectionView.dequeueConfiguredReusableCell(using: chipCell, for: indexPath, item: question)
             case .inlineError(let message):
@@ -268,6 +338,7 @@ final class FCUIChatViewController: UIViewController {
 
     private func render(_ state: ChatState) {
         messagesById = Dictionary(uniqueKeysWithValues: state.messages.map { ($0.id, $0) })
+        lastAiRowId = lastAiResponseRowId(in: state.messages)
 
         // Classify this render against the previous one so a prepended older
         // page keeps the user in place, while a new bottom turn scrolls down.
@@ -278,20 +349,46 @@ final class FCUIChatViewController: UIViewController {
         let beforeOffsetY = collectionView.contentOffset.y
         let beforeHeight = collectionView.contentSize.height
 
-        var snapshot = NSDiffableDataSourceSnapshot<Int, Row>()
-        snapshot.appendSections([0])
+        var rows: [Row] = []
         // Load-earlier affordance pinned to the top of the thread.
         if state.historyNextPage != nil {
-            snapshot.appendItems([.loadEarlier])
+            rows.append(.loadEarlier)
         }
-        snapshot.appendItems(state.messages.map { .message($0.id) })
+        rows.append(contentsOf: state.messages.map(row(for:)))
         if let errorMessage = state.errorMessage, !state.messages.isEmpty {
-            snapshot.appendItems([.inlineError(errorMessage)])
+            rows.append(.inlineError(errorMessage))
         }
-        if let suggestions = state.suggestedQuestions, !suggestions.isEmpty, !state.isLoading {
-            snapshot.appendItems(suggestions.map { .followUp($0) })
+        // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the answer,
+        // its action row AND its related-questions section. (SwiftUI gets the same result by
+        // never marking such a surface "revealed", which gates its follow-up section.)
+        if let suggestions = state.suggestedQuestions, !suggestions.isEmpty, !state.isLoading,
+           !lastAiIsExclusiveSurface() {
+            rows.append(contentsOf: suggestions.map { Row.followUp($0) })
         }
-        dataSource.apply(snapshot, animatingDifferences: !isPrepend) { [weak self] in
+
+        var snapshot = NSDiffableDataSourceSnapshot<Int, Row>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(rows)
+
+        // Content-only changes (a streamed delta, a tool status, a follow-up backfill, a user
+        // bubble marked failed) keep the same row identifiers, so ask for an in-place reconfigure
+        // of exactly those rows. `isLatest`/`isBusy` are render inputs too, so a change in either
+        // reconfigures every surviving message row.
+        let flagsChanged = state.isLoading != prevIsLoading || lastAiRowId != prevLastAiRowId
+        let survivingRows = Set(prevRows)
+        let changedRows = rows.filter { row in
+            guard let id = row.messageId, survivingRows.contains(row), let message = messagesById[id] else {
+                return false
+            }
+            return flagsChanged || prevMessagesById[id] != message
+        }
+        if !changedRows.isEmpty {
+            snapshot.reconfigureItems(changedRows)
+        }
+        // Animate only a real change of shape: animating a per-delta reconfigure would make a
+        // streaming answer jitter.
+        let structureChanged = rows != prevRows
+        dataSource.apply(snapshot, animatingDifferences: !isPrepend && structureChanged) { [weak self] in
             guard let self else { return }
             if isPrepend {
                 // Keep the previously-visible content in place after inserting
@@ -305,6 +402,10 @@ final class FCUIChatViewController: UIViewController {
         }
         prevMessageCount = newCount
         prevLastMessageId = newLastId
+        prevRows = rows
+        prevMessagesById = messagesById
+        prevIsLoading = state.isLoading
+        prevLastAiRowId = lastAiRowId
 
         inputBar.alpha = state.isLoading ? 0.5 : 1
         inputBar.isUserInteractionEnabled = !state.isLoading
@@ -313,6 +414,169 @@ final class FCUIChatViewController: UIViewController {
             ttsPlayback.play(url: url, id: "tts")
             viewModel.onAction(.setAudioPlaying(true))
         }
+    }
+
+    // MARK: - Row mapping (2.0.0)
+
+    /// An EXCLUSIVE alignment surface and a location card each get their own cell; everything else
+    /// is a bubble.
+    private func row(for message: ChatMessage) -> Row {
+        if case .aiResponse(let ai) = message, let kind = ai.alignmentKind, !kind.isAdditive {
+            return .alignment(message.id)
+        }
+        if case .location = message {
+            return .location(message.id)
+        }
+        return .message(message.id)
+    }
+
+    /// `ChatMessage.id` of the last `.aiResponse` (NOT the last message: a trailing failed user
+    /// bubble must not take "latest" away from the answer that owns the retry card).
+    private func lastAiResponseRowId(in messages: [ChatMessage]) -> String? {
+        for message in messages.reversed() {
+            if case .aiResponse = message { return message.id }
+        }
+        return nil
+    }
+
+    private func lastAiIsExclusiveSurface() -> Bool {
+        guard let id = lastAiRowId,
+              case .aiResponse(let ai)? = messagesById[id],
+              let kind = ai.alignmentKind else { return false }
+        return !kind.isAdditive
+    }
+
+    // MARK: - Capability chips (2.0.0)
+
+    /// Routes an alignment chip tap. Port of the app's `onAlignmentChipClick`.
+    ///
+    /// A CAPABILITY chip (`gps-prompt` / `upload-photo` marked `action:"invoke"`) does NOT send its
+    /// text — it invokes a device capability and only the OUTCOME is sent. Every other chip,
+    /// including "Not now" on a capability prompt, stays on the plain follow-up path.
+    ///
+    /// - Parameter messageId: the raw `AiResponse.id` of the surface that offered the chip (not the
+    ///   prefixed `ChatMessage.id` — core matches on the raw one).
+    private func handleAlignmentChip(messageId: String, kind: AlignmentKind?, chip: AlignmentChip) {
+        switch chip.capability(for: kind) {
+        case .shareLocation:
+            // Permission dialog / GPS fetch / recovery are owned by the nav controller's
+            // FCUILocationPromptHost; the outcome arrives on the subscription installed in
+            // viewDidLoad. Only start when no other location flow is running (mirrors Home's
+            // guard). A nil nav controller means no host is mounted, so no-op — never fall back to
+            // sending the chip's text, which is the defect this replaces.
+            guard let manager = locationPromptManager, manager.state == .idle else { return }
+            // Never start a flow whose outcome nothing is listening for: that is exactly the
+            // hang this feature exists to remove, and `observeLocationOutcomes()` in
+            // `viewDidLoad` no-ops if the nav controller was not resolvable yet. Idempotent, so
+            // this is a cheap re-attempt rather than a second subscription.
+            observeLocationOutcomes()
+            guard isObservingLocationOutcomes else { return }
+            pendingLocationSourceId = messageId
+            manager.triggerFromLocalContext()
+        case .takePhoto:
+            launchPicker(sourceType: .camera)
+        case .chooseFromGallery:
+            launchPicker(sourceType: .photoLibrary)
+        case .none:
+            sendAlignmentChip(chip)
+        }
+    }
+
+    /// The nav-controller-scoped location prompt state machine (same instance Home drives).
+    private var locationPromptManager: LocationPromptManager? {
+        (navigationController as? FarmerChatViewController)?.locationPrompt
+    }
+
+    /// Observes outcomes of the chat share-location flow. Subscribed for the life of the screen
+    /// but inert until armed — `events` is a `PassthroughSubject`, so it multicasts to every
+    /// subscriber (the nav controller and Home also listen) with no replay, which is exactly why
+    /// this subscribes up front and gates on `pendingLocationSourceId`.
+    ///
+    /// Idempotent: `handleAlignmentChip` calls it again before starting a flow, so a nav
+    /// controller that was not resolvable at `viewDidLoad` cannot leave the flow running with
+    /// nothing listening for its outcome.
+    private func observeLocationOutcomes() {
+        guard !isObservingLocationOutcomes, let manager = locationPromptManager else { return }
+        isObservingLocationOutcomes = true
+        manager.events
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in self?.handleLocationOutcome(event) }
+            .store(in: &cancellables)
+    }
+
+    private func handleLocationOutcome(_ event: LocationPromptEvent) {
+        guard let sourceId = pendingLocationSourceId else { return }
+        // Not a terminal per-flow outcome, or one belonging to Home / a widget trigger.
+        guard event.terminalSource == .localContext else { return }
+        // A terminal event for OUR request — disarm before dispatching.
+        pendingLocationSourceId = nil
+
+        // `isLocationObtained` lives in Core so both flavours share one rule: a settled flow is
+        // NOT the same as a successful one.
+        if event.isLocationObtained {
+            viewModel.onAction(.sendLocationSharedQuery(
+                sourceMessageId: sourceId,
+                address: resolvedAddress()
+            ))
+        } else {
+            // Denied / cancelled / fetch failed: still answer the blocking question, by sending the
+            // decline text as an ordinary follow-up. The app sends this through `SendAlignmentChip`
+            // with `locationDeclined` + parent_message_id; the SDK has neither, so the correlation
+            // and the chip analytics are lost (docs/04).
+            viewModel.onAction(.sendFollowUpQuestion(
+                question: fcuiLabel(
+                    AgenticLabels.locationPermissionDeclined,
+                    AgenticLabels.locationPermissionDeclinedFallback
+                ),
+                followUpQuestionId: nil,
+                transcriptionId: nil,
+                audioURL: nil
+            ))
+        }
+    }
+
+    /// The address shown in the location bubble.
+    ///
+    /// The app composes `display_address, geography_level2_name, country_name`; iOS's `#11`
+    /// response (`GetLocationResponse`) carries `district / state / country` instead, and those are
+    /// the only location prefs this SDK writes — no `fc_sdk_` key is invented for the rest
+    /// (root CLAUDE.md §2). Recorded as a delta in docs/04.
+    private func resolvedAddress() -> String {
+        let prefs = FarmerChat.shared.prefs
+        let parts = [
+            prefs.string(.userDistrict),
+            prefs.string(.userState),
+            prefs.string(.userCountryName)
+        ]
+        var seen: Set<String> = []
+        return parts
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .joined(separator: ", ")
+    }
+
+    /// A capability chip already chose the source, so this opens it directly — no photo-source
+    /// sheet, no composer. Falls back to the library if the camera is unavailable (simulator).
+    private func launchPicker(sourceType: UIImagePickerController.SourceType) {
+        let picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(sourceType)
+            ? sourceType
+            : .photoLibrary
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    /// A non-capability alignment chip sends the chip's `value` (falling back to its label) as a
+    /// follow-up — the same action a related-question tap uses, exactly as SwiftUI and Compose do.
+    private func sendAlignmentChip(_ chip: AlignmentChip) {
+        let question = chip.submittedQuery
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        viewModel.onAction(.sendFollowUpQuestion(
+            question: question,
+            followUpQuestionId: nil,
+            transcriptionId: nil,
+            audioURL: nil
+        ))
     }
 
     private func scrollToBottom() {

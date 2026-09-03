@@ -10,6 +10,12 @@ private let fcFollowupsBlockRegex = try? NSRegularExpression(pattern: "```follow
 /// collapsed by `@Published` coalescing into just the last one.
 let fcToolStatusMinDwellNanoseconds: UInt64 = 700_000_000
 
+/// `triggered_input_type` for a send whose real trigger was an alignment-chip selection rather
+/// than something the farmer typed or dictated (app parity — `align_chip_sel`).
+///
+/// Internal (not private) so the capability-chip tests can assert the literal.
+let FCAlignChipSelInputType = "align_chip_sel"
+
 /// Strips agentic control tokens that trail the streamed text but are absent from the clean
 /// `metadata.response` — e.g. `<<commodities:chickpea>>` and a ```` ```followups ... ``` ```` block.
 /// Without this the farmer watches raw control tokens type themselves into the answer.
@@ -44,6 +50,8 @@ func sanitizeAgenticStreamText(_ raw: String) -> String {
 public enum ChatMessage: Identifiable, Sendable, Equatable {
     case user(UserMessage)
     case aiResponse(AiResponse)
+    /// The farmer's resolved location (2.0.0) — see ``LocationMessage``.
+    case location(LocationMessage)
     case loadingPlaceholder(id: String)
 
     public struct UserMessage: Sendable, Equatable {
@@ -110,9 +118,13 @@ public enum ChatMessage: Identifiable, Sendable, Equatable {
         /// (``AlignmentKind/isAdditive``) ``text`` holds the real answer and this carries the
         /// nudge rendered below it.
         public var alignmentMessage: String?
-        /// Chip values already tapped on this surface. Present for parity with the Android state
-        /// model, which likewise never populates it — chip taps send a follow-up instead, so the
-        /// picked chip is not highlighted on either platform.
+        /// Chip values already tapped on this surface. Accumulates so every picked chip stays
+        /// highlighted and locked — each chip is clickable once — while the rest stay tappable.
+        ///
+        /// Two writers, both in this file: ``recordAlignmentPick(_:)`` for an ordinary chip (which
+        /// matches on the text it sent), and ``sendLocationSharedQuery(sourceMessageId:address:)``
+        /// for the share-location capability chip (whose text is never sent, so there is nothing
+        /// for the matcher to find).
         public var alignmentSelectedValues: [String]
         /// The query that triggered this surface. Kept so a capability chip (e.g. "Share my
         /// location") can re-send the user's real question once the capability is satisfied,
@@ -154,10 +166,29 @@ public enum ChatMessage: Identifiable, Sendable, Equatable {
         }
     }
 
+    /// The farmer's resolved location, shown in the thread in place of a text bubble once a
+    /// GPS_PROMPT alignment chip has been satisfied (2.0.0). Rendered by `FCLocationChatBubble`
+    /// (SwiftUI) / `FCUILocationBubbleCell` (UIKit), ports of Compose's `LocationChatBubble`.
+    ///
+    /// It stands in for the user text bubble a normal send would add — the farmer never typed
+    /// anything, they shared a location.
+    public struct LocationMessage: Sendable, Equatable {
+        /// The resolved, human-readable address. Never blank: a blank address yields no bubble at
+        /// all (app parity — see `ChatViewModel.sendLocationSharedQuery`).
+        public var address: String
+        public var id: String
+
+        public init(address: String, id: String = UUID().uuidString) {
+            self.address = address
+            self.id = id
+        }
+    }
+
     public var id: String {
         switch self {
         case .user(let message): return "user_\(message.id)"
         case .aiResponse(let message): return "ai_\(message.id)"
+        case .location(let message): return "location_\(message.id)"
         case .loadingPlaceholder(let id): return "loading_\(id)"
         }
     }
@@ -192,6 +223,12 @@ public enum ChatAction: Sendable {
     )
     case replacePreGeneratedWithQuestion(question: String, triggerInputType: String?)
     case sendFollowUpQuestion(question: String, followUpQuestionId: String?, transcriptionId: String?, audioURL: URL?)
+    /// A GPS_PROMPT "Share my location" capability chip succeeded (2.0.0): show `address` as a
+    /// location bubble and re-send the surface's own `alignmentOriginalQuery`.
+    ///
+    /// `sourceMessageId` is the raw ``ChatMessage/AiResponse/id`` of the surface that offered the
+    /// chip (NOT the prefixed ``ChatMessage/id``), so the pick is recorded on the right message.
+    case sendLocationSharedQuery(sourceMessageId: String, address: String)
     case sendQuestionWithImage(question: String, imageData: Data, imageURL: URL?)
     case sendFollowUpVoiceQuestion(audioURL: URL, base64Audio: String)
     case sendQuestionWithAudio(question: String, audioURL: URL)
@@ -267,6 +304,9 @@ public final class ChatViewModel: ObservableObject {
         case .replacePreGeneratedWithQuestion(let question, let triggerInputType):
             replacePreGenerated(question: question, triggerInputType: triggerInputType)
         case .sendFollowUpQuestion(let question, let followUpQuestionId, let transcriptionId, let audioURL):
+            // If this question came from an alignment surface's chip, record it on that message
+            // before the send starts, so the chip locks immediately on tap.
+            recordAlignmentPick(question)
             Task {
                 if followUpQuestionId != nil || self.state.suggestedQuestions?.contains(question) == true {
                     _ = await self.env.api.followUpQuestionClick(FollowUpClickRequest(followUpQuestion: question))
@@ -283,6 +323,8 @@ public final class ChatViewModel: ObservableObject {
                     originScreen: ScreenNames.chat
                 )
             }
+        case .sendLocationSharedQuery(let sourceMessageId, let address):
+            sendLocationSharedQuery(sourceMessageId: sourceMessageId, address: address)
         case .sendQuestionWithImage(let question, let imageData, let imageURL):
             Task { await self.sendImageQuestion(question: question, imageData: imageData, imageURL: imageURL) }
         case .sendFollowUpVoiceQuestion(let audioURL, let base64Audio):
@@ -856,6 +898,102 @@ public final class ChatViewModel: ObservableObject {
         state.errorMessage = nil
         state.failedMessageId = nil
         Task { await retry() }
+    }
+
+    // MARK: - Capability chips (2.0.0)
+
+    /// The GPS_PROMPT "Share my location" chip succeeded: show the resolved address as a
+    /// ``ChatMessage/location(_:)`` bubble and re-send the surface's original query.
+    ///
+    /// Port of the app's `sendLocationSharedQuery` (mirrored from Android core). The location
+    /// bubble takes the place of the user text bubble a normal send would add — the farmer never
+    /// typed anything, they shared a location — and a **blank address yields no bubble at all**,
+    /// matching the app.
+    ///
+    /// Two deliberate deltas from the app, both already accepted on Android and recorded in
+    /// docs/04:
+    ///  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
+    ///    backend correlates the answer to the prompt. ``TextPromptRequest`` has no such field, so
+    ///    no alignment chip send carries it — an SDK-wide gap, not specific to this path.
+    ///  - **no `agentic_chip_*` analytics properties.** The iOS analytics props are a flat
+    ///    dictionary with no chip type/value/label/status fields, so this reports as an ordinary
+    ///    text query. `triggered_input_type` IS sent as `align_chip_sel` (app parity).
+    private func sendLocationSharedQuery(sourceMessageId: String, address: String) {
+        // Checked BEFORE any mutation: `sendQuestionInternal`'s own guard would bail after the
+        // location bubble had already been appended, orphaning it with no answer coming.
+        guard !state.isLoading else { return }
+        guard let index = state.messages.firstIndex(where: { entry in
+            if case .aiResponse(let ai) = entry { return ai.id == sourceMessageId }
+            return false
+        }), case .aiResponse(var source) = state.messages[index] else { return }
+        // No original query means nothing to ask — bail before mutating state (defensive; the
+        // gps-prompt contract always carries original_query).
+        guard let query = source.alignmentOriginalQuery,
+              !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        // Mark share_precise_location as picked so the source chip locks/highlights exactly as a
+        // plain chip tap would. `recordAlignmentPick` cannot do it — the chip's text is never sent
+        // as the question, so there is nothing for it to match on.
+        if !source.alignmentSelectedValues.contains(AlignmentChip.valueShareLocation) {
+            source.alignmentSelectedValues.append(AlignmentChip.valueShareLocation)
+            state.messages[index] = .aiResponse(source)
+        }
+
+        if !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            state.messages.append(.location(ChatMessage.LocationMessage(address: address)))
+        }
+
+        state.suggestedQuestions = nil
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: [
+            "input_type": FCAlignChipSelInputType,
+            "screen": ScreenNames.chat
+        ])
+        env.config.onMessageSent?(query) // C4 semantic callback
+        Task {
+            // `replaceExistingUserBubble: true` with a non-empty thread suppresses the user text
+            // bubble (the location bubble above IS the farmer's reply) and appends the loading
+            // placeholder after it, giving location-bubble-then-placeholder ordering.
+            await self.sendQuestionInternal(
+                query,
+                transcriptionId: nil,
+                audioURL: nil,
+                triggeredInputType: FCAlignChipSelInputType,
+                weatherCtaTriggered: false,
+                ssfrCrop: nil,
+                statementId: nil,
+                replaceExistingUserBubble: true
+            )
+        }
+    }
+
+    // MARK: - Alignment chip selection (2.0.0)
+
+    /// Records a tapped alignment chip on its own message so the surface can render it as picked.
+    ///
+    /// Kept in core rather than duplicated per flavour: SwiftUI and UIKit both dispatch a plain
+    /// ``ChatAction/sendFollowUpQuestion(question:followUpQuestionId:transcriptionId:audioURL:)``
+    /// for a chip tap, so neither needs to know about selection state and both light up from this
+    /// one place. Mirrors `recordAlignmentPick` in the Android core.
+    ///
+    /// Without this, ``ChatMessage/AiResponse/alignmentSelectedValues`` stays empty forever and
+    /// the whole selected/locked chip treatment is dead code: the tapped chip never shows a
+    /// check, never locks, and the unpicked chips never fade back.
+    private func recordAlignmentPick(_ question: String) {
+        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let idx = state.messages.lastIndex(where: { entry in
+            if case .aiResponse(let ai) = entry { return ai.alignmentKind != nil }
+            return false
+        }) else { return }
+        guard case .aiResponse(var surface) = state.messages[idx] else { return }
+        // Only record a match against this surface's own chips — a follow-up the user typed
+        // themselves must never mark a chip as chosen. Matched on value OR label because a
+        // chip may carry only a label.
+        let matches = (surface.alignmentChips ?? []).contains {
+            $0.value == question || $0.label == question
+        }
+        guard matches, !surface.alignmentSelectedValues.contains(question) else { return }
+        surface.alignmentSelectedValues.append(question)
+        state.messages[idx] = .aiResponse(surface)
     }
 
     // MARK: - Follow-ups (#29)

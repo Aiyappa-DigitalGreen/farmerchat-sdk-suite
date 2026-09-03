@@ -746,15 +746,88 @@ export interface Alignment {
 /**
  * One quick-reply chip. `label` is shown, `value` is sent on tap.
  *
- * `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
- * location), "decline" lets the user opt out (use an approximate location). Today every chip's
- * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
- * "select" chips without another wire change.
+ * `action` describes how the chip behaves. A chip whose action is
+ * {@link AlignmentChipWire.ACTION_SELECT} on one of the two CAPABILITY surfaces
+ * (`gps-prompt` / `upload-photo`) does NOT send its own text as the question — it invokes a
+ * device capability and only the OUTCOME is sent (see {@link routeAlignmentChip}). Every other
+ * chip, the decline chip included, sends its `value` (falling back to `label`) as a follow-up.
  */
 export interface AlignmentChip {
   label?: string | null;
   value?: string | null;
   action?: string | null;
+}
+
+/**
+ * Wire values for the capability chips, copied verbatim from the app's
+ * `domain/model/chat/TextPromptResponse.kt` (and 1:1 with the Android core's
+ * `AlignmentChip` companion constants).
+ *
+ * Note {@link AlignmentChipWire.ACTION_SELECT} is the string `"invoke"`, not `"select"`, and
+ * {@link AlignmentChipWire.VALUE_SHARE_LOCATION} is `"share_precise_location"` — the app has a
+ * `share_location` constant commented out directly above it. Do NOT "normalize" either one: a
+ * mismatch fails silently, the chip falls through to the text path, and the farmer sends the
+ * string "share_precise_location" as their question.
+ */
+export const AlignmentChipWire = {
+  /** `action` marking a chip that invokes a capability rather than sending text. */
+  ACTION_SELECT: 'invoke',
+
+  /** GPS_PROMPT: start the location flow, then send the original query. */
+  VALUE_SHARE_LOCATION: 'share_precise_location',
+
+  /** UPLOAD_PHOTO: open the camera / the gallery. */
+  VALUE_TAKE_PHOTO: 'take_photo',
+  VALUE_CHOOSE_FROM_GALLERY: 'choose_from_gallery',
+
+  /** The decline chip on a capability prompt. */
+  VALUE_NOT_NOW: 'not_now',
+} as const;
+
+/** Where a tapped alignment chip goes. Anything but `text` invokes a device capability. */
+export const AlignmentChipRoutes = {
+  LOCATION: 'location',
+  CAMERA: 'camera',
+  GALLERY: 'gallery',
+  TEXT: 'text',
+} as const;
+
+export type AlignmentChipRoute =
+  (typeof AlignmentChipRoutes)[keyof typeof AlignmentChipRoutes];
+
+/**
+ * The capability-chip routing rule — the single place that decides whether a chip tap invokes a
+ * capability or sends text.
+ *
+ * Port of the app's `onAlignmentChipClick` (`ui/chat/ChatScreen.kt`) and of the `when` block in
+ * the Android SDK's Compose/Views chip handlers. Kept in core (rather than duplicated in the
+ * screen, as Android does) so the UI and the tests exercise the SAME function.
+ *
+ * A capability fires only when all three agree: the surface KIND is a capability prompt, the
+ * `action` is exactly `invoke`, and the `value` belongs to that kind. Everything else — a
+ * decline chip (`not_now`), a chip with no action, a capability value on the wrong surface, any
+ * non-capability surface — sends text, which is the 1.0.0 behaviour.
+ */
+export function routeAlignmentChip(
+  kind: AlignmentKind | null,
+  chip: AlignmentChip,
+): AlignmentChipRoute {
+  const isInvoke = chip.action === AlignmentChipWire.ACTION_SELECT;
+  const isPhoto = kind === AlignmentKinds.UPLOAD_PHOTO && isInvoke;
+  if (
+    kind === AlignmentKinds.GPS_PROMPT &&
+    isInvoke &&
+    chip.value === AlignmentChipWire.VALUE_SHARE_LOCATION
+  ) {
+    return AlignmentChipRoutes.LOCATION;
+  }
+  if (isPhoto && chip.value === AlignmentChipWire.VALUE_TAKE_PHOTO) {
+    return AlignmentChipRoutes.CAMERA;
+  }
+  if (isPhoto && chip.value === AlignmentChipWire.VALUE_CHOOSE_FROM_GALLERY) {
+    return AlignmentChipRoutes.GALLERY;
+  }
+  return AlignmentChipRoutes.TEXT;
 }
 
 /** The alignment surfaces the backend can ask for. */

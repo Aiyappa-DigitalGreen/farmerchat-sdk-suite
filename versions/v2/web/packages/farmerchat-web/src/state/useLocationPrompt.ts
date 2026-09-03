@@ -22,11 +22,33 @@ export type LocationPromptStateKind =
 
 export type LocationErrorType = 'NoNetwork' | 'GpsUnavailable' | 'LocationFailed';
 
+/**
+ * Which surface started the flow. `'chat'` is the 2.0.0 GPS_PROMPT capability chip — Kotlin's
+ * `LocationTriggerSource.LocalContext` (`core/ui/location/LocationPromptModels.kt`). It behaves
+ * like `'widget'` in the overlay: interstitial and permission are shown, the fetch is silent.
+ */
+export type LocationTriggerSource = 'weather' | 'widget' | 'chat';
+
 export interface LocationPromptState {
   kind: LocationPromptStateKind;
   errorType: LocationErrorType | null;
   /** Weather flow keeps the interstitial overlay during permission/fetch. */
-  source: 'weather' | 'widget' | null;
+  source: LocationTriggerSource | null;
+}
+
+/**
+ * How a location flow ended, handed to the callback {@link LocationPromptActions.triggerFromLocalContext}
+ * armed with. Port of Kotlin's `LocationPromptEvent.Continue` / `.Cancel`
+ * (`core/ui/location/LocationPromptModels.kt`), narrowed to the one caller that needs it.
+ *
+ * Success is `kind: 'continue'` with `reason === 'location_fetched'` — the same string the Kotlin
+ * emits and the same string chat checks for. Everything else (denied, cancelled, fetch failed) is
+ * a decline.
+ */
+export interface LocationOutcome {
+  kind: 'continue' | 'cancel';
+  /** Kotlin `LocationPromptEvent.Continue.reason`. Null on a cancel. */
+  reason: string | null;
 }
 
 const IDLE: LocationPromptState = { kind: 'Idle', errorType: null, source: null };
@@ -34,6 +56,20 @@ const IDLE: LocationPromptState = { kind: 'Idle', errorType: null, source: null 
 export interface LocationPromptActions {
   /** Weather CTA → interstitial (or straight through when location is known). */
   triggerFromWeather: (onLocationReady: () => void) => void;
+  /**
+   * 2.0.0: the chat GPS_PROMPT "Share my location" chip (Kotlin
+   * `LocationPromptManager.triggerFromLocalContext`). Straight to the interstitial — deliberately
+   * WITHOUT the `hasKnownLocation()` short-circuit `triggerFromWeather` has, because the chip is
+   * asking for a fresh fix, not for whatever is in prefs.
+   *
+   * [onOutcome] is armed for exactly this flow and fires once, on the terminal event; a flow
+   * started from Home or Settings never reaches it. No-op while another location flow is running
+   * (mirrors the Compose guard `state.value is LocationPromptState.Idle`), so the caller must not
+   * assume it was armed.
+   */
+  triggerFromLocalContext: (onOutcome: (outcome: LocationOutcome) => void) => void;
+  /** Drops an armed {@link triggerFromLocalContext} callback (e.g. the chat screen unmounted). */
+  cancelPendingOutcome: () => void;
   shareLocation: () => Promise<void>;
   skip: () => void;
   dismissError: () => void;
@@ -45,7 +81,22 @@ const GEO_TIMEOUT_MS = 10_000;
 
 export function useLocationPrompt(services: SdkServices): [LocationPromptState, LocationPromptActions] {
   const [state, setState] = useState<LocationPromptState>(IDLE);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const pendingNavigationRef = useRef<(() => void) | null>(null);
+  /**
+   * Callback armed by {@link LocationPromptActions.triggerFromLocalContext}, consumed by the first
+   * terminal event. Held in a ref (not state) so `retry()` — which re-enters `shareLocation` —
+   * cannot lose it, and so a re-render of the arming screen cannot re-arm it.
+   */
+  const pendingOutcomeRef = useRef<((outcome: LocationOutcome) => void) | null>(null);
+
+  /** Fires the armed callback exactly once, and disarms. */
+  const settleOutcome = useCallback((outcome: LocationOutcome) => {
+    const pending = pendingOutcomeRef.current;
+    pendingOutcomeRef.current = null;
+    pending?.(outcome);
+  }, []);
   const { api, session, store, analytics } = services;
 
   const hasKnownLocation = useCallback((): boolean => {
@@ -57,6 +108,9 @@ export function useLocationPrompt(services: SdkServices): [LocationPromptState, 
 
   const triggerFromWeather = useCallback(
     (onLocationReady: () => void) => {
+      // A weather flow owns the machine from here; an outcome it produces belongs to Home, not to
+      // a chat surface, so anything armed is dropped rather than fired against the wrong source.
+      pendingOutcomeRef.current = null;
       if (hasKnownLocation()) {
         onLocationReady();
         return;
@@ -67,6 +121,22 @@ export function useLocationPrompt(services: SdkServices): [LocationPromptState, 
     },
     [analytics, hasKnownLocation],
   );
+
+  const triggerFromLocalContext = useCallback<LocationPromptActions['triggerFromLocalContext']>(
+    (onOutcome) => {
+      // Only start when no other location flow is in progress (Compose: the `Idle` guard in
+      // `handleAlignmentChip`). Read through the ref: the tap handler may hold a stale render.
+      if (stateRef.current.kind !== 'Idle') return;
+      pendingOutcomeRef.current = onOutcome;
+      pendingNavigationRef.current = null;
+      setState({ kind: 'Interstitial', errorType: null, source: 'chat' });
+    },
+    [],
+  );
+
+  const cancelPendingOutcome = useCallback(() => {
+    pendingOutcomeRef.current = null;
+  }, []);
 
   const getPosition = useCallback((): Promise<GeolocationPosition> => {
     return new Promise((resolve, reject) => {
@@ -139,25 +209,46 @@ export function useLocationPrompt(services: SdkServices): [LocationPromptState, 
     }
 
     setState(IDLE);
+    // Kotlin emits `Continue(source, reason = "location_fetched")` here; the reason string is what
+    // the chat surface tests for, so it travels verbatim.
+    settleOutcome({ kind: 'continue', reason: 'location_fetched' });
     const pending = pendingNavigationRef.current;
     pendingNavigationRef.current = null;
     pending?.();
-  }, [analytics, api, getPosition, session, store]);
+  }, [analytics, api, getPosition, session, settleOutcome, store]);
 
   const skip = useCallback(() => {
     analytics.track(Events.GPS_FLOW_STEP, { step: 'interstitial_skipped' });
     pendingNavigationRef.current = null;
     setState(IDLE);
-  }, [analytics]);
+    // Kotlin `onSkipClicked` → `LocationPromptEvent.Cancel`.
+    settleOutcome({ kind: 'cancel', reason: null });
+  }, [analytics, settleOutcome]);
 
   const dismissError = useCallback(() => {
     pendingNavigationRef.current = null;
     setState(IDLE);
-  }, []);
+    // Recovery / Error dismissed. Kotlin's `dismiss()` emits nothing here, which leaves a chat
+    // surface armed forever; web settles it as a cancel so the blocking question always gets an
+    // answer (recorded in docs/04).
+    settleOutcome({ kind: 'cancel', reason: null });
+  }, [settleOutcome]);
 
   const retry = useCallback(async () => {
     await shareLocation();
   }, [shareLocation]);
 
-  return [state, { triggerFromWeather, shareLocation, skip, dismissError, retry, hasKnownLocation }];
+  return [
+    state,
+    {
+      triggerFromWeather,
+      triggerFromLocalContext,
+      cancelPendingOutcome,
+      shareLocation,
+      skip,
+      dismissError,
+      retry,
+      hasKnownLocation,
+    },
+  ];
 }

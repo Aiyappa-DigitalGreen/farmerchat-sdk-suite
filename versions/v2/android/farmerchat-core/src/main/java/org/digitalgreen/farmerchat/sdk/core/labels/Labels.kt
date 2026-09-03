@@ -314,9 +314,14 @@ object Labels {
     /** "Paused, resuming…" — transient stall hint while a stream is mid-answer. */
     const val RESPONSE_PAUSED_RESUMING = "fc_v2_app_label_response_paused_resuming"
 
-    // ---- alignment surfaces (2.0.0). All six verified present on endpoint #3. ----
+    // ---- alignment surfaces (2.0.0). All verified present on endpoint #3. ----
     /** "Share location" — GPS_PROMPT heading. */
     const val SHARE_LOCATION_TITLE = "fc_v2_app_label_share_location_title"
+    /**
+     * Sent as the query when the farmer declines the GPS_PROMPT surface, so the blocking question
+     * still resolves. Verified present on endpoint #3.
+     */
+    const val LOCATION_PERMISSION_DECLINED = "fc_v2_app_label_location_permission_declined"
     /** "Add one clear photo" — UPLOAD_PHOTO heading. */
     const val ADD_ONE_CLEAR_PHOTO = "fc_v2_app_label_add_one_clear_photo"
     /** "Please Confirm" — CONFIRM heading. */

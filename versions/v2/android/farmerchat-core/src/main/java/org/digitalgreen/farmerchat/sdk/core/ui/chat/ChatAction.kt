@@ -69,6 +69,19 @@ sealed class ChatAction {
         val sendQueryProperties: SendQueryProperties? = null
     ) : ChatAction()
 
+    /**
+     * The GPS_PROMPT surface's "Share my location" chip was satisfied (2.0.0).
+     *
+     * The chip does not send its own text: the flavour runs the location flow, and on success
+     * dispatches this with the resolved [address] so core shows a `LocationMessage` bubble and
+     * re-sends the surface's `alignmentOriginalQuery`. A blank [address] is allowed — the query is
+     * still re-sent, just without a bubble (app parity).
+     */
+    data class SendLocationSharedQuery(
+        val sourceMessageId: String,
+        val address: String
+    ) : ChatAction()
+
     data class SendQuestionWithImage(
         val question: String,
         val imageUri: Uri,

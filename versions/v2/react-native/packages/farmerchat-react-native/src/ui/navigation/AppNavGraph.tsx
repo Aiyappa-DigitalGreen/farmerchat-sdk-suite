@@ -55,6 +55,13 @@ interface GraphContextValue {
   handleSignUpClick: () => void;
   handleLogout: () => void;
   handleSeeAll: () => void;
+  /**
+   * 2.0.0: `FarmerChat.openScreen('termsofuse')` landed on Home and asked for the in-app
+   * Terms-of-Use dialog. Mirrors Compose's `openTermsOfUseRequested` flag threaded from
+   * `FarmerChatRoot` into `HomeScreen`; cleared through `consumeTermsOfUseRequest`.
+   */
+  termsOfUseRequested: boolean;
+  consumeTermsOfUseRequest: () => void;
 }
 
 const GraphContext = React.createContext<GraphContextValue | null>(null);
@@ -75,6 +82,10 @@ export function AppNavGraph(): React.ReactElement {
   const [currentRoute, setCurrentRoute] = useState<string | null>('Splash');
   const [isAuthenticated, setIsAuthenticated] = useState(sdk.session.isAuthenticated);
   const [showNameUpdatedToast, setShowNameUpdatedToast] = useState(false);
+  // 2.0.0 in-app Terms-of-Use dialog. Raised by AppNavigator when a `'termsofuse'` screen
+  // target is routed (see `openScreenTarget`), consumed by HomeScreen once acted on so a
+  // later terms fetch can never re-open the dialog unprompted.
+  const [termsOfUseRequested, setTermsOfUseRequested] = useState(false);
   const drawerNavRef = useRef<DrawerNavigationProp<DrawerParamList> | null>(null);
 
   // errorEvents → Error route (singleTop)
@@ -138,6 +149,15 @@ export function AppNavGraph(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    appNavigator.onTermsOfUseRequested = () => setTermsOfUseRequested(true);
+    return () => {
+      appNavigator.onTermsOfUseRequested = null;
+    };
+  }, [appNavigator]);
+
+  const consumeTermsOfUseRequest = useCallback(() => setTermsOfUseRequested(false), []);
+
   const openDrawer = useCallback(() => {
     drawerNavRef.current?.openDrawer();
   }, []);
@@ -194,6 +214,8 @@ export function AppNavGraph(): React.ReactElement {
       handleSignUpClick,
       handleLogout,
       handleSeeAll,
+      termsOfUseRequested,
+      consumeTermsOfUseRequest,
     }),
     [
       sdk,
@@ -206,6 +228,8 @@ export function AppNavGraph(): React.ReactElement {
       handleSignUpClick,
       handleLogout,
       handleSeeAll,
+      termsOfUseRequested,
+      consumeTermsOfUseRequest,
     ],
   );
 
@@ -374,7 +398,14 @@ function NameRoute(): React.ReactElement {
 }
 
 function HomeRoute(): React.ReactElement {
-  const { appNavigator, errorManager, locationPrompt, openDrawer } = useGraph();
+  const {
+    appNavigator,
+    errorManager,
+    locationPrompt,
+    openDrawer,
+    termsOfUseRequested,
+    consumeTermsOfUseRequest,
+  } = useGraph();
   return (
     <HomeScreen
       onOpenDrawer={openDrawer}
@@ -383,6 +414,8 @@ function HomeRoute(): React.ReactElement {
       onNavigateToError={(isNetworkError, fromScreen, retry) =>
         errorManager.navigateToError(isNetworkError, fromScreen, retry)
       }
+      openTermsOfUseRequested={termsOfUseRequested}
+      onTermsOfUseRequestConsumed={consumeTermsOfUseRequest}
     />
   );
 }
@@ -390,12 +423,15 @@ function HomeRoute(): React.ReactElement {
 function ChatRoute(
   props: NativeStackScreenProps<RootStackParamList, 'Chat'>,
 ): React.ReactElement {
-  const { appNavigator, openDrawer } = useGraph();
+  const { appNavigator, locationPrompt, openDrawer } = useGraph();
   return (
     <ChatScreen
       params={props.route.params ?? {}}
       onClose={() => appNavigator.navigateChatCloseToHome()}
       onOpenDrawer={openDrawer}
+      // 2.0.0: the `gps-prompt` capability chip drives the SHARED location flow, so the prompt
+      // host's overlay renders its permission / fetch / recovery UI.
+      locationPrompt={locationPrompt}
     />
   );
 }

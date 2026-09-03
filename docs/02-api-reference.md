@@ -24,6 +24,15 @@ Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GE
 **Endpoint #2 param semantics (verified live 2026-09-01 on all five envs):**
 - `country_code` is **required and must be non-blank**. `?country_code=` → HTTP **400** `{"error": "Country code is required"}`; `?country_code=null` → HTTP 400 `{"error": "Country 'NULL' not found"}`. 400 is non-retryable per the retry table, so a blank value fails the screen silently.
 - `state` is a **ranking hint matched on the state display name, not the ISO code**, and never filters the set. For `country_code=IN` all of `KA`, `Karnataka`, `MH`, `Maharashtra`, `""` and `ZZZZ` return the same five languages — but the priority/expanded split differs: `state=Karnataka` → `priority_view=[Kannada, English (India), Hindi]`, whereas `state=KA` (a code) → `priority_view=[Hindi, English (India)]` with Kannada demoted to `expanded_view`. Pass the state **name** as returned by `initialize_user.state`, never a code.
+
+  > **Re-probed live 2026-09-03 — the deployment data changed.** dev, stage, prod and eks now all
+  > return **Kenya only** (one group, `English (Kenya)`), for every `country_code` including `IN`,
+  > and `state` is completely inert: `Karnataka`, `KA`, `state=` and the parameter omitted return
+  > byte-identical responses. The 2026-09-01 observation above was accurate against the data that
+  > was deployed then; the `state`-name-not-code rule still describes the CONTRACT, but there is
+  > currently no multi-state data to exercise it. Do not "simplify" the rule away on the strength
+  > of today's single-country data — and do not hardcode an Indian default on the strength of the
+  > older observation either (an earlier SDK build did exactly that; see `docs/04`).
   - *Naming caveat*: the Android preference key is `USER_SELECTED_STATE_CODE` but it stores `initialize_user.state`, i.e. a name (iOS/web use `USER_STATE`). The key name is misleading; the stored shape is correct. Not renamed — it is a persisted key and would need a migration.
 | 3 | GET | `api/language/v2/get_labels/` | Server-driven UI labels | `language`(Int) | → `Map<String,String>` |
 | 4 | GET | `api/user/privacy_policy/` | Legal links | — | → `PrivacyPolicyResponse` |
@@ -111,7 +120,9 @@ in the JSON. Tracked in docs/05.
 - **ConversationChatHistoryMessageItem**: `message_type_id` (1=query_text, 2=query_audio, 3=response_text, 7=follow_up_questions, 11=input_image), `message_type, message_id, message_input_time?, section_message_id?, query_text?, heard_query_text?, response_text?, questions[]?, query_media_file_url?, reaction?, response_media_file_url?, resource_id?, resource_url?, actual_content_provider?, content_provider_logo?, hide_source?, hide_tts_speaker?, clarification_required?`.
 - **InitializeGuestUserRequest**: `device_id, lat?, long?, accuracy?, utm_source?, utm_medium?, utm_campaign?, moengage_id?, google_advertise_id?`. **Response**: `access_token, refresh_token, user_id?, show_crops_livestocks, country_code?, country?, state?, dashboard?, created_now?, ip_location_fallback_time_limit, …`.
   - **Verified live 2026-09-01 (prod)**: `show_crops_livestocks` is returned as the *string* `"True"`/`"False"`, not a JSON boolean. Gson coerces it on Android and iOS uses `@FlexibleBool`; TS wire types are declared `boolean | string | null`.
-  - **Verified live 2026-09-01 (prod)**: a fresh guest gets `country_code: null` / `state: null` when the backend cannot resolve the IP. Endpoint #2 rejects a blank `country_code` with **HTTP 400** `{"error": "Country code is required"}` (and `country_code=null` with `Country 'NULL' not found`), so callers MUST substitute a non-blank fallback — see `FarmerChatConfig.defaultCountryCode` / `defaultStateCode`.
+  - **Verified live 2026-09-01 (prod)**: a fresh guest gets `country_code: null` / `state: null` when the backend cannot resolve the IP. Endpoint #2 rejects a blank `country_code` with **HTTP 400** `{"error": "Country code is required"}` (and `country_code=null` with `Country 'NULL' not found`), so callers MUST substitute a non-blank fallback. **Re-confirmed live 2026-09-03 on prod** (a fresh guest still returns `country_code: null`).
+
+  The SDK derives that fallback the way the app does — from the **device locale's country** via `CountryLatLngProvider` — and only falls back to a literal (`FarmerChatConfig.LAST_RESORT_COUNTRY_CODE`, `"KE"`, matching the app's primary guest-init path) when the locale carries no region. `defaultCountryCode`/`defaultStateCode`/`defaultLatitude`/`defaultLongitude` are OPTIONAL host overrides that default to "unset = derive"; they are not hardcoded values.
 - **VerifyOtpResponse.preferred_language** (`PreferredLanguage`): `asr_bcp_code, asr_enabled, tts_bcp_code, tts_enabled, tts_voice_name, code, display_name, id, primary_speaking_countries, …`.
 - **SupportedLanguageGroup**: `display_name, flag, priority_view[], expanded_view[]`; `SupportedLanguage(id, name, code, bcpCode, latnCode, display_name, flag?, ttsVoiceName, asr_enabled, tts_enabled, country_phone_code)`.
 - **HomeUdfResponse**: `greeting?, sections:[SectionDto], ssfr_enable?`. `SectionDto(type?, id, image_url?, title?, question_text?, statement_id, badge{icon,count,show}?, cta{text,action}?, statement?, selection_type?, options[{id,text}]?, statement_type?, is_viewed?, meta{…}?, unique_key?/label?)`.

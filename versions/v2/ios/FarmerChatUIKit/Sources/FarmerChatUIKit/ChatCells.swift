@@ -10,6 +10,14 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     var onListen: (() -> Void)?
     var onShare: ((String) -> Void)?
     var onPlayClip: ((URL, String) -> Void)?
+    // ---- agentic streaming (2.0.0) ----
+    /// Retry for an interrupted stream (`.retryLastRequest`).
+    var onRetryStream: (() -> Void)?
+    /// Tap handler for an ADDITIVE alignment surface rendered below the answer.
+    var onAlignmentChipTap: ((AlignmentChip) -> Void)?
+    /// Called when the stall hint appears/disappears on its own timer, outside a snapshot apply,
+    /// so the owner can let the collection view re-measure this cell's height.
+    var onLayoutInvalidated: (() -> Void)?
 
     private let bubble = UIView()
     private let textLabel = UILabel()
@@ -18,6 +26,14 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     private let failedLabel = UILabel()
     private let actionsRow = UIStackView()
     private let spinner = UIActivityIndicatorView(style: .medium)
+    /// Tool progress / "getting your answer" line while a stream is in flight.
+    private let streamStatusView = FCUIStreamStatusView()
+    /// Transient "paused, resuming" hint (client-side only, never a failure).
+    private let stallHint = FCUIStreamStallHintView()
+    /// ADDITIVE alignment surface: a nudge below a real answer.
+    private let additiveSurface = FCUIAlignmentSurfaceView()
+    /// Interrupted-stream card with the "Try again" action.
+    private let streamErrorCard = FCUIStreamErrorCardView()
     private var leadingConstraint: NSLayoutConstraint!
     private var trailingConstraint: NSLayoutConstraint!
     private var imageTask: URLSessionDataTask?
@@ -57,7 +73,21 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
 
         spinner.hidesWhenStopped = true
 
-        let stack = UIStackView(arrangedSubviews: [imageView, clipButton, textLabel, failedLabel, actionsRow, spinner])
+        // Agentic subviews, in the same vertical order SwiftUI's FCAiResponseBubble uses:
+        // answer text → tool progress → stall hint → additive surface → stream error card →
+        // action row.
+        streamStatusView.isHidden = true
+        additiveSurface.isHidden = true
+        streamErrorCard.isHidden = true
+        streamErrorCard.onRetry = { [weak self] in self?.onRetryStream?() }
+        additiveSurface.onChipTap = { [weak self] chip in self?.onAlignmentChipTap?(chip) }
+        stallHint.onStallChanged = { [weak self] in self?.onLayoutInvalidated?() }
+
+        let stack = UIStackView(arrangedSubviews: [
+            imageView, clipButton, textLabel, failedLabel,
+            streamStatusView, stallHint, additiveSurface, streamErrorCard,
+            actionsRow, spinner
+        ])
         stack.axis = .vertical
         stack.spacing = 8
         stack.isLayoutMarginsRelativeArrangement = true
@@ -85,9 +115,24 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         imageTask?.cancel()
         imageView.image = nil
         actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        // A recycled cell must not keep a stall countdown (or a shown hint) from another message.
+        stallHint.reset()
+        streamStatusView.isHidden = true
+        additiveSurface.isHidden = true
+        streamErrorCard.isHidden = true
     }
 
-    func configure(message: ChatMessage, isTtsEnabled: Bool, playback: AudioPlaybackService) {
+    /// - Parameters:
+    ///   - isLatest: true for the newest AI message in the thread — gates the stream error card's
+    ///     retry and an alignment surface's escape hatch (2.0.0).
+    ///   - isBusy: thread-level busy flag; locks alignment chips while a send is in flight.
+    func configure(
+        message: ChatMessage,
+        isTtsEnabled: Bool,
+        playback: AudioPlaybackService,
+        isLatest: Bool = false,
+        isBusy: Bool = false
+    ) {
         switch message {
         case .user(let user):
             currentText = user.text
@@ -100,6 +145,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             failedLabel.isHidden = !user.isFailed
             failedLabel.text = fcuiLabel("message_failed", "Not sent")
             actionsRow.isHidden = true
+            hideAgenticViews()
             configureImage(user.imageURL)
             clipButton.isHidden = user.audioURL == nil
             if let audioURL = user.audioURL {
@@ -117,13 +163,86 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             alignRight(false)
             bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
             textLabel.textColor = FarmerChat.shared.config.aiBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
+            // A streaming answer grows IN PLACE with no typewriter/reveal animation — the text
+            // already arrives token by token (2.0.0).
             textLabel.text = ai.text
-            textLabel.isHidden = false
+            textLabel.isHidden = ai.text.isEmpty
             spinner.stopAnimating()
             failedLabel.isHidden = true
             imageView.isHidden = true
             clipButton.isHidden = true
-            buildActions(isTtsEnabled: isTtsEnabled && !ai.isPreGenerated)
+
+            let status = (ai.streamingStatus ?? "").trimmingCharacters(in: .whitespaces)
+            // Tool progress, or the initial "getting your answer" state before any text arrived.
+            let showStatus = ai.isStreaming && (ai.text.isEmpty || !status.isEmpty)
+            streamStatusView.isHidden = !showStatus
+            if showStatus {
+                streamStatusView.configure(text: status.isEmpty
+                    ? fcuiLabel(AgenticLabels.gettingYourAnswer, AgenticLabels.gettingYourAnswerFallback)
+                    : status)
+            }
+
+            // Text is flowing but has stalled with no tool status: a transient client-side hint,
+            // NOT a failure. Keyed on the text length so the next delta clears it automatically.
+            stallHint.update(
+                active: ai.isStreaming && !ai.text.isEmpty && status.isEmpty,
+                textLength: ai.text.count
+            )
+
+            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
+            // Single-tap; the answer above keeps its own action row and follow-ups.
+            if let kind = ai.alignmentKind, kind.isAdditive {
+                additiveSurface.isHidden = false
+                additiveSurface.configure(
+                    kind: kind,
+                    message: ai.alignmentMessage ?? "",
+                    chips: ai.alignmentChips ?? [],
+                    selectedValues: ai.alignmentSelectedValues,
+                    isLoading: isBusy,
+                    isLatest: isLatest,
+                    additive: true
+                )
+            } else {
+                additiveSurface.isHidden = true
+            }
+
+            // Interrupted terminal state: keep any partial answer above and offer retry. Only the
+            // latest answer shows the card — an older failed question keeps its partial text but
+            // drops the retry action.
+            let showErrorCard = ai.isInterrupted && isLatest
+            streamErrorCard.isHidden = !showErrorCard
+            if showErrorCard {
+                streamErrorCard.configure(
+                    errorKind: ai.streamErrorKind ?? .unknown,
+                    hasPartial: !ai.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
+
+            if ai.isStreaming || ai.isInterrupted {
+                // No Share/Save/Listen on an in-flight or broken answer.
+                actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                actionsRow.isHidden = true
+            } else {
+                buildActions(isTtsEnabled: isTtsEnabled && !ai.isPreGenerated)
+            }
+
+        // 2.0.0: a location message is routed to `FCUILocationBubbleCell` by
+        // `FCUIChatViewController.row(for:)`, so it never reaches this cell. Handled defensively
+        // (right-aligned address text) rather than left as a blank bubble if that routing ever
+        // regresses.
+        case .location(let location):
+            currentText = location.address
+            alignRight(true)
+            bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
+            textLabel.textColor = FCUITheme.foregroundPrimary
+            textLabel.text = location.address
+            textLabel.isHidden = location.address.isEmpty
+            spinner.stopAnimating()
+            failedLabel.isHidden = true
+            imageView.isHidden = true
+            clipButton.isHidden = true
+            actionsRow.isHidden = true
+            hideAgenticViews()
 
         case .loadingPlaceholder:
             currentText = ""
@@ -137,7 +256,16 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             imageView.isHidden = true
             clipButton.isHidden = true
             actionsRow.isHidden = true
+            hideAgenticViews()
         }
+    }
+
+    /// Collapses every 2.0.0 surface (and cancels the stall countdown) for a non-AI row.
+    private func hideAgenticViews() {
+        stallHint.reset()
+        streamStatusView.isHidden = true
+        additiveSurface.isHidden = true
+        streamErrorCard.isHidden = true
     }
 
     private func alignRight(_ right: Bool) {
@@ -331,6 +459,133 @@ final class FCUIInlineErrorCell: UICollectionViewCell {
 
     func configure(message: String) {
         label.text = message
+    }
+}
+
+// MARK: - Location bubble cell (2.0.0 — UIKit port of components/chat/LocationChatBubble.kt)
+
+/// The farmer's resolved location, standing in for the text bubble they would otherwise have sent
+/// in reply to a GPS_PROMPT alignment chip. Right-aligned like a user bubble.
+///
+/// Figma card: fixed 290x184 — a green-at-16% map band with a centred pin over a soft ellipse
+/// "shadow", then a footer with the caption above the bold address. Three corners rounded, the
+/// bottom-trailing (tail) one sharp, exactly like `FCUIChatBubbleCell`'s user bubble.
+///
+/// Honours the same two chat-customization knobs the other bubbles do: `bubbleCornerRadius` (the
+/// three rounded corners; the tail stays sharp) and `messageFontSize` (caption + address). The pin
+/// is an SF Symbol and the ellipse is a drawn layer because the package ships no image assets.
+final class FCUILocationBubbleCell: UICollectionViewCell {
+    private let bubble = UIView()
+    private let mapBand = UIView()
+    private let pinView = UIImageView()
+    private let ellipseView = FCUIEllipseView()
+    private let captionLabel = UILabel()
+    private let addressLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        let cfg = FarmerChat.shared.config
+        let radius = cfg.bubbleCornerRadius ?? 20
+        let fontSize = cfg.messageFontSize ?? 16
+
+        bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
+        bubble.layer.cornerRadius = radius
+        bubble.layer.cornerCurve = .continuous
+        // Three corners rounded; the bottom-trailing tail stays sharp (Compose parity).
+        bubble.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner]
+        bubble.clipsToBounds = true
+        bubble.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(bubble)
+
+        mapBand.backgroundColor = FCUITheme.green500.withAlphaComponent(0.16)
+        mapBand.translatesAutoresizingMaskIntoConstraints = false
+
+        pinView.image = UIImage(systemName: "mappin.and.ellipse")
+        pinView.tintColor = FCUITheme.green500
+        pinView.contentMode = .scaleAspectFit
+        pinView.translatesAutoresizingMaskIntoConstraints = false
+
+        ellipseView.fillColor = FCUITheme.green500.withAlphaComponent(0.24)
+        ellipseView.translatesAutoresizingMaskIntoConstraints = false
+
+        let pinStack = UIStackView(arrangedSubviews: [pinView, ellipseView])
+        pinStack.axis = .vertical
+        pinStack.alignment = .center
+        pinStack.spacing = 0
+        pinStack.translatesAutoresizingMaskIntoConstraints = false
+        mapBand.addSubview(pinStack)
+
+        captionLabel.font = .systemFont(ofSize: fontSize)
+        captionLabel.textColor = FCUITheme.foregroundSecondary
+        captionLabel.numberOfLines = 1
+
+        addressLabel.font = .systemFont(ofSize: fontSize, weight: .bold)
+        addressLabel.textColor = FCUITheme.foregroundPrimary
+        addressLabel.numberOfLines = 0
+
+        let footer = UIStackView(arrangedSubviews: [captionLabel, addressLabel])
+        footer.axis = .vertical
+        footer.spacing = 4
+        footer.isLayoutMarginsRelativeArrangement = true
+        footer.layoutMargins = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+        footer.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = UIStackView(arrangedSubviews: [mapBand, footer])
+        stack.axis = .vertical
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        bubble.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            // Fixed 290x184 card, right-aligned with the same 16pt gutter the bubbles use.
+            bubble.widthAnchor.constraint(equalToConstant: 290),
+            bubble.heightAnchor.constraint(equalToConstant: 184),
+            bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
+            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 16),
+
+            stack.topAnchor.constraint(equalTo: bubble.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor),
+
+            pinStack.centerXAnchor.constraint(equalTo: mapBand.centerXAnchor),
+            pinStack.centerYAnchor.constraint(equalTo: mapBand.centerYAnchor),
+            pinView.widthAnchor.constraint(equalToConstant: 44),
+            pinView.heightAnchor.constraint(equalToConstant: 44),
+            ellipseView.widthAnchor.constraint(equalToConstant: 28),
+            ellipseView.heightAnchor.constraint(equalToConstant: 8)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(message: ChatMessage.LocationMessage) {
+        let caption = fcuiLabel(AgenticLabels.yourLocation, AgenticLabels.yourLocationFallback)
+        captionLabel.text = caption
+        addressLabel.text = message.address
+        isAccessibilityElement = true
+        accessibilityLabel = "\(caption) \(message.address)"
+    }
+}
+
+/// A filled ellipse — the pin's soft ground "shadow" (Compose uses an `fc_ellipse_icon` drawable;
+/// this package ships no image assets).
+final class FCUIEllipseView: UIView {
+    var fillColor: UIColor = .clear { didSet { setNeedsDisplay() } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isOpaque = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func draw(_ rect: CGRect) {
+        fillColor.setFill()
+        UIBezierPath(ovalIn: rect).fill()
     }
 }
 #endif

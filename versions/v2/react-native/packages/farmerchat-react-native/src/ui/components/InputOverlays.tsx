@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { AnalyticsEvents } from '../../core/analytics';
 import { Labels } from '../../core/labels';
 import { StorageKeys } from '../../core/sessionStore';
+import type { FarmerChatSdk } from '../../core/sdk';
 import { useLabel, useSdk, useTheme } from '../context';
 import { radius, typography, dayTheme } from '../theme';
 import { FcIcon } from './Icon';
@@ -474,6 +475,91 @@ export function VoiceInputOverlay(props: {
 // Photo input — Camera / Photos tiles (expo-image-picker)
 // ---------------------------------------------------------------------------
 
+/**
+ * Camera capture — the permission dance, the deny counting and the picker call, with no UI.
+ *
+ * Extracted from {@link PhotoInputSheet} so the 2.0.0 `upload-photo` capability chip can invoke
+ * the camera DIRECTLY (Compose calls its `requestCamera()` / `galleryLauncher` the same way)
+ * instead of opening the Camera/Photos sheet the farmer has already chosen between.
+ *
+ * Resolves to the picked image, or null when the farmer cancelled, the permission was refused
+ * or the capture failed — the caller shows nothing in that case.
+ */
+export async function captureImageFromCamera(
+  sdk: FarmerChatSdk,
+  handlers: { onPermissionPermanentlyDenied: () => void },
+): Promise<PickedImage | null> {
+  sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
+    option: 'camera',
+  });
+  sdk.store.set(
+    StorageKeys.CAMERA_PERMISSION_ATTEMPT_COUNT,
+    sdk.store.getInt(StorageKeys.CAMERA_PERMISSION_ATTEMPT_COUNT) + 1,
+  );
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (permission.status !== 'granted') {
+    sdk.analytics.track(AnalyticsEvents.PERMISSION_DENIED, {
+      permission_type: 'Camera',
+    });
+    const denyCount = sdk.store.getInt(StorageKeys.CAMERA_PERMISSION_DENY_COUNT) + 1;
+    sdk.store.set(StorageKeys.CAMERA_PERMISSION_DENY_COUNT, denyCount);
+    if (denyCount >= 2 || permission.canAskAgain === false) {
+      handlers.onPermissionPermanentlyDenied();
+    }
+    return null;
+  }
+  sdk.analytics.track(AnalyticsEvents.PERMISSION_GRANTED, { permission_type: 'Camera' });
+  sdk.store.set(StorageKeys.CAMERA_PERMISSION_DENY_COUNT, 0);
+  try {
+    return assetToPickedImage(
+      sdk,
+      await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        base64: true,
+      }),
+    );
+  } catch {
+    sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
+    return null;
+  }
+}
+
+/** Gallery pick — the counterpart of {@link captureImageFromCamera}; needs no permission. */
+export async function pickImageFromGallery(
+  sdk: FarmerChatSdk,
+): Promise<PickedImage | null> {
+  sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
+    option: 'gallery',
+  });
+  try {
+    return assetToPickedImage(
+      sdk,
+      await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        base64: true,
+      }),
+    );
+  } catch {
+    sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
+    return null;
+  }
+}
+
+function assetToPickedImage(
+  sdk: FarmerChatSdk,
+  result: ImagePicker.ImagePickerResult,
+): PickedImage | null {
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (!asset || !asset.base64) {
+    sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
+    return null;
+  }
+  return { uri: asset.uri, base64: asset.base64 };
+}
+
 export function PhotoInputSheet(props: {
   visible: boolean;
   onPicked: (image: PickedImage) => void;
@@ -487,71 +573,18 @@ export function PhotoInputSheet(props: {
 
   if (!props.visible) return null;
 
-  const handleResult = (result: ImagePicker.ImagePickerResult) => {
-    if (result.canceled) {
-      props.onClose();
-      return;
-    }
-    const asset = result.assets[0];
-    if (!asset || !asset.base64) {
-      sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
-      props.onClose();
-      return;
-    }
-    props.onPicked({ uri: asset.uri, base64: asset.base64 });
-  };
-
   const openCamera = async () => {
-    sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
-      option: 'camera',
+    const image = await captureImageFromCamera(sdk, {
+      onPermissionPermanentlyDenied: props.onPermissionPermanentlyDenied,
     });
-    sdk.store.set(
-      StorageKeys.CAMERA_PERMISSION_ATTEMPT_COUNT,
-      sdk.store.getInt(StorageKeys.CAMERA_PERMISSION_ATTEMPT_COUNT) + 1,
-    );
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== 'granted') {
-      sdk.analytics.track(AnalyticsEvents.PERMISSION_DENIED, {
-        permission_type: 'Camera',
-      });
-      const denyCount = sdk.store.getInt(StorageKeys.CAMERA_PERMISSION_DENY_COUNT) + 1;
-      sdk.store.set(StorageKeys.CAMERA_PERMISSION_DENY_COUNT, denyCount);
-      if (denyCount >= 2 || permission.canAskAgain === false) {
-        props.onPermissionPermanentlyDenied();
-      }
-      props.onClose();
-      return;
-    }
-    sdk.analytics.track(AnalyticsEvents.PERMISSION_GRANTED, { permission_type: 'Camera' });
-    sdk.store.set(StorageKeys.CAMERA_PERMISSION_DENY_COUNT, 0);
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-        base64: true,
-      });
-      handleResult(result);
-    } catch {
-      sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
-      props.onClose();
-    }
+    if (image) props.onPicked({ uri: image.uri, base64: image.base64 });
+    else props.onClose();
   };
 
   const openGallery = async () => {
-    sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
-      option: 'gallery',
-    });
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-        base64: true,
-      });
-      handleResult(result);
-    } catch {
-      sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
-      props.onClose();
-    }
+    const image = await pickImageFromGallery(sdk);
+    if (image) props.onPicked({ uri: image.uri, base64: image.base64 });
+    else props.onClose();
   };
 
   const Tile = (p: { icon: IconName; text: string; onPress: () => void }) => (

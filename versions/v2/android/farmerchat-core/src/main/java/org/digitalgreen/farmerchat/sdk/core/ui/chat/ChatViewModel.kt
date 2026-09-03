@@ -29,6 +29,7 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.ChatUseCase
 import org.digitalgreen.farmerchat.sdk.core.util.ImageUtils
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.model.AgenticEvent
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import java.io.File
@@ -51,6 +52,9 @@ private val FOLLOWUPS_BLOCK_REGEX = Regex("```followups[\\s\\S]*?```")
  * collapsed by StateFlow conflation into just the last one.
  */
 private const val TOOL_STATUS_MIN_DWELL_MS = 700L
+
+/** `triggered_input_type` the app sends when an alignment chip selection drives the query. */
+private const val ALIGN_CHIP_SEL = "align_chip_sel"
 
 /**
  * Strips agentic control tokens that trail the streamed text but are absent from the clean
@@ -135,6 +139,8 @@ class ChatViewModel(
                 pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
                 sendFollowUpQuestion(action.question, action.transcriptionId, action.audioUri, action.followUpQuestionId)
             }
+            is ChatAction.SendLocationSharedQuery ->
+                sendLocationSharedQuery(action.sourceMessageId, action.address)
             is ChatAction.SendQuestionWithImage -> {
                 pendingSendQueryProperties = action.sendQueryProperties ?: SendQueryProperties(
                     screenName = AnalyticsScreens.CHAT,
@@ -877,6 +883,81 @@ class ChatViewModel(
                 finalizeStreamOrFail(StreamErrorKind.NETWORK)
             }
         }
+    }
+
+    /**
+     * The GPS_PROMPT "Share my location" chip succeeded: show the resolved address as a
+     * `LocationMessage` bubble and re-send the surface's original query.
+     *
+     * Port of the app's `sendLocationSharedQuery`. The location bubble takes the place of the user
+     * text bubble a normal send would add — the farmer never typed anything, they shared a
+     * location — and a blank address yields no bubble at all, matching the app.
+     *
+     * Two deliberate deltas from the app, both recorded in docs/04:
+     *  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
+     *    backend correlates the answer to the prompt. The SDK's `TextPromptRequest` has no such
+     *    field, so no alignment chip send carries it — an SDK-wide gap, not specific to this path.
+     *  - **no `agentic_chip_*` analytics properties.** `SendQueryProperties` has no
+     *    `isAlignmentChip` / chip type-value-label-status fields, so this reports as an ordinary
+     *    text query. `triggered_input_type` IS sent as `align_chip_sel` (app parity) because the
+     *    existing override parameter already carries it.
+     */
+    private fun sendLocationSharedQuery(sourceMessageId: String, address: String) {
+        if (_state.value.isLoading) return
+        val source = _state.value.messages
+            .firstOrNull { it.id == sourceMessageId } as? ChatMessage.AiResponse
+        // No original query means nothing to ask — bail before mutating state (defensive; the
+        // gps-prompt contract always carries original_query).
+        val query = source?.alignmentOriginalQuery?.takeIf { it.isNotBlank() } ?: return
+        clearAudioPlayback()
+        val placeholderId = UUID.randomUUID().toString()
+        _state.update { current ->
+            // Mark share_precise_location as picked so the source chip locks/highlights exactly as
+            // a plain chip tap would (recordAlignmentPick cannot do it — the chip's text is never
+            // sent as the question, so there is nothing for it to match on).
+            val marked = current.messages.map { m ->
+                if (m.id == sourceMessageId && m is ChatMessage.AiResponse &&
+                    !m.alignmentSelectedValues.contains(AlignmentChip.VALUE_SHARE_LOCATION)
+                ) {
+                    m.copy(
+                        alignmentSelectedValues =
+                            m.alignmentSelectedValues + AlignmentChip.VALUE_SHARE_LOCATION
+                    )
+                } else {
+                    m
+                }
+            }
+            val additions = buildList<ChatMessage> {
+                if (address.isNotBlank()) add(ChatMessage.LocationMessage(address = address))
+                add(ChatMessage.LoadingPlaceholder(id = placeholderId))
+            }
+            current.copy(
+                messages = marked + additions,
+                isLoading = true,
+                errorMessage = null,
+                failedMessageId = null,
+                chatResponseState = UiState.Loading,
+                suggestedQuestions = null
+            )
+        }
+        rememberForRetry(query, InputType.TEXT, null, null, ALIGN_CHIP_SEL, false, null, null)
+        pendingSendQueryProperties = SendQueryProperties(
+            screenName = AnalyticsScreens.CHAT,
+            isFollowupPrompt = true,
+            isImageQuery = false,
+            isTextQuery = true,
+            isVoiceQuery = false,
+            lengthOfTextQuery = query.length
+        )
+        pendingSendQueryProperties?.let {
+            analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties())
+        }
+        fetchTextPromptResponse(
+            query,
+            InputType.TEXT,
+            placeholderId,
+            triggeredInputTypeOverride = ALIGN_CHIP_SEL
+        )
     }
 
     /**

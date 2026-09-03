@@ -4,8 +4,13 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
 import androidx.core.net.toUri
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -59,6 +64,19 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
 
     private val viewedStatementIds = mutableSetOf<String>()
 
+    /**
+     * 2.0.0 unified composer instead of the pinned Photo/Speak/Type row — Compose parity with
+     * `HomeScreen.isComposerUi`, which is exactly `graph.config.enableAgenticChat`.
+     */
+    private val isComposerUi: Boolean get() = graph.config.enableAgenticChat
+
+    /**
+     * The single image attached to the composer, awaiting send. App parity
+     * (fc-compose-agentic HomeScreen.kt:338/374 `photoUris = listOf(uri)`): in composer mode a
+     * picked image is attached to the bar and travels to chat together with the typed question.
+     */
+    private var attachedPhoto: Uri? = null
+
     // Content-card tap bookkeeping (FetchImageStatement → navigate).
     private var pendingQuestion: String? = null
     private var pendingCardImageUrl: String? = null
@@ -87,7 +105,15 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
             fragment = this,
             binding = binding.fcHomeOverlays,
             onTextSubmitted = { text -> navigateToChat(question = text) },
-            onImagePicked = { uri -> navigateToChat(imageUri = uri.toString()) },
+            onImagePicked = { uri ->
+                if (isComposerUi) {
+                    // Attach, don't navigate: the composer owns the query until send.
+                    attachedPhoto = uri
+                    binding.fcHomeComposer.setPhotoUris(listOf(uri))
+                } else {
+                    navigateToChat(imageUri = uri.toString())
+                }
+            },
             onVoiceFinished = { file -> transcribeVoice(file) },
             onRecordingFailed = {
                 binding.fcHomeToast.show(
@@ -101,27 +127,7 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
 
         binding.fcHomeAppBar.fcAppBarLeft.setOnClickListener { journeyHost()?.openDrawer() }
         binding.fcHomeAppBar.fcAppBarLeft.isVisible = graph.config.showDrawer  // C3
-        binding.fcInputPhoto.setOnClickListener {
-            graph.analytics.track(
-                AnalyticsEvents.CHAT_ICON_CLICKED,
-                mapOf(
-                    AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
-                    AnalyticsProps.ICON_TYPE to "Image"
-                )
-            )
-            overlays?.showPhotoInput()
-        }
-        binding.fcInputSpeak.setOnClickListener { onSpeakClick() }
-        binding.fcInputType.setOnClickListener {
-            graph.analytics.track(
-                AnalyticsEvents.CHAT_ICON_CLICKED,
-                mapOf(
-                    AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
-                    AnalyticsProps.ICON_TYPE to "Text"
-                )
-            )
-            overlays?.showTextInput()
-        }
+        if (isComposerUi) setUpComposer() else setUpLegacyInputRow()
         binding.fcHomeAppBar.fcAppBarTitle.text = ""
         binding.fcHomeAppBar.fcAppBarWeather.setOnClickListener { onWeatherClick() }
         binding.fcHomeErrorRetry.setOnClickListener {
@@ -143,16 +149,135 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
     }
 
     private fun renderStaticTexts() {
-        binding.fcHomeGreeting.text = label(
-            Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
-            "Tap a button to ask a question"
-        )
+        // In composer mode there are no Photo/Speak/Type buttons to tap, so the v1 greeting
+        // would be a lie. The app's agentic header reads "For your farm today" (app parity:
+        // HomeScreen.kt:1042); only that title is ported here — the logo mark, leaf flourishes
+        // and location pill of the pinned header are not (see versions/v2/README.md).
+        binding.fcHomeGreeting.text = if (isComposerUi) {
+            label(Labels.FOR_YOUR_FARM_TODAY, "For your farm today")
+        } else {
+            label(
+                Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                "Tap a button to ask a question"
+            )
+        }
         binding.fcInputPhotoLabel.text = label(Labels.PHOTO, "Photo")
         binding.fcInputSpeakLabel.text = label(Labels.SPEAK, "Speak")
         binding.fcInputTypeLabel.text = label(Labels.TYPE, "Type")
         binding.fcHomeErrorTitle.text = label(Labels.CANT_LOAD_RIGHT_NOW, "Can't load right now")
         binding.fcHomeErrorRetry.text = label(Labels.TRY_AGAIN, "Try again")
         binding.fcHomeLoading.text = label(Labels.GETTING_TODAYS_ADVICE, "Getting today's advice")
+    }
+
+    // ------------------------------------------------------------------ input surface
+
+    /** 1.0.0 input: the pinned Photo / Speak / Type row driving the overlay panels. */
+    private fun setUpLegacyInputRow() {
+        binding.fcHomeComposer.isVisible = false
+        binding.fcHomeInputButtons.isVisible = true
+        binding.fcInputPhoto.setOnClickListener {
+            trackIconClick("Image")
+            overlays?.showPhotoInput()
+        }
+        binding.fcInputSpeak.setOnClickListener { onSpeakClick() }
+        binding.fcInputType.setOnClickListener {
+            trackIconClick("Text")
+            overlays?.showTextInput()
+        }
+    }
+
+    /**
+     * 2.0.0 input: the persistent floating composer replaces BOTH the pinned button row and the
+     * text overlay (app parity: fc-compose-agentic HomeScreen.kt:1590; Compose parity:
+     * HomeScreen.kt:947). Standard (non-compact) metrics, brand-green sheet.
+     */
+    private fun setUpComposer() {
+        binding.fcHomeInputButtons.isVisible = false
+        val composer = binding.fcHomeComposer
+        composer.isVisible = true
+        composer.compact = false
+        composer.setSurfaceColorRes(R.color.fc_green700)
+        // Compose defaults the band to `surfacePrimary` because agentic Home IS the grey reading
+        // surface. The Views Home surface is still v1 green (the agentic surface + gradient +
+        // pinned header are not ported — recorded in versions/v2/README.md), so the band takes
+        // green700 to read as part of the screen it is actually sitting on.
+        composer.setFadeColorRes(R.color.fc_green700)
+        composer.setPlaceholder(label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."))
+
+        composer.onPhotoClick = {
+            // Camera is only offered while nothing is attached (app: `if (photoUris.isEmpty())`).
+            if (attachedPhoto == null) {
+                trackIconClick("Image")
+                overlays?.showPhotoInput()
+            }
+        }
+        composer.onVoiceClick = { onSpeakClick() }
+        composer.onRemovePhoto = {
+            attachedPhoto = null
+            composer.setPhotoUris(emptyList())
+        }
+        // Tapping the field to type is the composer's equivalent of the legacy Type button, so
+        // CHAT_ICON_CLICKED (Text) fires on focus gain (app parity: HomeScreen.kt:1625).
+        composer.onFocusChange = { focused -> if (focused) trackIconClick("Text") }
+        composer.onSend = { text -> sendFromComposer(text) }
+
+        // A config change destroys the view but keeps the fragment, so an image attached
+        // before the rotation must be re-shown or the bar would send it with no thumbnail.
+        attachedPhoto?.let { composer.setPhotoUris(listOf(it)) }
+
+        composer.onBarHeightChanged = { height -> reserveComposerSpace(height) }
+        reserveComposerSpace(composer.barHeightPx())
+
+        // The composer's own listener reads ROOT insets, but its init-time requestApplyInsets()
+        // ran before it was attached. Ask again now that it is in the hierarchy, then re-read
+        // the settled bar height: insets are dispatched before the first layout, and the height
+        // only changes (and only then re-fires onBarHeightChanged) when the nav-bar inset
+        // exceeds the 20dp design gap.
+        ViewCompat.requestApplyInsets(binding.root)
+        binding.root.post { if (view != null) reserveComposerSpace(composer.barHeightPx()) }
+    }
+
+    private fun trackIconClick(iconType: String) {
+        graph.analytics.track(
+            AnalyticsEvents.CHAT_ICON_CLICKED,
+            mapOf(
+                AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                AnalyticsProps.ICON_TYPE to iconType
+            )
+        )
+    }
+
+    /**
+     * App parity (HomeScreen.kt:1635): an attached image travels to chat with the typed
+     * question; otherwise a non-blank question goes on its own. The composer has already
+     * cleared its text field by the time this runs.
+     */
+    private fun sendFromComposer(text: String) {
+        val uri = attachedPhoto
+        attachedPhoto = null
+        binding.fcHomeComposer.setPhotoUris(emptyList())
+        when {
+            uri != null -> navigateToChat(question = text, imageUri = uri.toString())
+            text.isNotBlank() -> navigateToChat(question = text)
+        }
+    }
+
+    /**
+     * The bar floats over the feed, so the feed reserves its at-rest height. The enclosing
+     * LinearLayout is `fitsSystemWindows`, so the nav-bar inset the bar folds in already sits
+     * outside the feed — subtract it or the last card stops short.
+     */
+    private fun reserveComposerSpace(barHeightPx: Int) {
+        val navBottom = ViewCompat.getRootWindowInsets(binding.root)
+            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        binding.fcHomeFeed.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0))
+        // The toast is declared after the composer in the root FrameLayout, so it draws on top
+        // of it. Its 24dp XML margin was safe while the only bottom content was the feed; the
+        // composer now occupies ~92dp there, so lift the toast clear of the bar.
+        val gap = (24f * resources.displayMetrics.density).toInt()
+        binding.fcHomeToast.updateLayoutParams<FrameLayout.LayoutParams> {
+            bottomMargin = (barHeightPx - navBottom).coerceAtLeast(0) + gap
+        }
     }
 
     private fun loadHome() {
@@ -183,8 +308,12 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                     // renderStaticTexts() already seeded this TextView with the
                     // GET_STARTED_BY_CLICKING... label, so a missing API greeting (the case on an
                     // empty feed) leaves the label in place rather than blanking the header.
-                    feed.data.greeting?.takeIf { it.isNotBlank() }?.let {
-                        binding.fcHomeGreeting.text = it
+                    // Composer mode keeps the fixed agentic header instead (app parity: the
+                    // agentic Home never renders the API greeting).
+                    if (!isComposerUi) {
+                        feed.data.greeting?.takeIf { it.isNotBlank() }?.let {
+                            binding.fcHomeGreeting.text = it
+                        }
                     }
                     adapter.submit(
                         // Drops plotline_widget (unrenderable in-SDK; would be blank cards).

@@ -6,6 +6,7 @@
     <color name="fc_surface_tertiary">#3F3F46</color>
     <color name="fc_surface_reading">#18181B</color>
     <color name="fc_surface_reading_secondary">#27272A</color>
+    <color name="fc_surface_reading_tertiary">#18181B</color>
     <color name="fc_foreground_primary">#FFFFFF</color>
     <color name="fc_foreground_secondary">#9F9FA9</color>
     <color name="fc_foreground_tertiary">#3F3F46</color>

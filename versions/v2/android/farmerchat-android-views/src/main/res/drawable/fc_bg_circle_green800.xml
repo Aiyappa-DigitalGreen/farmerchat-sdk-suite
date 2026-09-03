@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Composer action button. Compose wraps the camera and mic/send buttons in
+     LightContentColors, so their surface is Green800 in BOTH appearances. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/fc_green800" />
+</shape>

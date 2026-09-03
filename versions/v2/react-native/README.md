@@ -8,6 +8,32 @@
 - `npx tsc --noEmit` and the `tsc` build both pass cleanly (root CLAUDE.md §5 minimum check — recorded in `docs/04-parity-matrix.md`).
 - Runtime-tested on an Android emulator via Expo Go (SDK 52) against the live dev environment on 2026-07-17: guest init, language onboarding, name save, splash routing, dashboard, and the chat send/"Not sent"/Try again path. The dev backend's `get_answer_for_text_query` returned a persistent 500 during that run, so a successful AI answer has not yet been observed — details and remaining debts (audio/image/location/OTP) in `docs/04-parity-matrix.md`.
 
+## 2.0.0 agentic UI (opt-in)
+
+`FarmerChatConfig.enableAgenticChat` defaults to **false**; with it off the 1.0.0 input surface
+(Photo/Speak/Type tiles + text overlay) and the green Home surface are untouched. With it **on**:
+
+- Chat and Home swap their input for `InputComposer` (camera / text field / mic-or-send).
+- Home switches to the grey reading surface with the green gradient band, the pinned logo +
+  leaf-flanked "For your farm today" header and the location pill, and a card tap sends the card
+  question into chat as a plain text query instead of calling #13.
+- `FarmerChat.openScreen('termsofuse')` lands on Home and opens the in-app Terms-of-Use dialog.
+- **Capability chips.** A `gps-prompt` / `upload-photo` alignment surface's `invoke` chip does not
+  send its text as the question: "Share my location" runs the shared location flow and then
+  re-sends the farmer's ORIGINAL question with the resolved address shown as a location bubble,
+  while "Take a photo" / "Choose from gallery" open the camera or the gallery directly. Declining
+  (or a cancel / failure) answers the blocking question with "Continue without sharing my
+  location". Every other chip, `Not now` included, still sends its text.
+  Needs `expo-location` and `expo-image-picker` (already peer deps) and, for the address, a
+  logged-in user — a guest has no district/state/country stored, so no bubble is shown.
+
+**Host requirement (both paths, and now also the composer):** the Android host activity must set
+`android:windowSoftInputMode="adjustResize"`. The composer consumes the IME inset itself on iOS
+but relies on the window resize on Android; without it the bar sits behind the keyboard.
+
+Deviations from the android-compose reference, and the exact reasons, are recorded in
+`docs/04-parity-matrix.md` under "react-native composer + agentic Home wiring".
+
 ## Development
 
 ```sh

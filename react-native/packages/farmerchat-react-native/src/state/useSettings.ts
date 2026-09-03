@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
+import { resolveCountryCode } from '../core/config';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
 import type { HelpSupportData, SupportedLanguageGroup } from '../core/types';
@@ -74,10 +75,13 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
 
   const loadLanguages = useCallback(() => {
     patch({ languageState: UiStates.loading() });
-    // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
-    // empty whenever guest init never resolved one.
-    const countryCode =
-      sdk.store.getString(StorageKeys.USER_COUNTRY_CODE)?.trim() || sdk.config.defaultCountryCode;
+    // Same chain as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
+    // empty whenever guest init never resolved one — so fall through host config → device-locale
+    // region → 'KE' last resort rather than sending a blank (or an invented 'IN').
+    const countryCode = resolveCountryCode(
+      sdk.config,
+      sdk.store.getString(StorageKeys.USER_COUNTRY_CODE),
+    );
     const stateName =
       sdk.store.getString(StorageKeys.USER_STATE)?.trim() || sdk.config.defaultStateCode;
     void sdk.api.getSupportedLanguages(countryCode, stateName).then((result) => {

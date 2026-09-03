@@ -25,7 +25,7 @@ object SampleConfig {
     const val MOCK_URL = "http://10.0.2.2:8899/"
 
     val PROFILES = listOf(
-        "dev", "mock", "themed", "themed_mock", "chatonly", "togglesoff", "override"
+        "dev", "mock", "themed", "themed_mock", "chatonly", "togglesoff", "override", "agentic"
     )
 
     fun current(ctx: Context): String =
@@ -67,6 +67,10 @@ object SampleConfig {
                         "fc_v2_app_label_photo" to "PHOTO✦"
                     )
                 )
+            // 2.0.0 opt-in: agentic streaming chat + the unified InputComposer on Home and
+            // Chat (instead of the Photo/Speak/Type row). Without this profile the composer is
+            // unreachable at runtime, since `enableAgenticChat` defaults to false.
+            "agentic" -> b.enableAgenticChat(true)
             else -> {} // "dev": plain DEV backend, green brand, full journey
         }
         return b.build()

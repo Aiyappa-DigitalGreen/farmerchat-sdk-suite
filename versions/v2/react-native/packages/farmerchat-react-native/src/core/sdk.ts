@@ -23,7 +23,15 @@ export type FarmerChatScreen =
   | 'history'
   | 'settings'
   | 'language'
-  | 'help';
+  | 'help'
+  /**
+   * 2.0.0: lands on Home and opens the in-app Terms-of-Use dialog (`TermsOfUseDialog`), the
+   * SDK's stand-in for the app's Plotline `open_terms_of_use=true` card CTA. Android exposes
+   * the same key from `FarmerChatRoot` (`SCREEN_TERMS_OF_USE = "termsofuse"`); the SDK carries
+   * no Plotline (root CLAUDE.md §6), so the host raises the request through this existing
+   * public entry point rather than a new API.
+   */
+  | 'termsofuse';
 
 /** Deep-link style pending navigation target (AppNavigator.PendingTarget). */
 export type PendingTarget =

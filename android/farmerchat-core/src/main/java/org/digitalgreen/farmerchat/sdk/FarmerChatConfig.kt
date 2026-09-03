@@ -83,25 +83,34 @@ class FarmerChatConfig private constructor(
     /** Preselect a language code; when it matches a supported language the language screen is skipped. */
     val languageCode: String?,
     /**
-     * Country code used for the language list when `initialize_user` returns a null/blank
-     * `country_code` (the normal case for a fresh guest on an IP the backend cannot resolve).
-     * Endpoint #2 rejects a blank `country_code` with HTTP 400, so this must never be empty.
+     * OPTIONAL override for the country used in the language list when `initialize_user` returns
+     * a null/blank `country_code` (the normal case for a fresh guest on an IP the backend cannot
+     * resolve — verified live 2026-09-03 on prod).
+     *
+     * **Leave this empty (the default) and the SDK derives the country from the device locale**,
+     * exactly as the app does. Endpoint #2 rejects a blank `country_code` with HTTP 400, so if the
+     * locale carries no region either, [LAST_RESORT_COUNTRY_CODE] is sent.
+     *
+     * Set it only to pin the SDK to one region regardless of where the device is.
      */
     val defaultCountryCode: String,
-    /** State/region paired with [defaultCountryCode] for the endpoint #2 `state` query param. */
+    /**
+     * OPTIONAL `state` query param for endpoint #2. Empty by default and safe to leave empty:
+     * the parameter is inert on every environment (verified live 2026-09-03).
+     */
     val defaultStateCode: String,
     /**
-     * Latitude/longitude representing [defaultCountryCode]/[defaultStateCode].
+     * OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a
+     * location. **Leave these at [COORDINATE_UNSET] (the default) and the SDK uses the device
+     * locale's country centroid**, exactly as the app does on IP-geolocation failure.
      *
      * Endpoint #12 (home feed) is gated on the backend having a resolved location, and the
      * backend resolves it ONLY from coordinates — a country name alone is rejected (verified
      * live 2026-09-01: `{user_id, country, level_2}` left the profile empty and the feed at 0
-     * sections, while `{user_id, lat, long}` produced 21). When guest init cannot resolve a
-     * location and the host has no GPS permission, the SDK posts these coordinates to #11 so a
-     * guest sees a populated home screen instead of a blank one.
+     * sections, while `{user_id, lat, long}` produced 21). That is why coordinates are needed.
      *
-     * Set these to match [defaultCountryCode] when overriding it, or the feed will show advice
-     * for the wrong region.
+     * If both these and the device locale are unset, NO coordinates are sent — a guess would put
+     * the farmer's advice in the wrong place. Set them to pin a region deliberately.
      */
     val defaultLatitude: Double,
     val defaultLongitude: Double,
@@ -221,10 +230,12 @@ class FarmerChatConfig private constructor(
         private var guestApiKey: String? = null
         private var appearance: FarmerChatAppearance = FarmerChatAppearance.AUTO
         private var languageCode: String? = null
-        private var defaultCountryCode: String = DEFAULT_COUNTRY_CODE
+        // All four default to "unset" — resolved from the device locale at use time, the way the
+        // app does it. A host that sets them explicitly still wins.
+        private var defaultCountryCode: String = ""
         private var defaultStateCode: String = DEFAULT_STATE_CODE
-        private var defaultLatitude: Double = DEFAULT_LATITUDE
-        private var defaultLongitude: Double = DEFAULT_LONGITUDE
+        private var defaultLatitude: Double = COORDINATE_UNSET
+        private var defaultLongitude: Double = COORDINATE_UNSET
         private var enableVoice: Boolean = true
         private var enableImages: Boolean = true
         private var enableWeather: Boolean = true
@@ -378,32 +389,89 @@ class FarmerChatConfig private constructor(
         )
     }
 
+    /**
+     * The country code to send when the caller has none: the host's explicit [defaultCountryCode],
+     * else the DEVICE LOCALE's region, else [LAST_RESORT_COUNTRY_CODE]. **Never blank** — endpoint
+     * #2 rejects a blank `country_code` with HTTP 400.
+     *
+     * Every caller that needs a fallback country must use this rather than reading
+     * [defaultCountryCode] directly. That field defaults to "" (meaning "derive"), so a raw read
+     * sends a blank value and 400s — which is exactly the bug this method exists to prevent.
+     */
+    fun resolvedFallbackCountryCode(context: android.content.Context): String =
+        resolvedFallbackCountryCode(
+            org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider
+                .fromDeviceLocale(context).first
+        )
+
+    /**
+     * The pure chain behind [resolvedFallbackCountryCode], with the device locale's region passed
+     * in so it can be unit-tested without a `Context` (a mocked one returns a null `resources`).
+     */
+    internal fun resolvedFallbackCountryCode(localeRegion: String): String =
+        defaultCountryCode.takeIf { it.isNotBlank() }
+            ?: localeRegion.takeIf { it.isNotBlank() }
+            ?: LAST_RESORT_COUNTRY_CODE
+
+    /**
+     * The coordinates to seed when nothing else resolved a location: the host's explicit
+     * [defaultLatitude]/[defaultLongitude], else the device locale's country centroid.
+     *
+     * Returns (0.0, 0.0) when neither is available — callers MUST check
+     * [org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider.isResolved] and send
+     * nothing rather than post it. (0, 0) is a real point in the Gulf of Guinea.
+     */
+    fun resolvedFallbackCoordinates(context: android.content.Context): Pair<Double, Double> {
+        val provider = org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider
+        if (provider.isResolved(defaultLatitude, defaultLongitude)) {
+            return defaultLatitude to defaultLongitude
+        }
+        val (_, lat, lng) = provider.fromDeviceLocale(context)
+        return lat to lng
+    }
+
     companion object {
         /**
-         * Fallback country for endpoint #2 when `initialize_user` returns no `country_code`.
-         * The endpoint 400s on a blank value, so a non-blank default is required.
+         * LAST-RESORT country for endpoint #2, used only when the server returned none, nothing
+         * is persisted, the host configured none, AND the device locale carries no region.
+         *
+         * The endpoint 400s on a blank value (verified live 2026-09-03: `country_code=` →
+         * `{"error": "Country code is required"}`), so *something* non-blank must be sent. The app
+         * does the same thing on its primary guest-init path, where the literal is `"KE"`
+         * (`ui/onboarding/language/OnboardingSharedViewModel.kt` — its cached-geo retry path uses
+         * `"IN"`). `"KE"` also matches the live data: dev, stage, prod and eks all return Kenya
+         * only (verified live 2026-09-03).
+         *
+         * This is a floor, not a default. The normal answer comes from the device locale via
+         * [org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider], exactly as the app
+         * does — see [Builder.defaultCountryCode].
          */
-        const val DEFAULT_COUNTRY_CODE = "IN"
+        const val LAST_RESORT_COUNTRY_CODE = "KE"
 
         /**
-         * Fallback state/region paired with [DEFAULT_COUNTRY_CODE].
+         * No default state is invented.
          *
-         * Endpoint #2 matches `state` on the **display name**, not the ISO code, and uses it only
-         * to rank languages — a code or an unknown value returns the same set in default order.
-         * Verified live 2026-09-01: `state=Karnataka` surfaces Kannada in `priority_view`, while
-         * `state=KA` pushes it into `expanded_view` ("All languages").
+         * Endpoint #2's `state` is inert on every environment — dev, stage, prod and eks all
+         * return the identical set for `state=Karnataka`, `state=KA`, `state=` and the parameter
+         * omitted (verified live 2026-09-03). An earlier build shipped `"Karnataka"` as a default,
+         * which is both unfaithful to the app and wrong for a Kenya-only backend.
          */
-        const val DEFAULT_STATE_CODE = "Karnataka"
+        const val DEFAULT_STATE_CODE = ""
 
         /**
-         * Coordinates representing [DEFAULT_COUNTRY_CODE]/[DEFAULT_STATE_CODE] (Bengaluru).
+         * Sentinel meaning "no coordinates configured — derive them from the device locale".
          *
-         * Used to seed endpoint #11 when nothing else resolved a location, so the home feed is
-         * never empty. Verified live 2026-09-01: the backend accepts coordinates only — a
-         * country name alone leaves the profile (and the feed) empty.
+         * The app has NO hardcoded coordinates: on IP-geolocation failure it calls
+         * `CountryLatLngProvider.getLatLngFromDeviceLocale(context)` and uses that country's
+         * centroid, accepting it only when `lat != 0.0 && lng != 0.0`. An earlier build of this
+         * SDK shipped Bengaluru (12.9716, 77.5946) as a hardcoded default, which sent every
+         * unplaceable guest advice for Karnataka regardless of where they actually are.
+         *
+         * Endpoint #12 (home feed) is gated on the backend having resolved a location, and it
+         * resolves one ONLY from coordinates — a country name alone is rejected (verified live
+         * 2026-09-01) — which is why coordinates are needed at all.
          */
-        const val DEFAULT_LATITUDE = 12.9716
-        const val DEFAULT_LONGITUDE = 77.5946
+        const val COORDINATE_UNSET = 0.0
 
         @JvmStatic
         fun builder(environment: FarmerChatEnvironment): Builder = Builder(environment)

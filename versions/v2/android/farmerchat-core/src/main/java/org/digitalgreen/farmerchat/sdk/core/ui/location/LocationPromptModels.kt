@@ -90,4 +90,34 @@ sealed interface LocationPromptEvent {
     data class LocationUpdatedFromWidget(
         val campaign: LocationCampaignConfig? = null
     ) : LocationPromptEvent
+
+    companion object {
+        /**
+         * [Continue.reason] values that mean a usable location was actually obtained.
+         *
+         * `Continue` alone does NOT mean success — `dismiss()` emits
+         * `Continue(reason = "dismissed")` so that a caller armed for the flow always settles,
+         * and the weather flow continues navigation without a location. A caller that treats any
+         * `Continue` as success would show the chat GPS_PROMPT bubble for a location the farmer
+         * never shared.
+         */
+        // The SDK currently only ever emits "location_fetched"; the other two are the app's
+        // reasons for its post-Settings recovery paths, which the SDK does not port (docs/04).
+        // They are listed so the rule stays correct if those paths are added.
+        val LOCATION_OBTAINED_REASONS = setOf(
+            "location_fetched",
+            "location_fetched_pending_api",
+            "post_settings_preference_exists"
+        )
+    }
 }
+
+/**
+ * True when this event ends a location flow WITH a usable location.
+ *
+ * Kept in core so both flavours share one rule; the duplicate `reason == "location_fetched"`
+ * string comparisons they used to carry could drift apart silently.
+ */
+fun LocationPromptEvent.isLocationObtained(): Boolean =
+    this is LocationPromptEvent.Continue &&
+        reason in LocationPromptEvent.LOCATION_OBTAINED_REASONS

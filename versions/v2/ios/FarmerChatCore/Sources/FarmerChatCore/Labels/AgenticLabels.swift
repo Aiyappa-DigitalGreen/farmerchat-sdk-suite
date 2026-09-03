@@ -41,4 +41,16 @@ public enum AgenticLabels {
     public static let dontSeeYourOptionFallback = "Don't see your option?"
     public static let typeOrSayIt = "fc_v2_app_label_type_or_say_it"
     public static let typeOrSayItFallback = "Type or say it."
+
+    // Capability chips (2.0.0)
+
+    /// Sent as the query when the farmer declines / cancels the GPS_PROMPT surface, so the
+    /// blocking question still resolves. Verified present on endpoint #3 (live stage probe,
+    /// 2026-09-02); the English fallback below is kept as the usual safety net.
+    public static let locationPermissionDeclined = "fc_v2_app_label_location_permission_declined"
+    public static let locationPermissionDeclinedFallback = "Continue without sharing my location"
+
+    /// "Your location:" — the caption above the address on the location chat bubble.
+    public static let yourLocation = "fc_v2_app_label_your_location"
+    public static let yourLocationFallback = "Your location:"
 }

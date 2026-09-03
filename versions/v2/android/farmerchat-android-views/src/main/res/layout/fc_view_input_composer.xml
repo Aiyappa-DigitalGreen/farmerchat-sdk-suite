@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Unified input composer (2.0.0) — Views port of Compose components/InputComposer.kt.
+
+  ONE bar (camera / text field / mic-or-send) replacing v1's separate text-input overlay and
+  Photo/Speak/Type button row. Home uses it floating; Chat uses it anchored and compact.
+
+  Geometry, colors and the compact/standard transition are all driven from
+  internal/widgets/InputComposerView.kt so the two size variants share one layout. Only the
+  structure lives here — that way every child still goes through the theme inflater factory.
+-->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Opaque wrapper band. Compose parity: the floating composer sits inside a surface-colored
+      Box so scrolling list content never shows through the 10dp side gutters or the strip below
+      the sheet. The band's color is the caller's fadeColor (Home: surfacePrimary,
+      Chat: surfaceReadingPrimary).
+    -->
+    <LinearLayout
+        android:id="@+id/fcComposerFade"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical">
+
+        <!-- Floating sheet: 10dp horizontal margins, 24dp radius, brand surface. -->
+        <LinearLayout
+            android:id="@+id/fcComposerSheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/fc_bg_composer_sheet"
+            android:orientation="vertical"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp">
+
+            <LinearLayout
+                android:id="@+id/fcComposerRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:gravity="bottom"
+                android:orientation="horizontal">
+
+                <!-- Camera. Hidden once an image is attached or text is being typed. -->
+                <ImageButton
+                    android:id="@+id/fcComposerCamera"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/fc_bg_circle_green800"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/fc_icon_camera"
+                    app:tint="@color/fc_green500" />
+
+                <LinearLayout
+                    android:id="@+id/fcComposerField"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/fc_bg_composer_field"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp"
+                    android:orientation="vertical"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp">
+
+                    <!-- Single-image attachment strip (Compose allows one image per query). -->
+                    <FrameLayout
+                        android:id="@+id/fcComposerThumbBox"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:layout_marginBottom="10dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/fcComposerThumb"
+                            android:layout_width="64dp"
+                            android:layout_height="64dp"
+                            android:background="@drawable/fc_bg_card_md"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop" />
+
+                        <ImageButton
+                            android:id="@+id/fcComposerThumbRemove"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="top|end"
+                            android:layout_margin="3dp"
+                            android:background="@drawable/fc_bg_circle_surface"
+                            android:contentDescription="@null"
+                            android:padding="3dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/fc_ic_close"
+                            app:tint="@color/fc_foreground_primary" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <!--
+                          Two stacked placeholder views so a rotation is a true crossfade
+                          (Compose AnimatedContent: fadeIn(400) togetherWith fadeOut(400)).
+                          Only the visible one runs its shimmer sweep.
+                        -->
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ShimmerTextView
+                            android:id="@+id/fcComposerHintA"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:textColor="@color/fc_foreground_primary"
+                            android:textSize="17sp"
+                            tools:text="Ask about your farm..." />
+
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ShimmerTextView
+                            android:id="@+id/fcComposerHintB"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:alpha="0"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:textColor="@color/fc_foreground_primary"
+                            android:textSize="17sp" />
+
+                        <EditText
+                            android:id="@+id/fcComposerInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:background="@null"
+                            android:importantForAutofill="no"
+                            android:imeOptions="actionDone"
+                            android:inputType="textCapSentences|textMultiLine"
+                            android:maxLines="3"
+                            android:minHeight="24dp"
+                            android:paddingStart="0dp"
+                            android:paddingEnd="0dp"
+                            android:paddingTop="0dp"
+                            android:paddingBottom="0dp"
+                            android:textColor="@color/fc_foreground_primary"
+                            android:textSize="17sp" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <!-- Mic at rest, Send once there is content. -->
+                <ImageButton
+                    android:id="@+id/fcComposerAction"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/fc_bg_circle_green800"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/fc_icon_mic"
+                    app:tint="@color/fc_green500" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</merge>

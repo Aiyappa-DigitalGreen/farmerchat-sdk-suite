@@ -76,8 +76,15 @@ FarmerChat.initialize(config: FarmerChatConfig(
     guestApiKey: "…",            // overrides built-in guest init API key
     appearance: .auto,           // day | night | auto
     languageCode: nil,           // preselect a language, skips language screen if valid
-    defaultCountryCode: "IN",    // fallback for the language list when initialize_user
-    defaultStateCode: "Karnataka", // returns no country_code (endpoint #2 400s on a blank one)
+    defaultCountryCode: "",      // OPTIONAL region pin. Leave EMPTY (the default) and the SDK
+    defaultStateCode: "",        // derives the country from the DEVICE LOCALE, exactly as the
+                                 // app does, falling back to "KE" only when the locale carries
+                                 // no region (endpoint #2 400s on a blank country_code).
+                                 // `state` is inert on every environment — leave it empty.
+    defaultLatitude: 0.0,        // OPTIONAL coordinate pin for the #11 seed. 0.0 = "unset →
+    defaultLongitude: 0.0,       // use the device locale's country centroid". There is NO
+                                 // hardcoded city: if nothing resolves, no coordinates are sent
+                                 // rather than guessing a region for the farmer.
     enableVoice: true,
     enableImages: true,
     enableWeather: true,

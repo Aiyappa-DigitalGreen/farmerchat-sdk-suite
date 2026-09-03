@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,12 @@ fun ListItem(
     showTextRight: Boolean = textRight != null,
     textRightMaxLines: Int = 1,
     showChevron: Boolean = true,
+    /**
+     * 2.0.0: replaces the chevron with a small spinner while an action raised by this row is in
+     * flight (Settings' "My Farm" location row during acquisition). Takes precedence over
+     * [showChevron], matching the app, so a call site does not have to clear the chevron too.
+     */
+    showTrailingSpinner: Boolean = false,
     showDivider: Boolean = false
 ) {
     val colors = LocalContentColors.current
@@ -138,7 +145,14 @@ fun ListItem(
                 }
             }
 
-            if (showChevron) {
+            if (showTrailingSpinner) {
+                Spacer(modifier = Modifier.width(12.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = colors.foregroundSecondary
+                )
+            } else if (showChevron) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,

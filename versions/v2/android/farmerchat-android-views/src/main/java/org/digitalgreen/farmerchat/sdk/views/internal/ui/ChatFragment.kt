@@ -11,7 +11,10 @@ import android.view.LayoutInflater
 import android.view.View
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -20,7 +23,12 @@ import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioPlayback
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
+import org.digitalgreen.farmerchat.sdk.core.ui.location.isLocationObtained
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
@@ -51,6 +59,23 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
 
     private val source: String get() = arguments?.getString("source") ?: "home"
 
+    /**
+     * 2.0.0 unified composer instead of the Photo/Speak/Type row — Compose parity with
+     * `ChatScreen.isComposerUi`, which is exactly `graph.config.enableAgenticChat`. Off by
+     * default, so a host that does not opt in to agentic chat keeps the 1.0.0 input verbatim.
+     */
+    private val isComposerUi: Boolean get() = graph.config.enableAgenticChat
+
+    /**
+     * The single image attached to the composer, awaiting send.
+     *
+     * App parity (fc-compose-agentic ChatScreen.kt:499/550 `photoUris = listOf(uri)`): in
+     * composer mode a picked image is ATTACHED to the bar and sent together with whatever the
+     * farmer types, instead of being sent on its own the moment the picker returns. Only one
+     * image per query, so this is a single nullable rather than a list.
+     */
+    private var attachedPhoto: Uri? = null
+
     // Voice clip playback (user bubbles)
     private val clipPlayback = AudioPlayback()
     private var playingClipId: String? = null
@@ -79,6 +104,8 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FcFragmentChatBinding.bind(view)
+
+        observeLocationOutcomes()
 
         adapter = ChatAdapter(this)
         val layoutManager = LinearLayoutManager(requireContext())
@@ -143,7 +170,15 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             fragment = this,
             binding = binding.fcChatOverlays,
             onTextSubmitted = { text -> vm.onAction(ChatAction.SendFollowUpQuestion(text)) },
-            onImagePicked = { uri -> vm.onAction(ChatAction.SendQuestionWithImage("", uri)) },
+            onImagePicked = { uri ->
+                if (isComposerUi) {
+                    // Attach, don't send: the composer owns the query until the farmer taps send.
+                    attachedPhoto = uri
+                    binding.fcChatComposer.setPhotoUris(listOf(uri))
+                } else {
+                    vm.onAction(ChatAction.SendQuestionWithImage("", uri))
+                }
+            },
             onVoiceFinished = { file ->
                 overlays?.hide()
                 vm.onAction(
@@ -158,27 +193,103 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             }
         )
 
+        if (isComposerUi) setUpComposer() else setUpLegacyInputRow()
+
+        initializeIfNeeded()
+        observeState()
+    }
+
+    /** 1.0.0 input: the Photo / Speak / Type row driving the overlay panels. */
+    private fun setUpLegacyInputRow() {
+        binding.fcChatComposer.isVisible = false
+        binding.fcChatInputButtons.isVisible = true
         binding.fcChatInputPhotoLabel.text = label(Labels.PHOTO, "Photo")
         binding.fcChatInputSpeakLabel.text = label(Labels.SPEAK, "Speak")
         binding.fcChatInputTypeLabel.text = label(Labels.TYPE, "Type")
         binding.fcChatInputPhoto.setOnClickListener { overlays?.showPhotoInput() }
-        binding.fcChatInputSpeak.setOnClickListener {
-            if (!graph.prefs.getBoolean(SdkPreferences.Keys.ASR_ENABLED, true)) {
-                binding.fcChatToast.show(
-                    label(
-                        Labels.ASR_IS_DISABLED_FOR_YOUR_SELECTED_LANGUAGE,
-                        "ASR is disabled for your selected language"
-                    ),
-                    ToastView.Type.ERROR
-                )
-            } else {
-                overlays?.showVoiceInput()
-            }
-        }
+        binding.fcChatInputSpeak.setOnClickListener { onSpeakClick() }
         binding.fcChatInputType.setOnClickListener { overlays?.showTextInput() }
+    }
 
-        initializeIfNeeded()
-        observeState()
+    /**
+     * 2.0.0 input: the unified composer replaces the button row entirely.
+     *
+     * App parity (fc-compose-agentic ChatInputOverlays.kt:57) / Compose parity
+     * (`ChatScreen.kt:1097`): anchored + compact, brand-green sheet on the reading surface, no
+     * idle aura (that is a Home-only first-contact cue). The composer consumes the nav and IME
+     * insets itself, so nothing here adds padding on top of them.
+     */
+    private fun setUpComposer() {
+        binding.fcChatInputButtons.isVisible = false
+        val composer = binding.fcChatComposer
+        composer.isVisible = true
+        composer.compact = true
+        composer.setSurfaceColorRes(R.color.fc_green700)
+        composer.setFadeColorRes(R.color.fc_surface_reading)
+        composer.setPlaceholder(label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."))
+
+        // Camera is only offered while nothing is attached (app: `if (photoUris.isEmpty())`).
+        composer.onPhotoClick = { if (attachedPhoto == null) overlays?.showPhotoInput() }
+        composer.onVoiceClick = { onSpeakClick() }
+        composer.onRemovePhoto = {
+            attachedPhoto = null
+            composer.setPhotoUris(emptyList())
+        }
+        composer.onSend = { text -> sendFromComposer(text) }
+
+        // The bar floats over the list, so the list must reserve its at-rest height. The
+        // enclosing LinearLayout is fitsSystemWindows, so the nav-bar inset the bar folds in is
+        // already outside the list — subtract it or the last bubble sits too high.
+        // A config change destroys the view but keeps the fragment, so an image attached
+        // before the rotation must be re-shown or the bar would send it with no thumbnail.
+        attachedPhoto?.let { composer.setPhotoUris(listOf(it)) }
+
+        composer.onBarHeightChanged = { height -> reserveComposerSpace(height) }
+        reserveComposerSpace(composer.barHeightPx())
+
+        // The composer's own listener reads ROOT insets, but its init-time requestApplyInsets()
+        // ran before it was attached. Ask again now that it is in the hierarchy, then re-read
+        // the settled bar height: insets are dispatched before the first layout, and the height
+        // only changes (and only then re-fires onBarHeightChanged) when the nav-bar inset
+        // exceeds the 20dp design gap.
+        ViewCompat.requestApplyInsets(binding.root)
+        binding.root.post { if (view != null) reserveComposerSpace(composer.barHeightPx()) }
+    }
+
+    /** ASR gate + voice overlay — shared by the legacy Speak button and the composer mic. */
+    private fun onSpeakClick() {
+        if (!graph.prefs.getBoolean(SdkPreferences.Keys.ASR_ENABLED, true)) {
+            binding.fcChatToast.show(
+                label(
+                    Labels.ASR_IS_DISABLED_FOR_YOUR_SELECTED_LANGUAGE,
+                    "ASR is disabled for your selected language"
+                ),
+                ToastView.Type.ERROR
+            )
+        } else {
+            overlays?.showVoiceInput()
+        }
+    }
+
+    /**
+     * Compose parity (`sendFromComposer`, ChatScreen.kt:1081): an attached image sends as
+     * SendQuestionWithImage with whatever was typed; otherwise a non-blank text sends as a
+     * follow-up. The composer has already cleared its own text field by the time this runs.
+     */
+    private fun sendFromComposer(text: String) {
+        val uri = attachedPhoto
+        attachedPhoto = null
+        binding.fcChatComposer.setPhotoUris(emptyList())
+        when {
+            uri != null -> vm.onAction(ChatAction.SendQuestionWithImage(text, uri))
+            text.isNotBlank() -> vm.onAction(ChatAction.SendFollowUpQuestion(text))
+        }
+    }
+
+    private fun reserveComposerSpace(barHeightPx: Int) {
+        val navBottom = ViewCompat.getRootWindowInsets(binding.root)
+            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        binding.fcChatList.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0))
     }
 
     /** One-of initialization per nav args (doc 01 §3.8). */
@@ -247,6 +358,14 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             binding.fcChatLoading.text = label(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
             binding.fcChatAppBar.fcAppBarLogo.isVisible = state.messages.isNotEmpty()
 
+            // Compose parity (ChatScreen.kt:1103 `visible = !(isThread && state.isLoading)`):
+            // the composer slides off-screen while an answer is generating and back when it
+            // lands — the same rhythm the legacy Photo/Speak/Type row has.
+            if (isComposerUi) {
+                val isThread = state.messages.isNotEmpty()
+                binding.fcChatComposer.setBarVisible(!(isThread && state.isLoading))
+            }
+
             refreshRows(state)
             handleTtsPlayback(state)
 
@@ -285,22 +404,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                     is ChatMessage.UserMessage -> add(ChatRow.User(message))
 
                     // 2.0.0: the farmer's resolved location, standing in for the text bubble they
-                    // would otherwise have sent in reply to a GPS_PROMPT chip.
-                    //
-                    // KNOWN GAP vs Compose: Compose renders this with the dedicated
-                    // LocationChatBubble (pin icon, asymmetric corners, "Your location:" label
-                    // above the address). Views has no port of that component, so the address is
-                    // shown in the ordinary right-aligned user bubble with the label prefixed.
-                    // Correct and readable, but not the designed treatment — tracked in docs/04.
-                    is ChatMessage.LocationMessage -> add(
-                        ChatRow.User(
-                            ChatMessage.UserMessage(
-                                text = label(Labels.YOUR_LOCATION, "Your location:") +
-                                    " " + message.address,
-                                id = message.id
-                            )
-                        )
-                    )
+                    // would otherwise have sent in reply to a GPS_PROMPT chip. Rendered by the
+                    // dedicated location bubble (fc_item_chat_location) — the Views port of
+                    // Compose's LocationChatBubble.
+                    is ChatMessage.LocationMessage -> add(ChatRow.Location(message))
                     is ChatMessage.AiResponse -> {
                         val isLast = message.id == lastAiId
                         // 2.0.0: a live or interrupted agentic stream owns the message area —
@@ -394,10 +501,88 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
      * An alignment chip sends its `value` (falling back to its label) as a follow-up question —
      * the value is what the backend expects, the label is only what the farmer reads.
      */
-    override fun onAlignmentChipClick(chip: AlignmentChip) {
-        val question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
-        if (question.isBlank()) return
-        vm.onAction(ChatAction.SendFollowUpQuestion(question))
+    /**
+     * Routes an alignment chip tap. GPS_PROMPT and UPLOAD_PHOTO chips marked
+     * [AlignmentChip.ACTION_SELECT] do NOT send their text — they invoke a device capability and
+     * only the outcome is sent. Every other chip stays on the plain follow-up path.
+     * Port of the app's `onAlignmentChipClick`.
+     */
+    override fun onAlignmentChipClick(messageId: String, kind: AlignmentKind, chip: AlignmentChip) {
+        val isInvoke = chip.action == AlignmentChip.ACTION_SELECT
+        val isShareLocation = kind == AlignmentKind.GPS_PROMPT && isInvoke &&
+            chip.value == AlignmentChip.VALUE_SHARE_LOCATION
+        val isPhotoCapability = kind == AlignmentKind.UPLOAD_PHOTO && isInvoke
+        when {
+            isShareLocation -> {
+                // Permission dialog / GPS fetch / recovery are owned by the journey's location
+                // host; the outcome arrives on the collector installed in onViewCreated. Only
+                // start when no other location flow is running (mirrors Home's guard).
+                if (graph.locationPromptManager.state.value is LocationPromptState.Idle) {
+                    pendingLocationSourceId = messageId
+                    graph.locationPromptManager.triggerFromLocalContext()
+                }
+            }
+            isPhotoCapability && chip.value == AlignmentChip.VALUE_TAKE_PHOTO ->
+                overlays?.launchCameraForCapability()
+            isPhotoCapability && chip.value == AlignmentChip.VALUE_CHOOSE_FROM_GALLERY ->
+                overlays?.launchGalleryForCapability()
+            else -> {
+                val question = chip.value?.takeIf { it.isNotBlank() } ?: chip.label.orEmpty()
+                if (question.isBlank()) return
+                vm.onAction(ChatAction.SendFollowUpQuestion(question))
+            }
+        }
+    }
+
+    /** Armed while a chat-initiated location flow is in progress; holds the surface's message id. */
+    private var pendingLocationSourceId: String? = null
+
+    /** The address shown in the location bubble, assembled exactly as the app does. */
+    private fun resolvedAddress(): String {
+        val best = graph.prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "")
+        val stateName = graph.prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
+        val country = graph.prefs.getString(SdkPreferences.Keys.USER_COUNTRY_NAME, "")
+        return listOf(best, stateName, country).filter { it.isNotBlank() }.distinct()
+            .joinToString(", ")
+    }
+
+    /**
+     * Observes location outcomes for the chat share-location flow. Collected for the life of the
+     * view but inert until armed, so an outcome belonging to Home or Settings is ignored.
+     */
+    private fun observeLocationOutcomes() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            graph.locationPromptManager.events.collect { event ->
+                val srcId = pendingLocationSourceId ?: return@collect
+                val source = when (event) {
+                    is LocationPromptEvent.Continue -> event.source
+                    is LocationPromptEvent.Cancel -> event.source
+                    else -> return@collect
+                }
+                if (source != LocationTriggerSource.LocalContext) return@collect
+                pendingLocationSourceId = null
+                if (event.isLocationObtained()) {
+                    vm.onAction(
+                        ChatAction.SendLocationSharedQuery(
+                            sourceMessageId = srcId,
+                            address = resolvedAddress()
+                        )
+                    )
+                } else {
+                    // Denied / cancelled / failed: still answer the blocking question. The app uses
+                    // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
+                    // neither, so the correlation and chip analytics are lost (docs/04).
+                    vm.onAction(
+                        ChatAction.SendFollowUpQuestion(
+                            question = graph.labelManager.getLabel(
+                                Labels.LOCATION_PERMISSION_DECLINED,
+                                "Continue without sharing my location"
+                            )
+                        )
+                    )
+                }
+            }
+        }
     }
 
     /**
@@ -405,7 +590,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
      * chips can type or dictate it (the Views equivalent of the Compose `focusTextInput`).
      */
     override fun onTypeInstead() {
-        overlays?.showTextInput()
+        // In composer mode the composer IS the text input (Compose binds `focusTextInput` to the
+        // composer's focus requester); opening the legacy panel would stack it over the bar.
+        if (isComposerUi) {
+            binding.fcChatComposer.requestInputFocus()
+        } else {
+            overlays?.showTextInput()
+        }
     }
 
     /** The stall hint became due: re-render so the hint appears under the growing answer. */

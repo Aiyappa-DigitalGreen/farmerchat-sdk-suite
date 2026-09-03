@@ -25,7 +25,17 @@ Update this file with every change. Never mark ✅ for stubbed, partial, or unve
 | AccountBenefits + AccountSuccess | ✅ (question-count gate) | ✅ (back-stack nuance — see debts) | ✅ (back-stack nuance — see debts) | ✅ (shouldBypassInterstitial) | ✅ | ✅ | ✅ | ✅ |
 | Home feed sections (content/single/multi/SSFR) | ✅ (HomeViewModel) | ✅ (all four card types) | ✅ (all four card types) | ✅ (HomeViewModel + cache fallback) | ✅ (all four card types) | ✅ (content/single/multi + **SSFR card** now rendered above the feed, C3+`ssfr_enable` gated; **screenshot mock `ios-uikit-05-home.png`**) | ✅ | ✅ |
 | Guest home: seed #11 with default coords when country unresolved | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Composer lifted above the IME (`imePadding`) | n/a (UI) | ✅ | n/a (XML adjustResize) | n/a (UI) | ✅ | ✅ | ✅ | ✅ |
+| Composer lifted above the IME (`imePadding`) | n/a (UI) | ✅ | ✅ (root-inset listener — **not** `adjustResize`, see below) | n/a (UI) | ✅ | ✅ | ✅ | ✅ |
+
+> **Correction (2026-09-02).** This row previously read `n/a (XML adjustResize)` for
+> android-views. That was wrong: the SDK theme draws edge-to-edge, and under transparent
+> system bars `windowSoftInputMode="adjustResize"` does not shrink a bottom-gravity
+> overlay, so the input stayed behind the IME. Both android-views input surfaces —
+> `InputOverlaysController.applyImeInsets()` (v1 + v2) and `InputComposerView.applyImeInsets()`
+> (v2) — pad from `ViewCompat.getRootWindowInsets`, deliberately not from the dispatched
+> insets, which a sibling of a `fitsSystemWindows="true"` container sees zeroed. Do not
+> "simplify" either one back to `onApplyWindowInsets(insets)`.
+
 | Drawer order matches app (nav → divider → recent) | n/a (UI) | ✅ | ✅ | n/a (UI) | ✅ | ✅ | ✅ | ✅ |
 | `plotline_widget` sections filtered from feed + analytics | ✅ | ✅ | ✅ | ✅ | ✅ (via core) | ✅ (via core) | ✅ | ✅ |
 | Greeting falls back to label when #12 omits it | n/a (UI) | ✅ | ✅ (static label) | n/a (UI) | ✅ | n/a | ✅ | ✅ |
@@ -315,14 +325,16 @@ finding is **how** it can be resolved. Verified live on a fresh guest:
 **Coordinates are the only thing the backend accepts.** A country name is rejected, so no
 config value alone could fix this — the SDK has to post a real lat/long.
 
-**Fix**: added `defaultLatitude` / `defaultLongitude` to `FarmerChatConfig` (default
-`12.9716, 77.5946` — Bengaluru, pairing with `IN`/`Karnataka`). When guest init returns a blank
-`country_code`, the SDK now posts those coordinates to #11 before loading the feed, so the home
-screen is populated for every guest regardless of GPS permission or `geoApiKey`. Best-effort: a
-failure leaves the feed empty, i.e. the previous behaviour, and never blocks onboarding.
+**Fix**: added `defaultLatitude` / `defaultLongitude` to `FarmerChatConfig`. When guest init
+returns a blank `country_code`, the SDK posts fallback coordinates to #11 before loading the feed,
+so the home screen is populated for every guest regardless of GPS permission or `geoApiKey`.
+Best-effort: a failure leaves the feed empty, i.e. the previous behaviour, and never blocks
+onboarding.
 
-Hosts overriding `defaultCountryCode` **must** also set `defaultLocation(lat, long)`, or the feed
-shows advice for the wrong region.
+> **SUPERSEDED in part (2026-09-03).** This fix originally shipped a hardcoded default of
+> `12.9716, 77.5946` (Bengaluru, pairing with `IN`/`Karnataka`). That was wrong — see
+> "Fix — hardcoded fallback location replaced with the app's device-locale derivation" below.
+> The seeding behaviour described here is unchanged; only where the coordinates come from changed.
 
 | Platform | Status |
 |---|---|
@@ -337,6 +349,77 @@ into `CHAT_ONLY` skips onboarding and therefore skips the seed — same shape as
 `country`/`state` fields while the live #11 response nests everything under `user_profile`, so
 iOS cannot persist the resolved values (the call still sets the location server-side, which is
 what unblocks the feed).
+
+## Fix — hardcoded fallback location replaced with the app's device-locale derivation (2026-09-03)
+
+The guest-home fix above shipped a **hardcoded Bengaluru** fallback — `defaultLatitude = 12.9716`,
+`defaultLongitude = 77.5946`, plus an invented `defaultCountryCode = "IN"` and
+`defaultStateCode = "Karnataka"`. Consequence: every guest the backend could not place — anywhere
+on earth — was seeded with Karnataka and got Karnataka's advice.
+
+**The app has no hardcoded coordinates.** On IP-geolocation failure it calls
+`CountryLatLngProvider.getLatLngFromDeviceLocale(context)` (app `utils/CountryLatLngProvider.kt`),
+takes that country's centroid, and accepts it **only when `lat != 0.0 && lng != 0.0`**.
+
+**Fix**, on every platform:
+
+- The three config defaults became sentinels meaning *"unset → derive"*: country `""`, state `""`,
+  lat/lng `0.0`. **No coercion** back to a literal — an empty value stays empty. A host that sets
+  any of them explicitly still wins.
+- A last-resort country constant (`LAST_RESORT_COUNTRY_CODE` / `lastResortCountryCode` = `"KE"`)
+  exists only because endpoint #2 **400s on a blank `country_code`** (verified live 2026-09-03 on
+  prod: `{"error": "Country code is required"}`). `"KE"` is the app's own literal on its primary
+  guest-init path, and dev/stage/prod/eks all return Kenya only (verified live 2026-09-03).
+- Country fallback chain: server `country_code` → persisted → host config (if non-blank) →
+  **device-locale region** → `"KE"`.
+- Geo-failure path: falls back to the device locale's centroid, used **only if `isResolved`**. The
+  centroid is deliberately **not** persisted as the user's location — it is not a real fix and
+  writing it would leak a fake precise location into every later read. It only feeds guest init.
+- Seed path (#11): posts the resolved fallback; if nothing resolves it **sends nothing at all**.
+  `(0,0)` is a real point in the Gulf of Guinea — sending it is a wrong answer, not a missing one.
+- The `state` default is now empty and must stay so: the #2 `state` param is **inert** on every
+  environment (`Karnataka`, `KA`, blank and omitted all return the identical set — verified live
+  2026-09-03). Do not reinstate `"Karnataka"`.
+
+The 247-entry centroid table is **generated verbatim** from the app source on every platform and
+must be regenerated, never hand-edited — a wrong centroid fails silently.
+
+**Web-specific**: a browser language such as plain `en` carries **no region**, so
+`regionFromLocaleTag` returns `''` and the centroid is `[0, 0]` — that is the unknown-country case
+and takes the send-nothing branch. A language is never guessed into a country. Web also reaches the
+locale fallback when the host configured **no `geoApiKey`** (so `geolocate` was never called at
+all), which is the same "no coordinates" state Android reaches on a failed call; `geoState` is left
+`idle` in that case, because a call that was never made is not a failed call.
+
+| Platform | Status |
+|---|---|
+| android-core (+compose/views), v1 + v2 | ✅ `core/location/CountryLatLngProvider.kt` (247 entries, generated) + `FarmerChatConfig.resolvedFallbackCountryCode()` / `resolvedFallbackCoordinates()`, used by all five call sites (onboarding geo-failure branch, country chain, #11 seed, settings chooser, graph label bootstrap); **9 unit tests** — `CountryLatLngProviderTest` 5 + `FallbackCountryTest` 4. The country resolver is split into a `Context`-free `internal` overload taking the locale region, so the never-blank invariant is testable without mocking `Context` |
+| ios-core (+SwiftUI/UIKit), v1 + v2 | ✅ `Utils/CountryLatLngProvider.swift`, `FarmerChatConfig.resolvedFallbackCountryCode` / `resolvedFallbackCoordinates`, geo-failure `else` branch + `isResolved` guard in `seedDefaultLocation()`; 9 unit tests |
+| react-native, v1 + v2 | ✅ `core/countryLatLng.ts` (247 entries, generated) + `LAST_RESORT_COUNTRY_CODE`/`COORDINATE_UNSET`/`resolveFallbackCoordinates()`/`resolveCountryCode()` in `core/config.ts`; wired into `useOnboarding.bootstrapLanguages` (geo-failure branch + #11 seed) and `useSettings.loadLanguages`; 12 out-of-tree assertion groups (no test runner added) |
+| web, v1 + v2 | ✅ `core/countryLatLng.ts` (247 entries) + new `core/fallbackLocation.ts` (`resolveFallbackCoordinates` / `resolveCountryCode`); wired in `useOnboardingLanguage.bootstrap` (geo-failure branch **and** the #11 seed) and in `useSettingsLanguage.loadLanguages`; 44 assertions in `test/countryLatLng.test.ts`. Verified in both trees: `tsc --noEmit`, `tsc -p tsconfig.test.json --noEmit`, `vite build`, `npm test` all clean. |
+
+**Public API change** (docs/03): the four `FarmerChatConfig` static fallbacks
+(`defaultCountryCodeFallback`, `defaultStateCodeFallback`, `defaultLatitudeFallback`,
+`defaultLongitudeFallback` on iOS; equivalents elsewhere) were **removed** and replaced by
+`lastResortCountryCode`, `defaultStateCodeUnset` and `coordinateUnset`. The instance field names
+and types are unchanged, so hosts that only *set* config are unaffected; a host that *read* a
+static fallback must migrate. No in-repo sample referenced them.
+
+**Web is the exception, deliberately**: `DEFAULT_COUNTRY_CODE`, `DEFAULT_STATE_CODE`,
+`DEFAULT_LATITUDE` and `DEFAULT_LONGITUDE` are **kept as names** in
+`web/.../src/core/config.ts` and re-pointed at the unset sentinels (`''`, `''`,
+`COORDINATE_UNSET`, `COORDINATE_UNSET`), so nothing that imported them breaks. React-native
+dropped its `DEFAULT_LATITUDE`/`DEFAULT_LONGITUDE` and uses `?? COORDINATE_UNSET` inline instead.
+Both are correct; the shape differs only in whether the old names survive as aliases.
+
+### Known gaps, tracked not fixed
+
+| Gap | Where |
+|---|---|
+| ~~The settings language chooser reads `config.defaultCountryCode` **raw**, so with the new empty default it can send a blank `country_code` and 400.~~ **CLOSED on all four platforms 2026-09-03.** Found independently by the iOS, react-native and web ports — a genuine regression introduced by making the default empty. Android was the last one open and is now fixed too: `FarmerChatConfig` gained `resolvedFallbackCountryCode(Context)` / `resolvedFallbackCoordinates(Context)`, and **all five** Android call sites route through them (settings chooser, the graph's label bootstrap, and three in onboarding) in BOTH trees. Guarded by `FallbackCountryTest` (4 tests), whose load-bearing assertion is that the resolved country is **never blank** | `android/farmerchat-core/src/main/java/org/digitalgreen/farmerchat/sdk/core/ui/settings/SettingsViewModel.kt:45` and `versions/v2/android/.../core/ui/settings/SettingsViewModel.kt:45` |
+| The checked-in prebuilt `ios/dist` xcframework (v1 tree, consumed via `Package.binary.swift`) still carries the OLD Bengaluru default. Source consumers get the fix immediately; **binary consumers do not until `ios/build-xcframework.sh` is re-run** | `ios/dist`, `ios/Package.binary.swift` |
+| iOS applies the locale fallback for **both** a failed geolocate and a success carrying no `location`; Android's branch is keyed on `ApiResult.Error` only, so success-with-null-location still proceeds with no coordinates | `OnboardingSharedViewModel.fetchGeoAndInitialize` (android, both trees) |
+| The mock backend always returns a non-null `country_code`, so a green mock E2E is **not** evidence this path works — see docs/08 | all platforms |
 
 ## Fix — composer hidden behind the keyboard (2026-09-01)
 
@@ -451,6 +534,12 @@ entries stored.
 
 Source of truth: `fc-compose-agentic` @ `c0524dd6` (app v4.1.2). See `versions/v2/README.md`.
 
+> **The table immediately below is a SUPERSEDED early snapshot**, kept for history — it was taken
+> when only android-core and android-compose existed. Its ⛔ cells for ios / react-native / web are
+> no longer true. The authoritative status is
+> ["2.0.0 status after the parallel build-out"](#200-status-after-the-parallel-build-out-2026-09-02)
+> further down this file.
+
 | Piece | android-core | android UI | ios | react-native | web |
 |---|---|---|---|---|---|
 | `AgenticEvent` model + payloads | ✅ | n/a | ⛔ | ⛔ | ⛔ |
@@ -530,9 +619,38 @@ The card's copy is driven by both `errorKind` and `hasPartial` — "connection s
 answer is saved" is a materially different message from "nothing arrived", and it tints from
 `feedbackFail` so a themed host gets its own failure colour.
 
-**Two labels are not on the server yet.** `fc_v2_app_label_connection_stopped_partial_saved` and
-`fc_v2_app_label_response_paused_resuming` returned null from endpoint #3, so they fall back to
-English. The backend needs to add them before those strings localize.
+**Ten labels are not on the server — not two.** Corrected 2026-09-02 against a LIVE endpoint #3
+probe on stage (guest token via `initialize_user`; `language=1` and `language=2` both return 283
+entries). The earlier "two" was an undercount.
+
+Server keys carry the language suffix (`${key}_${lang}`, e.g. `fc_v2_app_label_my_farm_en`), so a
+naive comparison of bare SDK keys against the response reports **every** key as missing. Any future
+audit must strip the suffix first. Of the 256 keys the SDK declares, 246 are served and these 10
+are not:
+
+```
+fc_v2_app_label_cant_load_right_now
+fc_v2_app_label_connection_stopped_partial_saved
+fc_v2_app_label_failed_to_load_chats
+fc_v2_app_label_no_camera_app_available
+fc_v2_app_label_no_chats_yet
+fc_v2_app_label_permissions_are_required_to_auto_detect_sim_number.   (trailing "." is the app's)
+fc_v2_app_label_response_paused_resuming
+fc_v2_app_label_storage_exceeded
+fc_v2_app_label_this_permission_is_needed_for_the_app_to_function_properly_please_enable_it_in_your_device_settings
+fc_v2_app_label_user_cancelled_or_provider_error
+```
+
+All ten exist in the app's own `Labels.kt`, so none is an SDK invention — the app relies on English
+fallbacks for them too. Impact is **localization only, never a raw key on screen**: 7 of the 10 are
+used and every call site passes an English fallback (each verified, including the multi-line calls);
+`LabelManager.getLabel` ends in `englishFallback.ifBlank { baseKey }`, so an omitted fallback WOULD
+have shown a farmer the literal `fc_v2_app_label_storage_exceeded`. The other 3 —
+`PERMISSIONS_ARE_REQUIRED_TO_AUTO_DETECT_SIM_NUMBER`, `STORAGE_EXCEEDED`,
+`USER_CANCELLED_OR_USER_PROVIDER_ERROR` — are declared but never used.
+
+Cached response used for the first (wrong) count: 276 keys. Live stage now serves 283, so re-probe
+rather than trusting a cache. Snapshot kept at `scratchpad/labels_stage_en_20260902.json`.
 
 ### `InputComposer` port (2026-09-02)
 
@@ -605,12 +723,172 @@ the v1 trees are byte-clean.
 | `StreamErrorCard` + retry | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
 | `alignments` model + `AlignmentKind` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `AlignmentSurface` UI + chips | n/a | ✅ | ✅ | ✅ SwiftUI | ✅ | ✅ |
-| `InputComposer` wired into screens | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
-| Home agentic layout | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
-| `LocationChatBubble` | n/a | ✅ | 🟡 plain bubble | ⛔ | ⛔ | ⛔ |
-| `TermsOfUseDialog` wired | n/a | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ |
-| Settings "My Farm" rows | n/a | ⛔ | ⛔ | ⛔ | ⛔ | ⛔ |
-| iOS UIKit 2.0.0 UI | — | — | — | ⛔ | — | — |
+| `InputComposer` wired into screens | n/a | ✅ | ✅ | ⛔ | ✅ | ✅ |
+| Home agentic layout | n/a | ✅ | 🟡 composer + title only | ⛔ | 🟡 no sunbeams | 🟡 no sunbeams; pill is prefs-driven |
+| `LocationChatBubble` | n/a | ✅ | ✅ `fc_item_chat_location` | ✅ both | ✅ | ✅ |
+| **Location bubble actually PRODUCED** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Capability chips (`gps-prompt`, `upload-photo`)** | ✅ | ✅ | ✅ | ✅ both | ✅ | ✅ |
+| `TermsOfUseDialog` wired | n/a | ✅ | ⛔ | ⛔ | ✅ | ✅ via `openScreen('termsofuse')` |
+| `MarkdownText` v2 (tables, dividers, nesting) | n/a | ✅ | ⛔ | ⛔ | ⛔ | ✅ |
+| Alignment chip pick recorded per message | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Settings "My Farm" rows | n/a | ✅ | ⛔ | ⛔ | ⛔ | ⛔ |
+| iOS UIKit 2.0.0 UI | — | — | — | ✅ | — | — |
+
+`InputComposer` on **iOS is ⛔ by scope, not by oversight**: the unified composer bar was never
+part of the capability-chip/location round, and iOS still uses its 1.0.0 input surface. It is the
+only remaining ⛔ in the streaming/alignment feature set, and it blocks nothing else — the agentic
+chat, alignment surfaces, capability chips and location bubble all work without it.
+
+The two **bold** rows are the ones worth reading twice. Before 2026-09-02 every cell in the
+`LocationChatBubble` row that said ✅ was true and useless: the component rendered, and **no code
+on any platform ever constructed the message it renders**, because every alignment chip sent its
+own text as the question. See "The capability-chip gap" below.
+
+### The capability-chip gap (2026-09-02)
+
+**What was wrong.** Every alignment chip tap dispatched a plain
+`SendFollowUpQuestion(chip.value ?: chip.label)`. That is right for 5 of the 7 `AlignmentKind`s and
+wrong for the two CAPABILITY surfaces, which must invoke a device capability and send only the
+OUTCOME:
+
+- `gps-prompt` never started the location flow, so `LocationChatBubble` — built and rendering on
+  four platforms — could never appear.
+- `upload-photo` never opened camera or gallery. Tapping "Take photo" sent the farmer's question as
+  the literal string `take_photo`.
+
+Found while porting the bubble to react-native: the agent reported that nothing produced a
+`LocationMessage` on any platform and declined to invent a producer (correct — §2). The app HAS
+producers (`ui/chat/ChatViewModel.kt` `sendLocationSharedQuery`, and its history mapping), so this
+was a missing port, not an upstream gap.
+
+**What was built**, android core first as the reference, then fanned out:
+
+| Piece | where |
+|---|---|
+| 5 wire constants | `AlignmentChip` companion (`core/model/ChatModels.kt`) |
+| `SendLocationSharedQuery` action | `core/ui/chat/ChatAction.kt` |
+| `sendLocationSharedQuery()` producer | `core/ui/chat/ChatViewModel.kt` |
+| chip routing + armed outcome collector | both flavours' chat screen |
+
+The exact wire strings, which are easy to "normalize" and fail silently — a mismatch drops the chip
+to the text path and sends the constant as the question:
+
+```
+ACTION_SELECT             = "invoke"                    NOT "select"
+VALUE_SHARE_LOCATION      = "share_precise_location"    the app has "share_location" commented out above it
+VALUE_TAKE_PHOTO          = "take_photo"
+VALUE_CHOOSE_FROM_GALLERY = "choose_from_gallery"
+VALUE_NOT_NOW             = "not_now"
+```
+
+**Where the routing rule lives.** android keeps it per-flavour and tests a local mirror;
+ios/react-native/web each put it in a shared core module so the screen and the test exercise **one
+function**. The latter is better and is the pattern to follow — a screen holding an inline copy of
+the table passes the test while diverging from it.
+
+**Deltas recorded, not built** (identical on all four platforms):
+
+- **No `parent_message_id`.** The app returns the surface's server `message_id` so the backend
+  correlates the answer to the prompt. The SDK's `TextPromptRequest` has no such field, so NO
+  alignment chip send carries it. Adding an unexercisable wire field (the agentic endpoint still
+  returns 0 bytes to a guest) was judged worse than recording it. **This is the largest known
+  fidelity gap in the alignment feature.**
+- **No `agentic_chip_*` analytics.** `SendQueryProperties` has no `isAlignmentChip` / chip
+  type-value-label-status fields, so these report as ordinary text queries. `triggered_input_type`
+  IS sent as `align_chip_sel`.
+- **Chat history `message_type_id 12 → location_shared` NOT ported.** The app's own
+  `TODO(location-history)` says the type id and the address field (`query_text`) are unconfirmed
+  placeholders. Consequence: **a location bubble does not survive a conversation reload.**
+- **Address composition.** android uses the app's `APPROX_LOCATION_NAME, USER_SELECTED_STATE_CODE,
+  USER_COUNTRY_NAME`. ios/react-native/web have no `APPROX_LOCATION_NAME` (android writes it from
+  `user_profile.display_address`, which their `#11` response does not model) and substitute
+  district → state → country. No pref key was invented. A **guest** has none of these stored, so
+  the address is blank and no bubble renders — the app-parity branch.
+
+### Three producer bugs found by re-implementing the same flow
+
+All three are in a PRODUCER's completeness, not in any consumer's logic — every consumer was written
+correctly against a producer that quietly did not emit on all paths, or did not emit to everyone.
+Reviewing the consumer, where the feature appears to live, would not have surfaced any of them.
+
+1. **`LocationPromptManager.events` was single-consumer (android).** A
+   `Channel(BUFFERED).receiveAsFlow()` delivers each event to exactly ONE collector, and v2 compose
+   has two long-lived ones — `FarmerChatRoot` (widget toast) and `HomeScreen` (feed reload). A
+   location update raced: whichever won consumed the event and the other never saw it, giving a
+   toast with no reload or a reload with no toast, at random. Now a broadcast `SharedFlow`.
+   `replay = 0` deliberately, though the app uses `replay = 1` — a replayed stale event would make
+   `HomeScreen` reload its feed on every recomposition. All five collectors audited afterwards:
+   side effects are disjoint, nothing double-fires.
+   **v1 is NOT affected** — it has one collector per flavour (compose OR views, never both), so the
+   frozen tree needed no change. Verified, not assumed.
+2. **`dismiss()` emitted nothing (android + ios).** The error branch has no other exit —
+   `onLocationFetchFailed` / `onNoNetwork` / `onGpsEnableResult(false)` all park in `State.Error`,
+   and dismiss is how the user leaves it (views: the error card's **X**; compose: the recovery
+   sheet's swipe-away). A chat surface armed by a chip tap therefore waited **forever** and the
+   farmer's blocking question was never answered. android now emits
+   `Continue(reason = "dismissed")`; ios emits a terminal `.skipped(source:)`; react-native and web
+   settle theirs as a cancel. Found by the web agent doing this same port; ios had the identical
+   hole.
+3. **The opposite trap, closed at the same time.** After fix 2, a "flow ended" signal no longer
+   implies success — treating one as success shows a location bubble for a location that was never
+   shared. **Every platform now exposes the success test as one shared core function** that its
+   flavours and its tests both call (`isLocationObtained` / `isLocationObtained()` / a shared
+   module), replacing the per-flavour `reason == "location_fetched"` string comparisons.
+
+   What differs per platform is the test's *internals*, not its location. android compares against
+   `LOCATION_OBTAINED_REASONS` (the app's three reasons, though the SDK only ever emits
+   `location_fetched`) because its `Continue` case became overloaded by the dismiss emission. ios
+   deliberately has **no reason set at all**: its events carry no `reason` field, so the event case
+   itself is the discriminator, and inventing a reason string would add a wire-adjacent field with
+   no discriminating power (§2).
+
+Two more, ios-only, found by the same port:
+
+- **Both ios location hosts would have rendered zero pixels** for a chip-triggered flow:
+  `LocationPromptHostView` and `FCUILocationPromptHost` gated the permission/fetch overlay to
+  `source == .weather`. `.localContext` now shares it. **android is not affected** — compose does
+  not gate on source at all, and views' `keepInterstitialIfWeather` hides only for `Campaign` (the
+  widget flow), despite the misleading name.
+- **UIKit subscribe/trigger asymmetry:** `observeLocationOutcomes()` no-op'd silently on a nil nav
+  controller while the chip branch resolved the manager independently, so the whole GPS flow could
+  run with nothing listening. The subscription is now idempotent and the chip branch refuses to
+  start unless it is active.
+
+A third, react-native-only: `AppNavGraph`'s logout handler called `dismissError()` on an **idle**
+machine, which after fix 2 would have handed an armed chat surface a decline the farmer never
+triggered. Guarded with android's `wasActive` check (capture state before clearing, emit only if it
+was not already Idle). android's `clearState()` (logout) is silent by design and was already
+correct.
+
+### Verification, 2026-09-02 (all re-run, none an incremental no-op)
+
+```
+android   :farmerchat-core / :farmerchat-android-compose / :farmerchat-android-views
+          / :sample-compose / :sample-views  assembleDebug     BUILD SUCCESSFUL
+          :farmerchat-core:testDebugUnitTest --rerun-tasks     43 tests, 0 failures
+          (AlignmentKind 5, AlignmentPick 3, CapabilityChip 7, LocationOutcome 5,
+           AgenticEventParsing 14, AgenticStreamText 9)
+
+ios       FarmerChatCore  swift build + swift test             79 tests, 0 failures
+          FarmerChatCore    arm64-apple-ios15.0-simulator      Build complete!
+          FarmerChatSwiftUI arm64-apple-ios16.0-simulator      Build complete!
+          FarmerChatUIKit   arm64-apple-ios15.0-simulator      Build complete!
+
+web       npx tsc --noEmit / tsc -p tsconfig.test.json         exit 0
+          npx vite build                                       ✓ built
+          npm test                                             174 assertions
+          (agentic 73, agenticStream 12, alignmentPick 11, capabilityChip 36, markdown 42)
+
+rn        npx tsc --noEmit                                      exit 0
+          86 assertions run out-of-tree (no test runner in the package)
+```
+
+`FarmerChatSwiftUI` declares `.iOS(.v16)`; building it at 15.0 produces five spurious
+"only available in iOS 16" errors. Build each ios package at its own declared minimum.
+
+**Nothing has run on a device, simulator or browser.** Everything in 2.0.0 is build- and
+test-verified only, and the agentic wire still delivers 0 bytes to a guest, so no real `gps-prompt`
+surface has ever been exercised end to end.
 
 ### Three defects the parallel build found in my own core
 
@@ -638,8 +916,8 @@ verified before fixing, and each is fixed in **core**, so every flavour inherits
 |---|---|
 | android | **31** unit tests (parser 14, sanitizer 9, AlignmentKind 5, alignment pick 3) |
 | ios | **57** (`swift test`), incl. no-timeout session assertions |
-| web | **85** assertions on Node's native TS; includes a JSON object split one byte per chunk and a cut inside a 3-byte Devanagari sequence |
-| react-native | **46** assertions, run out-of-tree — the package has no test runner and none was added |
+| web | **138** assertions on Node's native TS — 85 agentic + 11 alignment-pick + 42 markdown; includes a JSON object split one byte per chunk, a cut inside a 3-byte Devanagari sequence, and the nested-emphasis / GFM-table cases the 1.0.0 renderer could not express |
+| react-native | **86** assertions, run out-of-tree — the package has no test runner and none was added; 46 agentic/alignment + **40 capability-chip / location-outcome** mirroring android's `CapabilityChipTest` + `LocationOutcomeTest` |
 
 ### Platform transport notes worth knowing
 
@@ -670,22 +948,645 @@ modules. The wire key is still `alignments`.
    bytes to a guest on all three environments, so no platform's reader has ever seen a real event.
    Four questions are listed in docs/05.
 2. **No device or browser run anywhere.** Everything is build- and test-verified only.
-3. `TermsOfUseDialog` and the Settings "My Farm" rows are unwired on every platform — core now has
+3. `TermsOfUseDialog` is now wired on **android-compose**, **react-native** and **web**; still
+   unwired on android-views and iOS. On web the open request arrives through the existing public
+   entry point — `openScreen('termsofuse')` lands on Home and raises a flag — mirroring
+   android-compose's `SCREEN_TERMS_OF_USE`, because the app's trigger is a Plotline card CTA and
+   root CLAUDE.md §6 bans Plotline inside SDK packages. The dialog renders the URL in a sandboxed
+   `<iframe>` (no WebView on the web), the same mechanism `LegalContentModal` already uses.
+   The Settings "My Farm" rows are **done on android-compose** (`SettingsScreen.kt`, the row +
+   `fc_icon_location`/`fc_icon_name`/`fc_icon_phone`, label `fc_v2_app_label_my_farm` — verified
+   present on endpoint #3) and still unwired on android-views, iOS, react-native and web. Core has
    `HomeAction.AcceptTerms` / `FetchPrivacyPolicy` / `HomeState.farmerchatTermsOfUse`,
-   `LocationTriggerSource.Settings` / `triggerFromSettings()` and the 8 verified labels, so the
+   `LocationTriggerSource.Settings` / `triggerFromSettings()` and the verified labels, so the
    blockers are gone and only the UI wiring remains.
-4. `chip.action == "select"` device-capability flows (camera / location) are unwired on all
-   platforms — chips uniformly send value-or-label as a follow-up.
-5. android-views has no `LocationChatBubble` port; it shows the address in the ordinary user bubble.
-6. iOS UIKit still renders the 1.0.0 chat.
-7. `InputComposer` and the Home agentic layout are android-compose only.
-8. Two labels remain absent from the server —
-   `fc_v2_app_label_response_paused_resuming` and
-   `fc_v2_app_label_connection_stopped_partial_saved` — so those two strings fall back to English
-   on every platform until the backend adds them. Every other label used by v2 was verified
+4. ~~Device-capability chip flows (camera / location) are unwired on all platforms — chips
+   uniformly send value-or-label as a follow-up.~~ **DONE on all four platforms (2026-09-02)** —
+   see "The capability-chip gap" above for the reference implementation, the exact wire constants
+   and the recorded deltas. Note the discriminator is `chip.action == "invoke"`, **not** `"select"`
+   as this item originally said; `ACTION_SELECT` is only the constant's NAME.
+   ~~web~~ — **done** (2026-09-02): the routing rule lives in `core/alignment.ts`
+   (`capabilityChipRoute` + the `CapabilityChip` constants, `action === "invoke"`,
+   `share_precise_location` / `take_photo` / `choose_from_gallery`), `ChatScreen.tsx` switches on
+   it — location → the shared `LocationPromptActions.triggerFromLocalContext` flow armed with the
+   source message id, photo → a hidden `<input type="file">` (camera one with `capture`), so a
+   capability chip never sends its own text. `not_now` and every non-capability chip still route
+   `TEXT` through `selectAlignmentChip`. 36 assertions in `test/capabilityChip.test.ts` mirror
+   android's `CapabilityChipTest`. Matches the android reference.
+   ~~react-native~~ — **done** (2026-09-02): the routing rule is `routeAlignmentChip` +
+   `AlignmentChipWire` in `core/types.ts` (`action === "invoke"`, `share_precise_location` /
+   `take_photo` / `choose_from_gallery`), which `ChatScreen.tsx`'s `handleAlignmentChip` switches
+   on at BOTH chip sites (the exclusive surface and the additive one inside `AiBubble`) — see
+   "react-native capability chips" below. `not_now`, a chip with no `invoke` action, a capability
+   value on the wrong surface and every non-capability surface still route `TEXT` through
+   `SelectAlignmentChip`.
+   ~~ios~~ — **done** (2026-09-02), BOTH flavours: the routing rule is
+   `AlignmentChip.capability(for:)` + the five wire constants in Core `ChatModels.swift`
+   (`actionSelect == "invoke"`, `share_precise_location` / `take_photo` / `choose_from_gallery` /
+   `not_now`), which `ChatView.handleAlignmentChip` (SwiftUI) and
+   `FCUIChatViewController.handleAlignmentChip` (UIKit) switch on at BOTH chip sites (the
+   exclusive surface and the additive one) — see "iOS capability chips" below. `not_now`, a chip
+   with no `invoke` action, a capability value on the wrong surface and every non-capability
+   surface still send value-or-label through `.sendFollowUpQuestion`.
+5. ~~android-views has no `LocationChatBubble` port~~ — **done**: `fc_item_chat_location.xml`
+   with its own `TYPE_LOCATION` view type, `bindLocation`, and the `bubbleCornerRadius` /
+   `messageFontSizeSp` knobs. ~~react-native~~ — **done** (`LocationChatBubble.tsx` +
+   `ChatMessage` `'location'` variant, rendered right-aligned in `ChatScreen`). ~~web~~ —
+   **done** (`ui/components/LocationChatBubble.tsx`, inline SVG for the pin/ellipse since the
+   package ships no image assets, + the `'location'` variant on `ChatMessage`, rendered
+   right-aligned from `ChatScreen`). ~~iOS still shows the address in the ordinary user bubble~~
+   — **done** (2026-09-02): iOS had **no location variant at all**;
+   `ChatMessage.location(LocationMessage(address:id:))` now exists in Core and renders in BOTH
+   flavours (`FCLocationChatBubble` in SwiftUI `ChatComponents.swift`, `FCUILocationBubbleCell` +
+   its own `Row.location` in UIKit `ChatCells.swift`), honouring the `bubbleCornerRadius` /
+   `messageFontSize` knobs, WITH a producer — see "iOS capability chips" below.
+
+   **On all of android, react-native and web the variant is never CONSTRUCTED.**
+   `grep 'LocationMessage('` finds no constructor anywhere in the android reference either — the
+   GPS_PROMPT chip still sends its value as an ordinary follow-up (item 4 above). The renderers
+   are wired and reachable, so whichever platform first appends one lights up everywhere; no
+   platform invented an appender, which would have been a behaviour the app does not have.
+
+   **Producer gap, every platform.** Nothing anywhere *creates* a `LocationMessage`: the
+   `GPS_PROMPT` chip only dispatches `SendFollowUpQuestion`, so the bubble's render path is
+   reachable but never reached at runtime. Android core has had this shape since the variant
+   landed (`ChatModels.kt`:95 defines it, `ChatScreen.kt`:699 and `ChatAdapter.kt`:276 render it,
+   no producer). react-native mirrored the gap rather than inventing the flow; **its producer
+   landed 2026-09-02** now that the android reference has one — see below and docs/05.
+
+   **Closed on web (2026-09-02), following the android reference which now has a producer.**
+   `useChat.sendLocationSharedQuery(sourceMessageId, address)` — the only constructor of the
+   `'location'` variant — marks `share_precise_location` picked on the source surface, appends the
+   bubble (blank address → no bubble, app parity), then re-sends that surface's
+   `alignmentOriginalQuery` with `triggered_input_type = align_chip_sel` and NO user text bubble
+   (new `runTextQuery({ suppressUserMessage })`). Called only from `ChatScreen`'s
+   `location_fetched` outcome. Deltas mirrored from android, not fixed: no `parent_message_id`
+   (`TextPromptRequest` has no such field) and no `agentic_chip_*` properties on this path.
+
+   **Closed on react-native (2026-09-02), same reference, same shape.**
+   `useChat`'s `sendLocationSharedQuery` — reached only through the new
+   `ChatAction.SendLocationSharedQuery` — is the only constructor of the `'location'` variant. It
+   marks `share_precise_location` picked on the source surface, appends the bubble (blank address
+   → no bubble, app parity) then the loading placeholder in ONE atomic update, and re-sends that
+   surface's `alignmentOriginalQuery` with `triggered_input_type = align_chip_sel` and no user
+   text bubble (new `sendTextQuery({ staged })`). Dispatched only from `ChatScreen`'s armed
+   `location_fetched` outcome. Same deltas mirrored from android, not fixed: no
+   `parent_message_id`, no `agentic_chip_*` properties, and no endpoint #30 on this path (the
+   chip's text is not the question).
+6. ~~iOS UIKit still renders the 1.0.0 chat.~~ — **stale as of 2026-09-02.** `FarmerChatUIKit`
+   now carries the 2.0.0 chat: `FCUIStreamStatusView`, `FCUIStreamStallHintView` and
+   `FCUIStreamErrorCardView` are configured from `ai.isStreaming` / `ai.isInterrupted` in
+   `FCUIChatBubbleCell`, `FCUIAlignmentSurfaceCell` renders an exclusive surface with its own
+   `Row.alignment` case, `FCUIAlignmentSurfaceView` renders an additive one below a real answer,
+   and (2026-09-02) `FCUILocationBubbleCell` + capability-chip routing landed — see "iOS
+   capability chips" below. Caveat on provenance: `AgenticViews.swift` was still untracked in git
+   when this line was rewritten, so the streaming/alignment part of it belongs to the concurrent
+   UIKit agentic port, not to the capability-chip change; only the capability-chip and location
+   bubble claims here were made by that change. Nothing in UIKit has been run on a device or
+   simulator, like the rest of 2.0.0.
+7. The Home **agentic layout** (grey reading surface, green→transparent gradient band,
+   sunbeams, pinned logo + leaf-flanked header + location pill, and the composer's idle
+   gradient aura) is complete only on android-compose. **react-native** now carries all of it
+   except the sunbeams and the idle aura (both need a blur/shader primitive the package's
+   dependency set does not have) — see "react-native composer + agentic Home wiring" below.
+   **web** carries all of it *including* the idle aura (a conic-gradient ring, already in
+   `theme.ts`) and the band's scroll fade, with two gaps: no sunbeams, and the location pill is
+   not Compose's `HomeLocationPill` (web has no such widget — it reads the district/state/country
+   prefs the location flow writes and otherwise invites sharing) — see "web composer, markdown
+   and agentic Home wiring" below.
+   `InputComposer` itself is wired on android-views too — see "android-views composer wiring".
+8. **Ten** labels remain absent from the server (corrected from "two" on 2026-09-02 against a
+   live stage probe — see the label section above for the full list and why the earlier count was
+   wrong), so those strings fall back to English on every platform until the backend adds them.
+   Every other label used by v2 was verified
    present on endpoint #3 before use.
 9. iOS, react-native and web still carry the **pre-existing v1 label-key mismatch**, so their UI
    does not localize at all. That is unrelated to v2 and unchanged by it.
+
+### android-views composer wiring (2026-09-02)
+
+`InputComposerView` + `fc_view_input_composer.xml` existed but were **orphaned** — referenced by
+nothing, so the class compiled and rendered nowhere. Wired now, gated exactly like Compose's
+`isComposerUi` (`graph.config.enableAgenticChat`, still default **false**):
+
+| | 1.0.0 path (flag off) | 2.0.0 path (flag on) |
+|---|---|---|
+| Chat input | `fcChatInputButtons` (Photo/Speak/Type) + overlay panels | `fcChatComposer`, compact, green700 sheet on `fc_surface_reading` band |
+| Home input | `fcHomeInputButtons` + overlay panels | `fcHomeComposer`, standard metrics, green700 sheet and band |
+| Home header | `GET_STARTED_BY_CLICKING…` / API greeting | `FOR_YOUR_FARM_TODAY` (title only) |
+| List padding | XML `paddingBottom=24dp` | `barHeightPx − navBar inset`, from `onBarHeightChanged` |
+
+Both composers are direct children of each fragment's root `FrameLayout`, at the **same nesting
+level as the `fc_view_input_overlays` include** — deliberately, because that is the position whose
+IME handling is already proven: a sibling of the `fitsSystemWindows="true"` content
+`LinearLayout` sees zeroed dispatched insets, so `InputComposerView.applyImeInsets()` reads
+`ViewCompat.getRootWindowInsets`, the same mechanism as `InputOverlaysController.applyImeInsets()`
+(fix of 2026-09-01, must not regress). The widget's `init` calls `requestApplyInsets` before it is
+attached, where it is a no-op, so both fragments re-request on the root after wiring.
+
+Live behaviour now driven from the fragments: send (`ChatAction.SendFollowUpQuestion` /
+`SendQuestionWithImage`; Home navigates instead), the mic behind the existing `ASR_ENABLED` gate,
+the camera behind the existing permission/deny-count flow, `setBarVisible()` on the Compose rhythm
+`!(isThread && state.isLoading)`, and `AlignmentSurfaceView`'s "type instead" escape hatch, which
+now focuses the composer rather than opening the legacy text panel over it (it would have stacked
+two input surfaces).
+
+**Deviation from android-compose, resolved in favour of the app.** A picked image is **attached**
+to the composer and sent with the typed text (app: `photoUris = listOf(uri)` in both
+`ChatScreen.kt:499/550` and `HomeScreen.kt:338/374`). The android-compose port instead sends /
+navigates the instant the picker returns, which leaves its own `photoUris`, thumbnail strip and
+`onRemovePhoto` permanently dead. Views follows the app source (root CLAUDE.md §1). **Gap:
+android-compose should be brought to the app behaviour** — not done here (v2 compose was out of
+scope for this change).
+
+Still not ported on android-views, all decorative or Home-layout-wide:
+- the composer's idle gradient **aura** (Home-only attention cue);
+- the agentic Home **surface + gradient band + sunbeams + pinned logo/leaf/location-pill header**
+  (`fc_leaf.xml` exists in `res/drawable/` and is referenced by nothing until that lands);
+- Home **voice transcription still navigates straight to chat** rather than filling the composer
+  with the transcript — same as android-compose, so this is not a views-only gap.
+
+Verified: `:farmerchat-android-views:assembleDebug` and `:farmerchat-core:testDebugUnitTest`
+clean. **Not run on a device**, consistent with the rest of 2.0.0. `sample-views` gained an
+`agentic` profile (`adb … -e profile agentic`), without which the composer is unreachable at
+runtime; `sample-compose` has no such profile.
+
+### react-native composer + agentic Home wiring (2026-09-02)
+
+`src/ui/components/InputComposer.tsx` existed but was **orphaned** — no screen imported it, so
+the file typechecked and rendered nowhere (the same defect android-views had). Wired now, gated
+exactly like Compose's `isComposerUi` (`sdk.config.enableAgenticChat`, still default **false**),
+so a host that has not opted in sees the untouched 1.0.0 input surface:
+
+| | 1.0.0 path (flag off) | 2.0.0 path (flag on) |
+|---|---|---|
+| Chat input | `PrimaryInputButtons` (Photo/Speak/Type) + `TextInputOverlay` in a `KeyboardAvoidingView` | `<InputComposer floating isAnchored compact bottomInset={0}>`, brand-green sheet on `surfaceReadingPrimary` |
+| Home input | `PrimaryInputButtons` (sticky) + `TextInputOverlay` | `<InputComposer floating isAnchored>`, brand-green sheet |
+| Home surface | `brand.surfacePrimary` (green) | `content.surfacePrimary` (grey) + gradient band |
+| Home app bar | green + yellow glow | `showBackground={false}` — green and glow come from the band |
+| Home header row | API greeting / `GET_STARTED_BY_CLICKING…` | pinned+fading logo mark + leaf-flanked `FOR_YOUR_FARM_TODAY` + location pill |
+| Home sticky slot | Photo/Speak/Type tiles | kept but empty (Compose renders `Spacer(0.dp)`) |
+| In-feed `FeedHeader` | rendered | skipped (the top-of-feed `SectionHeader` already carries the title) |
+| Card tap | `FetchImageStatement` (#13) → pre-generated answer | **skips #13**; sends `question_text ?? title` into Chat as a plain text query with `homeStatementId` |
+
+Behaviour ported alongside the visuals: send (`SendFollowUpQuestion` / `SendQuestionWithImage`;
+Home navigates instead), `visible={!(uiState.kind === 'thread' && state.isLoading)}` on Chat so
+the bar slides off while an answer generates, the `CHAT_ICON_CLICKED` (`Icon: 'Text'`) event on
+focus gain and (`Icon: 'Image'`) on camera — both existing event names, no new ones.
+
+**IME:** the composer owns its own keyboard handling (`Keyboard` listeners, iOS-only lift; on
+Android the host activity's `windowSoftInputMode="adjustResize"` already resizes the window). It
+is therefore deliberately **not** wrapped in Chat's existing `KeyboardAvoidingView` — doing so
+would double the bottom inset, the RN counterpart of the Compose `imePadding()` double-inset
+note. The `KeyboardAvoidingView` still wraps `TextInputOverlay` on the 1.0.0 path, unchanged.
+
+**Layout model deviation (documented in `InputComposer.tsx`'s own header, not new here):** the RN
+composer is a bottom **flow** element, not a `fillMaxSize` overlay, because `FloatingFadeHeight`
+is 0 and the floating wrapper paints `fadeColor` opaquely, so nothing behind it is ever visible.
+Consequence: Compose's `contentPadding = composerBarHeight(floating = true)` reserve is **not**
+applied on either list — the list is already shortened by the bar, and reserving it again would
+double the gap. `composerBarHeight()` is therefore exported but currently called by no RN screen.
+
+**Deviation from android-compose, resolved in favour of the app** (the same call android-views
+made): a picked image is **attached** to the composer and sent with the typed text (app:
+`photoUris = listOf(uri)`, `ChatScreen.kt:499/550`, `HomeScreen.kt:338/374`). android-compose
+still sends/navigates the instant the picker returns, leaving its own `photoUris`, thumbnail strip
+and `onRemovePhoto` permanently dead. Gap on android-compose, unchanged here.
+
+**Terms-of-use dialog.** `TermsOfUseDialog.tsx` mirrors the Compose component; its accept action
+is a plain `onAcceptAndContinue` host callback (root CLAUDE.md §6 — the app's `AnalyticsManager`
+call has no analogue in an SDK package). Reached the same way Compose reaches it: `useHome` gained
+`HomeState.farmerchatTermsOfUse` + `HomeAction.FetchPrivacyPolicy` (#4, fetched on every Home
+entry) + `HomeAction.AcceptTerms` (#7, best-effort); `FarmerChatScreen` gained `'termsofuse'`
+(Android's `SCREEN_TERMS_OF_USE` key), which `AppNavigator.openScreenTarget` routes to Home and
+then raises through `AppNavGraph` into `HomeScreen`'s `openTermsOfUseRequested` prop. The open
+request waits up to 5 s for the URL, then toasts `UNABLE_TO_LOAD_LEGAL_LINKS` and consumes itself.
+
+Six labels added to `core/labels.ts`, all copied verbatim from the Android core `Labels.kt`
+(`SET_YOUR_LOCATION`, `LOCATION_FOUND`, `CHANGE`, `ALLOW_LOCATION_IN_SETTINGS`,
+`ACCEPT_AND_CONTINUE`, `YOUR_LOCATION`) — no invented keys.
+
+Not ported on react-native, all because the dependency set has no gradient / shader / blur / SVG
+primitive (no `react-native-svg`, no `expo-linear-gradient`) and the asset set is a fixed PNG list:
+- the composer's idle **aura** and placeholder **shimmer** (already documented in
+  `InputComposer.tsx`'s header before this change);
+- the Home **sunbeams** (Compose blurs beam paths into cached offscreen bitmaps);
+- the header's green→transparent band is a **24-step stacked-alpha ramp** rather than a real
+  vertical gradient (a vertical ramp is faithfully steppable; the rotating sweep aura is not);
+- the leaf divider in `SectionHeader` tiles 4x4 rounded **pips** instead of the `fc_leaf` drawable;
+- the location pin in `LocationChatBubble` / the Home pill is **drawn from Views** (no
+  `Icons.Filled.LocationOn`, no `fc_ellipse_icon` raster).
+
+Location-pill deviations forced by the RN core (not cosmetic):
+- the pill drives the **widget** flow — the silent one, which is the behaviour the pill wants.
+  (`useLocationPrompt` had no `LocalContext` source at all when the pill was written; the
+  capability-chip work below added `'localContext'`, and the pill deliberately keeps `widget`);
+- **no Blocked state**: there is no location permission deny-count key in `sessionStore.ts`
+  (camera/mic only) and inventing one is out of bounds (root CLAUDE.md §2), so a blocked
+  permission surfaces through the shared prompt host's Recovery / GPS-error path;
+- the place name comes from `USER_DISTRICT → USER_STATE → USER_COUNTRY_NAME` (all filled by #16)
+  because the RN store has no `APPROX_LOCATION_NAME` key;
+- no haptics and no width-morph spring.
+
+Also corrected: the comment on `ChatAction.SelectAlignmentChip` in `state/useChat.ts` claimed the
+Android core "has the field but nothing that fills it" and that the action was an RN-only
+addition. Stale — core fills it in `ChatViewModel.recordAlignmentPick()` (:906) as of the fix
+recorded under "Three defects the parallel build found in my own core" above.
+
+Structural deviation worth knowing: Compose keeps the Home `stickyHeader` slot in agentic mode
+and renders `Spacer(0.dp)` in it, because its entry is a keyed DSL item. RN drops the row
+entirely instead — a zero-height cell listed in `stickyHeaderIndices` is **not** a no-op (it is
+still measured and pinned, and it rides the same viewability path that drives `MarkImageViewed`),
+so `stickyIndex` comes back `-1` and `stickyHeaderIndices` is left `undefined`. Nothing is sticky
+in agentic mode either way.
+
+Verified: `npx tsc --noEmit` clean in `versions/v2/react-native/packages/farmerchat-react-native`
+(exit 0, no output). The package has no test runner and none was added. **Not run on a device or
+in Expo Go**, consistent with the rest of 2.0.0.
+
+**Unmeasured on device, called out explicitly:** the agentic Home header's pin/fade and the
+gradient band's fade are driven from `onScroll` (`scrollEventThrottle={16}`) writing one
+`Animated.Value` with `setValue`, consumed by exactly three interpolations (header opacity,
+header `translateY`, band opacity) — the band's 24 fade rows share that one parent opacity.
+Compose reads `firstVisibleItemScrollOffset` in the draw phase and pays nothing per frame; the RN
+equivalent is a non-native-driven JS update per scroll event. Correct by construction, but its
+cost on a low-end Android device has **not** been measured, and cannot be without a device run.
+
+### react-native capability chips (2026-09-02)
+
+The defect: **every** alignment chip sent its own text as the question, so the two CAPABILITY
+surfaces did nothing — `gps-prompt` never started the location flow and `upload-photo` never
+opened a picker. A capability chip must invoke a capability and send only the OUTCOME. Ported
+from the android reference (`AlignmentChip` companion constants, `sendLocationSharedQuery`,
+Compose's `handleAlignmentChip` + armed collector, `CapabilityChipTest`).
+
+- **The routing rule lives in core, not the screen.** `core/types.ts` gained `AlignmentChipWire`
+  (`ACTION_SELECT = "invoke"` — *not* `"select"`; `VALUE_SHARE_LOCATION =
+  "share_precise_location"` — *not* the commented-out `share_location`; `VALUE_TAKE_PHOTO`,
+  `VALUE_CHOOSE_FROM_GALLERY`, `VALUE_NOT_NOW`), `AlignmentChipRoutes` and
+  `routeAlignmentChip(kind, chip)`. Android duplicates the `when` per flavour and tests a local
+  mirror; RN exports one function so the screen and the tests exercise the SAME code. A
+  capability fires only when kind, `action` and `value` all agree.
+- **Both chip sites route through it.** `ChatScreen.handleAlignmentChip` is called from the
+  exclusive surface's `onChipPress` *and* the additive one's `onAlignmentChipPress` inside
+  `AiBubble`. It is a plain function in the render body, not a `useCallback([])`, because it
+  reads `locationPrompt.state` live — a memoized closure would freeze the Idle guard at mount.
+- **The producer.** New `ChatAction.SendLocationSharedQuery` → `useChat.sendLocationSharedQuery`,
+  the only constructor of the `'location'` `ChatMessage` variant (closes the producer gap in
+  item 5 above and the docs/05 question). Validates `isLoading` + a non-blank
+  `alignmentOriginalQuery` BEFORE mutating, so a bail can never leave an orphan placeholder
+  spinning; then one atomic update marks `share_precise_location` picked, appends the bubble
+  (blank address → no bubble) and the placeholder; then `sendTextQuery({ staged })` sends the
+  ORIGINAL query with `triggered_input_type = align_chip_sel` and appends no user bubble. A retry
+  of that send passes `staged: null` with the bubble id as its anchor, so it re-asks with a fresh
+  placeholder and never a second location bubble.
+- **The address.** Assembled as the app's `composeResolvedAddress` does: best place name, state,
+  country — blanks dropped, de-duplicated, `", "`-joined. RN has no `APPROX_LOCATION_NAME` key
+  (android writes it from `user_profile.display_address`, which this store does not model), so
+  `USER_DISTRICT` stands in for it — the same substitution the Home location pill already
+  documents. A **guest** has none of the three written, so the address is blank and no bubble is
+  appended: the app-parity branch, not a failure.
+- **The location flow.** `useLocationPrompt` gained the `'localContext'` source +
+  `triggerFromLocalContext()` (android `LocationTriggerSource.LocalContext` /
+  `triggerFromLocalContext`) and the terminal `Continue { source, reason }` / `Cancel { source }`
+  events android core already had. `ChatScreen` subscribes for the life of the screen but stays
+  inert until armed with the source message id — held in a **ref**, since the listener is
+  registered once and a `useState` read would be stale forever — so an outcome belonging to Home
+  or Settings is ignored. It only starts when the machine is `Idle` (Compose's guard).
+  `LocationPromptHost` needed no change: its `silentDuringFetch` excludes only `'widget'`, so
+  `localContext` inherits the interstitial + fetch overlay exactly like android.
+- **Every terminal exit settles the armed caller, and settling is not succeeding** (android's
+  later fix, ported). All six non-Idle states now settle: `Interstitial` / `RequestPermission` /
+  `RequestEnableGps` / `FetchingLocation` exit through `skip` (the host's secondary, close and
+  `onRequestClose`), `Recovery` and `Error` through `dismissError` — their primary buttons
+  (`shareLocation` / `retryFromRecovery`) re-enter the flow rather than ending it, so
+  `dismissError` is their only TERMINAL exit — plus a permission denial that lands back on Idle,
+  and the fetch itself. Both terminal actions emit `Cancel` (what Compose's own error-card
+  buttons do via `onSkipClicked`; android's `dismiss()` emits `Continue("dismissed")` instead —
+  equally non-success). Without an emission the chat surface would wait forever and the blocking
+  question would never be answered.
+- **…but only when a flow was actually running.** `skip` / `dismissError` capture the state
+  before clearing it and emit only if it was not already `Idle` — android's `wasActive` guard,
+  and not optional here: `AppNavGraph`'s logout handler calls `dismissError()` on an idle
+  machine, which would otherwise hand an armed chat surface a decline the farmer never
+  triggered. A `stateRef` mirrors the machine synchronously (React state cannot be read back
+  after a `set`; android reads its `_state` StateFlow). The armed id is likewise cleared
+  *before* dispatching, so a fetch that lands after a skip is dropped rather than double-sent. The success rule therefore is NOT an inline `reason ===
+  'location_fetched'`: `core/locationOutcome.ts` (the RN counterpart of
+  `LocationPromptModels.kt`) owns the event union, `LOCATION_OBTAINED_REASONS`
+  (`location_fetched`, `location_fetched_pending_api`, `post_settings_preference_exists` —
+  verbatim from core; RN emits only the first), `isLocationObtained()` and
+  `isTerminalLocationOutcome()`. It is deliberately a module with **no runtime imports**, unlike
+  `useLocationPrompt` (`expo-location` + React), so the rule is testable out-of-tree at all.
+- **Decline / cancel / failure** send `fc_v2_app_label_location_permission_declined` (real key,
+  app `Labels.kt:222`, **verified present on endpoint #3**, English fallback "Continue without
+  sharing my location" kept as the usual safety net) as an ordinary follow-up, so the blocking question still resolves. Added
+  to `core/labels.ts` verbatim — no invented key.
+- **RN adaptation, more complete than android** (the same call web made): android's error /
+  recovery `dismiss()` emits no event, leaving a chat surface armed forever; RN settles both
+  `skip` and `dismissError` as a `Cancel`. Since this host also uses `dismissError` for the
+  Recovery sheet, RN answers a blocking question android would leave hanging.
+- **Photo chips** call `captureImageFromCamera` / `pickImageFromGallery` — extracted from
+  `PhotoInputSheet` so the picker opens **directly** instead of re-asking Camera-or-Photos, which
+  the chip already answered. The result follows Compose's launchers: in composer mode it is
+  ATTACHED (thumbnail + typed question); on the 1.0.0 surface it sends immediately with an empty
+  question. Neither photo chip is marked picked (android does that for location only).
+- **Also corrected:** the `AlignmentChip.action` doc comment in `core/types.ts` said `"select"`
+  invokes a capability — the wrong string, and precisely the trap these constants exist to avoid.
+- **Not ported.** The app's chat-history `message_type_id 12 → location_shared` mapping stays
+  out: its own `TODO(location-history)` says the type id and address field are unconfirmed
+  placeholders. Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
+  (the SDK's `TextPromptRequest` has no such field) and no `agentic_chip_*` analytics properties
+  on the location path.
+
+Verified: `npx tsc --noEmit` clean (exit 0, no output) in
+`versions/v2/react-native/packages/farmerchat-react-native`; **40 assertions** in 14 cases
+mirroring android's `CapabilityChipTest` (routing rule + literal wire strings) and
+`LocationOutcomeTest` (obtained-vs-settled), run out-of-tree — `node capabilityChip.test.ts` on
+Node 26's native type stripping, importing the real `routeAlignmentChip` from `src/core/types.ts`
+and `isLocationObtained` from `src/core/locationOutcome.ts`, so the tested rule and the shipped
+rule cannot diverge — 14 cases passed, 0 failed. The package still has no test runner and none
+was added. **Not run on a device or in Expo Go**, and the wire itself still cannot be exercised.
+
+### web composer, markdown and agentic Home wiring (2026-09-02)
+
+Five gaps closed in `versions/v2/web/packages/farmerchat-web`. Three of them were **orphaned or
+dead code that compiled** — the same defect class android-views and react-native hit.
+
+**1. `alignmentSelectedValues` was never written (web copy of core defect #1).**
+`state/useChat.ts` declared it, initialised it to `[]`, and `ChatScreen.tsx` read it at two
+render sites — but nothing appended, so the selected/locked chip treatment could never trigger.
+Fixed as a pure reducer, `recordAlignmentPick` in `core/alignment.ts`, called from a new
+`ChatActions.selectAlignmentChip(messageId, kind, chip)`.
+
+Two deliberate differences from the Kotlin, both because web's `sendFollowUpQuestion` is *shared*
+by the alignment chips, the related-question chips **and** the text composer:
+
+- The action takes the surface's own `messageId`, so the match is structural. Recording inside
+  `sendFollowUpQuestion` (as Android can, because its action carries only a question string and it
+  re-checks that string against the last surface's chips) would mark a chip as chosen whenever a
+  farmer happened to type a matching string.
+- The pick is stored **verbatim, never trimmed**. `AlignmentSurface` compares it against
+  `chip.value` / `chip.label` untrimmed, so the previous call site's `.trim()` would have recorded
+  a string that can never match — the chip would stay unhighlighted. Pinned by two assertions.
+
+`agentic_chip_type` (`AlignmentKind.analyticsType`) now rides the **existing**
+`SEND_QUERY_INITIATED` event, and only for a chip tap, so ordinary sends keep their 1.0.0 payload.
+No new event name (root CLAUDE.md §2).
+
+**2. `InputComposer.tsx` + `composerLayout.ts` were orphaned** — they typechecked and no screen
+imported them. Wired into both screens, gated exactly like Compose's
+`isComposerUi = config.enableAgenticChat` (still default **false**), so a host that has not opted
+in sees the untouched 1.0.0 input surface:
+
+| | 1.0.0 path (flag off) | 2.0.0 path (flag on) |
+|---|---|---|
+| Chat input | `PrimaryInputButtons` + `TextInputOverlay` | `<InputComposer floating compact>`, slides out while an answer generates |
+| Home input | `PrimaryInputButtons` (sticky) + `TextInputOverlay` | `<InputComposer floating showAura>` |
+| Home surface | green | grey reading surface + gradient band |
+| Home app bar | green | transparent — green and glow come from the band |
+| Home sticky slot | Photo/Speak/Type | not rendered |
+| In-feed `FeedHeader` | rendered | skipped (top-of-feed header already carries the title) |
+| Card tap | #13 `fetchImageStatement` → pre-generated answer | **skips #13**, sends the card question as a plain text query |
+| Scroll padding | none | `composerBarHeight({floating:true})`, so the last card clears the bar |
+
+Details worth recording:
+
+- `onSend` is `(text) => void`, so the attachment is parent state (Compose's `photoUris`).
+  `ComposerAttachment` gained an optional `file`, since the web needs both the object URL (preview)
+  and the `File` (payload) where Compose needs only a `Uri`.
+- `PhotoInputOverlay` gained `attachOnly`. In composer mode it hands the image straight back as an
+  attachment and the composer field owns the question — asking for the question twice would be a
+  dead end.
+- The alignment escape hatch ("Type or say it.") previously opened the very overlay the composer
+  replaces. It now focuses the composer field in composer mode (Compose calls `focusTextInput`),
+  via the existing `onReady` imperative handle.
+
+**3. `markdown.tsx` → v2.** Parsing moved to a new pure `ui/components/markdownParse.ts` (no DOM,
+no React) so it runs under the framework-less Node test runner; `markdown.tsx` is now render-only.
+Added from the Kotlin: GFM tables (2-line separator look-ahead, per-column alignment, 1–2 columns
+weighted / 3+ columns scrollable with a right-edge fade, alternating rows), `---`/`***`/`___`
+dividers, header levels clamped 1..3, and the 24/20/16/12/5px block-pair rhythm
+(`blockTopSpacing`). The regex tokenizer was replaced by a recursive scanner mirroring
+`appendEmphasis` / `findItalicClose`: the old `\*[^*\n]+\*` **structurally could not** match
+`*italic **bold** italic*`, and an unmatched marker used to eat the rest of the line.
+
+Two supersets of the Kotlin kept deliberately (§3 no-regression — parity here is additive):
+fenced code, blockquotes, links and inline code spans have no Compose counterpart but web has
+rendered them since 1.0.0. Two web-only notes: list items are parsed one block each (for the
+rhythm) then regrouped into `<ul>`/`<ol>` by the renderer so the list keeps its screen-reader
+semantics, which Compose does not need since it draws its own bullets; and a `href` containing
+parentheses is still unsupported (the pattern stops at the first `)`), which is unchanged 1.0.0
+behaviour. Non-`http(s)` schemes are never linkified.
+
+**One visible rendering change, taken deliberately for parity.** 1.0.0 joined consecutive
+non-blank lines into a single `<p>` separated by `<br>`; Compose emits one `Paragraph` block per
+non-blank line, and the 20px consecutive-paragraph rhythm is defined on that. Web now matches
+Compose, so **hard-wrapped** prose renders with 20px between each wrapped line rather than as one
+tight block. In practice the API sends a paragraph as one long line separated by blank lines, which
+is unaffected; history messages and pre-generated statements have not been checked against real
+payloads, so this is the change to look at first if wrapped text ever looks too airy.
+
+**4. `LocationChatBubble`.** New `ui/components/LocationChatBubble.tsx` plus a `'location'`
+variant on `ChatMessage`, rendered right-aligned from `ChatScreen`. Fixed 290x184, three corners
+at 20px with the bottom-right sharp, tinted map header, caption + bold address footer. The pin and
+its ellipse are inline SVG because the package ships no image assets. **The variant is never
+constructed — matching android, where `grep 'LocationMessage('` finds no constructor either.** No
+appender was invented; see item 5 of "Still to do".
+
+**Update (2026-09-02) — the variant is now produced.** The android reference gained
+`ChatViewModel.sendLocationSharedQuery`, so web ported it: `useChat.sendLocationSharedQuery` is the
+one and only constructor of the `'location'` variant, driven from `ChatScreen`'s capability-chip
+routing (item 4 of "Still to do"). Web-specific notes:
+
+- **Address assembly.** The app joins approximate-location-name → state → country, blank parts
+  dropped, de-duplicated, `", "`-joined. Web has no `APPROX_LOCATION_NAME` key — android writes it
+  from `user_profile.display_address`, which web's `GetLocationResponse` does not model — so
+  `USER_DISTRICT` stands in for it, the same substitution `HomeScreen`'s location pill already
+  documents. State/country come from `USER_STATE` / `USER_COUNTRY_NAME`.
+- **The location flow.** `useLocationPrompt` gained `triggerFromLocalContext(onOutcome)` (android
+  `LocationPromptManager.triggerFromLocalContext`, source `'chat'` = `LocationTriggerSource.
+  LocalContext`) and `cancelPendingOutcome()`. The outcome callback is armed per tap, so an outcome
+  from Home's weather flow or Settings can never land on a chat surface, and it is dropped when
+  `ChatScreen` unmounts. Deliberately no `hasKnownLocation()` short-circuit: the chip asks for a
+  fresh fix. It no-ops unless the machine is `Idle` (Compose's guard).
+- **Web adaptation, more complete than android.** Android's error/recovery `dismiss()` emits no
+  event, leaving a chat surface armed forever; web settles `skip` and `dismissError` as a cancel,
+  so the blocking question always gets an answer — the decline label
+  `fc_v2_app_label_location_permission_declined` (real key, app `Labels.kt:222`, **not served by
+  endpoint #3 yet**, English fallback "Continue without sharing my location") sent as an ordinary
+  follow-up.
+- **Photo chips.** `take_photo` / `choose_from_gallery` click hidden file inputs directly rather
+  than opening the Photo overlay's source picker. The picked file follows Compose's launchers: in
+  composer mode it is ATTACHED (thumbnail + typed question); otherwise it sends immediately with an
+  empty question.
+- **Not ported.** The app's chat-history `message_type_id 12 → location_shared` mapping stays out:
+  its own `TODO(location-history)` says the type id and address field are unconfirmed placeholders.
+
+**5. `TermsOfUseDialog` + agentic Home visuals.** New
+`ui/components/TermsOfUseDialog.tsx`; `useHome` gained `farmerchatTermsOfUse`, `fetchPrivacyPolicy`
+(#4) and `acceptTerms` (#7), with the fetch on **every** Home entry (app parity — an open request
+can arrive before it lands, so Home waits up to 5 s for a non-blank URL, then toasts and consumes
+the request). The trigger is the existing public `openScreen('termsofuse')`, mirroring
+android-compose's `SCREEN_TERMS_OF_USE`, because the app's trigger is a Plotline card CTA and §6
+bans Plotline. No WebView on the web, so the document loads in a sandboxed `<iframe>` — the same
+mechanism `LegalContentModal` already uses. No Plotline ToS event is emitted; only the existing
+`TERMS_OF_USE_OPENED`.
+
+**Gap: `openScreen('termsofuse')` is a no-op in `CHAT_ONLY`.** That mode has no Home (docs/07 C3 —
+`routeFromSplash` lands straight in chat and `ChatScreen.onClose` exits the SDK instead of popping
+to Home), and Home is what renders the dialog. Rather than let `replaceAll` blow the chat away and
+strand the user on an excluded screen, the request is ignored — the same silent-ignore the
+neighbouring `settings` / `chatHistory` cases use when their config flag is off. A CHAT_ONLY host
+needing the terms must present them itself. Android has the same shape of hole (its
+`SCREEN_TERMS_OF_USE` also routes via Home) but was not audited for it here.
+
+Home visuals ported: grey reading surface, green→transparent band (solid to 58.8% of a band 36.6%
+of the surface tall) with the yellow glow and a fade over the first 215px of scroll, centred 42px
+logo mark, leaf-flanked header, location pill, centred greeting. **Two gaps:** the decorative
+swaying `Sunbeams` are not ported, and the location pill is not Compose's `HomeLocationPill` (web
+has no such widget — it reads the district/state/country prefs the location flow writes, and
+otherwise invites sharing).
+
+**Verified:** `npx tsc --noEmit` clean, `npx tsc -p tsconfig.test.json` clean, `npx vite build`
+clean (59 modules), `npm test` **138 assertions** across 4 files — the two new ones,
+`test/alignmentPick.test.ts` (11) and `test/markdown.test.ts` (42), were added to the `test`
+script. **Not run in a browser** — no screen has been rendered, so all of the above is build- and
+test-verified only, like the rest of 2.0.0.
+
+### iOS capability chips (2026-09-02)
+
+The same defect the android / react-native / web sections describe, fixed on **both** iOS
+flavours: every alignment chip sent its own text as the question, so `gps-prompt` never started
+the location flow and `upload-photo` never opened a picker. A capability chip must invoke a
+capability and send only the OUTCOME. Ported from the android reference (`AlignmentChip`
+companion constants, `sendLocationSharedQuery`, Compose's `handleAlignmentChip` + armed
+collector, `CapabilityChipTest`, `isLocationObtained()`). iOS additionally had **no `ChatMessage`
+location variant at all**, so there was nothing to render a shared location with.
+
+- **The routing rule lives in Core, not the screens.** `AlignmentChip` gained the five wire
+  constants — `actionSelect = "invoke"` (*not* `"select"`), `valueShareLocation =
+  "share_precise_location"` (*not* the commented-out `share_location`), `valueTakePhoto`,
+  `valueChooseFromGallery`, `valueNotNow` — plus `capability(for kind:) -> AlignmentCapability?`
+  and the `AlignmentCapability` enum (`shareLocation` / `takePhoto` / `chooseFromGallery`). Like
+  react-native and web, and unlike android (which duplicates the `when` per flavour and tests a
+  local mirror), both flavours and the tests exercise the SAME function. A capability fires only
+  when kind, `action` and `value` all agree; everything else — `not_now` included — returns nil
+  and stays on the plain follow-up path. The stale `AlignmentChip.action` doc comment claiming
+  `"select"` invokes a capability (the exact trap these constants exist to avoid) was corrected.
+- **The location variant.** New `ChatMessage.location(LocationMessage(address:id:))`, id-prefixed
+  `location_` alongside `user_` / `ai_` / `loading_`. Rendered right-aligned in **both** flavours:
+  `FCLocationChatBubble` (SwiftUI, `ChatComponents.swift`) and `FCUILocationBubbleCell` (UIKit,
+  `ChatCells.swift`, with its own `Row.location` case and cell registration). Fixed 290x184, three
+  corners at the `bubbleCornerRadius` knob with the bottom-trailing tail sharp, green-at-16% map
+  band, centred pin over a soft ellipse, caption + bold address at the `messageFontSize` knob —
+  the same two knobs the user/AI bubbles honour. The pin is an SF Symbol and the ellipse is drawn
+  (`UIBezierPath` / `Ellipse()`) because neither package ships image assets, the same substitution
+  web made with inline SVG. `FCUIChatBubbleCell` handles `.location` defensively (right-aligned
+  address text) so a routing regression degrades instead of rendering a blank bubble.
+- **The producer.** New `ChatAction.sendLocationSharedQuery(sourceMessageId:address:)` →
+  `ChatViewModel.sendLocationSharedQuery`, the only constructor of the variant. Guards `isLoading`
+  and a non-blank `alignmentOriginalQuery` BEFORE mutating (a bail after the append would orphan
+  the bubble with no answer coming); then marks `share_precise_location` picked on the source
+  surface — `recordAlignmentPick` cannot, since the chip's text is never sent, so there is nothing
+  for it to match on — appends the bubble (blank address → **no bubble**, app parity) and calls
+  `sendQuestionInternal(..., triggeredInputType: "align_chip_sel", replaceExistingUserBubble:
+  true)`, which suppresses the user bubble and appends its own placeholder after the location
+  bubble. A retry of that send reuses the same path, so it re-asks with a fresh placeholder and
+  never a second location bubble. `sourceMessageId` is the raw `AiResponse.id`, not the prefixed
+  `ChatMessage.id`; UIKit's cell registrations hand out the prefixed one, so both flavours unwrap
+  via `messagesById[...]` first.
+- **The address.** The app composes `display_address, geography_level2_name, country_name`. iOS's
+  `#11` response (`GetLocationResponse`) carries `district / state / country`, and the three prefs
+  it writes (`USER_DISTRICT` / `USER_STATE` / `USER_COUNTRY_NAME`) are the only location prefs this
+  SDK has — **no `fc_sdk_` key was invented** (§2), so the address is those three, blanks dropped,
+  de-duplicated, `", "`-joined. The same substitution react-native documents for its missing
+  `APPROX_LOCATION_NAME`. A **guest** has none of them written, so the address is blank and no
+  bubble is appended: the app-parity branch, not a failure.
+- **The location flow.** `LocationPromptSource` gained `.localContext` and
+  `LocationPromptManager` gained `triggerFromLocalContext()` (android
+  `LocationTriggerSource.LocalContext` / `triggerFromLocalContext`). `events` is a Combine
+  `PassthroughSubject` — **confirmed** to multicast to every subscriber, so unlike android (which
+  had to convert a single-consumer channel) no plumbing change was needed; it has **no replay**,
+  which is exactly why both flavours subscribe for the life of the screen and gate on an arming
+  token (`pendingLocationSourceId`) rather than subscribing on the chip tap. An outcome belonging
+  to Home or a widget trigger is therefore ignored. The flow starts only when the machine is
+  `.idle` (Compose's guard); a nil UIKit nav controller (no host mounted) is a no-op — neither
+  flavour ever falls back to sending the chip's text, which is the defect being replaced.
+- **iOS-only manager change, matching android's later `dismiss()` fix.** iOS's manager emitted
+  **nothing** on the decline paths: `runLocationFlow` parks in `.recovery` (permission denied) or
+  `.error` (GPS off / fetch failed) and returns, and `dismissError()` just called `reset()` — so an
+  armed chat surface would have hung forever and the blocking question never resolved, the same
+  hole android's `dismiss()` had. `LocationPromptEvent` is now `locationUpdatedFromWidget` /
+  `locationSaved(source:)` / `skipped(source:)`, and `dismissError()` emits the terminal `skipped`
+  that covers gpsUnavailable, permission-denied-recovery and fetch-failed alike. `.recovery`
+  deliberately stays non-terminal (`onAppForeground()` can re-run the flow out of it);
+  `locationUpdatedFromWidget` stays payload-free because `FarmerChatView` compares it with `==`;
+  `reset()` stays silent because it is teardown, like android's `clearState()`. Emissions read
+  `source` **before** `reset()` and happen at the terminal call sites, never inside `reset()` —
+  `saveLocation` already calls `reset()` before emitting, so a cancel inside `reset()` would fire
+  on every success. `dismissError()` carries android's `wasActive` guard for the same reason: a
+  dismiss after a success must not send a second, contradictory event.
+- **The success predicate is in Core, shared by both flavours**, as android's
+  `LocationPromptEvent.isLocationObtained()` is: `isLocationObtained` plus `terminalSource`, and
+  the flavours' collector is `guard event.terminalSource == .localContext` then
+  `if event.isLocationObtained`. **No reason-string set was added, deliberately.** Android needs
+  `LOCATION_OBTAINED_REASONS` because its `Continue` case is overloaded — `dismiss()` emits
+  `Continue(reason = "dismissed")`, so `Continue` alone stopped meaning success. iOS has no
+  `reason` field and no overloaded case: `.locationSaved` is the single success emission and
+  `.skipped` the single settled-without-location one, so the case itself carries the meaning and a
+  `reason` would be a wire-adjacent field with no discriminating power (§2). Android's two extra
+  reasons (`location_fetched_pending_api`, `post_settings_preference_exists`) belong to the app's
+  post-Settings recovery paths that no SDK ports, and its own comment says the SDK only ever emits
+  `location_fetched`.
+- **Both hosts show the overlay for the new source.** `LocationPromptHostView` (SwiftUI) and
+  `FCUILocationPromptHost` (UIKit) gated their permission/fetch loading overlay to
+  `source == .weather`, which would have put **zero pixels** on screen for a chip-triggered flow;
+  `.localContext` now shares it. Compose's host keeps the interstitial for every source; widget /
+  deeplink stay silent by design.
+- **Decline / cancel / failure** send `fc_v2_app_label_location_permission_declined` (real key,
+  app `Labels.kt:222`, **verified present on endpoint #3**, English fallback "Continue without
+  sharing my location" kept as the usual safety net) as an ordinary follow-up, so the blocking question still resolves. Added
+  verbatim to `AgenticLabels` alongside `fc_v2_app_label_your_location` for the bubble caption —
+  no invented key. (Both localize; the surrounding v1 short keys still do not — item 9 above.)
+- **Photo chips** open the picker **directly** — SwiftUI sets `showCamera` (after
+  `FCCameraPermission.request()`) or `showGallery`, skipping the Camera-or-Photos sheet the chip
+  already answered; UIKit presents a `UIImagePickerController` with the explicit `sourceType`,
+  falling back to `.photoLibrary` when the camera is unavailable (simulator). Neither photo chip
+  is marked picked (android does that for location only).
+- **Not ported.** The app's chat-history `message_type_id 12 → location_shared` mapping stays out:
+  its own `TODO(location-history)` says the type id and address field are unconfirmed
+  placeholders. Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
+  (`TextPromptRequest` has no such field, so no chip send carries it) and no `agentic_chip_*`
+  analytics properties (iOS's analytics props are a flat dictionary with no chip
+  type/value/label/status fields), so the location send reports as an ordinary text query —
+  `triggered_input_type` IS `align_chip_sel`.
+- **Also corrected:** the `alignmentSelectedValues` doc comment claimed the field is never
+  populated on either platform. `recordAlignmentPick` has populated it since the alignment-pick
+  fix; `sendLocationSharedQuery` is now its second writer.
+
+**Verified** (exact commands, `.build` deleted first so none is an incremental no-op):
+
+```
+versions/v2/ios/FarmerChatCore    $ swift build                        → Build complete! (8.70s)
+versions/v2/ios/FarmerChatCore    $ swift test                         → 79 tests, 0 failures
+SIM=$(xcrun --sdk iphonesimulator --show-sdk-path)
+versions/v2/ios/FarmerChatCore    $ xcrun swift build --sdk "$SIM" \
+    -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator            → Build complete! (7.34s)
+versions/v2/ios/FarmerChatSwiftUI $ xcrun swift build --sdk "$SIM" \
+    -Xswiftc -target -Xswiftc arm64-apple-ios16.0-simulator            → Build complete! (10.40s)
+versions/v2/ios/FarmerChatUIKit   $ xcrun swift build --sdk "$SIM" \
+    -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator            → Build complete! (8.92s)
+```
+
+The 79 (up from 60) include two new files mirroring android's tests: `CapabilityChipTests` (12
+cases — the five literal wire strings, the decline label key + English fallback,
+`align_chip_sel`, the routing rule in both directions, a `CaseIterable` guard that every
+`AlignmentCapability` is reachable, the `location_` id prefix) and `LocationOutcomeTests` (7
+cases — android's `LocationOutcomeTest`: saved → obtained, skipped/dismissed → NOT obtained,
+widget update → neither obtained nor terminal, exactly one case is a success, the
+terminal-source filter, and the flavours' full decision table). **Not run on a device or
+simulator** — build- and test-verified only, like the rest of 2.0.0.
 
 ## Known intentional gaps (docs/03 adaptation table)
 - Play in-app update/review: all platforms ⛔ (host concern).

@@ -119,13 +119,34 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | `guestApiKey` | `string` | built-in | overrides the guest-init API key |
 | `appearance` | `'day'\|'night'\|'auto'` | `'auto'` | theme mode |
 | `languageCode` | `string` | – | preselect a language, skips the language screen |
-| `defaultCountryCode` | `string` | `'IN'` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
-| `defaultStateCode` | `string` | `'Karnataka'` | state/region paired with `defaultCountryCode`; endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages |
+| `defaultCountryCode` | `string` | `''` (derive) | OPTIONAL override for the country used in the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. **Leave it unset and the SDK derives the country from the device locale**, exactly as the app does. Set it only to pin the SDK to one region. |
+| `defaultStateCode` | `string` | `''` (omitted) | OPTIONAL `state` param for endpoint #2. Safe to leave empty: the parameter is inert on every environment — `Karnataka`, `KA`, blank and omitted all return the identical set (verified live 2026-09-03). |
+| `defaultLatitude` | `number` | `0` (derive) | OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a location. **Leave it at `0` and the SDK uses the device locale's country centroid**, as the app does on IP-geolocation failure. |
+| `defaultLongitude` | `number` | `0` (derive) | see `defaultLatitude` |
 | `enableVoice` | `boolean` | `true` | Speak input + Listen TTS |
 | `enableImages` | `boolean` | `true` | Photo queries |
 | `enableWeather` | `boolean` | `true` | weather chip + advice CTA |
 | `onEvent` | `(name, props) => void` | – | analytics fan-out |
 | `onSessionExpired` | `() => void` | – | refresh + guest fallback both failed |
+
+### Fallback location (no hardcoded city)
+
+Endpoint #12 (home feed) stays empty until the backend has a resolved location, and it resolves
+one ONLY from coordinates — a country name alone is rejected. When the Google `geolocate` call
+fails (or no `geoApiKey` is configured), the SDK does what the app does: it derives the **device
+locale's country** and uses that country's centroid from a 247-entry table ported verbatim from
+the app's `CountryLatLngProvider`, accepting it only when `lat != 0 && lng != 0`.
+
+- The chain for `country_code` is: server `country_code` → persisted → your `defaultCountryCode`
+  (when non-blank) → device-locale region → `'KE'` (the app's own literal; endpoint #2 returns
+  HTTP 400 on a blank value, so a floor has to exist).
+- If nothing resolves, **no coordinates are sent at all**. `(0, 0)` is a real point in the Gulf of
+  Guinea, so sending it would be a wrong answer rather than a missing one — the guest gets an
+  empty feed, which is honest.
+- There is **no hardcoded city**. An earlier build defaulted to Bengaluru, so every guest the
+  backend could not place was given Karnataka's advice.
+- `expo-localization` is an optional peer used for the locale region; when it is absent the SDK
+  falls back to `Intl` and never crashes.
 
 ## Networking guarantees (parity with the production app)
 

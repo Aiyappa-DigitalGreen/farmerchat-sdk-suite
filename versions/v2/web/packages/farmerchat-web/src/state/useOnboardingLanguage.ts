@@ -10,6 +10,7 @@ import type { GeoResponse, SupportedLanguage, SupportedLanguageGroup } from '../
 import { UiState, idle, loading } from './uiState';
 import { toUiState } from './helpers';
 import { Events } from '../core/analytics';
+import { isResolved, resolveCountryCode, resolveFallbackCoordinates } from '../core/fallbackLocation';
 
 export interface OnboardingLanguageState {
   geoState: UiState<GeoResponse>;
@@ -97,6 +98,13 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
     let lng: number | null = null;
     let accuracy: number | null = null;
 
+    // The three host-overridable knobs, all "unset → derive from the device locale" by default.
+    const fallbackConfig = {
+      defaultCountryCode: config.defaultCountryCode,
+      defaultLatitude: config.defaultLatitude,
+      defaultLongitude: config.defaultLongitude,
+    };
+
     if (config.geoApiKey) {
       patch({ geoState: loading() });
       const geo = await api.geolocate();
@@ -105,6 +113,24 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
         lat = geo.data.location.lat;
         lng = geo.data.location.lng;
         accuracy = geo.data.accuracy ?? null;
+      }
+    }
+
+    if (lat === null || lng === null) {
+      // GEO-FAILURE FALLBACK (port of OnboardingSharedViewModel's ApiResult.Error branch).
+      // geolocate is a tolerated P1 failure — and on web it may never have been called at all,
+      // when the host configured no `geoApiKey`. Either way the app does NOT then proceed with no
+      // coordinates: it falls back to the DEVICE LOCALE's country centroid
+      // (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and accepts it ONLY when
+      // `lat != 0 && lng != 0`. A browser language such as plain `en` carries no region and
+      // yields (0, 0), which must stay unresolved — sending it would place the farmer in the
+      // Gulf of Guinea. `geoState` is deliberately left untouched here: a call that was never
+      // made is not a failed call.
+      const fallback = resolveFallbackCoordinates(fallbackConfig);
+      if (isResolved(fallback.lat, fallback.lng)) {
+        lat = fallback.lat;
+        lng = fallback.lng;
+        accuracy = 0;
       }
     }
 
@@ -120,14 +146,18 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
     }
     patch({ guestInitState: { status: 'success', data: init?.ok ? init.data : null } });
 
-    // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an unresolvable IP
-    // comes back with country_code == null (so nothing was persisted). Read the init response
-    // first, then the store, then the host-configured default — never ''.
+    // Endpoint #2 400s on a blank `country_code` (`{"error": "Country code is required"}`,
+    // verified live 2026-09-03 on prod), and a fresh guest on an unresolvable IP comes back with
+    // country_code == null (so nothing was persisted). Chain: server → persisted → host config
+    // (when non-blank) → device-locale region → LAST_RESORT_COUNTRY_CODE. Never ''.
     const initData = init?.ok ? init.data : null;
-    const countryCode =
-      initData?.country_code?.trim() ||
-      store.getString(PrefKeys.USER_COUNTRY_CODE)?.trim() ||
-      config.defaultCountryCode;
+    const countryCode = resolveCountryCode(
+      initData?.country_code,
+      store.getString(PrefKeys.USER_COUNTRY_CODE),
+      config.defaultCountryCode,
+    );
+    // `state` is inert on every environment (verified live 2026-09-03) and defaults to '',
+    // so no region is invented to pair with a derived country.
     const regionState =
       initData?.state?.trim() ||
       store.getString(PrefKeys.USER_STATE)?.trim() ||
@@ -137,11 +167,24 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
     // verified live 2026-09-01). Without this a guest the backend cannot place by IP lands on a
     // permanently blank home screen. Best-effort — a failure just leaves the feed empty.
     if (!initData?.country_code?.trim() && session.userId) {
-      await api.updateUserLocation({
-        user_id: session.userId,
-        lat: config.defaultLatitude,
-        long: config.defaultLongitude,
-      });
+      const seed = resolveFallbackCoordinates(fallbackConfig);
+      // Nothing resolved — not the host's config, not the device locale. Send NOTHING rather
+      // than guess: an unplaceable guest gets an empty feed, which is honest, where a guessed
+      // city would silently give them another country's advice. (This is where the SDK used to
+      // post a hardcoded Bengaluru for every such guest on earth.)
+      if (isResolved(seed.lat, seed.lng)) {
+        const seeded = await api.updateUserLocation({
+          user_id: session.userId,
+          lat: seed.lat,
+          long: seed.lng,
+        });
+        if (seeded.ok) {
+          // Same persistence the GPS path uses (useLocationPrompt): the response carries display
+          // names, not codes, so USER_COUNTRY_CODE is deliberately not written here.
+          if (seeded.data.country) store.setString(PrefKeys.USER_COUNTRY_NAME, seeded.data.country);
+          if (seeded.data.state) store.setString(PrefKeys.USER_STATE, seeded.data.state);
+        }
+      }
     }
 
     await fetchSupportedLanguages(countryCode, regionState);

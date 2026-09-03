@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Image
@@ -48,6 +49,8 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -75,6 +78,7 @@ import org.digitalgreen.farmerchat.sdk.compose.components.PrimaryInputButtons
 import org.digitalgreen.farmerchat.sdk.compose.components.PrimaryInputButtonsType
 import org.digitalgreen.farmerchat.sdk.compose.components.SingleSelectCard
 import org.digitalgreen.farmerchat.sdk.compose.components.SsfrCard
+import org.digitalgreen.farmerchat.sdk.compose.components.TermsOfUseDialog
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInputOverlay
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
@@ -87,6 +91,7 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import org.digitalgreen.farmerchat.sdk.compose.util.hasLocationPermission
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
@@ -116,12 +121,23 @@ import java.util.UUID
  * Home / dashboard (doc 01 §3.7). App bar with weather, greeting, sticky
  * Photo/Speak/Type buttons, SSFR card, daily feed (content / single-select /
  * multi-select cards), input overlays, permission counters.
+ *
+ * @param openTermsOfUseRequested 2.0.0: something outside Home asked for the in-app
+ *   Terms-of-Use dialog. In the app this arrives as a Plotline card CTA
+ *   (`open_terms_of_use=true`) via `PlotlineHomeEvents.openTermsOfUse`; the SDK carries no
+ *   Plotline, so the host raises it instead (see FarmerChatRoot). Set back to false through
+ *   [onTermsOfUseRequestConsumed] once the request has been acted on, so a later terms fetch
+ *   can never re-open the dialog unprompted.
+ * @param onTermsOfUseRequestConsumed Called once [openTermsOfUseRequested] has been handled
+ *   (dialog opened, or the terms URL failed to arrive and the error toast was shown).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     openDrawer: () -> Unit,
-    onNavigateToChat: (Destination.Chat) -> Unit
+    onNavigateToChat: (Destination.Chat) -> Unit,
+    openTermsOfUseRequested: Boolean = false,
+    onTermsOfUseRequestConsumed: () -> Unit = {}
 ) {
     val graph = FarmerChat.requireGraph()
     val context = LocalContext.current
@@ -175,7 +191,15 @@ fun HomeScreen(
                 AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT,
                 mapOf(AnalyticsProps.OPTION to "camera", AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
             )
-            onNavigateToChat(Destination.Chat(question = "", imageUri = uri.toString()))
+            if (isComposerUi) {
+                // App parity: in composer mode a picked photo is ATTACHED so it can be sent
+                // together with typed text (fc-compose-agentic HomeScreen.kt:350/386). Only one
+                // image is allowed, so a new pick replaces the old. Without this the composer's
+                // thumbnail strip and onRemovePhoto are unreachable and image+text is impossible.
+                photoUris = listOf(uri)
+            } else {
+                onNavigateToChat(Destination.Chat(question = "", imageUri = uri.toString()))
+            }
         }
     }
 
@@ -188,7 +212,15 @@ fun HomeScreen(
                 AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT,
                 mapOf(AnalyticsProps.OPTION to "gallery", AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
             )
-            onNavigateToChat(Destination.Chat(question = "", imageUri = uri.toString()))
+            if (isComposerUi) {
+                // App parity: in composer mode a picked photo is ATTACHED so it can be sent
+                // together with typed text (fc-compose-agentic HomeScreen.kt:350/386). Only one
+                // image is allowed, so a new pick replaces the old. Without this the composer's
+                // thumbnail strip and onRemovePhoto are unreachable and image+text is impossible.
+                photoUris = listOf(uri)
+            } else {
+                onNavigateToChat(Destination.Chat(question = "", imageUri = uri.toString()))
+            }
         }
     }
 
@@ -326,6 +358,33 @@ fun HomeScreen(
         )
         if (userId.isNotBlank()) {
             vm.onAction(HomeAction.LoadWeather(context, userId))
+        }
+        // App parity (HomeScreen.kt:842): fetch the legal links on EVERY Home entry, not lazily
+        // when the dialog is asked for — farmerchatTermsOfUse has to already be in state by the
+        // time an open request arrives. Best-effort in core; a failure only leaves it null.
+        vm.onAction(HomeAction.FetchPrivacyPolicy)
+    }
+
+    // ------------------------------------------------------------------ terms-of-use dialog
+    var showTermsOfUseDialog by remember { mutableStateOf(false) }
+
+    // The terms URL is fetched on Home entry, so an open request can arrive before the fetch
+    // completes. Wait briefly for a non-blank URL, then open — otherwise toast and consume the
+    // request so it never opens "unprompted" on a later fetch (avoids a stale re-open).
+    LaunchedEffect(openTermsOfUseRequested) {
+        if (!openTermsOfUseRequested) return@LaunchedEffect
+        val termsUrl = withTimeoutOrNull(5_000) {
+            snapshotFlow { homeState.farmerchatTermsOfUse }.first { !it.isNullOrBlank() }
+        }
+        onTermsOfUseRequestConsumed()
+        if (!termsUrl.isNullOrBlank()) {
+            graph.analytics.track(AnalyticsEvents.TERMS_OF_USE_OPENED)
+            showTermsOfUseDialog = true
+        } else {
+            toast.show(
+                label(Labels.UNABLE_TO_LOAD_LEGAL_LINKS, "Unable to load Terms of Use"),
+                ToastState.Error
+            )
         }
     }
 
@@ -995,6 +1054,26 @@ fun HomeScreen(
             )
         }
 
+        // 2.0.0 in-app Terms-of-Use dialog. Guarded on a non-blank URL by the effect above; the
+        // takeIf here keeps it correct even if state is refetched to null while it is open.
+        if (showTermsOfUseDialog) {
+            homeState.farmerchatTermsOfUse?.takeIf { it.isNotBlank() }?.let { termsUrl ->
+                TermsOfUseDialog(
+                    url = termsUrl,
+                    title = label(Labels.TERMS_OF_USE, "Terms of Use"),
+                    onDismiss = { showTermsOfUseDialog = false },
+                    onAcceptAndContinue = {
+                        // accept_terms (#7) — best-effort in core; the dialog closes either way.
+                        // The app also tracks a Plotline ToS event here; the SDK emits no
+                        // Plotline-named event (root CLAUDE.md §2 forbids new event names), so
+                        // only the existing TERMS_OF_USE_OPENED above reaches the host.
+                        vm.onAction(HomeAction.AcceptTerms(userId))
+                        showTermsOfUseDialog = false
+                    }
+                )
+            }
+        }
+
         Toast(
             message = toast.message,
             state = toast.state,
@@ -1040,12 +1119,7 @@ private fun HomeLocationPill(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val hasPermission = remember(resumeTick, locationState) {
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                context, Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+        hasLocationPermission(context)
     }
     val hasExactLocation = remember(resumeTick, locationState) {
         manager.hasStoredLocation() && hasPermission

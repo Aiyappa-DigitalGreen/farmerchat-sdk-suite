@@ -9,6 +9,9 @@ import FarmerChatCore
 struct ChatView: View {
     @Environment(\.fcTheme) private var theme
     @EnvironmentObject var router: FCRouter
+    /// The global location prompt state machine (provided by `FarmerChatView`). 2.0.0: the
+    /// GPS_PROMPT capability chip drives it and consumes the outcome.
+    @EnvironmentObject var locationPrompt: LocationPromptManager
     let args: FCDestination.ChatArgs
     let openDrawer: () -> Void
 
@@ -39,6 +42,12 @@ struct ChatView: View {
     // pre-generated answers are marked complete immediately (no reveal). The
     // follow-up section + action row only appear after the last answer reveals.
     @State private var revealedIds: Set<String> = []
+
+    // ---------------------------------------------------------------- capability chips (2.0.0)
+    /// Armed while a chat-initiated location flow is in progress; holds the raw `AiResponse.id` of
+    /// the GPS_PROMPT surface whose chip started it. Nil means the collector below is inert, so an
+    /// outcome belonging to Home or Settings is ignored.
+    @State private var pendingLocationSourceId: String?
 
     var body: some View {
         ZStack {
@@ -108,6 +117,13 @@ struct ChatView: View {
         .onReceive(ttsPlayback.didFinish) { _ in
             viewModel.onAction(.setAudioPlaying(false))
             viewModel.onAction(.clearAudioPlaybackUrl)
+        }
+        // 2.0.0: outcomes of the chat share-location capability flow. `events` is a
+        // PassthroughSubject, so it multicasts to every subscriber (Home also listens) — but it
+        // has no replay, hence subscribing for the life of the screen and gating on
+        // `pendingLocationSourceId` rather than subscribing on the chip tap.
+        .onReceive(locationPrompt.events) { event in
+            handleLocationOutcome(event)
         }
         .sheet(isPresented: $showCamera) {
             FCCameraPicker { picked in
@@ -336,7 +352,9 @@ struct ChatView: View {
                     selectedValues: ai.alignmentSelectedValues,
                     isLoading: viewModel.state.isLoading,
                     isLatest: isLastAi,
-                    onChipTap: { chip in sendAlignmentChip(chip) },
+                    onChipTap: { chip in
+                        handleAlignmentChip(messageId: ai.id, kind: kind, chip: chip)
+                    },
                     onTypeInstead: { showTextInput = true }
                 )
             } else {
@@ -363,7 +381,19 @@ struct ChatView: View {
                     isLatest: isLastAi,
                     isBusy: viewModel.state.isLoading,
                     onRetryStream: { viewModel.onAction(.retryLastRequest) },
-                    onAlignmentChipTap: { chip in sendAlignmentChip(chip) }
+                    onAlignmentChipTap: { chip in
+                        handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
+                    }
+                )
+            }
+        // 2.0.0: the farmer's resolved location, standing in for the text bubble they would
+        // otherwise have sent. Right-aligned because it is their reply to a GPS_PROMPT chip.
+        case .location(let location):
+            HStack {
+                Spacer(minLength: 0)
+                FCLocationChatBubble(
+                    address: location.address,
+                    label: fcLabel(AgenticLabels.yourLocation, AgenticLabels.yourLocationFallback)
                 )
             }
         case .loadingPlaceholder:
@@ -371,8 +401,37 @@ struct ChatView: View {
         }
     }
 
-    /// An alignment chip tap sends the chip's `value` (falling back to its label) as a follow-up —
-    /// the same action a related-question tap uses, exactly as Compose does.
+    // MARK: - Alignment chips (2.0.0)
+
+    /// Routes an alignment chip tap. Port of the app's `onAlignmentChipClick`.
+    ///
+    /// A CAPABILITY chip (`gps-prompt` / `upload-photo` marked `action:"invoke"`) does NOT send its
+    /// text — it invokes a device capability and only the OUTCOME is sent. Every other chip,
+    /// including "Not now" on a capability prompt, stays on the plain follow-up path.
+    ///
+    /// - Parameter messageId: the raw `AiResponse.id` of the surface that offered the chip (not the
+    ///   prefixed `ChatMessage.id` — core matches on the raw one).
+    private func handleAlignmentChip(messageId: String, kind: AlignmentKind?, chip: AlignmentChip) {
+        switch chip.capability(for: kind) {
+        case .shareLocation:
+            // Permission dialog / GPS fetch / recovery are owned by LocationPromptHostView; the
+            // outcome arrives on the collector above. Only start when no other location flow is
+            // running (mirrors Home's guard).
+            guard locationPrompt.state == .idle else { return }
+            pendingLocationSourceId = messageId
+            locationPrompt.triggerFromLocalContext()
+        case .takePhoto:
+            // Straight to the camera — no photo-source sheet, the chip already chose.
+            Task { if await FCCameraPermission.request() { showCamera = true } }
+        case .chooseFromGallery:
+            showGallery = true
+        case .none:
+            sendAlignmentChip(chip)
+        }
+    }
+
+    /// A non-capability alignment chip sends the chip's `value` (falling back to its label) as a
+    /// follow-up — the same action a related-question tap uses, exactly as Compose does.
     private func sendAlignmentChip(_ chip: AlignmentChip) {
         let question = chip.submittedQuery
         guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -382,6 +441,59 @@ struct ChatView: View {
             transcriptionId: nil,
             audioURL: nil
         ))
+    }
+
+    /// Terminal outcome of the chat share-location flow. Inert unless this screen armed it, so an
+    /// outcome belonging to Home (weather chip) or a widget trigger is ignored.
+    private func handleLocationOutcome(_ event: LocationPromptEvent) {
+        guard let sourceId = pendingLocationSourceId else { return }
+        // Not a terminal per-flow outcome, or one belonging to Home / a widget trigger.
+        guard event.terminalSource == .localContext else { return }
+        // A terminal event for OUR request — disarm before dispatching.
+        pendingLocationSourceId = nil
+
+        // `isLocationObtained` lives in Core so both flavours share one rule: a settled flow is
+        // NOT the same as a successful one.
+        if event.isLocationObtained {
+            viewModel.onAction(.sendLocationSharedQuery(
+                sourceMessageId: sourceId,
+                address: resolvedAddress()
+            ))
+        } else {
+            // Denied / cancelled / fetch failed: still answer the blocking question, by sending the
+            // decline text as an ordinary follow-up. The app sends this through `SendAlignmentChip`
+            // with `locationDeclined` + parent_message_id; the SDK has neither, so the correlation
+            // and the chip analytics are lost (docs/04).
+            viewModel.onAction(.sendFollowUpQuestion(
+                question: fcLabel(
+                    AgenticLabels.locationPermissionDeclined,
+                    AgenticLabels.locationPermissionDeclinedFallback
+                ),
+                followUpQuestionId: nil,
+                transcriptionId: nil,
+                audioURL: nil
+            ))
+        }
+    }
+
+    /// The address shown in the location bubble.
+    ///
+    /// The app composes `display_address, geography_level2_name, country_name`; iOS's `#11`
+    /// response (`GetLocationResponse`) carries `district / state / country` instead, and those are
+    /// the only location prefs this SDK writes — no `fc_sdk_` key is invented for the rest
+    /// (root CLAUDE.md §2). Recorded as a delta in docs/04.
+    private func resolvedAddress() -> String {
+        let prefs = FarmerChat.shared.prefs
+        let parts = [
+            prefs.string(.userDistrict),
+            prefs.string(.userState),
+            prefs.string(.userCountryName)
+        ]
+        var seen: Set<String> = []
+        return parts
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .joined(separator: ", ")
     }
 
     private func chatError(_ message: String) -> some View {

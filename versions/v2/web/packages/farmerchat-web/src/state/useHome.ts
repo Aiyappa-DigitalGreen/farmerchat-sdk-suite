@@ -28,6 +28,11 @@ export interface HomeState {
   imageViewedState: UiState<ImageViewedResponse>;
   imageStatementState: UiState<ImageStatementResponse>;
   dismissedCardIds: Set<string>;
+  /**
+   * 2.0.0: the Terms-of-Use URL from privacy_policy (#4), for `TermsOfUseDialog`. Null until the
+   * fetch lands (or if it fails — best-effort, exactly as the Kotlin `HomeViewModel` treats it).
+   */
+  farmerchatTermsOfUse: string | null;
 }
 
 const initialState: HomeState = {
@@ -39,6 +44,7 @@ const initialState: HomeState = {
   imageViewedState: idle(),
   imageStatementState: idle(),
   dismissedCardIds: new Set<string>(),
+  farmerchatTermsOfUse: null,
 };
 
 export interface HomeActions {
@@ -50,6 +56,15 @@ export interface HomeActions {
   markImageViewed: (statementId: number) => Promise<void>;
   fetchImageStatement: (statementId: number, triggeredInputType: string) => Promise<ImageStatementResponse | null>;
   dismissCard: (sectionId: string) => void;
+  /**
+   * 2.0.0: fetch the legal links (#4) so `TermsOfUseDialog` has a URL to load. Called on EVERY
+   * Home entry rather than lazily when the dialog is asked for — an open request can arrive
+   * before the fetch completes, so the URL has to already be on its way (app parity,
+   * HomeScreen.kt:346). Best-effort: a failure only leaves `farmerchatTermsOfUse` null.
+   */
+  fetchPrivacyPolicy: () => Promise<void>;
+  /** 2.0.0: accept the terms of use (#7) from `TermsOfUseDialog`. Best-effort. */
+  acceptTerms: () => Promise<void>;
   clearTranscriptionState: () => void;
   consumeResult: () => void;
 }
@@ -176,6 +191,20 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
     });
   }, []);
 
+  const fetchPrivacyPolicy = useCallback(async () => {
+    const res = await api.getPrivacyPolicy();
+    if (!res.ok) return;
+    // The endpoint sends the terms under either key depending on deployment; prefer the explicit
+    // *_url and fall back to the bare field, taking the first non-blank.
+    const candidates = [res.data.terms_of_use_url, res.data.terms_of_use];
+    const url = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    if (url) patch({ farmerchatTermsOfUse: url });
+  }, [api, patch]);
+
+  const acceptTerms = useCallback(async () => {
+    await api.acceptTerms({ user_id: session.userId ?? '' });
+  }, [api, session]);
+
   const clearTranscriptionState = useCallback(() => {
     patch({ voiceTranscribeState: idle() });
   }, [patch]);
@@ -195,6 +224,8 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
       markImageViewed,
       fetchImageStatement,
       dismissCard,
+      fetchPrivacyPolicy,
+      acceptTerms,
       clearTranscriptionState,
       consumeResult,
     },

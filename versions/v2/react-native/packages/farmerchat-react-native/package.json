@@ -53,6 +53,7 @@
     "expo-constants": ">=16.0.0",
     "expo-device": ">=6.0.0",
     "expo-image-picker": ">=15.0.0",
+    "expo-localization": ">=16.0.0",
     "expo-location": ">=17.0.0",
     "react": ">=18.2.0",
     "react-native": ">=0.74.0",
@@ -64,6 +65,9 @@
     "react-native-webview": ">=13.8.0"
   },
   "peerDependenciesMeta": {
+    "expo-localization": {
+      "optional": true
+    },
     "react-native-view-shot": {
       "optional": true
     },

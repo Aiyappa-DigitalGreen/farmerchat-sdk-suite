@@ -660,3 +660,74 @@ public struct FCScrollToBottomButton: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Location bubble (2.0.0 — port of components/chat/LocationChatBubble.kt)
+
+/// The farmer's resolved location, standing in for the text bubble they would otherwise have sent
+/// in reply to a GPS_PROMPT alignment chip. Right-aligned like a user bubble (`ChatView` wraps it
+/// the way Compose wraps it in a `fillMaxWidth` Box with `contentAlignment = CenterEnd`).
+///
+/// Figma card: fixed 290x184 — a green-at-16% map band with a centred pin over a soft ellipse
+/// "shadow", then a footer with the caption above the bold address. Three corners rounded, the
+/// bottom-trailing one sharp, exactly like `FCUserChatBubble`.
+///
+/// Honours the same two chat-customization knobs the other bubbles do: `bubbleCornerRadius` (the
+/// three rounded corners; the tail stays sharp) and `messageFontSize` (caption + address). The pin
+/// and its ellipse are drawn with SF Symbols / shapes because the package ships no image assets.
+public struct FCLocationChatBubble: View {
+    @Environment(\.fcTheme) private var theme
+    let address: String
+    let label: String
+
+    public init(address: String, label: String) {
+        self.address = address
+        self.label = label
+    }
+
+    private var radius: CGFloat { FarmerChat.shared.config.bubbleCornerRadius ?? 20 }
+    private var fontSize: CGFloat { FarmerChat.shared.config.messageFontSize ?? 16 }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            // Map-style band with the centred pin — fills the height left above the footer.
+            ZStack {
+                FCPrimitive.green500Alpha16
+                VStack(spacing: 0) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 34))
+                        .foregroundColor(FCPrimitive.green500)
+                        .frame(width: 44, height: 44)
+                    Ellipse()
+                        .fill(FCPrimitive.green500.opacity(0.24))
+                        .frame(width: 28, height: 8)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Footer: caption + resolved address.
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(.system(size: fontSize))
+                    .foregroundColor(theme.content.foregroundSecondary)
+                Text(address)
+                    .font(.system(size: fontSize, weight: .bold))
+                    .foregroundColor(theme.content.foregroundPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 290, height: 184)
+        .background(theme.content.surfaceReadingSecondary)
+        .clipShape(UnevenRoundedRectangle(
+            topLeadingRadius: radius,
+            bottomLeadingRadius: radius,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: radius,
+            style: .continuous
+        ))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label) \(address)")
+    }
+}

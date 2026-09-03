@@ -280,6 +280,18 @@ internal class InputOverlaysController(
 
     // ------------------------------------------------------------------ photo
 
+    /**
+     * Open the camera directly, with no photo panel — the UPLOAD_PHOTO alignment chip's
+     * `take_photo` capability (app: the chip launches the device camera, not the composer).
+     * Permission handling and the settings-dialog fallback are shared with the panel path.
+     */
+    fun launchCameraForCapability() = requestCamera()
+
+    /** Open the gallery directly — the UPLOAD_PHOTO chip's `choose_from_gallery` capability. */
+    fun launchGalleryForCapability() {
+        runCatching { galleryLauncher.launch("image/*") }
+    }
+
     private fun requestCamera() {
         if (hasPermission(Manifest.permission.CAMERA)) {
             launchCamera()

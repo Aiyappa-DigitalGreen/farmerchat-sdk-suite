@@ -84,10 +84,12 @@ public final class SettingsViewModel: ObservableObject {
         state.languageState = .loading
         Task {
             // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the
-            // preference is empty whenever guest init never resolved one.
+            // preference is empty whenever guest init never resolved one. `defaultCountryCode`
+            // is now empty by default ("derive from the device locale"), so this MUST go through
+            // the same resolver — reading the raw field would send a blank and 400.
             let result = await env.api.countryWiseSupportedLanguages(
                 countryCode: env.prefs.string(.userCountryCode)?.nonBlank
-                    ?? env.config.defaultCountryCode,
+                    ?? env.config.resolvedFallbackCountryCode,
                 state: env.prefs.string(.userState)?.nonBlank
                     ?? env.config.defaultStateCode
             )

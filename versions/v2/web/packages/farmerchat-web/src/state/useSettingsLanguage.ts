@@ -9,6 +9,7 @@ import { PrefKeys } from '../core/storage';
 import type { SupportedLanguage, SupportedLanguageGroup } from '../core/types';
 import { UiState, idle, loading } from './uiState';
 import { toUiState } from './helpers';
+import { resolveCountryCode } from '../core/fallbackLocation';
 import { Events } from '../core/analytics';
 
 export interface LanguageSettingsState {
@@ -59,10 +60,14 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
 
   const loadLanguages = useCallback(async () => {
     patch({ languageState: loading() });
-    // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
-    // empty whenever guest init never resolved one.
-    const countryCode =
-      store.getString(PrefKeys.USER_COUNTRY_CODE)?.trim() || config.defaultCountryCode;
+    // Same chain as onboarding: endpoint #2 400s on a blank `country_code`, and the store is
+    // empty whenever guest init never resolved one — persisted → host config (when non-blank) →
+    // device-locale region → LAST_RESORT_COUNTRY_CODE.
+    const countryCode = resolveCountryCode(
+      null,
+      store.getString(PrefKeys.USER_COUNTRY_CODE),
+      config.defaultCountryCode,
+    );
     const regionState =
       store.getString(PrefKeys.USER_STATE)?.trim() || config.defaultStateCode;
     const res = await api.getSupportedLanguages(countryCode, regionState);

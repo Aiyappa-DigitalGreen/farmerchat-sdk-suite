@@ -41,6 +41,13 @@ export type HomeAction =
     }
   | { type: 'MarkImageViewed'; statementId: number; userId: string }
   | { type: 'FetchImageStatement'; statementId: number; triggeredInputType: string }
+  /**
+   * 2.0.0: accept the terms of use from `TermsOfUseDialog`. Calls endpoint #7
+   * (`accept_terms`) — best-effort, matching the app: acceptance is recorded but never blocks.
+   */
+  | { type: 'AcceptTerms'; userId: string }
+  /** 2.0.0: fetch the legal links (#4) so `TermsOfUseDialog` has a URL to load. */
+  | { type: 'FetchPrivacyPolicy' }
   | { type: 'ClearTranscriptionState' }
   | { type: 'ConsumeResult' }
   | { type: 'SetLoadingState' };
@@ -54,6 +61,8 @@ export interface HomeState {
   imageViewedState: UiState<ImageViewedResponse>;
   imageStatementState: UiState<ImageStatementResponse>;
   dismissedCardIds: Set<string>;
+  /** 2.0.0: terms-of-use URL from #4, for `TermsOfUseDialog`. */
+  farmerchatTermsOfUse: string | null;
 }
 
 const initialHomeState: HomeState = {
@@ -65,6 +74,7 @@ const initialHomeState: HomeState = {
   imageViewedState: UiStates.idle(),
   imageStatementState: UiStates.idle(),
   dismissedCardIds: new Set<string>(),
+  farmerchatTermsOfUse: null,
 };
 
 /** Accept transcription only if !error && confidence > 0.7 && text not blank (docs/02). */
@@ -292,6 +302,34 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
     [sdk],
   );
 
+  /**
+   * Fetches the legal links (#4) so `TermsOfUseDialog` can load the terms. Best-effort: a
+   * failure only leaves the URL null (port of `HomeViewModel.fetchPrivacyPolicy`).
+   *
+   * App parity: `terms_of_use_url` is the WebView URL; `terms_of_use` is the fallback the
+   * response uses on some environments.
+   */
+  const fetchPrivacyPolicy = useCallback(async () => {
+    const result = await sdk.api.getPrivacyPolicy();
+    if (!mounted.current) return;
+    if (result.ok) {
+      const url = result.data.terms_of_use_url ?? result.data.terms_of_use ?? null;
+      patch({ farmerchatTermsOfUse: url && url.trim().length > 0 ? url : null });
+    }
+  }, [patch, sdk]);
+
+  /**
+   * Accepts the terms of use (#7). Best-effort, matching the app: the dialog closes on tap and
+   * a failure never blocks the farmer — acceptance is recorded server-side when it succeeds.
+   */
+  const acceptTerms = useCallback(
+    async (userId: string) => {
+      if (userId.trim().length === 0) return;
+      await sdk.api.acceptTerms({ user_id: userId });
+    },
+    [sdk],
+  );
+
   const onAction = useCallback(
     (action: HomeAction) => {
       switch (action.type) {
@@ -329,6 +367,12 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
         case 'FetchImageStatement':
           void fetchImageStatement(action.statementId, action.triggeredInputType);
           break;
+        case 'AcceptTerms':
+          void acceptTerms(action.userId);
+          break;
+        case 'FetchPrivacyPolicy':
+          void fetchPrivacyPolicy();
+          break;
         case 'ClearTranscriptionState':
           patch({ voiceTranscribeState: UiStates.idle() });
           break;
@@ -344,7 +388,9 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
       }
     },
     [
+      acceptTerms,
       fetchImageStatement,
+      fetchPrivacyPolicy,
       fetchUserProfile,
       loadHome,
       loadWeather,

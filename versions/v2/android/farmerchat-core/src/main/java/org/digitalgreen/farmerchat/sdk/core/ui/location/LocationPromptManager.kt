@@ -1,10 +1,11 @@
 package org.digitalgreen.farmerchat.sdk.core.ui.location
 
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
@@ -36,8 +37,24 @@ class LocationPromptManager(
     private val _state = MutableStateFlow<LocationPromptState>(LocationPromptState.Idle)
     val state: StateFlow<LocationPromptState> = _state
 
-    private val _events = Channel<LocationPromptEvent>(capacity = Channel.BUFFERED)
-    val events = _events.receiveAsFlow()
+    /**
+     * Outcome events, BROADCAST to every collector.
+     *
+     * This was a `Channel(BUFFERED).receiveAsFlow()`, which delivers each event to exactly ONE
+     * collector. There are already two long-lived collectors — `FarmerChatRoot` (widget toast) and
+     * `HomeScreen` (feed reload) — so a location update raced: whichever won consumed the event and
+     * the other never saw it, giving a toast with no reload or a reload with no toast, at random.
+     * The chat GPS_PROMPT flow adds a third collector, which would have made it worse.
+     *
+     * The app uses `replay = 1`; the SDK deliberately uses `replay = 0`. Every SDK collector is
+     * subscribed before the flow it cares about can emit, and a replayed stale event would make
+     * `HomeScreen` reload its feed on every recomposition.
+     */
+    private val _events = MutableSharedFlow<LocationPromptEvent>(
+        replay = 0,
+        extraBufferCapacity = 16
+    )
+    val events: SharedFlow<LocationPromptEvent> = _events.asSharedFlow()
 
     /** Navigation the caller wants to perform after the flow completes (weather → chat). */
     var pendingNavigation: (() -> Unit)? = null
@@ -120,7 +137,7 @@ class LocationPromptManager(
         val campaign = currentCampaign()
         _state.value = LocationPromptState.Idle
         scope.launch {
-            _events.send(LocationPromptEvent.Cancel(source, campaign))
+            _events.emit(LocationPromptEvent.Cancel(source, campaign))
         }
         // Weather flow: continue navigation without location.
         pendingNavigation?.invoke()
@@ -128,8 +145,26 @@ class LocationPromptManager(
     }
 
     fun dismiss() {
+        // Capture before clearing: currentSource() derives from _state and falls back to Weather
+        // once the state is Idle.
+        val wasActive = _state.value !is LocationPromptState.Idle
+        val source = currentSource()
+        val campaign = currentCampaign()
         _state.value = LocationPromptState.Idle
         pendingNavigation = null
+        // Every terminal exit MUST emit, or a collector armed for this flow waits forever. The
+        // error branch has no other exit: onLocationFetchFailed / onNoNetwork /
+        // onGpsEnableResult(false) all park in State.Error and dismiss() is how the user leaves
+        // it. "dismissed" is deliberately NOT one of the success reasons, so the chat gps-prompt
+        // settles into its decline query and the blocking question still gets answered.
+        // App parity: `dismiss(emitContinue = true)` emits Continue(reason = "dismissed").
+        // onLocationFetched already sets Idle before emitting, so a dismiss following a success
+        // sees wasActive = false and does not emit a second, contradictory event.
+        if (wasActive) {
+            scope.launch {
+                _events.emit(LocationPromptEvent.Continue(source, campaign, reason = "dismissed"))
+            }
+        }
     }
 
     // ------------------------------------------------------------------ host callbacks
@@ -151,7 +186,7 @@ class LocationPromptManager(
                 LocationPromptState.Idle
             }
             if (_state.value is LocationPromptState.Idle) {
-                scope.launch { _events.send(LocationPromptEvent.Cancel(source, campaign)) }
+                scope.launch { _events.emit(LocationPromptEvent.Cancel(source, campaign)) }
                 pendingNavigation?.invoke()
                 pendingNavigation = null
             }
@@ -257,9 +292,9 @@ class LocationPromptManager(
 
             _state.value = LocationPromptState.Idle
             if (source == LocationTriggerSource.Campaign) {
-                _events.send(LocationPromptEvent.LocationUpdatedFromWidget(campaign))
+                _events.emit(LocationPromptEvent.LocationUpdatedFromWidget(campaign))
             }
-            _events.send(LocationPromptEvent.Continue(source, campaign, reason = "location_fetched"))
+            _events.emit(LocationPromptEvent.Continue(source, campaign, reason = "location_fetched"))
             pendingNavigation?.invoke()
             pendingNavigation = null
         }

@@ -119,8 +119,10 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | `guestApiKey` | `string` | built-in | overrides the guest-init API key |
 | `appearance` | `'day'\|'night'\|'auto'` | `'auto'` | theme mode |
 | `languageCode` | `string` | – | preselect a language, skips the language screen |
-| `defaultCountryCode` | `string` | `'IN'` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
-| `defaultStateCode` | `string` | `'Karnataka'` | state/region paired with `defaultCountryCode`; endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages |
+| `defaultCountryCode` | `string` | `''` (derive) | OPTIONAL override for the country used in the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. **Leave it unset and the SDK derives the country from the device locale**, exactly as the app does. Set it only to pin the SDK to one region. |
+| `defaultStateCode` | `string` | `''` (omitted) | OPTIONAL `state` param for endpoint #2. Safe to leave empty: the parameter is inert on every environment — `Karnataka`, `KA`, blank and omitted all return the identical set (verified live 2026-09-03). |
+| `defaultLatitude` | `number` | `0` (derive) | OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a location. **Leave it at `0` and the SDK uses the device locale's country centroid**, as the app does on IP-geolocation failure. |
+| `defaultLongitude` | `number` | `0` (derive) | see `defaultLatitude` |
 | `enableVoice` | `boolean` | `true` | Speak input + Listen TTS |
 | `enableImages` | `boolean` | `true` | Photo queries |
 | `enableWeather` | `boolean` | `true` | weather chip + advice CTA |
@@ -181,19 +183,40 @@ arrive with `response` **empty on purpose** and replace the answer with `alignme
 additive ones (`gender-select`, `commodity-confirm`) render below a real answer. Escalate gets an
 urgent tint derived from the theme's failure colour.
 
+### Capability chips
+
+A chip whose `action` is exactly `"invoke"` on one of the two capability surfaces does **not**
+send its own text as the question — it invokes a device capability and only the OUTCOME is sent:
+
+| Surface | Chip `value` | What happens |
+|---|---|---|
+| `gps-prompt` | `share_precise_location` | Runs the shared location flow (permission → GPS → fetch, `expo-location`). On success the resolved address appears as a location bubble and the farmer's **original** question is re-sent with `triggered_input_type: "align_chip_sel"`. Declining, cancelling or a failed fetch sends "Continue without sharing my location" instead, so the blocking question still resolves. |
+| `upload-photo` | `take_photo` / `choose_from_gallery` | Opens the camera or the gallery directly (`expo-image-picker`) — not the Camera/Photos sheet, which the chip has already answered. With `enableAgenticChat` the photo is attached to the composer so a question can be typed with it; otherwise it is sent immediately. |
+
+Everything else — `not_now`, a chip with no `invoke` action, a capability value on the wrong
+surface, and every non-capability surface — sends its `value` (falling back to `label`) as an
+ordinary follow-up, which is the 1.0.0 behaviour. The address is assembled from the stored
+geography, so a **guest** (who has no district/state/country stored) gets no location bubble.
+
 ### Known gaps vs. the Android reference
 
-- `AlignmentChip.action` (`"select"` invokes a device capability, `"decline"` opts out) is parsed
-  into the type and otherwise ignored — matching Android, where no device flow consumes it
-  either. No GPS/photo capability flow is wired on either platform, so a capability chip is sent
-  back as a plain follow-up.
+- No `parent_message_id` on any alignment chip send. The app returns the surface's server
+  `message_id` so the backend can correlate the answer to the prompt; `TextPromptRequest` has no
+  such field, so no platform's SDK sends it.
+- No `agentic_chip_*` analytics properties on the location-shared send (it reports as an ordinary
+  text query with `triggered_input_type: "align_chip_sel"`), matching the Android SDK.
 - The Compose `AlignmentSurface` has a `fetchingProgressLabel` slot for a capability in flight;
-  it is not ported, for the same reason.
+  it is not ported. Nothing is lost in practice: the location prompt's own full-screen overlay
+  and the system picker cover the chat while a capability runs.
+- The app's chat-history `message_type_id 12 → location_shared` mapping is not ported (the app's
+  own `TODO(location-history)` calls the type id and address field unconfirmed), so a location
+  bubble does not survive a conversation reload.
 - The stream error card uses the `info` icon for both states (this package's bundled icon set has
   no wifi-off/warning glyph); the copy still distinguishes them.
-- Tapping an alignment chip records the pick so the chip locks and stays highlighted — an
-  **addition** on React Native. The Android core has the `alignmentSelectedValues` field but
-  nothing that fills it, so a tapped chip never locks there.
+- Tapping an alignment chip records the pick so the chip locks and stays highlighted. Parity with
+  the Android core, which fills `alignmentSelectedValues` in `recordAlignmentPick()`; React Native
+  records it explicitly on the action instead of matching the sent question, and the location
+  capability marks `share_precise_location` itself (its chip text is never sent).
 - When an agentic answer settles from the terminal `metadata` event, the settled bubble **keeps
   the stream's id** instead of minting a new one as Android does. Android's fresh id makes its
   reveal-tracking set miss, which replays the typewriter animation over text the farmer just
@@ -205,6 +228,25 @@ User-visible strings resolve through the label manager, but this package has a *
 pre-existing bug**: several of its label base keys do not match the keys the server ships, so
 those strings fall back to their English defaults. The agentic/alignment strings use the same base
 keys as the Android SDK, but localization on React Native is **not verified**.
+
+### Fallback location (no hardcoded city)
+
+Endpoint #12 (home feed) stays empty until the backend has a resolved location, and it resolves
+one ONLY from coordinates — a country name alone is rejected. When the Google `geolocate` call
+fails (or no `geoApiKey` is configured), the SDK does what the app does: it derives the **device
+locale's country** and uses that country's centroid from a 247-entry table ported verbatim from
+the app's `CountryLatLngProvider`, accepting it only when `lat != 0 && lng != 0`.
+
+- The chain for `country_code` is: server `country_code` → persisted → your `defaultCountryCode`
+  (when non-blank) → device-locale region → `'KE'` (the app's own literal; endpoint #2 returns
+  HTTP 400 on a blank value, so a floor has to exist).
+- If nothing resolves, **no coordinates are sent at all**. `(0, 0)` is a real point in the Gulf of
+  Guinea, so sending it would be a wrong answer rather than a missing one — the guest gets an
+  empty feed, which is honest.
+- There is **no hardcoded city**. An earlier build defaulted to Bengaluru, so every guest the
+  backend could not place was given Karnataka's advice.
+- `expo-localization` is an optional peer used for the locale region; when it is absent the SDK
+  falls back to `Intl` and never crashes.
 
 ## Networking guarantees (parity with the production app)
 

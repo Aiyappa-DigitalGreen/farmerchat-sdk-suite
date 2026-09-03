@@ -53,7 +53,11 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
                 }
             }
 
-            delay(200L) // minimum splash duration
+            // The floor covers the WHOLE splash, bootstrap included — not 200 ms plus however
+            // long the network takes. Measured from here so the elapsed check below subtracts
+            // whatever the session bootstrap already spent.
+            val splashStartedAt = android.os.SystemClock.elapsedRealtime()
+            val minSplashMs = graph.config.minSplashDurationMs
             // Gate on a pending error: the error screen handles retry-driven routing.
             if (graph.errorNavigationManager.hasPendingError.value) return@launch
 
@@ -65,6 +69,7 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
             ) {
                 // Guest session + conversation bootstrap (shared with android-compose).
                 graph.ensureChatOnlySession()
+                holdSplash(splashStartedAt, minSplashMs)
                 NavRoutes.navigateChatOnly(nav)
                 return@launch
             }
@@ -72,6 +77,7 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
             // first so Home opens with real server labels instead of English fallbacks.
             graph.ensureSkippedOnboardingBootstrap()
 
+            holdSplash(splashStartedAt, minSplashMs)
             NavRoutes.navigateFromSplash(nav, graph.routeDecider.routeFromSplash()) { _ ->
                 graph.locationPromptManager.triggerFromCampaign(
                     org.digitalgreen.farmerchat.sdk.core.ui.location.LocationCampaignConfig(
@@ -87,4 +93,15 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
         logoAnimator = null
         super.onDestroyView()
     }
+
+    /**
+     * Holds the splash until [minSplashMs] have passed since [startedAt].
+     *
+     * A floor, never an added delay: if the bootstrap already took longer, this returns at once.
+     */
+    private suspend fun holdSplash(startedAt: Long, minSplashMs: Long) {
+        val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+        if (elapsed < minSplashMs) kotlinx.coroutines.delay(minSplashMs - elapsed)
+    }
+
 }

@@ -467,17 +467,172 @@ const css = `
 .fcsdk-bottomsheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 50;
   background: var(--fc-bg); border-radius: 18px 18px 0 0; padding: 20px 18px 22px; box-shadow: 0 -8px 30px rgba(0,0,0,0.3); }
 
-/* --- markdown ------------------------------------------------------------------------------------------------ */
-.fcsdk-md p { margin: 0 0 10px; }
-.fcsdk-md p:last-child { margin-bottom: 0; }
-.fcsdk-md h1, .fcsdk-md h2, .fcsdk-md h3, .fcsdk-md h4 { margin: 14px 0 6px; line-height: 1.3; }
-.fcsdk-md h1 { font-size: 19px; } .fcsdk-md h2 { font-size: 17px; } .fcsdk-md h3, .fcsdk-md h4 { font-size: 15.5px; }
-.fcsdk-md ul, .fcsdk-md ol { margin: 4px 0 10px; padding-left: 22px; }
-.fcsdk-md li { margin: 3px 0; }
+/* --- markdown (2.0.0) -----------------------------------------------------------------------------
+   Parity with components/MarkdownText.kt. The 24/20/16/12/5px block-pair rhythm is applied as an
+   inline marginTop by the renderer (see markdownParse.blockTopSpacing), so every element here has
+   its own margins zeroed — a stray default margin would stack on top of the computed spacing and
+   silently break the rhythm. */
+.fcsdk-md-block > * { margin: 0; }
+.fcsdk-md p { margin: 0; }
+.fcsdk-md h1, .fcsdk-md h2, .fcsdk-md h3 { margin: 0; line-height: 1.3; }
+.fcsdk-md h1 { font-size: 19px; } .fcsdk-md h2 { font-size: 17px; } .fcsdk-md h3 { font-size: 15.5px; }
+.fcsdk-md ul, .fcsdk-md ol { margin: 0; padding-left: 22px; }
+.fcsdk-md li { margin: 0; }
+/* Consecutive list items tighten to 5px — Kotlin's BulletItem-after-BulletItem spacing. */
+.fcsdk-md li + li { margin-top: 5px; }
 .fcsdk-md code { background: var(--fc-surface); border-radius: 5px; padding: 1px 5px; font-size: 0.92em; }
-.fcsdk-md pre { background: var(--fc-surface); border-radius: 10px; padding: 10px 12px; overflow-x: auto; }
+.fcsdk-md pre { background: var(--fc-surface); border-radius: 10px; padding: 10px 12px; overflow-x: auto; margin: 0; }
 .fcsdk-md a { color: var(--fc-brand-bright); }
-.fcsdk-md blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--fc-brand-bright); color: var(--fc-text-muted); }
+.fcsdk-md blockquote { margin: 0; padding: 4px 12px; border-left: 3px solid var(--fc-brand-bright); color: var(--fc-text-muted); }
+/* Divider: a 3px fully-rounded rule (Compose height(3.dp) + RoundedCornerShape(50)). */
+.fcsdk-md-divider { height: 3px; border-radius: 50px; background: var(--fc-border); }
+/* Tables. The WRAPPER scrolls, never the page. 1-2 column tables fill the width; 3+ columns keep
+   a 160px per-column minimum and pan, with a right-edge fade hinting there is more. */
+.fcsdk-md-tablewrap { position: relative; max-width: 100%; }
+.fcsdk-md-tablewrap--scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fcsdk-md-table { border-collapse: collapse; width: 100%;
+  border: 1px solid var(--fc-border); border-radius: 8px; overflow: hidden; }
+.fcsdk-md-table--wide { width: auto; min-width: 100%; }
+.fcsdk-md-table--wide th, .fcsdk-md-table--wide td { min-width: 160px; }
+.fcsdk-md-table th, .fcsdk-md-table td { padding: 10px 12px; vertical-align: top; }
+.fcsdk-md-table th { background: var(--fc-surface); font-size: 12.5px; font-weight: 700; }
+.fcsdk-md-table td { font-size: 13.5px; }
+/* Body rows alternate, as in the Kotlin (surfaceSecondary / surfaceReadingSecondary). */
+.fcsdk-md-table tbody tr:nth-child(odd) { background: var(--fc-bg); }
+.fcsdk-md-table tbody tr:nth-child(even) { background: var(--fc-surface); }
+.fcsdk-md-tablefade { position: absolute; top: 0; right: 0; bottom: 0; width: 48px; pointer-events: none;
+  background: linear-gradient(to right, rgba(0,0,0,0), var(--fc-surface-reading, var(--fc-bg))); }
+
+/* --- agentic Home + Terms-of-Use dialog (2.0.0) ---------------------------------------------------
+   App parity (HomeScreen.kt:534): in agentic mode the surface is the grey READING surface and the
+   green lives only in a gradient band behind the header and first card, so the app bar is
+   transparent and the band shows through it. */
+.fcsdk-home--agentic { background: var(--fc-surface-reading); }
+.fcsdk-home--agentic .fcsdk-appbar { background: transparent; color: var(--fc-appbar-text); }
+/* Band + glow sit behind; the app bar and scroller are lifted above them. */
+.fcsdk-home-band { position: absolute; left: 0; right: 0; top: 0; height: 36.6%; z-index: 0;
+  pointer-events: none; transition: opacity 120ms linear;
+  background: linear-gradient(to bottom, var(--fc-brand) 0%, var(--fc-brand) 58.8%,
+    rgba(0, 0, 0, 0) 100%); }
+.fcsdk-home-band-glow { position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+  width: 100%; height: 148px; pointer-events: none;
+  background: radial-gradient(ellipse at top center, rgba(255, 249, 71, 0.30), rgba(255, 249, 71, 0) 70%); }
+.fcsdk-home--agentic .fcsdk-appbar, .fcsdk-home--agentic .fcsdk-scroll { position: relative; z-index: 1; }
+/* Centred top section: 42px logo mark, leaf-flanked section title, location pill, greeting. */
+.fcsdk-home-agentic-head { display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 2px 16px 16px; text-align: center; color: var(--fc-appbar-text); }
+.fcsdk-home-logomark { font-size: 34px; line-height: 42px; height: 42px; }
+.fcsdk-home-sectionhead { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; }
+.fcsdk-home-leaf { opacity: 0.75; font-size: 14px; }
+.fcsdk-home-leaf--flip { transform: scaleX(-1); }
+.fcsdk-home-locationpill { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 999px; padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.14); color: inherit; font-size: 13px; }
+.fcsdk-home-locationpill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcsdk-greeting--centred { text-align: center; padding: 4px 8px 0; }
+/* Terms-of-Use dialog: full-surface, document in the middle, elevated accept footer. */
+.fcsdk-terms { max-width: 640px; height: 100%; max-height: 100%; }
+.fcsdk-terms-body { position: relative; flex: 1; min-height: 0; display: flex; }
+.fcsdk-terms-loading { position: absolute; inset: 0; background: #fff; display: flex;
+  align-items: flex-start; justify-content: center; padding-top: 24px; }
+.fcsdk-terms-footer { flex-shrink: 0; background: var(--fc-bg); padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18); }
+
+/* --- location chat bubble (2.0.0) ----------------------------------------------------------------
+   Port of components/LocationChatBubble.kt: fixed 290x184 card, three corners at Radius.XL (20px)
+   with the bottom-right sharp (same asymmetric shape as the user bubble, because this IS a
+   user-side message), tinted map header above a caption/address footer. */
+.fcsdk-bubble-location-row { display: flex; justify-content: flex-end; }
+.fcsdk-locbubble { width: 290px; max-width: 100%; height: 184px; display: flex; flex-direction: column;
+  overflow: hidden; border-radius: 20px 20px 0 20px; background: var(--fc-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10); }
+/* Green500_16 — a 16% tint of the brand green, as in the Kotlin. */
+.fcsdk-locbubble-map { flex: 1 1 auto; min-height: 0; display: flex; align-items: center;
+  justify-content: center; background: var(--fc-brand-soft, rgba(0, 201, 80, 0.16)); }
+.fcsdk-locbubble-mark { display: flex; flex-direction: column; align-items: center;
+  color: var(--fc-brand-bright); line-height: 0; }
+.fcsdk-locbubble-footer { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 16px; }
+.fcsdk-locbubble-caption { font-size: 14px; color: var(--fc-text-muted); }
+.fcsdk-locbubble-address { font-size: 14px; font-weight: 700; color: var(--fc-text); }
+
+/* --- unified composer (2.0.0) -------------------------------------------------------------------------------
+   Geometry mirrors components/composerLayout.ts, which transcribes the Compose
+   InputComposer.kt constants 1:1 (dp read as px). Sizes that morph between the
+   standard and compact metrics carry a 250ms transition, matching Compose's
+   animateDpAsState(tween(250)). */
+.fcsdk-screen--composer { position: relative; }
+.fcsdk-composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 14;
+  transition: transform 300ms ease; pointer-events: none; }
+.fcsdk-composer > * { pointer-events: auto; }
+.fcsdk-composer--floating { padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px); }
+.fcsdk-composer--anchored { padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--fc-bg); }
+.fcsdk-composer--hidden { transform: translateY(160%); }
+.fcsdk-composer--hidden > * { pointer-events: none; }
+.fcsdk-composer-sheet { background: var(--fc-brand);
+  transition: padding 250ms ease, border-radius 250ms ease; }
+.fcsdk-composer--floating .fcsdk-composer-sheet { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24); }
+.fcsdk-composer-row { display: flex; align-items: flex-end; }
+.fcsdk-composer-btn { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: #fff; color: var(--fc-brand); line-height: 1; padding: 0;
+  transition: width 250ms ease, height 250ms ease, font-size 250ms ease; }
+.fcsdk-composer-btn:hover { filter: brightness(0.94); }
+.fcsdk-composer-field { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; cursor: text;
+  background: var(--fc-surface);
+  transition: background 220ms ease, min-height 250ms ease; }
+.fcsdk-composer-field--active { background: var(--fc-bg); }
+.fcsdk-composer-thumbs, .fcsdk-composer-fieldrow { position: relative; z-index: 2; }
+.fcsdk-composer-thumbs { display: flex; gap: 5px; padding: 8px 0 10px; }
+.fcsdk-composer-thumb { position: relative; flex: 0 0 auto; border-radius: 10px; overflow: hidden; }
+.fcsdk-composer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fcsdk-composer-thumb button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 11px; line-height: 1; padding: 0; }
+.fcsdk-composer-fieldrow { display: flex; align-items: center; width: 100%; padding: 7px 0; }
+.fcsdk-composer-input { flex: 1 1 auto; width: 100%; min-height: 24px; max-height: 72px;
+  border: none; outline: none; resize: none; background: transparent; color: var(--fc-text);
+  font-size: 15px; line-height: 1.35; padding: 0; overflow-y: auto; }
+.fcsdk-composer-placeholder { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--fc-text-muted); font-size: 15px; }
+.fcsdk-composer-placeholder--in { animation: fcsdk-ph-in 400ms ease both; }
+.fcsdk-composer-placeholder--out { animation: fcsdk-ph-out 400ms ease both; }
+/* Placeholder shimmer sweep — Compose ShimmerText, 2250ms, idle only. */
+.fcsdk-composer-placeholder--shimmer {
+  background-image: linear-gradient(100deg, currentColor 0%, currentColor 30%,
+    var(--fc-brand-bright) 45%, var(--fc-brand-bright) 55%, currentColor 70%, currentColor 100%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+  animation: fcsdk-ph-shimmer 2250ms linear infinite; }
+.fcsdk-root[data-fc-theme="day"] .fcsdk-composer-placeholder--shimmer,
+.fcsdk-root[data-fc-theme="night"] .fcsdk-composer-placeholder--shimmer { -webkit-text-fill-color: transparent; }
+@keyframes fcsdk-ph-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fcsdk-ph-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fcsdk-ph-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+/* Ambient "aura": a conic gradient rotating behind the field, with an inset panel of the
+   field's own background drawn over it so only a ~2.4px ring shows. Home-only, idle-only.
+   Colours are InputComposer.kt AuraColors; 7s rotation; the opacity keyframes replay the
+   Kotlin breath (2 gentle breaths, then a deep ebb and slow swell) over its 15s cycle. */
+.fcsdk-composer-field--aura::before { content: ''; position: absolute; z-index: 0;
+  left: 50%; top: 50%; width: 260%; aspect-ratio: 1; border-radius: 50%;
+  background: conic-gradient(from 0turn, #00C950, #22D3EE, #00C950, #FFF947, #00C950);
+  filter: blur(3px);
+  animation: fcsdk-aura-spin 7s linear infinite, fcsdk-aura-breathe 15s ease-in-out infinite; }
+.fcsdk-composer-field--aura::after { content: ''; position: absolute; z-index: 1; inset: 2.4px;
+  border-radius: 14px; background: inherit; }
+@keyframes fcsdk-aura-spin {
+  from { transform: translate(-50%, -50%) rotate(0turn); }
+  to { transform: translate(-50%, -50%) rotate(1turn); } }
+@keyframes fcsdk-aura-breathe {
+  0% { opacity: 1; } 16% { opacity: 0.5; } 32% { opacity: 1; }
+  48% { opacity: 0.5; } 66.67% { opacity: 0.04; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fcsdk-composer-field--aura::before { animation: none; opacity: 0.7; }
+  .fcsdk-composer-placeholder--shimmer { animation: none; color: var(--fc-text-muted);
+    -webkit-text-fill-color: currentColor; background-image: none; }
+}
 
 /* --- misc ------------------------------------------------------------------------------------------------------ */
 .fcsdk-error-inline { color: var(--fc-danger); font-size: 13px; }

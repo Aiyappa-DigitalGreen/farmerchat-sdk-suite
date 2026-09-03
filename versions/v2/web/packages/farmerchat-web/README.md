@@ -78,8 +78,9 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `guestApiKey` | `string` | `''` | API key for guest initialization (`initialize_user`) and the guest-token refresh fallback (`send_tokens`). Required for the SDK to work — provisioned per host. |
 | `appearance` | `'day' \| 'night' \| 'auto'` | `'auto'` | `auto` follows `prefers-color-scheme` live. |
 | `languageCode` | `string` | — | Preselects the UI language code. |
-| `defaultCountryCode` | `string` | `'IN'` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |
-| `defaultStateCode` | `string` | `'Karnataka'` | State/region paired with `defaultCountryCode`. Endpoint #2 matches the state **display name**, not the ISO code, and uses it only to rank languages. |
+| `defaultCountryCode` | `string` | `''` (derive) | OPTIONAL override for the endpoint #2 `country_code` when `initialize_user` cannot resolve one (a fresh guest often gets `country_code: null`). **Leave it unset and the SDK derives the country from the browser locale**, exactly as the Android app does. Endpoint #2 returns HTTP 400 for a blank value, so if the locale carries no region either (e.g. a plain `en` browser), `'KE'` — the app's own last-resort literal — is sent. Set it only to pin the SDK to one region. |
+| `defaultStateCode` | `string` | `''` (omit) | OPTIONAL `state` query param for endpoint #2. Safe to leave empty: the parameter is inert on every environment (`Karnataka`, `KA`, blank and omitted all return the identical set — verified live 2026-09-03). |
+| `defaultLatitude` / `defaultLongitude` | `number` | `0` (derive) | OPTIONAL override for the coordinates posted to endpoint #11 when nothing else resolved a location. **Leave them at `0` and the SDK uses the browser locale's country centroid**, the app's own IP-geolocation fallback. If neither these nor the locale resolve, **no coordinates are sent at all** — a guess would put the farmer's advice in the wrong place. |
 | `enableVoice` | `boolean` | `true` | Speak input + voice-clip playback (needs MediaRecorder). |
 | `enableImages` | `boolean` | `true` | Photo input + image analysis queries. |
 | `enableWeather` | `boolean` | `true` | Weather chip on Home + weather advice CTA. |
@@ -210,7 +211,40 @@ split across two network chunks is parsed correctly.
 the answer with a chip prompt: `alignment-clarify` / `-confirm` / `-escalate`,
 `gps-prompt`, `upload-photo` (exclusive — the surface *is* the message, and `response`
 arrives empty on purpose), plus `gender-select` / `commodity-confirm` (additive — they
-render below a real answer). Tapping a chip sends its `value` as a follow-up.
+render below a real answer). Tapping a chip sends its `value` as a follow-up, and the tapped
+chip is recorded on that surface so it renders selected and locked while the unpicked chips fade
+back (`selectAlignmentChip`). **Capability chips are the exception**: a chip whose `action` is
+`invoke` invokes a browser capability and sends only the OUTCOME, never its own text —
+`share_precise_location` starts the shared location flow, `take_photo` / `choose_from_gallery`
+open the camera / gallery picker directly. On a `location_fetched` outcome the resolved address is
+appended as a `LocationChatBubble` and the surface's `original_query` is re-sent with
+`triggered_input_type = align_chip_sel`; on a decline, cancel or failure the label
+`fc_v2_app_label_location_permission_declined` ("Continue without sharing my location") is sent as
+an ordinary follow-up. `not_now` and every other chip keep the plain text path. The routing table
+is one function, `capabilityChipRoute` in `core/alignment.ts`, shared by the screen and its tests.
+
+With the flag on, the UI also switches to the 2.0.0 layout, matching the Compose reference:
+
+- **`InputComposer`** replaces the Photo/Speak/Type row *and* the text overlay on both Home and
+  Chat — one bar with `[camera] [ text field ] [mic | send]`. Home renders it floating with the
+  idle gradient aura; Chat renders it compact and slides it out while an answer generates. An
+  attached photo becomes a thumbnail inside the field, and the question is typed beside it.
+- **Home** moves to the grey reading surface with a green→transparent gradient band behind a
+  centred logo mark, a leaf-flanked "For your farm today" header, a location pill and the
+  greeting; the band fades over the first 215px of scroll. A feed card tap sends the card question
+  straight into chat rather than fetching a pre-generated answer (#13).
+- **`LocationChatBubble`** renders a `location` message right-aligned in the thread, produced by
+  `useChat.sendLocationSharedQuery` — the only constructor of that variant — from a satisfied
+  `gps-prompt` capability chip. Its address joins district → state → country from the stored prefs
+  (blank parts dropped, de-duplicated); a blank address yields no bubble but still re-sends the
+  query, matching the app.
+- **`TermsOfUseDialog`** opens on `openScreen('termsofuse')`, loading the terms from
+  `privacy_policy` (#4) in a sandboxed iframe with an "Accept and continue" button that calls
+  `accept_terms` (#7).
+
+Markdown rendering is also upgraded for every answer (both #27 and #27a): GFM tables with
+per-column alignment and horizontal scrolling past two columns, `---` dividers, and correctly
+nested `*italic **bold** italic*` emphasis.
 
 ⚠ The #27a wire framing is not yet confirmed against a live stream (a guest receives
 0 bytes on dev/stage/prod; agentic answers appear to be gated on an OTP-verified user),
@@ -222,12 +256,16 @@ which is why the reader is permissive and why this is a preview flag.
 npm run typecheck        # tsc --noEmit (strict)
 npm run build            # vite library build (ESM + CJS) + .d.ts
 npm run typecheck:test   # tsc -p tsconfig.test.json (src + test/)
-npm test                 # agentic parser + byte-level stream tests (plain Node, no framework)
+npm test                 # 174 assertions: agentic, alignment-pick, capability-chip, markdown (plain Node, no framework)
 ```
 
-`npm test` runs the agentic parser / framing / sanitizer / alignment tests plus the
-byte-level `readAgenticStream` tests (split JSON objects, a multi-byte character split
-across two reads, failure and abort mapping) on Node's native TypeScript support — this
+`npm test` runs **174 assertions** across five files: the agentic parser / framing / sanitizer /
+alignment tests, the byte-level `readAgenticStream` tests (split JSON objects, a multi-byte
+character split across two reads, failure and abort mapping), the `recordAlignmentPick` reducer,
+the capability-chip routing rule and its literal wire strings (mirroring android's
+`CapabilityChipTest`), and the markdown parser (nested emphasis, unmatched markers, GFM tables, the block rhythm) — all
+on Node's native TypeScript support. Both new suites parse in React-free modules
+(`core/alignment.ts`, `ui/components/markdownParse.ts`) precisely so they can run here; this
 package intentionally has **no test framework**, so the suite is a plain assertion
 script that exits non-zero on failure. `test/ts-extension-hook.mjs` is a short
 `node:module` resolve hook that lets Node load the extensionless imports inside `src/`.

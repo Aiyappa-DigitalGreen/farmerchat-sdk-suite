@@ -30,8 +30,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.R
@@ -42,9 +49,11 @@ import org.digitalgreen.farmerchat.sdk.compose.components.SecondaryButton
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
 import org.digitalgreen.farmerchat.sdk.compose.components.rememberToastState
+import org.digitalgreen.farmerchat.sdk.compose.theme.Green700
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import org.digitalgreen.farmerchat.sdk.compose.util.hasLocationPermission
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
@@ -52,10 +61,12 @@ import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 
 /**
- * Settings (doc 01 §3.10). Appearance Day/Night/Auto selector, account details
- * ("Your name"), Logout / Sign up, "name updated" toast.
+ * Settings (doc 01 §3.10). Appearance Day/Night/Auto selector, "My Farm" location row,
+ * account details ("Your phone" / "Your name"), Logout / Sign up, "name updated" toast.
  */
 @Composable
 fun SettingsScreen(
@@ -80,6 +91,71 @@ fun SettingsScreen(
     }
     var userName by remember {
         mutableStateOf(graph.prefs.getString(SdkPreferences.Keys.USER_NAME, ""))
+    }
+    // Written only by SessionManager.onOtpVerified, so a guest has no number and gets "—".
+    val phoneNumber = remember {
+        graph.prefs.getString(SdkPreferences.Keys.PHONE_NUMBER_LOGIN, "")
+    }
+
+    // ------------------------------------------------------------------ My Farm / location
+    //
+    // 2.0.0 "My Farm" location row. Driven by the shared LocationPromptManager singleton whose
+    // overlay (LocationPromptHost) is mounted once at FarmerChatRoot, so triggering from here is
+    // enough — this screen renders no permission UI of its own.
+    //
+    // SDK adaptation of the app-only manager helpers, all derived here without touching core
+    // (identical to HomeLocationPill's adaptation on Home):
+    //  • `isLocationEnabledOnce()`        → LocationPromptManager.hasStoredLocation(); core writes
+    //    FARMER_APP_LATITUDE/LONGITUDE only in onLocationFetched, i.e. only after a real GPS fix.
+    //  • `hasCurrentLocationPermission()` → a live ContextCompat check in this layer.
+    //  • `getApproxLocationName()`        → APPROX_LOCATION_NAME, which core writes from the #16
+    //    response's `display_address`. The app's separate never-overwritten
+    //    IP_APPROX_LOCATION_NAME key does not exist in the SDK, so there is one name, not two.
+    val locationManager = graph.locationPromptManager
+    val locationState by locationManager.state.collectAsState()
+    val context = LocalContext.current
+
+    // Permission is changed in system Settings — where this screen is exactly the place the user
+    // leaves from — so re-check on every resume. hasStoredLocation() alone stays true after the
+    // permission is revoked, so it must be paired with a live check or the row keeps showing a
+    // stale exact location.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumeTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val hasExactLocation = remember(resumeTick, locationState) {
+        locationManager.hasStoredLocation() && hasLocationPermission(context)
+    }
+    // Derived fresh every recomposition (cheap prefs read) rather than cached, so a permission
+    // revocation is picked up immediately via resumeTick above.
+    val locationPlaceName = graph.prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "")
+
+    // Only reacts to states raised by THIS row (source == Settings) so Home's own location flow
+    // does not make this row appear to be updating too.
+    val isSettingsLocationFlowActive = when (val s = locationState) {
+        is LocationPromptState.RequestPermission -> s.source == LocationTriggerSource.Settings
+        is LocationPromptState.RequestEnableGps -> s.source == LocationTriggerSource.Settings
+        is LocationPromptState.FetchingLocation -> s.source == LocationTriggerSource.Settings
+        else -> false
+    }
+    var wasSettingsLocationFlowActive by remember { mutableStateOf(false) }
+    LaunchedEffect(locationState) {
+        if (wasSettingsLocationFlowActive &&
+            locationState == LocationPromptState.Idle &&
+            hasExactLocation
+        ) {
+            // Flow just completed successfully. hasExactLocation is safe to read here: core
+            // persists FARMER_APP_LATITUDE/LONGITUDE in onLocationFetched *before* the coroutine
+            // that flips state to Idle, and `remember(locationState)` recomputes during the
+            // composition that precedes this relaunch — so it is never the pre-fetch value.
+            toast.show(label(Labels.LOCATION_FOUND, "Location found"), ToastState.Success)
+        }
+        wasSettingsLocationFlowActive = isSettingsLocationFlowActive
     }
 
     LaunchedEffect(Unit) {
@@ -188,6 +264,82 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // My Farm (2.0.0)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = label(Labels.MY_FARM, "My Farm"),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.foregroundPrimary
+                    )
+
+                    ListCard {
+                        ListItem(
+                            iconRes = R.drawable.fc_icon_location,
+                            textLeft = label(Labels.LOCATION, "Location"),
+                            textRight = when {
+                                isSettingsLocationFlowActive ->
+                                    label(Labels.GETTING_YOUR_LOCATION, "Getting your location")
+                                locationPlaceName.isBlank() -> "—"
+                                // Approximate (pre-permission) location is qualified inline with its
+                                // own label, independent of the "Estimated" helper caption below —
+                                // the two are worded differently by design in the app.
+                                !hasExactLocation ->
+                                    "$locationPlaceName (${label(Labels.APPROXIMATE, "approximate")})"
+                                else -> locationPlaceName
+                            },
+                            showTrailingSpinner = isSettingsLocationFlowActive,
+                            onClick = {
+                                if (locationManager.state.value == LocationPromptState.Idle) {
+                                    locationManager.triggerFromSettings()
+                                }
+                            }
+                        )
+                    }
+
+                    // "Share your location…" / "Change anytime." are tinted Green700 as a visual
+                    // accent (matching the app/Figma helper) but are not tappable themselves — the
+                    // location action lives on the row above — so no underline or clickable here.
+                    Text(
+                        text = buildAnnotatedString {
+                            if (hasExactLocation) {
+                                append(
+                                    label(
+                                        Labels.LOCATION_HELPER_ADVICE_WEATHER,
+                                        "Advice and weather for this area."
+                                    )
+                                )
+                                append(" ")
+                                withStyle(SpanStyle(color = Green700)) {
+                                    append(
+                                        label(
+                                            Labels.LOCATION_HELPER_CHANGE_ANYTIME,
+                                            "Change anytime."
+                                        )
+                                    )
+                                }
+                            } else {
+                                append(label(Labels.ESTIMATED, "Estimated"))
+                                append(". ")
+                                withStyle(SpanStyle(color = Green700)) {
+                                    append(
+                                        label(
+                                            Labels.LOCATION_HELPER_SHARE,
+                                            "Share your location for better advice."
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.foregroundSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 // Account details
                 Text(
                     text = label(Labels.ACCOUNT_DETAILS, "Account details"),
@@ -196,7 +348,19 @@ fun SettingsScreen(
                 )
 
                 ListCard {
+                    // 2.0.0: read-only phone row. Non-tappable (no chevron, empty onClick) and
+                    // only ever populated after OTP verification, so guests see "—" — same as
+                    // the app, which reads its own persisted login number.
                     ListItem(
+                        iconRes = R.drawable.fc_icon_phone,
+                        textLeft = label(Labels.YOUR_PHONE, "Your phone"),
+                        textRight = phoneNumber.trim().takeIf { it.isNotEmpty() } ?: "—",
+                        showChevron = false,
+                        showDivider = true,
+                        onClick = {}
+                    )
+                    ListItem(
+                        iconRes = R.drawable.fc_icon_name,
                         textLeft = label(Labels.YOUR_NAME, "Your name"),
                         textRight = userName.ifBlank { null },
                         onClick = {

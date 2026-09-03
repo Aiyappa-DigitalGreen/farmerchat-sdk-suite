@@ -130,6 +130,25 @@ public final class OnboardingViewModel: ObservableObject {
             accuracy = response.accuracy
             prefs.setDouble(location.lat, .latitude)
             prefs.setDouble(location.lng, .longitude)
+        } else {
+            // P1 fallback endpoint — tolerated failure. The app does NOT then proceed with no
+            // coordinates: it falls back to the DEVICE LOCALE's country centroid
+            // (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and accepts it only when
+            // `lat != 0.0 && lng != 0.0`. A locale with no region yields (0.0, 0.0), which must
+            // stay unresolved — sending it would place the farmer off West Africa.
+            //
+            // Covers BOTH a failed call and a success carrying no `location` (Android only
+            // handles the former — noted in docs/04).
+            //
+            // Deliberately NOT persisted to `.latitude`/`.longitude`: a country centroid is not
+            // this user's location, and writing it would leak a fake precise fix into every
+            // later read. It only feeds guest init, exactly as the app does.
+            let fallback = config.resolvedFallbackCoordinates
+            if CountryLatLngProvider.isResolved(lat: fallback.lat, lng: fallback.lng) {
+                lat = fallback.lat
+                lng = fallback.lng
+                accuracy = 0.0
+            }
         }
 
         state.guestInitState = .loading
@@ -138,11 +157,12 @@ public final class OnboardingViewModel: ObservableObject {
         switch initResult {
         case .success(let response):
             // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an unresolvable
-            // IP comes back with country_code == nil. Fall through to the persisted value,
-            // then to the host-configured default, never to "".
+            // IP comes back with country_code == nil. Fall through to the persisted value, then
+            // to the host config (if set), then to the DEVICE LOCALE's region, and only as a
+            // last resort to `lastResortCountryCode` — never to "".
             let countryCode = response.countryCode?.nonBlank
                 ?? prefs.string(.userCountryCode)?.nonBlank
-                ?? config.defaultCountryCode
+                ?? config.resolvedFallbackCountryCode
             let regionState = response.state?.nonBlank
                 ?? prefs.string(.userState)?.nonBlank
                 ?? config.defaultStateCode
@@ -172,16 +192,26 @@ public final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    /// Posts the configured default coordinates to endpoint #11 so a guest with no resolvable
+    /// Posts the resolved fallback coordinates to endpoint #11 so a guest with no resolvable
     /// location still gets a home feed. Best-effort — a failure just leaves the feed empty,
     /// which is the pre-existing behaviour, so it never blocks onboarding.
+    ///
+    /// The coordinates are the host's explicit config override, else the DEVICE LOCALE's country
+    /// centroid — the app's own fallback. There is NO hardcoded city: a previous build defaulted
+    /// to Bengaluru, so every guest the backend could not place was told about Karnataka.
     private func seedDefaultLocation() async {
         guard let userId = env.session.userId else { return }
+        let fallback = config.resolvedFallbackCoordinates
+        // Nothing resolved — not the host's config, not the device locale. Send nothing rather
+        // than guess: an unplaceable guest gets an empty feed, which is honest, where a guessed
+        // city (or (0,0), a real point in the Gulf of Guinea) would silently give them another
+        // country's advice.
+        guard CountryLatLngProvider.isResolved(lat: fallback.lat, lng: fallback.lng) else { return }
         let result = await api.updateUserLocation(
             UpdateLocationRequest(
                 userId: userId,
-                lat: config.defaultLatitude,
-                long: config.defaultLongitude
+                lat: fallback.lat,
+                long: fallback.lng
             )
         )
         // NOTE: the live #11 response nests everything under `user_profile`, which

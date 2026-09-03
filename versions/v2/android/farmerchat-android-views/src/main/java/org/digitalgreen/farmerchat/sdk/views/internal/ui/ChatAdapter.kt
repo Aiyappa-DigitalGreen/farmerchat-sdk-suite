@@ -13,12 +13,14 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
+import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import org.digitalgreen.farmerchat.sdk.views.R
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatAiBinding
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatErrorBinding
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatLoadingBinding
+import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatLocationBinding
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatUserBinding
 import org.digitalgreen.farmerchat.sdk.views.internal.util.Markdown
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
@@ -29,6 +31,15 @@ internal sealed interface ChatRow {
 
     data class User(val message: ChatMessage.UserMessage) : ChatRow {
         override val key: String = "user_${message.id}"
+    }
+
+    /**
+     * 2.0.0: the farmer's resolved location, standing in for the text bubble they would
+     * otherwise have sent in reply to a GPS_PROMPT chip. Rendered by the dedicated
+     * fc_item_chat_location bubble (Compose parity: components/LocationChatBubble.kt).
+     */
+    data class Location(val message: ChatMessage.LocationMessage) : ChatRow {
+        override val key: String = "loc_${message.id}"
     }
 
     data class Ai(
@@ -75,7 +86,8 @@ internal class ChatAdapter(
 
         // Agentic (2.0.0)
         /** A quick-reply chip on an alignment surface was tapped. */
-        fun onAlignmentChipClick(chip: AlignmentChip)
+        /** [messageId] and [kind] are needed to route capability chips (gps-prompt / upload-photo). */
+        fun onAlignmentChipClick(messageId: String, kind: AlignmentKind, chip: AlignmentChip)
 
         /** The alignment escape hatch ("Type or say it.") was tapped: focus the text input. */
         fun onTypeInstead()
@@ -95,6 +107,7 @@ internal class ChatAdapter(
         const val TYPE_AI = 1
         const val TYPE_LOADING = 2
         const val TYPE_ERROR = 3
+        const val TYPE_LOCATION = 4
 
         /**
          * How long a live stream may go without a new token, and without a tool status, before
@@ -201,12 +214,15 @@ internal class ChatAdapter(
 
     override fun getItemViewType(position: Int): Int = when (rows[position]) {
         is ChatRow.User -> TYPE_USER
+        is ChatRow.Location -> TYPE_LOCATION
         is ChatRow.Ai -> TYPE_AI
         is ChatRow.Loading -> TYPE_LOADING
         is ChatRow.InlineError -> TYPE_ERROR
     }
 
     private class UserHolder(val binding: FcItemChatUserBinding) : RecyclerView.ViewHolder(binding.root)
+    private class LocationHolder(val binding: FcItemChatLocationBinding) :
+        RecyclerView.ViewHolder(binding.root)
     private class AiHolder(val binding: FcItemChatAiBinding) : RecyclerView.ViewHolder(binding.root)
     private class LoadingHolder(val binding: FcItemChatLoadingBinding) : RecyclerView.ViewHolder(binding.root)
     private class ErrorHolder(val binding: FcItemChatErrorBinding) : RecyclerView.ViewHolder(binding.root)
@@ -215,6 +231,8 @@ internal class ChatAdapter(
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
             TYPE_USER -> UserHolder(FcItemChatUserBinding.inflate(inflater, parent, false))
+            TYPE_LOCATION ->
+                LocationHolder(FcItemChatLocationBinding.inflate(inflater, parent, false))
             TYPE_AI -> AiHolder(FcItemChatAiBinding.inflate(inflater, parent, false))
             TYPE_LOADING -> LoadingHolder(FcItemChatLoadingBinding.inflate(inflater, parent, false))
             else -> ErrorHolder(FcItemChatErrorBinding.inflate(inflater, parent, false))
@@ -237,6 +255,7 @@ internal class ChatAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val row = rows[position]) {
             is ChatRow.User -> bindUser(holder as UserHolder, row.message)
+            is ChatRow.Location -> bindLocation(holder as LocationHolder, row.message)
             is ChatRow.Ai -> bindAi(holder as AiHolder, row)
             is ChatRow.Loading -> {
                 // App parity (ChatLoadingContent.kt -> LogoSpinnerHorizontal): the in-thread
@@ -248,6 +267,32 @@ internal class ChatAdapter(
                 }
             }
             is ChatRow.InlineError -> bindError(holder as ErrorHolder, row)
+        }
+    }
+
+    /**
+     * The location bubble (2.0.0). Compose parity: `LocationChatBubble` is a fixed 290x184 card,
+     * so nothing here is size-dependent — only the label and the resolved address, plus the same
+     * bubble-radius customization knob the user bubble honours (the bottom-right stays sharp).
+     */
+    private fun bindLocation(holder: LocationHolder, message: ChatMessage.LocationMessage) {
+        val b = holder.binding
+        b.fcLocationLabel.text = callbacks.labelFor(Labels.YOUR_LOCATION, "Your location:")
+        b.fcLocationAddress.text = message.address
+
+        val cfg = FarmerChat.requireGraph().config
+        cfg.messageFontSizeSp?.let {
+            b.fcLocationLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, it)
+            b.fcLocationAddress.setTextSize(TypedValue.COMPLEX_UNIT_SP, it)
+        }
+        cfg.bubbleCornerRadius?.let { r ->
+            (b.fcLocationBubble.background as? GradientDrawable)?.let { bg ->
+                val d = bg.mutate() as GradientDrawable
+                val px = r * b.root.resources.displayMetrics.density
+                // order: top-left, top-right, bottom-right, bottom-left (x,y each)
+                d.cornerRadii = floatArrayOf(px, px, px, px, 0f, 0f, px, px)
+                b.fcLocationBubble.background = d
+            }
         }
     }
 
@@ -319,7 +364,7 @@ internal class ChatAdapter(
                 isLatest = row.isLast,
                 additive = false,
                 labelFor = callbacks::labelFor,
-                onChipClick = { chip -> callbacks.onAlignmentChipClick(chip) },
+                onChipClick = { chip -> callbacks.onAlignmentChipClick(message.id, alignmentKind, chip) },
                 onTypeInstead = { callbacks.onTypeInstead() }
             )
             // Reset every other slot — a recycled holder must not keep a previous answer.
@@ -399,7 +444,7 @@ internal class ChatAdapter(
                 isLatest = row.isLast,
                 additive = true,
                 labelFor = callbacks::labelFor,
-                onChipClick = { chip -> callbacks.onAlignmentChipClick(chip) },
+                onChipClick = { chip -> callbacks.onAlignmentChipClick(message.id, alignmentKind, chip) },
                 onTypeInstead = {}
             )
         }

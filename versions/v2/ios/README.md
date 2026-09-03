@@ -76,8 +76,15 @@ FarmerChat.initialize(config: FarmerChatConfig(
     guestApiKey: "…",            // overrides built-in guest init API key
     appearance: .auto,           // day | night | auto
     languageCode: nil,           // preselect a language, skips language screen if valid
-    defaultCountryCode: "IN",    // fallback for the language list when initialize_user
-    defaultStateCode: "Karnataka", // returns no country_code (endpoint #2 400s on a blank one)
+    defaultCountryCode: "",      // OPTIONAL region pin. Leave EMPTY (the default) and the SDK
+    defaultStateCode: "",        // derives the country from the DEVICE LOCALE, exactly as the
+                                 // app does, falling back to "KE" only when the locale carries
+                                 // no region (endpoint #2 400s on a blank country_code).
+                                 // `state` is inert on every environment — leave it empty.
+    defaultLatitude: 0.0,        // OPTIONAL coordinate pin for the #11 seed. 0.0 = "unset →
+    defaultLongitude: 0.0,       // use the device locale's country centroid". There is NO
+                                 // hardcoded city: if nothing resolves, no coordinates are sent
+                                 // rather than guessing a region for the farmer.
     enableVoice: true,
     enableImages: true,
     enableWeather: true,
@@ -206,7 +213,7 @@ events with `attribute`/`value` props so hosts can map them onto identity.
 | `NSCameraUsageDescription` | Photo questions via camera |
 | `NSPhotoLibraryUsageDescription` | Photo questions from the gallery |
 | `NSPhotoLibraryAddUsageDescription` | "Download" answer card to Photos |
-| `NSLocationWhenInUseUsageDescription` | Location prompt (weather/local advice) |
+| `NSLocationWhenInUseUsageDescription` | Location prompt (weather/local advice, and the 2.0.0 `gps-prompt` capability chip) |
 
 The SDK checks availability gracefully — missing permissions degrade the
 feature (with a toast), they don't crash.
@@ -322,10 +329,48 @@ it replaces the answer; escalate gets an urgent tint. An **additive** one
 > every `Alignment` reference ambiguous in host files importing both modules. The
 > wire key is still `alignments`.
 
-Known iOS-only gaps for 2.0.0: the streaming/alignment UI exists in
-`FarmerChatSwiftUI` only (`FarmerChatUIKit` still renders 1.0.0 chat), and
-`alignmentSelectedValues` is never populated (faithful to Android core, so a
-tapped chip is not highlighted on either platform).
+### Capability chips (2.0.0)
+
+The two CAPABILITY surfaces do not send text. A chip whose `action` is `"invoke"`
+and whose `value` belongs to its own surface invokes a device capability, and only
+the OUTCOME is sent:
+
+| Surface | `value` | What happens |
+|---|---|---|
+| `gps-prompt` | `share_precise_location` | Runs the location flow, then re-sends the surface's `original_query` with `triggered_input_type = align_chip_sel`, showing the resolved address as a location bubble |
+| `upload-photo` | `take_photo` | Opens the camera directly (no photo-source sheet) |
+| `upload-photo` | `choose_from_gallery` | Opens the gallery directly |
+| any | `not_now`, or no `invoke` action | Ordinary follow-up — the chip's `value`/`label` is sent as the question |
+
+The rule is one Core function, `AlignmentChip.capability(for:)`, so SwiftUI and
+UIKit cannot drift apart; `AlignmentChip.actionSelect` / `valueShareLocation` /
+`valueTakePhoto` / `valueChooseFromGallery` / `valueNotNow` hold the exact wire
+strings (note `"invoke"`, **not** `"select"`, and `"share_precise_location"`,
+**not** `"share_location"`).
+
+Declining, cancelling or a failed fetch still answers the blocking question: the
+label `fc_v2_app_label_location_permission_declined` is sent as a follow-up
+(English fallback "Continue without sharing my location"; the key is verified
+present on endpoint #3). `LocationPromptEvent.isLocationObtained` /
+`.terminalSource` in Core are the shared predicate both flavours filter on, so a
+location outcome belonging to Home is never mistaken for a chat one.
+
+A shared location renders as `ChatMessage.location(LocationMessage)` —
+`FCLocationChatBubble` (SwiftUI) / `FCUILocationBubbleCell` (UIKit), honouring the
+same `bubbleCornerRadius` and `messageFontSize` knobs as the other bubbles. The
+address is `USER_DISTRICT, USER_STATE, USER_COUNTRY_NAME` (blanks dropped,
+de-duplicated); a guest has none of those, so the address is blank and no bubble
+is appended — app parity, not a failure. `NSLocationWhenInUseUsageDescription` and
+`NSCameraUsageDescription` / `NSPhotoLibraryUsageDescription` are therefore
+required for these chips to do anything (see the Info.plist table above).
+
+Known iOS-only deltas for 2.0.0, both mirrored from the Android reference rather
+than "fixed": the location send carries no `parent_message_id` (`TextPromptRequest`
+has no such field) and no `agentic_chip_*` analytics properties, so it reports as
+an ordinary text query. The app's chat-history `message_type_id 12 →
+location_shared` mapping is deliberately not ported (the app's own
+`TODO(location-history)` calls its type id and address field unconfirmed
+placeholders).
 
 ## Verification status
 
@@ -339,7 +384,7 @@ cd ios/FarmerChatCore   && swift test    # 10/10 tests pass (macOS host run)
 
 ```
 cd versions/v2/ios/FarmerChatCore    && swift build                                   # Build complete
-cd versions/v2/ios/FarmerChatCore    && swift test                                    # 57/57 tests pass (45 new agentic + 12 pre-existing)
+cd versions/v2/ios/FarmerChatCore    && swift test                                    # 79/79 tests pass (60 pre-existing + 19 new: CapabilityChipTests 12, LocationOutcomeTests 7)
 cd versions/v2/ios/FarmerChatCore    && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator   # Build complete
 cd versions/v2/ios/FarmerChatSwiftUI && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios16.0-simulator   # Build complete
 cd versions/v2/ios/FarmerChatUIKit   && xcrun swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator   # Build complete

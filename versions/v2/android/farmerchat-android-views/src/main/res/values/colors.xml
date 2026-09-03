@@ -33,6 +33,7 @@
     <color name="fc_surface_active">#2900C950</color>
     <color name="fc_surface_reading">#FFFFFF</color>
     <color name="fc_surface_reading_secondary">#ECECEE</color>
+    <color name="fc_surface_reading_tertiary">#FFFFFF</color>
     <color name="fc_foreground_primary">#000000</color>
     <color name="fc_foreground_secondary">#52525C</color>
     <color name="fc_foreground_tertiary">#D4D4D8</color>

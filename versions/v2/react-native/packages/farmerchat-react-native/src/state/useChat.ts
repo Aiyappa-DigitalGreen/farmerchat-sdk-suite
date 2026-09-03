@@ -18,6 +18,7 @@ import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
 import {
   alignmentAnalyticsType,
+  AlignmentChipWire,
   alignmentKindFromType,
   isAdditiveAlignment,
 } from '../core/types';
@@ -38,6 +39,12 @@ import { isTranscriptionAcceptable } from './useHome';
  * events queue up instead of being dropped.
  */
 const TOOL_STATUS_MIN_DWELL_MS = 700;
+
+/**
+ * `triggered_input_type` for a query re-sent after an alignment chip satisfied a capability.
+ * App parity (`ChatViewModel.ALIGN_CHIP_SEL`); the string is part of the #27/#27a contract.
+ */
+const ALIGN_CHIP_SEL = 'align_chip_sel';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,7 +129,28 @@ export interface LoadingPlaceholder {
   id: string;
 }
 
-export type ChatMessage = UserMessage | AiResponse | LoadingPlaceholder;
+/**
+ * The farmer's resolved location, shown in the thread in place of a text bubble once a
+ * GPS_PROMPT alignment chip has been satisfied (2.0.0). Rendered right-aligned by
+ * `LocationChatBubble` on ChatScreen.
+ *
+ * 1:1 port of the Android core `ChatMessage.LocationMessage` (farmerchat-core
+ * `ui/chat/ChatModels.kt`:95) — same two fields, same role.
+ *
+ * PRODUCED BY {@link ChatAction} `SendLocationSharedQuery` — the capability-chip outcome path
+ * (2.0.0). The chat screen arms the shared location flow when a `gps-prompt` chip whose action
+ * is `invoke` is tapped, and dispatches that action once a real fix is stored. A blank address
+ * yields NO bubble at all, matching the app. (Earlier revisions of this SDK defined and
+ * rendered the variant with no producer on any platform — that open question is closed.)
+ */
+export interface LocationMessage {
+  kind: 'location';
+  id: string;
+  /** Human-readable address — the #16 response's `display_address`. */
+  address: string;
+}
+
+export type ChatMessage = UserMessage | AiResponse | LoadingPlaceholder | LocationMessage;
 
 export type ChatEntrySource = 'home' | 'history';
 
@@ -188,10 +216,12 @@ export type ChatAction =
    * highlighted and locked — and sends the chip's `value` (falling back to its `label`) as a
    * follow-up question, exactly like the Compose `onChipClick`.
    *
-   * NOTE: the Android core has the `alignmentSelectedValues` field but nothing that fills it —
-   * its Compose `onChipClick` only dispatches `SendFollowUpQuestion`, so a tapped chip never
-   * locks. This action is an addition on React Native (see the report / docs/04 delta), not a
-   * port.
+   * PARITY: the Android core fills `alignmentSelectedValues` from core itself —
+   * `ChatViewModel.recordAlignmentPick()` (farmerchat-core `ui/chat/ChatViewModel.kt`:906) runs
+   * on every `SendFollowUpQuestion` and locks the chip when the question matches one of the
+   * surface's own chip `value`/`label`s, so both Compose and Views light up without knowing
+   * about selection state. React Native records the pick explicitly in this action instead of
+   * pattern-matching the question, which is the same behaviour reached a more direct way.
    */
   | {
       type: 'SelectAlignmentChip';
@@ -200,6 +230,17 @@ export type ChatAction =
       chip: AlignmentChip;
       kind: AlignmentKind;
     }
+  /**
+   * The OUTCOME of a satisfied `gps-prompt` capability chip (2.0.0): the farmer shared a real
+   * location, so mark `share_precise_location` picked on the surface, show the resolved address
+   * as a {@link LocationMessage} in place of a text bubble, and re-send the surface's
+   * `alignmentOriginalQuery` — never the chip's own text.
+   *
+   * Port of the Android core's `ChatAction.SendLocationSharedQuery` +
+   * `ChatViewModel.sendLocationSharedQuery`. The chat screen owns the permission/GPS flow and
+   * dispatches this only for an outcome it armed itself.
+   */
+  | { type: 'SendLocationSharedQuery'; sourceMessageId: string; address: string }
   | {
       type: 'SendFollowUpVoiceQuestion';
       audioUri: string;
@@ -789,16 +830,29 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       statementId?: number | null;
       isRetry?: boolean;
       sendQueryProperties?: SendQueryProperties | null;
+      /**
+       * 2.0.0 capability-chip outcome: the caller has ALREADY staged the thread (a
+       * {@link LocationMessage} standing in for the user's text bubble, plus the loading
+       * placeholder) in one atomic update, so this send must not append its own bubbles.
+       * `anchorId` stands in for the user-bubble id on the failure and retry paths — nothing
+       * of kind `user` carries it, so nothing gets marked failed and a retry only appends a
+       * fresh placeholder. Mirrors Android calling `fetchTextPromptResponse` with a
+       * placeholder id it prepared itself.
+       */
+      staged?: { placeholderId: string; anchorId: string } | null;
     }) => {
       const question = params.question.trim();
       if (question.length === 0) return;
 
       // Hoisted so the agentic path can reuse it as the stream id (the loading bubble becomes
       // the answer bubble in place) and so both paths remove exactly this placeholder.
-      const placeholderId = makeId('ld');
+      const placeholderId = params.staged?.placeholderId ?? makeId('ld');
 
       let userMessageId = params.userMessageId ?? null;
-      if (userMessageId === null) {
+      if (params.staged) {
+        // Thread already staged by the caller — no bubble to append.
+        userMessageId = params.staged.anchorId;
+      } else if (userMessageId === null) {
         userMessageId = makeId('user');
         const userMessage: UserMessage = {
           kind: 'user',
@@ -841,7 +895,10 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       }
 
       lastRequestRef.current = () =>
-        void sendTextQuery({ ...params, userMessageId, isRetry: true });
+        // `staged: null` so a retry of a capability-chip send does not append a SECOND location
+        // bubble; `userMessageId` (the staged anchor) keeps it off the user-bubble path too, so
+        // the retry just adds a fresh placeholder — Android's retry behaviour for this path.
+        void sendTextQuery({ ...params, staged: null, userMessageId, isRetry: true });
 
       sdk.analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, {
         triggered_input_type: params.triggeredInputType,
@@ -899,6 +956,90 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       streamAgenticAnswer,
     ],
   );
+  // --- capability-chip outcome: location shared (2.0.0) ---------------------------
+
+  /**
+   * Sends the surface's ORIGINAL query after the farmer shared a real location, and puts the
+   * resolved address in the thread as a {@link LocationMessage}.
+   *
+   * Port of the Android core's `ChatViewModel.sendLocationSharedQuery`. The location bubble
+   * takes the place of the user text bubble a normal send would add — the farmer never typed
+   * anything, they shared a location — and a blank address yields no bubble at all, matching
+   * the app.
+   *
+   * Three deliberate deltas, all mirroring the Android SDK and recorded in docs/04:
+   *  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
+   *    backend can correlate the answer to the prompt. {@link TextPromptRequest} has no such
+   *    field, so no alignment chip send carries it — an SDK-wide gap, not specific to this path.
+   *  - **no `agentic_chip_*` analytics properties.** This reports as an ordinary text query;
+   *    `triggered_input_type` IS `align_chip_sel` (app parity).
+   *  - **no endpoint #30 (`track_follow_up_click`).** The chip's text is not the question, so
+   *    there is no follow-up click to attribute — Android's location path skips it too.
+   */
+  const sendLocationSharedQuery = useCallback(
+    (sourceMessageId: string, address: string) => {
+      const current = stateRef.current;
+      if (current.isLoading) return;
+      const source = current.messages.find(
+        (m): m is AiResponse => m.kind === 'ai' && m.id === sourceMessageId,
+      );
+      // No original query means nothing to ask. Bail BEFORE mutating: sendTextQuery early-
+      // returns on a blank question, which would leave the thread spinning behind an orphan
+      // placeholder. (Defensive — the gps-prompt contract always carries original_query.)
+      const query = source?.alignmentOriginalQuery?.trim() ?? '';
+      if (query.length === 0) return;
+
+      const resolved = address.trim();
+      const placeholderId = makeId('ld');
+      const bubbleId = makeId('loc');
+      mutate((prev) => {
+        // Mark share_precise_location as picked so the source chip locks/highlights exactly as
+        // a plain chip tap would — the chip's text is never sent as the question, so the
+        // ordinary `SelectAlignmentChip` bookkeeping never runs for it.
+        const marked = prev.messages.map((m) =>
+          m.kind === 'ai' &&
+          m.id === sourceMessageId &&
+          !(m.alignmentSelectedValues ?? []).includes(AlignmentChipWire.VALUE_SHARE_LOCATION)
+            ? {
+                ...m,
+                alignmentSelectedValues: [
+                  ...(m.alignmentSelectedValues ?? []),
+                  AlignmentChipWire.VALUE_SHARE_LOCATION,
+                ],
+              }
+            : m,
+        );
+        const additions: ChatMessage[] = [];
+        // App parity: a blank address adds no bubble, only the loading placeholder.
+        if (resolved.length > 0) {
+          additions.push({ kind: 'location', id: bubbleId, address: resolved });
+        }
+        additions.push({ kind: 'loading', id: placeholderId });
+        return {
+          ...prev,
+          messages: [...marked, ...additions],
+          isLoading: true,
+          errorMessage: null,
+          failedMessageId: null,
+          chatResponseState: UiStates.loading(),
+          suggestedQuestions: null,
+          suggestedQuestionIds: null,
+          clarificationRequired: false,
+        };
+      });
+
+      void sendTextQuery({
+        question: query,
+        triggeredInputType: ALIGN_CHIP_SEL,
+        staged: {
+          placeholderId,
+          anchorId: resolved.length > 0 ? bubbleId : sourceMessageId,
+        },
+      });
+    },
+    [mutate, sendTextQuery],
+  );
+
   // --- image query (endpoint #28) ------------------------------------------------
 
   const sendImageQuery = useCallback(
@@ -1369,6 +1510,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           });
           break;
         }
+        case 'SendLocationSharedQuery':
+          sendLocationSharedQuery(action.sourceMessageId, action.address);
+          break;
         case 'SendQuestionWithImage':
           void sendImageQuery({
             question: action.question,
@@ -1431,6 +1575,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       patch,
       sdk,
       sendImageQuery,
+      sendLocationSharedQuery,
       sendTextQuery,
       sendVoiceQuery,
       synthesiseAudio,

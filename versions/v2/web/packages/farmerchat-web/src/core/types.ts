@@ -656,10 +656,11 @@ export interface Alignment {
 /**
  * One quick-reply chip. `label` is shown, `value` is sent on tap.
  *
- * `action` describes how the chip behaves: "select" invokes a capability (take a photo, share
- * location), "decline" lets the user opt out (use an approximate location). Today every chip's
- * value/label is sent back as a follow-up; `action` is parsed so device flows can be wired to
- * "select" chips without another wire change.
+ * `action` describes how the chip behaves: the value of `CapabilityChip.ACTION_SELECT` —
+ * the string `"invoke"`, NOT `"select"` — marks a chip that invokes a device
+ * capability (take a photo, share location) rather than sending its text.
+ * Those capability flows ARE wired as of 2026-09-02; see the capability
+ * constants below and "The capability-chip gap" in docs/04.
  */
 export interface AlignmentChip {
   label?: string | null;

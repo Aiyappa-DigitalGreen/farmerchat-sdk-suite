@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The map-style band at the top of the location bubble: accent @ 16% (Compose Green500_16).
+  Only the TOP corners are rounded — Compose clips the whole column to the bubble shape, and
+  Views layouts do not clip children, so the band carries the matching corners itself.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_green500_16" />
+    <corners
+        android:topLeftRadius="20dp"
+        android:topRightRadius="20dp"
+        android:bottomLeftRadius="0dp"
+        android:bottomRightRadius="0dp" />
+</shape>

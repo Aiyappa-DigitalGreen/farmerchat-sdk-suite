@@ -219,19 +219,25 @@ function AppBarShell(props: {
   children: React.ReactNode;
   showGlow?: boolean;
   glowOpacity?: number;
+  /**
+   * Compose parity (`HomeAppBar(showBackground = ...)`): agentic Home draws the green and the
+   * glow in the gradient band behind the whole top section, so the bar itself goes transparent.
+   */
+  showBackground?: boolean;
 }): React.ReactElement {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const barHeight = 64 + insets.top;
+  const showBackground = props.showBackground !== false;
   return (
     <View
       style={{
         height: barHeight,
-        backgroundColor: theme.brand.surfacePrimary,
+        backgroundColor: showBackground ? theme.brand.surfacePrimary : 'transparent',
         overflow: 'hidden',
       }}
     >
-      {props.showGlow !== false ? (
+      {showBackground && props.showGlow !== false ? (
         <Glow
           type="yellow"
           height={80}
@@ -256,13 +262,18 @@ export function DefaultAppBar(props: {
   navIcon: AppBarNavIcon;
   onNavPress?: () => void;
   rightContent?: React.ReactNode;
+  /**
+   * Compose parity (`DefaultAppBar(showGlow = ...)`): the yellow glow is dropped on bars that
+   * sit above their own content surface — e.g. `TermsOfUseDialog`. Defaults to on.
+   */
+  showGlow?: boolean;
   testID?: string;
 }): React.ReactElement {
   const theme = useTheme();
   const brand = theme.brand;
   const icon = navIconName(props.navIcon);
   return (
-    <AppBarShell>
+    <AppBarShell showGlow={props.showGlow}>
       {icon ? (
         <ActionButton
           testID={props.testID ? `${props.testID}-nav` : undefined}
@@ -297,11 +308,16 @@ export function HomeAppBar(props: {
   weatherIconUrl?: string | null;
   weatherLoadingLabel: string;
   onWeatherPress: () => void;
+  /**
+   * Compose parity (`HomeAppBar(showBackground = !isComposerUi)`): transparent in agentic mode —
+   * the green (and the glow) come from the gradient band drawn behind the whole top section.
+   */
+  showBackground?: boolean;
 }): React.ReactElement {
   const theme = useTheme();
   const brand = theme.brand;
   return (
-    <AppBarShell>
+    <AppBarShell showBackground={props.showBackground}>
       {props.showMenu !== false ? (
         <ActionButton
           onPress={props.onMenuPress}
@@ -433,6 +449,82 @@ export function Toast(props: { toast: ToastState | null }): React.ReactElement |
 // Feed header / footer (Feed.kt)
 // ---------------------------------------------------------------------------
 
+/**
+ * SectionHeader — port of the Compose SDK `components/SectionHeader.kt` (2.0.0).
+ *
+ * Centered section title flanked by a tiled divider on each side; the divider fills whatever
+ * width is left beside the title, so the pattern stretches or shrinks with the title length.
+ * Matches the "For your farm today" header in Figma 1.2 Home.
+ *
+ * Deviation from the Compose reference (deliberate): Compose tiles the `fc_leaf` drawable,
+ * alternating each leaf's facing direction, drawn on a Canvas. This package's asset set
+ * (`ui/assets.ts`) carries no leaf raster and there is no vector primitive in the dependency
+ * set, so the divider tiles 4x4 rounded pips at the same `LeafSize` and gapless spacing — the
+ * same subtle texture at the same metrics, without the leaf silhouette.
+ */
+export function SectionHeader(props: {
+  title: string;
+  titleColor?: string;
+  accentColor?: string;
+  horizontalPadding?: number;
+  /** Compose default 16 (the Figma component's py-16); the agentic Home header passes 0. */
+  verticalPadding?: number;
+}): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.sectionHeaderRow,
+        {
+          paddingHorizontal: props.horizontalPadding ?? 24,
+          paddingVertical: props.verticalPadding ?? 16,
+        },
+      ]}
+    >
+      <PipDivider color={props.accentColor ?? theme.content.buttonPrimaryAccent} />
+      <Text
+        style={[
+          typography.titleMedium,
+          styles.sectionHeaderTitle,
+          { color: props.titleColor ?? theme.content.foregroundPrimary },
+        ]}
+      >
+        {props.title}
+      </Text>
+      <PipDivider color={props.accentColor ?? theme.content.buttonPrimaryAccent} />
+    </View>
+  );
+}
+
+/** Compose `LeafSize` — small + gapless reads as a texture rather than a row of dots. */
+const LEAF_SIZE = 4;
+
+function PipDivider(props: { color: string }): React.ReactElement {
+  const [width, setWidth] = useState(0);
+  const count = Math.max(0, Math.floor(width / LEAF_SIZE));
+  return (
+    <View
+      style={styles.pipDivider}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <View
+          key={index}
+          style={{
+            width: LEAF_SIZE,
+            height: LEAF_SIZE,
+            borderRadius: LEAF_SIZE / 2,
+            backgroundColor: props.color,
+            // Alternate the opacity the way Compose alternates the leaf facing, so the row
+            // still reads as a repeating pattern rather than a solid rule.
+            opacity: index % 2 === 0 ? 1 : 0.55,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 export function FeedHeader(props: { title: string; color?: string }): React.ReactElement {
   const theme = useTheme();
   return (
@@ -550,6 +642,21 @@ export function SkeletonBlock(props: {
 }
 
 const styles = StyleSheet.create({
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  sectionHeaderTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  pipDivider: {
+    flex: 1,
+    height: LEAF_SIZE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   spinnerRow: {
     flexDirection: 'row',
     alignItems: 'center',

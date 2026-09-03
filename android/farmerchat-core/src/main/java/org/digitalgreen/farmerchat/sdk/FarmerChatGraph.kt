@@ -22,6 +22,7 @@ import org.digitalgreen.farmerchat.sdk.core.network.authenticator.TokenAuthentic
 import org.digitalgreen.farmerchat.sdk.core.network.timeout.ApiPriorityHeaderInterceptor
 import org.digitalgreen.farmerchat.sdk.core.network.timeout.PriorityRequestIdInterceptor
 import org.digitalgreen.farmerchat.sdk.core.network.timeout.TimeoutTypeInterceptor
+import org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
 import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
@@ -285,6 +286,7 @@ class FarmerChatGraph internal constructor(
     // ------------------------------------------------------------------ state machine factories
 
     fun onboardingViewModel() = OnboardingSharedViewModel(
+        appContext,
         fetchGeoLocationUseCase, getSupportedLanguagesUseCase, getLanguageLabelsUseCase,
         sessionManager, labelManager, prefs, analytics, config, updateUserLocationUseCase
     )
@@ -304,6 +306,7 @@ class FarmerChatGraph internal constructor(
     fun chatHistoryViewModel() = ChatHistoryViewModel(historyUseCase, prefs)
 
     fun settingsViewModel() = SettingsViewModel(
+        appContext,
         getSupportedLanguagesUseCase, getLanguageLabelsUseCase, labelManager, prefs, analytics, config
     )
 
@@ -357,7 +360,7 @@ class FarmerChatGraph internal constructor(
 
         runCatching {
             val country = prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
-                .ifBlank { config.defaultCountryCode }
+                .ifBlank { config.resolvedFallbackCountryCode(appContext) }
             val state = prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
                 .ifBlank { config.defaultStateCode }
 
@@ -389,7 +392,14 @@ class FarmerChatGraph internal constructor(
 
     suspend fun ensureChatOnlySession() {
         if (!sessionManager.hasSession()) {
-            runCatching { sessionManager.initializeGuestUser() }
+            // Resolve coordinates FIRST. CHAT_ONLY skips onboarding, which is where the geo
+            // pipeline normally lives, so this path used to call initializeGuestUser() with
+            // lat/long/accuracy all null — the backend then had only the request IP to go on, and
+            // the device-locale fallback never ran at all on the one flow a host embedding just
+            // the chat actually uses. Verified on a device 2026-09-03:
+            // `initializeGuestUser lat=null long=null acc=null`.
+            val (lat, lng, accuracy) = resolveBootstrapCoordinates()
+            runCatching { sessionManager.initializeGuestUser(lat, lng, accuracy) }
         }
         // CHAT_ONLY skips the language screen, which is the only other caller of #3
         // get_labels — without this the chat UI would render hardcoded English fallbacks.
@@ -408,4 +418,33 @@ class FarmerChatGraph internal constructor(
             }
         }
     }
+
+    /**
+     * Coordinates for a CHAT_ONLY guest bootstrap: the real IP-geolocation first, then the
+     * device-locale country centroid, then nothing.
+     *
+     * Mirrors `OnboardingSharedViewModel.fetchGeoAndInitialize` so both entry points place a guest
+     * the same way. Returns nulls when nothing resolves — a guess would put the farmer's advice in
+     * the wrong country, and (0,0) is a real point in the Gulf of Guinea.
+     */
+    private suspend fun resolveBootstrapCoordinates(): Triple<Double?, Double?, Double?> {
+        when (val geo = fetchGeoLocationUseCase.fetchGeoLocation().first()) {
+            is ApiResult.Success -> {
+                val lat = geo.data.location?.lat
+                val lng = geo.data.location?.lng
+                if (lat != null && lng != null) return Triple(lat, lng, geo.data.accuracy)
+            }
+            is ApiResult.Error -> {
+                // Tolerated: a missing geoApiKey fails here immediately, which is the common case
+                // for a host that only embeds the chat.
+            }
+        }
+        val (lat, lng) = config.resolvedFallbackCoordinates(appContext)
+        return if (CountryLatLngProvider.isResolved(lat, lng)) {
+            Triple(lat, lng, 0.0)
+        } else {
+            Triple(null, null, null)
+        }
+    }
+
 }

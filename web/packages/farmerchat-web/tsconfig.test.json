@@ -1,0 +1,11 @@
+{
+  "//": "Typechecks the unit tests in test/ alongside src/. The tests import with explicit .ts extensions because they run directly on Node's native TypeScript support (`node test/countryLatLng.test.ts`) — this package has no test framework and none was added. The main tsconfig.json / tsconfig.build.json deliberately cover src/ only, so the published .d.ts output is unaffected.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src", "test"]
+}

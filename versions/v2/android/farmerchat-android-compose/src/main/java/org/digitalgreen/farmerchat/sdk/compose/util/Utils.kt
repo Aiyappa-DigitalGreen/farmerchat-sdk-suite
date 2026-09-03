@@ -1,9 +1,12 @@
 package org.digitalgreen.farmerchat.sdk.compose.util
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.painter.Painter
@@ -91,6 +94,23 @@ fun isNetworkAvailable(context: Context): Boolean {
         caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }.getOrDefault(false)
 }
+
+/**
+ * Live OS location-permission check — the SDK's stand-in for the app's
+ * `LocationPromptManager.hasCurrentLocationPermission()`, which core does not expose (core has no
+ * Android permission APIs). Fine **or** coarse counts as granted, matching `LocationPromptHost`.
+ *
+ * Needed wherever a stored GPS fix is displayed: `hasStoredLocation()` stays true after the
+ * farmer revokes the permission from system Settings, so a saved exact location can only be
+ * trusted when paired with this check.
+ */
+fun hasLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
 
 /** Simple debounce for click handlers (port of the app's rememberDebouncedClick). */
 class DebouncedAction(private val intervalMs: Long = 600L) {

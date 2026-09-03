@@ -104,6 +104,11 @@ init could not send coordinates, the backend's IP geolocation returned `country_
 nothing was persisted (no `fc_sdk_user_country_code` key in the app's prefs), and the home feed
 came back with zero sections. The language screen still worked — but only because of the
 `defaultCountryCode`/`defaultStateCode` fallback added the same day.
+**Superseded 2026-09-03:** those knobs shipped with hardcoded Indian defaults (`"IN"` /
+`"Karnataka"` / Bengaluru `12.9716, 77.5946`), which meant every guest the backend could not place
+— anywhere on earth — was seeded with Karnataka. They are now OPTIONAL overrides that default to
+"unset", and the SDK derives the fallback from the **device locale** via a 247-country centroid
+table ported verbatim from the app, exactly as the app does. See `docs/04`.
 
 Set `-PFC_GEO_API_KEY=…` (wired to `BuildConfig.FC_GEO_API_KEY` in RationSmart) for a populated
 home feed from first launch.

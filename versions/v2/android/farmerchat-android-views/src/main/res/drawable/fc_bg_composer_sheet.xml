@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Floating composer sheet (2.0.0). Compose parity: SmoothShapes.rounded(Radius.XXL) = 24dp,
+     filled with the brand surface (BrandColors.surfacePrimary = Green700). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_green700" />
+    <corners android:radius="24dp" />
+</shape>

@@ -194,6 +194,45 @@ cd android
 
 `sample-jetpack` is the smallest end-to-end host: a mock "GreenAcres" dashboard whose only SDK touch-points are one `FarmerChat.initialize(...)` call and a `FarmerChatFab()` in the Scaffold. It runs in `CHAT_ONLY` mode so the FAB opens straight into the chat screen, and all branding lives in one file — `FarmerChatSetup.kt` (theme colors/radii, FAB label/colors, chat bubbles) — the single place to customize. It shows **both usage styles**: the FAB = full-screen launch (`FarmerChat.launch`), and `InlineActivity` (reached from the dashboard button) = **component/inline embedding** — `FarmerChatInline(Modifier…)` placed inside the host layout, so the SDK fills only its panel while host chrome stays visible.
 
+## 2.0.0 — agentic chat and the unified composer
+
+`enableAgenticChat` is the single opt-in for everything 2.0.0 adds, and it defaults to **false**,
+so an unchanged host on 2.0.0 artifacts behaves exactly like 1.0.0.
+
+```kotlin
+FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    .enableAgenticChat(true)   // streaming answers + alignment surfaces + InputComposer
+    .build()
+```
+
+With it on, both UI flavours replace the Photo / Speak / Type row on **Home and Chat** with the
+unified `InputComposer` — one bar carrying camera, text field, and mic-or-send — and the chat
+answer streams instead of arriving whole. With it off, neither screen changes.
+
+Flavour parity for the composer:
+
+| | compose | views |
+|---|---|---|
+| Composer on Home + Chat | ✅ | ✅ (`InputComposerView`) |
+| Image attaches to the bar, sent with the text | ⛔ sends on pick | ✅ (app behaviour) |
+| Idle gradient aura (Home) | ✅ | ⛔ |
+| Agentic Home surface / gradient / pinned header | ✅ | ⛔ (header title only) |
+
+The views composer lifts itself above the keyboard by reading **root** window insets
+(`ViewCompat.getRootWindowInsets`), not the dispatched ones: it is a sibling of a
+`fitsSystemWindows="true"` container, which zeroes the insets a sibling would otherwise see. Do
+not "simplify" that to `onApplyWindowInsets(insets)` — the input goes behind the IME.
+
+To exercise it, `sample-views` has an `agentic` profile:
+
+```bash
+adb shell am start -n org.digitalgreen.farmerchat.sample.views/.MainActivity -e profile agentic
+# then force-stop + relaunch so Application.onCreate rebuilds the graph
+```
+
+**Nothing in 2.0.0 has run on a device**, and the agentic endpoint has never delivered a byte —
+see `versions/v2/README.md` and `docs/04-parity-matrix.md`.
+
 ## Verification status
 
 See `docs/04-parity-matrix.md` for the honest per-feature ledger. Anything not covered by `compileDebugKotlin` (on-device flows, backend contract drift) is marked UNVERIFIED there.

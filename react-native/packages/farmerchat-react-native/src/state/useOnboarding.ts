@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
+import { resolveCountryCode, resolveFallbackCoordinates } from '../core/config';
+import { isResolved } from '../core/countryLatLng';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
 import type {
@@ -136,10 +138,13 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
       //
       // Order is load-bearing, not cosmetic: `initialize_user` resolves country/state from the
       // coords when present and only falls back to IP geolocation otherwise. Verified live
-      // 2026-09-01 — guest init WITH lat/long returns `country_code: IN, state: Karnataka` and a
+      // 2026-09-01 — guest init WITH lat/long comes back with a resolved country/state and a
       // 21-section home feed; WITHOUT them on an unresolvable IP it returns `country_code: null`
-      // and `daily/` comes back `{"sections": []}`. `ensureGuestSession` no-ops once a session
-      // exists, so a late geolocate can never repair the first (and only) guest init.
+      // and `daily/` comes back `{"sections": []}`. (The country it echoes is whatever the
+      // coordinates say — that run reported Karnataka only because the SDK was then sending
+      // hardcoded Bengaluru coordinates, which is the bug this path no longer has.)
+      // `ensureGuestSession` no-ops once a session exists, so a late geolocate can never repair
+      // the first (and only) guest init.
       let lat: number | null = null;
       let lng: number | null = null;
       let accuracy: number | null = null;
@@ -158,12 +163,32 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
         }
       }
 
+      // GEO FAILURE (or no `geoApiKey` at all) → DEVICE LOCALE, exactly as the app does. The app
+      // does NOT proceed with no coordinates when IP geolocation fails: it falls back to the
+      // device locale's country centroid (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and
+      // accepts it ONLY when `lat != 0.0 && lng != 0.0`. A locale carrying no region yields
+      // (0, 0), which must stay unresolved — sending it would place the farmer off West Africa.
+      //
+      // Keyed on `lat === null` rather than on the error branch so it also covers a host that
+      // configured no `geoApiKey`, where the geolocate call never ran at all.
+      if (lat === null) {
+        const [localeLat, localeLng] = resolveFallbackCoordinates(sdk.config);
+        if (isResolved(localeLat, localeLng)) {
+          lat = localeLat;
+          lng = localeLng;
+          accuracy = 0;
+        }
+      }
+
       patch({ guestInitState: UiStates.loading() });
       const init = await sdk.session.ensureGuestSession({ lat, long: lng, accuracy });
-      // Endpoint #2 400s on a blank `country_code`. Store first, then the host-configured
-      // default; the init response overrides both below when it actually resolved one.
-      let countryCode =
-        sdk.store.getString(StorageKeys.USER_COUNTRY_CODE)?.trim() || sdk.config.defaultCountryCode;
+      // Endpoint #2 400s on a blank `country_code`, so the chain never yields one:
+      // persisted → host config (when non-blank) → device-locale region → 'KE' last resort.
+      // The init response overrides it below when it actually resolved one.
+      let countryCode = resolveCountryCode(
+        sdk.config,
+        sdk.store.getString(StorageKeys.USER_COUNTRY_CODE),
+      );
       let stateName =
         sdk.store.getString(StorageKeys.USER_STATE)?.trim() || sdk.config.defaultStateCode;
       if (init && !init.ok) {
@@ -186,11 +211,17 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
       const resolvedCountry = init?.ok ? init.data.country_code?.trim() : null;
       const seedUserId = sdk.store.getString(StorageKeys.USER_ID);
       if (!resolvedCountry && seedUserId) {
-        await sdk.api.updateUserLocation({
-          user_id: seedUserId,
-          lat: sdk.config.defaultLatitude,
-          long: sdk.config.defaultLongitude,
-        });
+        const [seedLat, seedLng] = resolveFallbackCoordinates(sdk.config);
+        // Nothing resolved — not the host's config, not the device locale. Send NOTHING rather
+        // than guess: an unplaceable guest gets an empty feed, which is honest, where a guessed
+        // city would silently hand them another country's advice.
+        if (isResolved(seedLat, seedLng)) {
+          await sdk.api.updateUserLocation({
+            user_id: seedUserId,
+            lat: seedLat,
+            long: seedLng,
+          });
+        }
       }
 
       await fetchSupportedLanguages(countryCode, stateName);

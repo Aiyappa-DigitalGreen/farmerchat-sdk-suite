@@ -20,18 +20,68 @@ public enum LocationPromptState: Sendable, Equatable {
     case error(LocationErrorType)
 }
 
-/// Where the prompt was triggered from — weather keeps the interstitial
-/// overlay during permission/fetch, widget/campaign shows nothing.
+/// Where the prompt was triggered from — weather and localContext keep the
+/// interstitial overlay during permission/fetch, widget/campaign shows nothing.
 public enum LocationPromptSource: Sendable, Equatable {
     case weather
     case widget
     case deeplink
+    /// 2.0.0: the chat GPS_PROMPT "Share my location" capability chip. Mirrors Android's
+    /// `LocationTriggerSource.LocalContext` — the outcome is routed back into the chat thread, so
+    /// an outcome carrying any OTHER source must be ignored by the chat collector.
+    case localContext
 }
 
+/// Terminal outcomes of a location flow, broadcast to every subscriber (``PassthroughSubject``
+/// multicasts; there is no replay, so subscribe before triggering).
+///
+/// Every case is terminal and every terminal path emits exactly one — that matters for the chat
+/// share-location flow, which arms itself on a chip tap and must be disarmed by whatever happens
+/// next. ``LocationPromptState/recovery`` is deliberately NOT terminal: `onAppForeground()` can
+/// re-run the flow out of it, so the event is emitted when the sheet is actually dismissed.
 public enum LocationPromptEvent: Sendable, Equatable {
+    /// Widget/campaign flow saved a location — kept payload-free (`FarmerChatView` compares it
+    /// with `==`).
     case locationUpdatedFromWidget
-    case locationSaved
-    case skipped
+    /// The location was saved. Android's equivalent is
+    /// `Continue(source, reason = "location_fetched")`; there is no `reason` here because this is
+    /// the single success emission, so the case itself carries that meaning.
+    case locationSaved(source: LocationPromptSource)
+    /// The farmer skipped the interstitial, or dismissed a recovery sheet / error screen — the
+    /// flow ended with no location. Covers Android's `Cancel(source, campaign)` AND its
+    /// `Continue(reason = "dismissed")`: both mean "settled, no location", and iOS keeps them one
+    /// case because nothing here distinguishes them.
+    case skipped(source: LocationPromptSource)
+
+    /// True when this event ends a location flow **WITH** a usable location.
+    ///
+    /// Kept in Core so both flavours share one rule — the analogue of Android's
+    /// `LocationPromptEvent.isLocationObtained()`. On Android the predicate has to inspect a
+    /// `reason` string against `LOCATION_OBTAINED_REASONS`, because its `Continue` case is
+    /// overloaded: `dismiss()` emits `Continue(reason = "dismissed")`, so `Continue` alone does
+    /// NOT mean success and a caller treating it as such would show the chat GPS_PROMPT bubble for
+    /// a location the farmer never shared.
+    ///
+    /// iOS has no `reason` field and no overloaded case — ``locationSaved(source:)`` is the single
+    /// success emission and ``skipped(source:)`` the single "settled, no location" one — so the
+    /// case itself carries the meaning and no reason set is needed. Adding one would be inventing
+    /// a wire-adjacent field with no discriminating power (root CLAUDE.md §2).
+    public var isLocationObtained: Bool {
+        if case .locationSaved = self { return true }
+        return false
+    }
+
+    /// The trigger source this **terminal** outcome belongs to, or nil when the event is not a
+    /// per-flow terminal outcome (``locationUpdatedFromWidget`` is a broadcast for Home to reload).
+    ///
+    /// A caller armed for its own flow — the chat share-location capability chip — must ignore an
+    /// outcome carrying any other source, so this is the filter both flavours apply before acting.
+    public var terminalSource: LocationPromptSource? {
+        switch self {
+        case .locationSaved(let source), .skipped(let source): return source
+        case .locationUpdatedFromWidget: return nil
+        }
+    }
 }
 
 // MARK: - Manager (port of LocationPromptManager + LocationPromptHost logic)
@@ -81,6 +131,16 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         Task { await runLocationFlow() }
     }
 
+    /// 2.0.0: the chat GPS_PROMPT "Share my location" capability chip. Full interstitial flow, the
+    /// same shape as weather (port of Android's `triggerFromLocalContext`). The caller arms itself
+    /// first and consumes the terminal event off ``events``.
+    public func triggerFromLocalContext() {
+        pendingNavigation = nil
+        source = .localContext
+        trackStep("interstitial_shown")
+        state = .interstitial
+    }
+
     public func setPendingNavigation(_ navigation: (@MainActor () -> Void)?) {
         pendingNavigation = navigation
     }
@@ -96,12 +156,28 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         trackStep("skipped")
         env.prefs.setBool(true, .locationPromptSkipped)
         env.analytics.track(AnalyticsEvents.gpsLocationSkipped)
-        events.send(.skipped)
+        // `reset()` does not clear `source`, but read it first anyway — the same discipline
+        // `saveLocation` uses with `wasWidget`.
+        let endedSource = source
         reset()
+        events.send(.skipped(source: endedSource))
     }
 
+    /// Dismisses a recovery sheet or an error screen. This is the flow's terminal "no location"
+    /// exit for permission-denied, GPS-off and fetch-failed alike — `runLocationFlow` sets a state
+    /// and returns without emitting, so without this emission a caller armed on ``events`` (the
+    /// chat share-location flow) would wait forever and the farmer's blocking question would never
+    /// be answered. Mirrors Android's `dismiss()` emitting `Continue(reason = "dismissed")`.
     public func dismissError() {
+        // Capture before clearing. `wasActive` mirrors Android's guard: `saveLocation` already
+        // resets to `.idle` BEFORE emitting its success, so a dismiss following a success must not
+        // send a second, contradictory event.
+        let wasActive = state != .idle
+        let endedSource = source
         reset()
+        if wasActive {
+            events.send(.skipped(source: endedSource))
+        }
     }
 
     /// Recovery sheet → "Turn on in settings" (host opens app settings URL).
@@ -119,6 +195,9 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         }
     }
 
+    /// Teardown, not a user-facing exit: deliberately silent, like Android's `clearState()`. Every
+    /// path a farmer can take out of a live flow emits through ``skipTapped()`` /
+    /// ``dismissError()`` / `saveLocation` instead.
     public func reset() {
         fetchTask?.cancel()
         fetchTask = nil
@@ -208,12 +287,12 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         trackStep("location_saved")
 
         let navigation = pendingNavigation
-        let wasWidget = source == .widget
+        let savedSource = source
         reset()
-        if wasWidget {
+        if savedSource == .widget {
             events.send(.locationUpdatedFromWidget)
         } else {
-            events.send(.locationSaved)
+            events.send(.locationSaved(source: savedSource))
         }
         navigation?()
     }
@@ -227,6 +306,8 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         case .weather: return "weather"
         case .widget: return "widget"
         case .deeplink: return "deeplink"
+        // Mirrors Android's `LocationTriggerSource.LocalContext`, snake_cased like its siblings.
+        case .localContext: return "local_context"
         }
     }
 

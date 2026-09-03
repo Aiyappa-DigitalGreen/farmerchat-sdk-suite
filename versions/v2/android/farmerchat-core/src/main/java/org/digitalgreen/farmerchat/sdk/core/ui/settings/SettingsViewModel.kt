@@ -24,6 +24,7 @@ import org.digitalgreen.farmerchat.sdk.FarmerChatConfig
  * over LanguageSettingsState). Language list + per-row label fetch + submit.
  */
 class SettingsViewModel(
+    private val appContext: android.content.Context,
     private val getSupportedLanguagesUseCase: GetSupportedLanguagesUseCase,
     private val getLanguageLabelsUseCase: GetLanguageLabelsUseCase,
     private val labelManager: LabelManager,
@@ -41,8 +42,10 @@ class SettingsViewModel(
         _state.update { it.copy(languageState = UiState.Loading) }
         // Same guard as onboarding: endpoint #2 400s on a blank `country_code`, and the pref is
         // empty whenever guest init never resolved one.
+        // resolvedFallbackCountryCode, never config.defaultCountryCode: that field defaults to
+        // "" (meaning "derive from the device locale"), so a raw read sends a blank value and 400s.
         val countryCode = prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "")
-            .takeIf { it.isNotBlank() } ?: config.defaultCountryCode
+            .takeIf { it.isNotBlank() } ?: config.resolvedFallbackCountryCode(appContext)
         val stateName = prefs.getString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, "")
             .takeIf { it.isNotBlank() } ?: config.defaultStateCode
         scope.launch {
