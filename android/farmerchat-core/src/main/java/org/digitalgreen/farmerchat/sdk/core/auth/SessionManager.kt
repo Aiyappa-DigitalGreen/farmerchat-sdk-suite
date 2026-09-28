@@ -113,7 +113,18 @@ class SessionManager(
      * stored one (a different account signed in on the host), the previous user's open
      * conversation is dropped so the new user never lands in it.
      */
-    fun setHostSession(accessToken: String, refreshToken: String?, userId: String) {
+    fun setHostSession(
+        accessToken: String,
+        refreshToken: String?,
+        userId: String,
+        languageId: Int? = null,
+        languageCode: String? = null,
+    ) {
+        // The host's language wins: it is what the backend already holds for this user.
+        languageId?.takeIf { it > 0 }?.let { prefs.putInt(SdkPreferences.Keys.SELECTED_LANGUAGE_ID, it) }
+        languageCode?.takeIf { it.isNotBlank() }?.let {
+            prefs.putString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, it.trim().lowercase())
+        }
         val previousUserId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
         if (previousUserId.isNotBlank() && previousUserId != userId) {
             prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "")

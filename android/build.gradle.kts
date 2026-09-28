@@ -16,7 +16,7 @@ plugins {
 // module hard-codes the group or version.
 // -----------------------------------------------------------------------------
 val farmerChatGroup = "org.digitalgreen.farmerchat"
-val farmerChatVersion = "1.0.0" // == FarmerChatVersion
+val farmerChatVersion = "1.1.0" // == FarmerChatVersion
 
 // Expose to all modules (referenced by publish blocks and, optionally, runtime).
 extra["FarmerChatGroup"] = farmerChatGroup

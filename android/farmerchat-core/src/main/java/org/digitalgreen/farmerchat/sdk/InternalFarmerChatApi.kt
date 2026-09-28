@@ -28,5 +28,5 @@ annotation class InternalFarmerChatApi
  * `farmerChatVersion` declared in the root build script.
  */
 object FarmerChatVersion {
-    const val VERSION: String = "1.0.0"
+    const val VERSION: String = "1.1.0"
 }

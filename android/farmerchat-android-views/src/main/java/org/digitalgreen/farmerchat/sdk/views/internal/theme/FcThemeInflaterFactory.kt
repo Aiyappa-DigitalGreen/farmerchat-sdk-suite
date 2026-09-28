@@ -50,6 +50,22 @@ internal class FcThemeInflaterFactory(
         if (bgRes != 0) applyStroke(view, bgRes)
         applyHostFont(view)
         applyHostLogo(view, attrs)
+        applyNeutrals(view, attrs, bgRes)
+    }
+
+    /** Host background / surfaces / text colour, by the colour resource the layout names. */
+    private fun applyNeutrals(view: View, attrs: AttributeSet, bgRes: Int) {
+        when (bgRes) {
+            R.color.fc_surface_primary -> colors.background
+            R.color.fc_surface_secondary -> colors.cardSurface
+            R.color.fc_surface_reading -> colors.readingSurface
+            else -> null
+        }?.let { view.setBackgroundColor(it) }
+        if (view is TextView &&
+            attrs.getAttributeResourceValue(ANDROID_NS, "textColor", 0) == R.color.fc_foreground_primary
+        ) {
+            colors.onBackground?.let { view.setTextColor(it) }
+        }
     }
 
     /** Host [FarmerChatTheme.fontFamily] on every TextView, keeping its bold/italic style. */

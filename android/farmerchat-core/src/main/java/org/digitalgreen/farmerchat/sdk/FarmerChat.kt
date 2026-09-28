@@ -188,6 +188,14 @@ object FarmerChat {
     @JvmStatic
     fun logout(onComplete: ((success: Boolean) -> Unit)? = null) {
         val graph = graphInternal ?: return
+        // HOST_TOKEN: the host owns the server session and has ended it itself. A server logout
+        // from here would carry a token the host just invalidated (401 → host token provider,
+        // whose own storage is already cleared), so only the local SDK state is dropped.
+        if (graph.config.authMode == FarmerChatAuthMode.HOST_TOKEN) {
+            clearLocalSession()
+            onComplete?.invoke(true)
+            return
+        }
         sdkScope.launch {
             val success = graph.sessionManager.logout()
             graph.locationPromptManager.clearState()
@@ -221,8 +229,17 @@ object FarmerChat {
      */
     @JvmStatic
     @JvmOverloads
-    fun setHostSession(accessToken: String, userId: String, refreshToken: String? = null) {
-        graphInternal?.sessionManager?.setHostSession(accessToken, refreshToken, userId)
+    fun setHostSession(
+        accessToken: String,
+        userId: String,
+        refreshToken: String? = null,
+        /** The host's current language for this user (backend id + code), if it has one. */
+        languageId: Int? = null,
+        languageCode: String? = null,
+    ) {
+        graphInternal?.sessionManager?.setHostSession(
+            accessToken, refreshToken, userId, languageId, languageCode
+        )
     }
 
     /**

@@ -24,6 +24,12 @@ internal class FcResolvedColors(
     @ColorInt val onBrand: Int,
     @ColorInt val error: Int,
     @ColorInt val surfaceActive: Int,
+    // Neutral host overrides — null keeps the SDK token. Matched by the layout's colour
+    // RESOURCE id (not value): #FFFFFF is both a surface and the text on brand buttons.
+    @ColorInt val background: Int? = null,
+    @ColorInt val cardSurface: Int? = null,
+    @ColorInt val readingSurface: Int? = null,
+    @ColorInt val onBackground: Int? = null,
 ) {
     /** default-brand-color-int → themed-color-int (opaque colors). */
     val remap: Map<Int, Int> = buildMap {
@@ -86,11 +92,20 @@ internal object FcViewTheme {
         }
         val surfaceActive = withAlpha(accent, 0x29)
 
-        // If nothing brand-related was actually supplied, treat as no-op.
+        // Neutrals: a light value only overrides the light token (dark keeps the SDK's dark
+        // surfaces unless a *Night value is given) — the FarmerChatTheme contract.
+        fun neutral(@ColorInt light: Int?, @ColorInt night: Int?): Int? = if (dark) night else light
+        val background = neutral(theme.background, theme.backgroundNight)
+        val cardSurface = neutral(theme.cardSurface, theme.cardSurfaceNight)
+        val readingSurface = neutral(theme.readingSurface, theme.readingSurfaceNight)
+        val onBackground = neutral(theme.onBackground, theme.onBackgroundNight)
+
+        // If nothing was actually supplied, treat as no-op.
         if (primary == FcResolvedColors.DEF_GREEN700 &&
             primaryDark == FcResolvedColors.DEF_GREEN800 &&
             accent == FcResolvedColors.DEF_GREEN500 &&
-            error == FcResolvedColors.DEF_RED500
+            error == FcResolvedColors.DEF_RED500 &&
+            listOf(background, cardSurface, readingSurface, onBackground).all { it == null }
         ) return null
 
         return FcResolvedColors(
@@ -101,6 +116,10 @@ internal object FcViewTheme {
             onBrand = onBrand,
             error = error,
             surfaceActive = surfaceActive,
+            background = background,
+            cardSurface = cardSurface,
+            readingSurface = readingSurface,
+            onBackground = onBackground,
         )
     }
 
