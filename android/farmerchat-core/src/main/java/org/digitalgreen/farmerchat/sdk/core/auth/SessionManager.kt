@@ -107,6 +107,34 @@ class SessionManager(
     }
 
     /**
+     * HOST_TOKEN: adopt the host app's signed-in user. Tokens alone are not enough — the
+     * user id is what `new_conversation` and every chat request carry, and in HOST_TOKEN mode
+     * neither guest init nor verify_otp runs to write it. When the user id differs from the
+     * stored one (a different account signed in on the host), the previous user's open
+     * conversation is dropped so the new user never lands in it.
+     */
+    fun setHostSession(accessToken: String, refreshToken: String?, userId: String) {
+        val previousUserId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
+        if (previousUserId.isNotBlank() && previousUserId != userId) {
+            prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "")
+        }
+        tokenStore.saveTokens(accessToken, refreshToken ?: tokenStore.getRefreshToken())
+        prefs.putString(SdkPreferences.Keys.PREF_USER_ID, userId)
+        prefs.putBoolean(SdkPreferences.Keys.OTP_VERIFIED, true)
+        _isAuthenticated.value = true
+    }
+
+    /**
+     * Local-only counterpart of [logout] for hosts that own the server session (HOST_TOKEN):
+     * clears SDK prefs + tokens without calling api/user/logout/, which the host already did.
+     */
+    fun clearLocalSession() {
+        prefs.clearAll(preserveAppearance = true)
+        tokenStore.clear()
+        _isAuthenticated.value = false
+    }
+
+    /**
      * Logout (app semantics): POST api/user/logout/ best-effort, clear all SDK prefs
      * (preserving appearance), clear tokens, flip auth state.
      */

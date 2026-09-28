@@ -58,14 +58,14 @@ internal class SplashFragment : BaseFragment(R.layout.fc_fragment_splash) {
             if (graph.errorNavigationManager.hasPendingError.value) return@launch
 
             val nav = findNavController()
-            // C3: CHAT_ONLY skips onboarding/home and lands directly in a fresh chat
-            // (unless a pending deep-link target should be honored first).
-            if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
-                graph.routeDecider.peekPendingTarget() == null
-            ) {
+            // C3: CHAT_ONLY skips onboarding/home and lands directly in chat. A pending deep-link
+            // target (openChat / FarmerChatFragment.newInstance) is honored here too, without
+            // routeFromSplash(): its language/name gates and its Home-first back stack would
+            // surface exactly the screens CHAT_ONLY hides.
+            if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
                 // Guest session + conversation bootstrap (shared with android-compose).
                 graph.ensureChatOnlySession()
-                NavRoutes.navigateChatOnly(nav)
+                NavRoutes.navigateChatOnly(nav, graph.routeDecider.consumePendingTarget())
                 return@launch
             }
             // If the language SCREEN was skipped (config.locale), run its API work headlessly

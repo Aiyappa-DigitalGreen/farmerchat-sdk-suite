@@ -29,12 +29,21 @@ internal object NavRoutes {
      * C3 CHAT_ONLY: skip onboarding/home and land directly in a fresh chat,
      * clearing the whole back stack (mirrors Compose FarmerChatRoot).
      */
-    fun navigateChatOnly(navController: NavController) {
-        navController.navigate(
-            R.id.fc_dest_chat,
-            chatArgs(source = "chat_only"),
-            clearStackOptions(navController)
-        )
+    fun navigateChatOnly(navController: NavController, target: PendingTarget? = null) {
+        val args = when (target) {
+            // "history" is what makes ChatFragment load the thread; with the drawer off its
+            // back control pops, finds nothing beneath, and exits to the host.
+            is PendingTarget.Chat -> chatArgs(source = "history", conversationId = target.chatId)
+            is PendingTarget.ChatQuery -> chatArgs(
+                source = "chat_only",
+                question = target.question,
+                channel = target.channel,
+                preGeneratedAnswer = target.preGeneratedAnswer,
+                followUpQuestions = target.followUpQuestions
+            )
+            else -> chatArgs(source = "chat_only")
+        }
+        navController.navigate(R.id.fc_dest_chat, args, clearStackOptions(navController))
     }
 
     /**

@@ -96,6 +96,10 @@ class FarmerChatActivity : AppCompatActivity(), JourneyHost {
         controller?.closeDrawer()
     }
 
+    override fun exitJourney() {
+        finish()
+    }
+
     override fun applyAppearance(mode: String) {
         applyLocalNightMode(mode)
     }

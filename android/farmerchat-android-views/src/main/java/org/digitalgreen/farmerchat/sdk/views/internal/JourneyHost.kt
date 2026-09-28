@@ -10,6 +10,9 @@ internal interface JourneyHost {
     fun openDrawer()
     fun closeDrawer()
     fun applyAppearance(mode: String)
+
+    /** Leave the SDK: the activity finishes; an embedded fragment hands control back to its host. */
+    fun exitJourney()
 }
 
 /** Finds the nearest JourneyHost (parent fragment chain, then the activity). */

@@ -1,10 +1,14 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.theme
 
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
 import org.digitalgreen.farmerchat.sdk.views.R
 
 /**
@@ -44,6 +48,40 @@ internal class FcThemeInflaterFactory(
         // Stroked brand drawables identified by their background resource id.
         val bgRes = attrs.getAttributeResourceValue(ANDROID_NS, "background", 0)
         if (bgRes != 0) applyStroke(view, bgRes)
+        applyHostFont(view)
+        applyHostLogo(view, attrs)
+    }
+
+    /** Host [FarmerChatTheme.fontFamily] on every TextView, keeping its bold/italic style. */
+    private fun applyHostFont(view: View) {
+        if (view !is TextView) return
+        val font = hostFont(view.context) ?: return
+        view.typeface = Typeface.create(font, view.typeface?.style ?: Typeface.NORMAL)
+    }
+
+    /**
+     * Host [FarmerChatTheme.logo] in place of the built-in mark. The layout's tint is kept: the
+     * logo is treated as a mark, exactly like the one it replaces, so it follows the palette.
+     */
+    private fun applyHostLogo(view: View, attrs: AttributeSet) {
+        if (view !is ImageView) return
+        val logo = FcViewTheme.hostTheme()?.logo ?: return
+        val src = attrs.getAttributeResourceValue(ANDROID_NS, "src", 0)
+            .takeIf { it != 0 } ?: attrs.getAttributeResourceValue(APP_NS, "srcCompat", 0)
+        if (src == R.drawable.fc_logo_mark) view.setImageResource(logo)
+    }
+
+    private var fontLoaded = false
+    private var font: Typeface? = null
+
+    private fun hostFont(context: Context): Typeface? {
+        if (!fontLoaded) {
+            fontLoaded = true
+            font = FcViewTheme.hostTheme()?.fontFamily?.let { res ->
+                runCatching { ResourcesCompat.getFont(context, res) }.getOrNull()
+            }
+        }
+        return font
     }
 
     private fun applyStroke(view: View, bgRes: Int) {
@@ -87,6 +125,7 @@ internal class FcThemeInflaterFactory(
 
     companion object {
         private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+        private const val APP_NS = "http://schemas.android.com/apk/res-auto"
         private val FRAMEWORK_PREFIXES = arrayOf("android.widget.", "android.view.", "android.webkit.")
     }
 }

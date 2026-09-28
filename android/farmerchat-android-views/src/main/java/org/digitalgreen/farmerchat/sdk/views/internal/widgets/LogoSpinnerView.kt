@@ -10,6 +10,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import org.digitalgreen.farmerchat.sdk.views.R
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcViewTheme
 import org.digitalgreen.farmerchat.sdk.views.internal.util.dp
 
 /**
@@ -25,7 +26,7 @@ internal class LogoSpinnerView @JvmOverloads constructor(
         indeterminateTintList = ContextCompat.getColorStateList(context, R.color.fc_green500)
     }
     private val logo = ImageView(context).apply {
-        setImageResource(R.drawable.fc_logo_mark)
+        setImageResource(FcViewTheme.hostTheme()?.logo ?: R.drawable.fc_logo_mark)
         setColorFilter(ContextCompat.getColor(context, R.color.fc_foreground_primary))
     }
     private val label = TextView(context).apply {

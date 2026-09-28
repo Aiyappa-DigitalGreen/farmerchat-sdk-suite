@@ -78,6 +78,38 @@ Embedding instead of launching an Activity:
 - Compose: call `FarmerChatRoot()` inside your own hierarchy (theme + navigation self-contained).
 - Views: add `FarmerChatFragment` to your FragmentManager.
 
+### Embedding the Views chat in a host screen (host-owned login)
+
+For a host that already signs users in against a FarmerChat-compatible backend (first consumer:
+Econet), with the SDK rendering the host's chat screen directly — no FAB, no SDK onboarding:
+
+```kotlin
+// init: .authMode(HOST_TOKEN).mode(CHAT_ONLY).showDrawer(false).customBaseUrl(hostBaseUrl)
+//       .tokenProvider { hostRefresh() }            // 401 → host refresh, off main thread
+FarmerChat.setHostSession(accessToken, userId, refreshToken)   // before showing chat, every time
+val chat = FarmerChatFragment.newInstance(question = q, conversationId = id)
+childFragmentManager.beginTransaction()
+    .replace(R.id.container, chat).setPrimaryNavigationFragment(chat).commit()
+class HostChat : Fragment(), FarmerChatFragment.ExitListener {   // chat close → host decides
+    override fun onFarmerChatExit() { findNavController().popBackStack() }
+}
+FarmerChat.clearLocalSession()                        // on host logout (no server logout call)
+```
+
+- `setHostSession` supplies the **user id** as well as tokens: in HOST_TOKEN mode neither guest
+  init nor verify_otp runs, so without it `new_conversation` never fires. A different user id
+  drops the previous user's open conversation.
+- `ExitListener` (parent fragment chain, then activity) replaces the CHAT_ONLY close button's
+  `finish()`, which would otherwise finish the host's activity. No listener = old behaviour.
+- CHAT_ONLY now honours a pending chat target (`newInstance` / `openChat`) directly, instead of
+  routing it through `routeFromSplash()` (language gate + hidden Home).
+- Host `FarmerChatTheme` applies to the embedded fragment too (inflater `ContextWrapper`, since a
+  host activity's inflater already carries AppCompat's factory). `fontFamily` and `logo` are now
+  honoured by the Views UI (previously Compose-only); corner radii are still Compose-only.
+- Pass `appearance(DAY)` for a light-only host: the SDK sets local night mode on its host activity.
+- Parity: Android views + core only. Compose (`FarmerChatRoot` exit), iOS, RN and web are NOT
+  updated — gap to record in docs/04.
+
 ## Config options
 
 | Option | Default | Notes |

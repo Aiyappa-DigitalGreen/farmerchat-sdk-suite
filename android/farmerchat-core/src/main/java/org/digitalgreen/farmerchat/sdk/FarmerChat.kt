@@ -211,4 +211,28 @@ object FarmerChat {
     fun updateTokens(accessToken: String, refreshToken: String? = null) {
         graphInternal?.sessionManager?.updateTokens(accessToken, refreshToken)
     }
+
+    /**
+     * HOST_TOKEN: hand the SDK the host's signed-in user — tokens AND user id. Call it whenever
+     * the host has a session and before showing chat (it is cheap and idempotent). Without the
+     * user id the SDK cannot create a conversation, because in HOST_TOKEN mode neither guest
+     * init nor OTP runs to supply one. A different [userId] than last time starts a fresh
+     * conversation. No-op if the SDK has not been initialized.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun setHostSession(accessToken: String, userId: String, refreshToken: String? = null) {
+        graphInternal?.sessionManager?.setHostSession(accessToken, refreshToken, userId)
+    }
+
+    /**
+     * Clears SDK state locally (tokens, user, conversation, labels) WITHOUT the server logout
+     * that [logout] performs. For HOST_TOKEN hosts whose own logout already ended the session.
+     */
+    @JvmStatic
+    fun clearLocalSession() {
+        val graph = graphInternal ?: return
+        graph.sessionManager.clearLocalSession()
+        graph.locationPromptManager.clearState()
+    }
 }

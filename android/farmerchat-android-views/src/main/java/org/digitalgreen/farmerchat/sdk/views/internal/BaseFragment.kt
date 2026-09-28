@@ -1,5 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.views.internal
 
+import android.os.Bundle
+import android.view.LayoutInflater
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -8,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.FarmerChatGraph
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcEmbeddedTheme
 
 /**
  * Base for all SDK fragments: graph access, LabelManager shorthand and
@@ -19,6 +22,10 @@ internal abstract class BaseFragment(layoutId: Int) : Fragment(layoutId) {
 
     /** Analytics screen name; null disables auto view/exit tracking. */
     protected open val analyticsScreenName: String? = null
+
+    /** Embedded in a host activity: inflate through the host-theme recolor (no-op in FarmerChatActivity). */
+    override fun onGetLayoutInflater(savedInstanceState: Bundle?): LayoutInflater =
+        FcEmbeddedTheme.themedInflater(this, super.onGetLayoutInflater(savedInstanceState))
 
     protected fun label(key: String, fallback: String): String =
         graph.labelManager.getLabel(key, fallback)

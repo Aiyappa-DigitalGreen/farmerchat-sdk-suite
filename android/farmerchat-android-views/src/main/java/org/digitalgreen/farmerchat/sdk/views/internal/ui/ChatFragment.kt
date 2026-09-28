@@ -115,13 +115,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 // Drawer off (CHAT_ONLY): openDrawer() is a no-op, so this would strand the
                 // user in a thread opened from history. Step back to the history list, or exit
                 // if there is nothing to pop.
-                if (!findNavController().popBackStack()) requireActivity().finish()
+                if (!findNavController().popBackStack()) exitJourney()
             } else {
                 graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
                 // CHAT_ONLY has no SDK Home — close exits the SDK back to the host
                 // (parity with android-compose FarmerChatRoot).
                 if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
-                    requireActivity().finish()
+                    exitJourney()
                 } else {
                     NavRoutes.navigateChatClose(findNavController())
                 }
@@ -560,6 +560,11 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             vm.onAction(ChatAction.SetAudioPlaying(false))
         }
         super.onStop()
+    }
+
+    /** Leaves the SDK. Embedded, this returns to the host instead of finishing its activity. */
+    private fun exitJourney() {
+        journeyHost()?.exitJourney() ?: requireActivity().finish()
     }
 
     override fun onDestroyView() {

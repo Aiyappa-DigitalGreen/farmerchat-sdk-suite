@@ -66,6 +66,12 @@ class RouteDecider(
 
     fun peekPendingTarget(): PendingTarget? = pendingTarget
 
+    /**
+     * Takes the pending target without running the onboarding gates of [routeFromSplash].
+     * CHAT_ONLY has no language/name/home screens, so it consumes a deep-link target directly.
+     */
+    fun consumePendingTarget(): PendingTarget? = pendingTarget.also { pendingTarget = null }
+
     fun isLanguageSelected(): Boolean =
         prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)
 
