@@ -139,6 +139,9 @@ class FarmerChatGraph internal constructor(
      * clone. Contains the tail of the chain (AuthHeader → Logging + authenticator)
      * but NOT the priority/timeout interceptors — mirrors the app's baseFarmerOkHttp.
      */
+    private val endpointOverrideInterceptor =
+        org.digitalgreen.farmerchat.sdk.core.network.EndpointOverrideInterceptor(config.endpointOverrides)
+
     private val baseMainClient: OkHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
         .addInterceptor(authHeaderInterceptor)
@@ -154,6 +157,7 @@ class FarmerChatGraph internal constructor(
         .retryOnConnectionFailure(true)
         .addInterceptor(PriorityRequestIdInterceptor())
         .addInterceptor(ApiPriorityHeaderInterceptor())
+        .addInterceptor(endpointOverrideInterceptor)
         .addInterceptor(TimeoutTypeInterceptor { baseMainClient })
         .addInterceptor(authHeaderInterceptor)
         .addInterceptor(loggingInterceptor)
@@ -170,6 +174,7 @@ class FarmerChatGraph internal constructor(
         .retryOnConnectionFailure(true)
         .addInterceptor(PriorityRequestIdInterceptor())
         .addInterceptor(ApiPriorityHeaderInterceptor())
+        .addInterceptor(endpointOverrideInterceptor)
         .addInterceptor(TimeoutTypeInterceptor { baseAuthClient })
         .addInterceptor(loggingInterceptor)
         .build()

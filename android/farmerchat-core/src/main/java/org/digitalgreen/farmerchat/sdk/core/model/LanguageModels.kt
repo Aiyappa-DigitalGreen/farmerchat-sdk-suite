@@ -22,8 +22,20 @@ data class SupportedLanguageGroup(
     @SerializedName("display_name") val displayName: String = "",
     val flag: String = "",
     @SerializedName("priority_view") val priorityView: List<SupportedLanguage> = emptyList(),
-    @SerializedName("expanded_view") val expandedView: List<SupportedLanguage> = emptyList()
-)
+    @SerializedName("expanded_view") val expandedView: List<SupportedLanguage> = emptyList(),
+    /**
+     * Pre-v2 shape of the same endpoint (`api/language/country_wise_supported_languages/`): one flat
+     * list per group instead of priority/expanded views. Served by host backends still on it;
+     * normalised into [priorityView] by [normalized]. Absent from the v2 response.
+     */
+    @SerializedName("languages") val languages: List<SupportedLanguage>? = null
+) {
+    /** v2 as-is; a pre-v2 group's flat [languages] becomes its [priorityView]. */
+    fun normalized(): SupportedLanguageGroup =
+        if (priorityView.isEmpty() && expandedView.isEmpty() && !languages.isNullOrEmpty()) {
+            copy(priorityView = languages)
+        } else this
+}
 
 typealias LanguageLabelsResponse = Map<String, String>
 

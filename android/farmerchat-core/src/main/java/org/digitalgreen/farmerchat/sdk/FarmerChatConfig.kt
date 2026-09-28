@@ -52,6 +52,8 @@ class FarmerChatHooks internal constructor(
     val onScreenView: ((name: String) -> Unit)?,
     val onError: ((code: Int, message: String) -> Unit)?,
     val onSessionStart: (() -> Unit)?,
+    /** The user picked a language inside the SDK (id + code as the backend knows them). */
+    val onLanguageChanged: ((languageId: Int, languageCode: String) -> Unit)? = null,
 )
 
 /**
@@ -178,7 +180,14 @@ class FarmerChatConfig private constructor(
     /** Highest-precedence label overrides (labelKey → string), win over server labels. */
     val stringOverrides: Map<String, String>,
     /** Force this language code regardless of device/onboarding. */
-    val locale: String?
+    val locale: String?,
+
+    /**
+     * Host backend path overrides: SDK path → host path, both relative to the base URL
+     * (e.g. `"api/language/v2/get_labels/" to "api/language/get_labels/"`). For hosts whose
+     * backend serves an endpoint under an older/different path. Empty = SDK paths unchanged.
+     */
+    val endpointOverrides: Map<String, String> = emptyMap()
 ) {
 
     /** The base URL actually used: [customBaseUrl] when set (non-blank), else [environment]'s. */
@@ -223,6 +232,8 @@ class FarmerChatConfig private constructor(
         .onSessionStart(hooks.onSessionStart)
         .stringOverrides(stringOverrides)
         .locale(locale)
+        .onLanguageChanged(hooks.onLanguageChanged)
+        .endpointOverrides(endpointOverrides)
 
     class Builder(private val environment: FarmerChatEnvironment) {
         private var customBaseUrl: String? = null
@@ -272,6 +283,8 @@ class FarmerChatConfig private constructor(
         private var onScreenView: ((String) -> Unit)? = null
         private var onError: ((Int, String) -> Unit)? = null
         private var onSessionStart: (() -> Unit)? = null
+        private var onLanguageChanged: ((Int, String) -> Unit)? = null
+        private var endpointOverrides: Map<String, String> = emptyMap()
 
         private var stringOverrides: Map<String, String> = emptyMap()
         private var locale: String? = null
@@ -339,6 +352,12 @@ class FarmerChatConfig private constructor(
         fun onScreenView(cb: ((String) -> Unit)?) = apply { onScreenView = cb }
         fun onError(cb: ((Int, String) -> Unit)?) = apply { onError = cb }
         fun onSessionStart(cb: (() -> Unit)?) = apply { onSessionStart = cb }
+        /** Language picked inside the SDK — keep the host's own language state in step. */
+        fun onLanguageChanged(cb: ((languageId: Int, languageCode: String) -> Unit)?) =
+            apply { onLanguageChanged = cb }
+
+        /** SDK path → host path (relative to the base URL) for a host backend on other paths. */
+        fun endpointOverrides(overrides: Map<String, String>) = apply { endpointOverrides = overrides }
 
         // C5 -------------------------------------------------------------
         fun stringOverrides(overrides: Map<String, String>) = apply { stringOverrides = overrides }
@@ -382,10 +401,11 @@ class FarmerChatConfig private constructor(
             messageFontSizeSp = messageFontSizeSp,
             hooks = FarmerChatHooks(
                 onChatOpened, onMessageSent, onAnswerReceived,
-                onScreenView, onError, onSessionStart
+                onScreenView, onError, onSessionStart, onLanguageChanged
             ),
             stringOverrides = stringOverrides,
-            locale = locale
+            locale = locale,
+            endpointOverrides = endpointOverrides
         )
     }
 

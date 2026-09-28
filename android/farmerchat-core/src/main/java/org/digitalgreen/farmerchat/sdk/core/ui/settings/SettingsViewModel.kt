@@ -134,6 +134,11 @@ class SettingsViewModel(
                             prefs.putBoolean(SdkPreferences.Keys.ASR_ENABLED, it.isAsrEnabled)
                             prefs.putBoolean(SdkPreferences.Keys.TTS_ENABLED, it.isTtsEnabled)
                         }
+                        // The backend now has this language for the user; a host sharing that user
+                        // keeps its own language state in step through this hook.
+                        runCatching {
+                            config.hooks.onLanguageChanged?.invoke(languageId, language?.code.orEmpty())
+                        }
                         analytics.track(
                             AnalyticsEvents.SAVE_LANGUAGE_CLICK,
                             mapOf(AnalyticsProps.LANGUAGE_CODE to _state.value.languageCode)

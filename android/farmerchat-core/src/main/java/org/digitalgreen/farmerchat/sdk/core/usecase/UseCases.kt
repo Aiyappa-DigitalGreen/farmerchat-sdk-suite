@@ -137,6 +137,7 @@ class GetSupportedLanguagesUseCase(
                 apiName = "get_supported_languages",
                 priority = ApiPriority.PRIORITY_2_NO_FALLBACK
             ) { repo.getSupportedLanguages(countryCode, state) }
+                .let { r -> if (r is ApiResult.Success) ApiResult.Success(r.data.map { it.normalized() }) else r }
         )
     }
 
