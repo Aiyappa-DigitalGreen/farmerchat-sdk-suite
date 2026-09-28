@@ -39,7 +39,9 @@ internal object NavRoutes {
                 question = target.question,
                 channel = target.channel,
                 preGeneratedAnswer = target.preGeneratedAnswer,
-                followUpQuestions = target.followUpQuestions
+                followUpQuestions = target.followUpQuestions,
+                imageUri = target.imageUri,
+                audioUri = target.audioUri
             )
             else -> chatArgs(source = "chat_only")
         }

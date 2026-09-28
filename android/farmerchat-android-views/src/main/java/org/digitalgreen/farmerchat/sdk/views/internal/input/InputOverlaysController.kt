@@ -358,7 +358,8 @@ internal class InputOverlaysController(
                     "enable it in your device settings."
             )
         }
-        AlertDialog.Builder(context)
+        // The view's context, not the fragment's: embedded, that one carries the SDK theme.
+        AlertDialog.Builder(binding.root.context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(label(Labels.GO_TO_SETTINGS, "Go to Settings")) { _, _ ->

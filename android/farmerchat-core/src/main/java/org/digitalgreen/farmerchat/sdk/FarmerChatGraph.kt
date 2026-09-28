@@ -347,8 +347,16 @@ class FarmerChatGraph internal constructor(
      * Best-effort and idempotent: no-ops once labels exist, and any failure leaves the English
      * fallbacks in place, which is the pre-existing behaviour.
      */
+    /**
+     * Set when the language list 404s this process. A backend without the endpoint (a host's own
+     * server) would otherwise pay its P2 retries + backoff on every chat open, for a result that
+     * is always the English fallback. Cleared by process death only.
+     */
+    @Volatile
+    private var labelBootstrapUnavailable = false
+
     private suspend fun ensureLabelsLoaded() {
-        if (labelManager.areLabelsLoaded()) return
+        if (labelManager.areLabelsLoaded() || labelBootstrapUnavailable) return
 
         val code = prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "")
             .ifBlank { config.locale ?: config.languageCode ?: "en" }
@@ -365,7 +373,11 @@ class FarmerChatGraph internal constructor(
                 .ifBlank { config.defaultStateCode }
 
             val groups = getSupportedLanguagesUseCase.getSupportedLanguages(country, state).first()
-            if (groups !is ApiResult.Success) return@runCatching
+            if (groups !is ApiResult.Success) {
+                // 404 = this backend has no such endpoint; offline/5xx may succeed next open.
+                if ((groups as? ApiResult.Error)?.code == 404) labelBootstrapUnavailable = true
+                return@runCatching
+            }
             val all = groups.data.flatMap { it.priorityView + it.expandedView }
             val match = all.firstOrNull { it.code.equals(code, ignoreCase = true) }
                 ?: all.firstOrNull { it.code.equals("en", ignoreCase = true) }

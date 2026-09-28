@@ -8,6 +8,7 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.NavHostFragment
 import org.digitalgreen.farmerchat.sdk.FarmerChat
+import org.digitalgreen.farmerchat.sdk.FarmerChatLaunch
 import org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcJourneyHostBinding
@@ -36,18 +37,34 @@ class FarmerChatFragment : Fragment(R.layout.fc_journey_host), JourneyHost {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Deep-link args become the pending target the SDK splash consumes. Only on first
+        // Launch options become the pending target the SDK splash consumes. Only on first
         // creation: a restored fragment already navigated there.
         if (savedInstanceState == null) {
             val graph = FarmerChat.requireGraph()
-            val conversationId = arguments?.getString(ARG_CONVERSATION_ID)?.takeIf { it.isNotBlank() }
-            val question = arguments?.getString(ARG_QUESTION)?.takeIf { it.isNotBlank() }
+            val a = arguments ?: Bundle.EMPTY
+            fun str(key: String) = a.getString(key)?.takeIf { it.isNotBlank() }
+            // Dropping the stored id makes the CHAT_ONLY bootstrap create a fresh conversation.
+            if (a.getBoolean(ARG_NEW_CONVERSATION)) {
+                graph.prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "")
+            }
+            val question = str(ARG_QUESTION)
+            val imageUri = str(ARG_IMAGE_URI)
+            val audioUri = str(ARG_AUDIO_URI)
+            val answer = str(ARG_ANSWER)
+            val conversationId = str(ARG_CONVERSATION_ID)
             when {
                 conversationId != null ->
                     graph.routeDecider.savePendingTarget(PendingTarget.Chat(conversationId))
-                question != null ->
+                question != null || imageUri != null || audioUri != null || answer != null ->
                     graph.routeDecider.savePendingTarget(
-                        PendingTarget.ChatQuery(question = question, source = "deeplink")
+                        PendingTarget.ChatQuery(
+                            question = question.orEmpty(),
+                            source = "deeplink",
+                            preGeneratedAnswer = answer,
+                            followUpQuestions = a.getStringArrayList(ARG_FOLLOW_UPS),
+                            imageUri = imageUri,
+                            audioUri = audioUri,
+                        )
                     )
             }
         }
@@ -105,16 +122,31 @@ class FarmerChatFragment : Fragment(R.layout.fc_journey_host), JourneyHost {
     companion object {
         private const val ARG_QUESTION = "fc_arg_question"
         private const val ARG_CONVERSATION_ID = "fc_arg_conversation_id"
+        private const val ARG_IMAGE_URI = "fc_arg_image_uri"
+        private const val ARG_AUDIO_URI = "fc_arg_audio_uri"
+        private const val ARG_ANSWER = "fc_arg_pre_generated_answer"
+        private const val ARG_FOLLOW_UPS = "fc_arg_follow_ups"
+        private const val ARG_NEW_CONVERSATION = "fc_arg_new_conversation"
 
-        /**
-         * Embedded counterpart of [FarmerChat.openChat]: [conversationId] opens that thread,
-         * else [question] is asked immediately, else a fresh chat opens.
-         */
+        /** Embedded counterpart of [FarmerChat.openChat]; see [FarmerChatLaunch] for what each option does. */
+        @JvmStatic
+        fun newInstance(launch: FarmerChatLaunch): FarmerChatFragment =
+            FarmerChatFragment().apply {
+                arguments = bundleOf(
+                    ARG_QUESTION to launch.question,
+                    ARG_CONVERSATION_ID to launch.conversationId,
+                    ARG_IMAGE_URI to launch.imageUri,
+                    ARG_AUDIO_URI to launch.audioUri,
+                    ARG_ANSWER to launch.preGeneratedAnswer,
+                    ARG_FOLLOW_UPS to launch.followUpQuestions?.let { ArrayList(it) },
+                    ARG_NEW_CONVERSATION to launch.startNewConversation,
+                )
+            }
+
+        /** Shorthand for [newInstance] with just a question and/or a conversation. */
         @JvmStatic
         @JvmOverloads
         fun newInstance(question: String? = null, conversationId: String? = null): FarmerChatFragment =
-            FarmerChatFragment().apply {
-                arguments = bundleOf(ARG_QUESTION to question, ARG_CONVERSATION_ID to conversationId)
-            }
+            newInstance(FarmerChatLaunch(question = question, conversationId = conversationId))
     }
 }

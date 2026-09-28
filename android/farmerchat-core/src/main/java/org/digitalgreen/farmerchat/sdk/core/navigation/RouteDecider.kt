@@ -13,7 +13,11 @@ sealed interface PendingTarget {
         val source: String,
         val channel: String? = null,
         val preGeneratedAnswer: String? = null,
-        val followUpQuestions: List<String>? = null
+        val followUpQuestions: List<String>? = null,
+        /** Host-supplied photo (content/file URI) sent with [question] on arrival. */
+        val imageUri: String? = null,
+        /** Host-supplied voice recording (content/file URI) transcribed + asked on arrival. */
+        val audioUri: String? = null
     ) : PendingTarget
     data class Gps(val action: String) : PendingTarget
     data object Home : PendingTarget
