@@ -1,6 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.theme
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
@@ -51,6 +52,19 @@ internal class FcThemeInflaterFactory(
         applyHostFont(view)
         applyHostLogo(view, attrs)
         applyNeutrals(view, attrs, bgRes)
+        applyAccentIconTint(view, attrs, colors)
+    }
+
+    /**
+     * Single-colour icons whose brand green is baked into the vector (`fillColor="#00C950"`), so
+     * no tint remap can reach them. When the layout leaves one untinted, tint it with the host
+     * accent — exactly what the baked green stood for. Layout-tinted uses keep their tint.
+     */
+    private fun applyAccentIconTint(view: View, attrs: AttributeSet, colors: FcResolvedColors) {
+        if (view !is ImageView || view.imageTintList != null) return
+        val src = attrs.getAttributeResourceValue(ANDROID_NS, "src", 0)
+            .takeIf { it != 0 } ?: attrs.getAttributeResourceValue(APP_NS, "srcCompat", 0)
+        if (src in BRAND_ACCENT_ICONS) view.imageTintList = ColorStateList.valueOf(colors.accent)
     }
 
     /** Host background / surfaces / text colour, by the colour resource the layout names. */
@@ -142,6 +156,22 @@ internal class FcThemeInflaterFactory(
     companion object {
         private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
         private const val APP_NS = "http://schemas.android.com/apk/res-auto"
+        /** Drawables whose only colour is a baked-in brand green (see [applyAccentIconTint]). */
+        private val BRAND_ACCENT_ICONS = setOf(
+            R.drawable.fc_icon_camera,
+            R.drawable.fc_icon_card,
+            R.drawable.fc_icon_help,
+            R.drawable.fc_icon_home,
+            R.drawable.fc_icon_keyboard,
+            R.drawable.fc_icon_language,
+            R.drawable.fc_icon_mic,
+            R.drawable.fc_icon_save,
+            R.drawable.fc_icon_send,
+            R.drawable.fc_icon_settings,
+            R.drawable.fc_icon_sms,
+            R.drawable.fc_icon_timer,
+            R.drawable.fc_icon_whatsapp,
+        )
         private val FRAMEWORK_PREFIXES = arrayOf("android.widget.", "android.view.", "android.webkit.")
     }
 }
