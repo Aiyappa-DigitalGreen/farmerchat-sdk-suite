@@ -16,6 +16,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.HomeUdfResponse
 import org.digitalgreen.farmerchat.sdk.core.model.ImageStatementRequest
 import org.digitalgreen.farmerchat.sdk.core.model.ImageViewedRequest
 import org.digitalgreen.farmerchat.sdk.core.model.NewConversationRequest
+import org.digitalgreen.farmerchat.sdk.core.model.ProfileUser
 import org.digitalgreen.farmerchat.sdk.core.model.SetCultivatedCropsRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SetVoiceRequest
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
@@ -235,13 +236,49 @@ class HomeViewModel(
         scope.launch {
             getUserProfileUseCase.fetchUserProfile(userId).collect { result ->
                 if (result is ApiResult.Success) {
-                    val name = result.data.userProfile.displayName()
+                    val profile = result.data.userProfile
+                    val name = profile.displayName()
                     if (name.isNotBlank()) {
                         prefs.putString(SdkPreferences.Keys.USER_NAME, name)
                     }
+                    backfillApproxLocationName(profile)
                 }
             }
         }
+    }
+
+    /**
+     * Fills the location pill's place name from the profile's geography when the local pref is
+     * empty (app parity: `HomeViewModel.fetchUserProfile`, b72ea4da).
+     *
+     * `APPROX_LOCATION_NAME` is normally written by the GPS flow, from #16's `display_address`
+     * ([LocationPromptManager]). A farmer who has geography saved SERVER-side but nothing in this
+     * install's prefs therefore sees a name-less pill: a reinstall, a fresh host app, or any
+     * already-onboarded user reaching Home without re-running the GPS flow. The profile already
+     * carries the place, so fill it from there.
+     *
+     * NOTE this is NOT the app's stated reason. The app is repairing its own V1→V2 upgrade, where
+     * the lat/lng prefs survived but `APPROX_LOCATION_NAME` was a V2-only key that had never been
+     * written. The SDK has always had that key, so that premise does not apply — the mechanism is
+     * ported, the rationale is the one above. Recorded in docs/05.
+     *
+     * Fill-WHEN-BLANK, never overwrite: a live GPS fix produces a more precise
+     * `display_address` than the profile's coarse geography, and this runs on every Home entry.
+     *
+     * The app also seeds a second, never-overwritten `IP_APPROX_LOCATION_NAME` key. The SDK has
+     * ONE approx-name key by design (documented at compose `HomeScreen.kt` `HomeLocationPill`),
+     * so that half is deliberately not ported rather than inventing a key (CLAUDE.md §2).
+     */
+    private fun backfillApproxLocationName(profile: ProfileUser) {
+        val placeName = profile.approxPlaceName() ?: return
+
+        if (prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "").isBlank()) {
+            prefs.putString(SdkPreferences.Keys.APPROX_LOCATION_NAME, placeName)
+        }
+        // Published UNCONDITIONALLY, not gated on the pref having been blank: the pill reads the
+        // pref non-reactively, so this state write is the only thing that makes it recompose once
+        // the async profile fetch lands.
+        _state.update { it.copy(approxLocationName = placeName) }
     }
 
     private fun updateCultivatedCrops(action: HomeAction.UpdateCultivatedCrops) {

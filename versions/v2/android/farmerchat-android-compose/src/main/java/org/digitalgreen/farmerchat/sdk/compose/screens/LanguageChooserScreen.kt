@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.screens
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,6 +54,7 @@ import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.base.UiState
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import kotlinx.coroutines.delay
+import androidx.compose.material3.Surface
 
 /**
  * Settings → Language chooser (doc 01 §3.13). RadioButton list + "All
@@ -61,6 +64,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun LanguageChooserScreen(
     openDrawer: () -> Unit,
+    /**
+     * Plain back navigation, used INSTEAD of [openDrawer] when the drawer is off. With
+     * `showDrawer(false)` (CHAT_ONLY) `openDrawer` is a no-op, so this screen's only control was
+     * a dead button. Parity with the views `LanguageChooserFragment`.
+     */
+    onBack: () -> Unit = {},
     onLanguageSaved: () -> Unit,
     onFetchLabelsFailure: () -> Unit,
     onLabelsChanged: () -> Unit = {}
@@ -88,10 +97,15 @@ fun LanguageChooserScreen(
     LaunchedEffect(state.languageSubmitSuccess) {
         if (state.languageSubmitSuccess && !navigating) {
             navigating = true
-            vm.consumeLanguageResult()
             toast.show(label(Labels.LANGUAGE_UPDATED, "Language updated"), ToastState.Success)
             delay(500L)
             onLanguageSaved()
+            // consume LAST. `consumeLanguageResult()` clears `languageSubmitSuccess`, which is
+            // this effect's KEY — calling it first cancelled this very coroutine during the
+            // delay, so `onLanguageSaved()` never ran. The save itself worked (API 200, prefs
+            // written, `languageSubmitSuccess = true`), but the farmer was left sitting on the
+            // language screen with no toast and no way to tell anything had happened.
+            vm.consumeLanguageResult()
         }
     }
 
@@ -113,7 +127,7 @@ fun LanguageChooserScreen(
         onDispose { graph.analytics.trackScreenExit(AnalyticsScreens.LANGUAGE_SETTINGS) }
     }
 
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = fcNavigationBarsBottom()
     val languageState = state.languageState
 
     Box(
@@ -122,10 +136,14 @@ fun LanguageChooserScreen(
             .background(colors.surfacePrimary)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            val drawerOn = graph.config.showDrawer
             DefaultAppBar(
-                title = label(Labels.CHOOSE_YOUR_LANGUAGE, "Choose your language"),
-                leftIcon = Icons.Filled.Menu,
-                onLeftClick = openDrawer
+                // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+                showGlow = false,
+title = label(Labels.CHOOSE_YOUR_LANGUAGE, "Choose your language"),
+                leftIcon = if (drawerOn) Icons.Filled.Menu else Icons.AutoMirrored.Filled.ArrowBack,
+                leftRadius = Radius.Rounded,
+                onLeftClick = if (drawerOn) openDrawer else onBack
             )
 
             when (languageState) {
@@ -135,7 +153,11 @@ fun LanguageChooserScreen(
                             .weight(1f)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
+                            // App parity (LanguageChooserScreen.kt:172): 20dp sides, 32dp top,
+                            // 20dp bottom — not a flat 16dp, which put the list 16dp high and
+                            // 4dp wide of the app's rows.
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 32.dp, bottom = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // App parity (ui/settings/LanguageChooserScreen.kt `displayedLanguages`):
@@ -160,24 +182,26 @@ fun LanguageChooserScreen(
                         }
 
                         if (!showAllLanguages && state.expandedLanguages.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 10.dp)
-                                    .background(
-                                        colors.surfaceSecondary,
-                                        SmoothShapes.rounded(Radius.Rounded)
-                                    )
-                                    .clickable(
-                                        indication = null,
-                                        interactionSource = remember { MutableInteractionSource() }
-                                    ) { showAllLanguages = true }
-                                    .padding(horizontal = 18.dp, vertical = 10.dp)
-                                    .align(Alignment.CenterHorizontally)
+                            // App parity (LanguageChooserScreen.kt:202): a 10dp spacer, then a
+                            // FILLED primary Surface — buttonPrimarySurface with
+                            // buttonPrimaryForeground text, not a secondary-surface Box with dark
+                            // text, which rendered the chip inverted. Surface(onClick=) also
+                            // applies minimumInteractiveComponentSize(), which is what gives the
+                            // chip its real height; a bare Box sits a few px short.
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                onClick = { showAllLanguages = true },
+                                shape = SmoothShapes.rounded(Radius.Rounded),
+                                color = colors.buttonPrimarySurface,
+                                contentColor = colors.buttonPrimaryForeground,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
                                 Text(
                                     text = label(Labels.ALL_LANGUAGES, "All languages"),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = colors.foregroundPrimary
+                                    // App parity (LanguageChooserScreen.kt:211): labelLarge, the
+                                    // same value the onboarding Language screen's chip uses.
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                                 )
                             }
                         }
@@ -199,18 +223,25 @@ fun LanguageChooserScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    // App parity (LanguageChooserScreen.kt:273): the bar has its own
+                    // surfaceSecondary background and insets the button by 24dp / 16dp top /
+                    // 8dp + nav bar, so it reads as a footer rather than a floating button.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp + bottomInset)
+                            .background(colors.surfaceSecondary)
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 16.dp, bottom = 8.dp + bottomInset)
                     ) {
                         PrimaryButton(
                             label = if (state.isSubmittingLanguage)
                                 label(Labels.SETTING_LANGUAGE, "Setting language")
                             else
                                 label(Labels.SAVE_LANGUAGE, "Save language"),
+                            // App parity (LanguageChooserScreen.kt:285): Chevron, not Default —
+                            // the app's save button carries a trailing chevron.
                             state = if (state.isSubmittingLanguage) PrimaryButtonState.Loading
-                            else PrimaryButtonState.Default,
+                            else PrimaryButtonState.Chevron,
                             enabled = state.selectedLanguageId != null && !state.isFetchingLabels,
                             onClick = { vm.submitLanguage() },
                             modifier = Modifier.fillMaxWidth(),

@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/fc_green700">
+
+    <!-- App LogoAppBar: Glow(Yellow) 80dp at the SCREEN top ("always on"), so it lights the
+         status-bar area and the top of the bar. Drawn behind the (now transparent) bar. -->
+    <ImageView
+        android:id="@+id/fcChatTopGlow"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/fc_glow_yellow" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -26,8 +37,23 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingTop="8dp"
-                android:paddingBottom="24dp" />
+                android:paddingTop="12dp"
+                android:paddingBottom="16dp" />
+
+            <!-- App ScrollIndicator: after a new answer with more below, a 40dp accent circle
+                 bounces three times above the composer, then fades. Tap = scroll to the end. -->
+            <ImageView
+                android:id="@+id/fcChatScrollIndicator"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="bottom|center_horizontal"
+                android:alpha="0"
+                android:background="@drawable/fc_bg_circle_accent"
+                android:contentDescription="@null"
+                android:padding="10dp"
+                android:src="@drawable/fc_icon_arrow_down"
+                android:visibility="gone"
+                app:tint="@color/fc_button_primary_foreground" />
 
             <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LogoSpinnerView
                 android:id="@+id/fcChatLoading"
@@ -106,6 +132,21 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+
+    <!--
+      Answer-generation tip carousel (2.0.0) — app parity with `ChatLoadingContent` /
+      `ChatThreadContent`, where `Tips` is a bottom-anchored overlay OUTSIDE the message list.
+
+      A direct child of the root FrameLayout so it can sit over the message area, and declared
+      BEFORE the composer / overlays / toast so those still draw above it. Gone until an answer
+      is generating; see ChatFragment.observeState.
+    -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.TipsCarouselView
+        android:id="@+id/fcChatTips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone" />
 
     <!--
       Unified input composer (2.0.0) — camera / text field / mic-or-send.

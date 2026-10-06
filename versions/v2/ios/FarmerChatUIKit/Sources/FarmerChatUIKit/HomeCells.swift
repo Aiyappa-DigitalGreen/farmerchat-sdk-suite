@@ -10,7 +10,7 @@ final class FCUIGreetingCell: UICollectionViewCell {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        label.font = .systemFont(ofSize: 26, weight: .bold)
+        label.font = FCUITypography.current.titleMedium.font
         label.textColor = FCUITheme.foregroundPrimary
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -41,11 +41,11 @@ final class FCUIInputButtonsHeader: UICollectionReusableView {
         super.init(frame: frame)
         backgroundColor = FCUITheme.surfacePrimary
 
-        let photo = makeButton(icon: "camera.fill", title: fcuiLabel("input_photo", "Photo"))
+        let photo = makeButton(icon: "camera.fill", title: fcuiLabel(FCLabels.photo, "Photo"))
         photo.addAction(UIAction { [weak self] _ in self?.onPhoto?() }, for: .touchUpInside)
-        let speak = makeButton(icon: "mic.fill", title: fcuiLabel("input_speak", "Speak"))
+        let speak = makeButton(icon: "mic.fill", title: fcuiLabel(FCLabels.speak, "Speak"))
         speak.addAction(UIAction { [weak self] _ in self?.onSpeak?() }, for: .touchUpInside)
-        let type = makeButton(icon: "keyboard", title: fcuiLabel("input_type", "Type"))
+        let type = makeButton(icon: "keyboard", title: fcuiLabel(FCLabels.type, "Type"))
         type.addAction(UIAction { [weak self] _ in self?.onType?() }, for: .touchUpInside)
 
         var buttons: [UIView] = []
@@ -96,12 +96,12 @@ final class FCUISsfrCell: UICollectionViewCell {
 
         let title = UILabel()
         title.text = fcuiLabel("ssfr_title", "Get fertilizer advice for your crop")
-        title.font = .systemFont(ofSize: 17, weight: .semibold)
+        title.font = FCUITypography.current.titleMedium.font
         title.textColor = FCUITheme.foregroundPrimary
         title.numberOfLines = 0
 
-        let wheat = cropButton(icon: "laurel.leading", title: fcuiLabel("ssfr_wheat", "Wheat"), crop: "wheat")
-        let maize = cropButton(icon: "leaf.fill", title: fcuiLabel("ssfr_maize", "Maize"), crop: "maize")
+        let wheat = cropButton(icon: "laurel.leading", title: fcuiLabel(FCLabels.ssfrWheat, "Wheat"), crop: "wheat")
+        let maize = cropButton(icon: "leaf.fill", title: fcuiLabel(FCLabels.ssfrMaize, "Maize"), crop: "maize")
         let row = UIStackView(arrangedSubviews: [wheat, maize])
         row.axis = .horizontal
         row.spacing = 10
@@ -168,11 +168,11 @@ final class FCUIFeedCardCell: UICollectionViewCell {
         imageView.clipsToBounds = true
         imageView.heightAnchor.constraint(equalToConstant: 170).isActive = true
 
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        titleLabel.font = FCUITypography.current.titleMedium.font
         titleLabel.textColor = FCUITheme.foregroundPrimary
         titleLabel.numberOfLines = 0
 
-        statementLabel.font = .systemFont(ofSize: 15)
+        statementLabel.font = FCUITypography.current.bodyMedium.font
         statementLabel.textColor = FCUITheme.foregroundSecondary
         statementLabel.numberOfLines = 0
 
@@ -227,8 +227,8 @@ final class FCUIFeedCardCell: UICollectionViewCell {
 
     func configure(section: SectionDto) {
         self.section = section
-        titleLabel.text = section.title ?? section.statement ?? section.questionText
-        statementLabel.text = section.title != nil ? section.statement : nil
+        titleLabel.fcSetText(section.title ?? section.statement ?? section.questionText, style: FCUITypography.current.titleMedium)
+        statementLabel.fcSetText(section.title != nil ? section.statement : nil, style: FCUITypography.current.bodyMedium)
         statementLabel.isHidden = statementLabel.text?.isEmpty != false
 
         // Image
@@ -273,7 +273,7 @@ final class FCUIFeedCardCell: UICollectionViewCell {
         }
 
         if !isSingle {
-            let save = FCUIPrimaryButton(title: fcuiLabel("save", "Save"))
+            let save = FCUIPrimaryButton(title: fcuiLabel(FCLabels.save, "Save"))
             save.addAction(UIAction { [weak self] _ in
                 guard let self, let section = self.section else { return }
                 let chosen = (section.options ?? []).filter { self.selectedOptionIds.contains($0.id) }
@@ -311,7 +311,7 @@ final class FCUIVoiceRecordingViewController: UIViewController {
 
         let title = UILabel()
         title.text = fcuiLabel("voice_listening", "Listening…")
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
+        title.font = FCUITypography.current.titleMedium.font
         title.textColor = FCUITheme.foregroundPrimary
         title.textAlignment = .center
 

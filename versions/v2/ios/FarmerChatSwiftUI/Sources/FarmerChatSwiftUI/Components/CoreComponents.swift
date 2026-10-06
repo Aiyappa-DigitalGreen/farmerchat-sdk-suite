@@ -29,7 +29,7 @@ public struct FCPrimaryButton: View {
         }) {
             HStack(spacing: 8) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.buttonPrimaryForeground.opacity(contentAlpha))
                 if state == .chevron {
                     Image(systemName: "chevron.right")
@@ -44,7 +44,7 @@ public struct FCPrimaryButton: View {
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .background(theme.content.buttonPrimarySurface)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: theme.shapes.button, style: .continuous))
         }
         // NOTE: intentionally NOT using .disabled() — SwiftUI dims the whole
         // button (fill included) when disabled, which would turn the dark
@@ -69,12 +69,12 @@ public struct FCSecondaryButton: View {
         // Port of SecondaryButton.kt: filled surfaceSecondary, radius MD (12).
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .fcTextStyle(theme.typography.titleMedium)
                 .foregroundColor(destructive ? theme.brand.feedbackFail : theme.content.foregroundPrimary)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
                 .background(theme.content.surfaceSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: theme.shapes.button, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -198,6 +198,74 @@ public struct FCLogoMark: View {
     }
 }
 
+/// Port of `components/ShimmerText.kt`: text filled with a slow horizontal gradient sweep —
+/// the "AI is thinking" treatment. The SDK had no equivalent, so the chat spinner's status
+/// line was flat where android's shimmers.
+///
+/// (The two-tone "Soil data **received**" that shows up in android screenshots is this
+/// shimmer caught mid-sweep, not two-colour text.)
+public struct FCShimmerText: View {
+    @Environment(\.fcTheme) private var theme
+    let text: String
+    var style: FCTextStyle?
+    var baseColor: Color?
+    var highlightColor: Color?
+    var duration: Double = 1.2
+
+    @State private var progress: CGFloat = 0
+
+    public init(text: String,
+                style: FCTextStyle? = nil,
+                baseColor: Color? = nil,
+                highlightColor: Color? = nil,
+                duration: Double = 1.2) {
+        self.text = text
+        self.style = style
+        self.baseColor = baseColor
+        self.highlightColor = highlightColor
+        self.duration = duration
+    }
+
+    public var body: some View {
+        let resolvedStyle = style ?? theme.typography.bodyLarge
+        let base = baseColor ?? theme.content.foregroundSecondary
+        let highlight = highlightColor ?? theme.content.borderActive
+
+        // Android disables the sweep on low-RAM devices. iOS has no `isLowRamDevice`; the
+        // equivalent reason to drop a looping animation here is the accessibility setting
+        // that asks for exactly that, so Reduce Motion takes its place.
+        let animate = !UIAccessibility.isReduceMotionEnabled
+
+        return Text(text)
+            .fcTextStyle(resolvedStyle)
+            .foregroundStyle(
+                animate
+                    ? AnyShapeStyle(LinearGradient(
+                        stops: [
+                            .init(color: base, location: 0.0),
+                            .init(color: highlight, location: 0.35),
+                            .init(color: highlight, location: 0.65),
+                            .init(color: base, location: 1.0),
+                        ],
+                        // Android sweeps a band 1.2x the text width from just off the leading
+                        // edge to just past the trailing one; expressed in unit space that is
+                        // a centre travelling -0.6 -> 1.6, with the band spanning ±0.6.
+                        startPoint: UnitPoint(x: bandCentre - 0.6, y: 0),
+                        endPoint: UnitPoint(x: bandCentre + 0.6, y: 1)
+                    ))
+                    : AnyShapeStyle(base)
+            )
+            .onAppear {
+                guard animate else { return }
+                withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                    progress = 1
+                }
+            }
+    }
+
+    private var bandCentre: CGFloat { -0.6 + progress * 2.2 }
+}
+
 public struct FCLogoSpinner: View {
     @Environment(\.fcTheme) private var theme
     let message: String
@@ -206,7 +274,8 @@ public struct FCLogoSpinner: View {
     public var body: some View {
         Group {
             if vertical {
-                VStack(spacing: 16) { spinnerContent }
+                // App parity (LogoSpinner.kt:88): 12dp, not 16.
+                VStack(spacing: 12) { spinnerContent }
             } else {
                 HStack(spacing: 12) { spinnerContent }
             }
@@ -217,12 +286,16 @@ public struct FCLogoSpinner: View {
     @State private var spin = false
 
     @ViewBuilder private var spinnerContent: some View {
-        // Port of LogoSpinner.kt: a Green500 progress ring with the static
-        // Green500 flower mark centered inside it.
+        // Port of LogoSpinner.kt: a Green500 progress ring with the static Green500 flower
+        // mark centred inside it. Geometry per LogoSpinner.kt:90/101 — 55/32/3 vertical,
+        // 40/23/2.5 horizontal. The stroke was 3 for both.
         ZStack {
             Circle()
                 .trim(from: 0, to: 0.75)
-                .stroke(FCPrimitive.green500, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .stroke(
+                    FCPrimitive.green500,
+                    style: StrokeStyle(lineWidth: vertical ? 3 : 2.5, lineCap: .round)
+                )
                 .frame(width: vertical ? 55 : 40, height: vertical ? 55 : 40)
                 .rotationEffect(.degrees(spin ? 360 : 0))
                 .onAppear {
@@ -232,10 +305,25 @@ public struct FCLogoSpinner: View {
                 }
             FCLogoMark(size: vertical ? 32 : 23, tint: FCPrimitive.green500)
         }
-        Text(message)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(theme.content.foregroundPrimary)
-            .multilineTextAlignment(.center)
+
+        // App parity (LogoSpinner.kt:143-160): the HORIZONTAL spinner shimmers its label, the
+        // vertical one does not — the app splits these into two components (`LogoSpinner.kt`
+        // uses a plain Text, `LogoSpinnerHorizontal.kt` uses ShimmerText). Both are
+        // `labelMedium`; the shimmer is the only difference, NOT the weight. This label was
+        // `labelLarge` because `LogoSpinner.kt:249` uses that — but :249 belongs to
+        // `LogoSpinnerVertical`, the separate full-screen loader with its own error state.
+        if vertical {
+            Text(message)
+                .fcTextStyle(theme.typography.labelMedium)
+                .foregroundColor(theme.content.foregroundPrimary)
+                .multilineTextAlignment(.center)
+        } else {
+            FCShimmerText(
+                text: message,
+                style: theme.typography.labelMedium,
+                baseColor: theme.content.foregroundPrimary
+            )
+        }
     }
 }
 
@@ -293,7 +381,7 @@ public struct FCToastView: View {
                 Image(systemName: "info.circle.fill").foregroundColor(theme.content.foregroundSecondary)
             }
             Text(toast.message)
-                .font(.system(size: 14, weight: .medium))
+                .fcTextStyle(theme.typography.bodySmall)
                 .foregroundColor(theme.content.foregroundPrimary)
                 .lineLimit(3)
         }
@@ -347,12 +435,12 @@ public struct FCRadioRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17, weight: .regular))
+                        .fcTextStyle(theme.typography.bodyMedium)
                         .foregroundColor(theme.content.foregroundPrimary)
                         .lineLimit(1)
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 13))
+                            .fcTextStyle(theme.typography.bodySmall)
                             .foregroundColor(theme.content.foregroundSecondary)
                     }
                 }
@@ -388,7 +476,7 @@ public struct FCTextField: View {
             .keyboardType(keyboard)
             .textContentType(contentType)
             .focused($focused)
-            .font(.system(size: 17))
+            .fcTextStyle(theme.typography.bodyLarge)
             .foregroundColor(theme.content.foregroundPrimary)
             .padding(.horizontal, 16)
             .frame(height: 56)
@@ -485,7 +573,7 @@ public struct FCAppBar: View {
                 .buttonStyle(.plain)
             }
             Text(title)
-                .font(.system(size: 20, weight: .semibold))
+                .fcTextStyle(theme.typography.titleMedium)
                 .foregroundColor(theme.content.foregroundPrimary)
                 .lineLimit(1)
             Spacer()
@@ -515,20 +603,24 @@ public struct FCListCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     public var body: some View {
+        // App parity (Lists.kt:47-54): Radius.MD (12pt, not 18) and the card owns the
+        // 16pt horizontal inset plus a 6/4 top/bottom — the rows inside add none.
         VStack(alignment: .leading, spacing: 0) {
             if let title, !title.isEmpty {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .fcTextStyle(theme.typography.labelLarge)
                     .foregroundColor(theme.content.foregroundSecondary)
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
+                    .padding(.top, 8)
                     .padding(.bottom, 6)
             }
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
         .background(theme.content.surfaceSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -549,12 +641,12 @@ public struct FCListItem: View {
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16))
+                        .fcTextStyle(theme.typography.bodyMedium)
                         .foregroundColor(theme.content.foregroundPrimary)
                         .multilineTextAlignment(.leading)
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 13))
+                            .fcTextStyle(theme.typography.bodySmall)
                             .foregroundColor(theme.content.foregroundSecondary)
                     }
                 }
@@ -565,11 +657,29 @@ public struct FCListItem: View {
                         .foregroundColor(theme.content.foregroundTertiary)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
+            // App parity (Lists.kt:81-89): a FIXED 48pt row when the row is single-line,
+            // 12pt vertical padding only when it wraps — and no horizontal padding, which
+            // the enclosing ListCard provides. iOS had a uniform 13pt vertical inset inside
+            // its own 16pt horizontal one, so rows drifted taller than 48 and the text sat
+            // 32pt from the card edge instead of 16.
+            .modifier(FCListRowMetrics(isMultiline: !(subtitle ?? "").isEmpty))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The row's height rule, kept as a modifier so the single-line and wrapping cases stay
+/// side by side rather than duplicated down two branches of the view body.
+private struct FCListRowMetrics: ViewModifier {
+    let isMultiline: Bool
+
+    func body(content: Content) -> some View {
+        if isMultiline {
+            content.padding(.vertical, 12)
+        } else {
+            content.frame(height: 48)
+        }
     }
 }
 

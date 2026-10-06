@@ -3,8 +3,8 @@
  * SDK's shipped, overridable surface (see src/lib/theme.ts). */
 import { Ban } from "lucide-react"
 import {
-  CHAT_COLORS, COLORS, FAB_COLORS, PRESETS, SHAPE,
-  type Chat, type Colors, type Fab, type NumOrEmpty, type Shape, type ThemeState, type Typography,
+  CHAT_COLORS, COLORS, CONFIG_DEFAULTS, FAB_COLORS, NIGHT_COLORS, PRESETS, SHAPE,
+  type Chat, type Colors, type Config, type Fab, type NightColors, type NumOrEmpty, type Shape, type ThemeState, type Typography,
 } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface Props {
@@ -29,8 +30,60 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
     onChange({ ...state, [section]: { ...state[section], ...value } })
   }
 
-  const ColorRow = <T extends Colors | Fab | Chat>(
-    section: "colors" | "fab" | "chat", obj: T, key: keyof T, label: string, optional = false,
+  /* --- runtime config rows. `cfg` falls back to the SDK defaults so a theme
+        saved before this section existed still renders. ------------------- */
+  const cfg: Config = state.config ?? CONFIG_DEFAULTS
+  const setCfg = (k: keyof Config, v: string | boolean) =>
+    onChange({ ...state, config: { ...cfg, [k]: v } })
+
+  const SelectRow = (key: keyof Config, label: string, opts: string[]) => (
+    <div className="flex items-center justify-between gap-3 py-1.5" key={String(key)}>
+      <Label className="text-sm font-normal">{label}</Label>
+      <Select value={String(cfg[key])} onValueChange={(v) => setCfg(key, v)}>
+        <SelectTrigger size="sm" className="w-[150px]" data-testid={`config-${String(key)}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {opts.map((o) => <SelectItem key={o} value={o} className="font-mono text-xs">{o}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+
+  const ConfigTextRow = (key: keyof Config, label: string, hint?: string) => (
+    <div className="flex items-center justify-between gap-3 py-1.5" key={String(key)}>
+      <div className="min-w-0">
+        <Label className="text-sm font-normal">{label}</Label>
+        {hint && <span className="block text-[0.7rem] text-muted-foreground">{hint}</span>}
+      </div>
+      <Input
+        value={String(cfg[key] ?? "")}
+        placeholder="unset"
+        onChange={(e) => setCfg(key, e.target.value)}
+        className="h-7 w-[150px] font-mono text-xs"
+        data-testid={`config-${String(key)}`}
+      />
+    </div>
+  )
+
+  const SwitchRow = (key: keyof Config, label: string, hint?: string) => {
+    const on = Boolean(cfg[key])
+    const isDefault = cfg[key] === CONFIG_DEFAULTS[key]
+    return (
+      <div className="flex items-center justify-between gap-3 py-1.5" key={String(key)}>
+        <div className="min-w-0">
+          <Label className="text-sm font-normal">{label}</Label>
+          {hint
+            ? <span className="block text-[0.7rem] text-muted-foreground">{hint}</span>
+            : !isDefault && <span className="block text-[0.7rem] text-muted-foreground">differs from SDK default</span>}
+        </div>
+        <Switch checked={on} onCheckedChange={(v) => setCfg(key, v)} data-testid={`config-${String(key)}`} />
+      </div>
+    )
+  }
+
+  const ColorRow = <T extends Colors | Fab | Chat | NightColors>(
+    section: "colors" | "fab" | "chat" | "night", obj: T, key: keyof T, label: string, optional = false,
   ) => {
     const val = (obj[key] as unknown as string) || ""
     return (
@@ -52,6 +105,7 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
             placeholder={optional ? "inherit" : "#RRGGBB"}
             onChange={(e) => patch(section, { [key]: e.target.value.trim() } as Partial<ThemeState[typeof section]>)}
             className="h-7 w-[86px] font-mono text-xs"
+            data-testid={`${section}-${String(key)}`}
           />
           {optional && val && (
             <Tooltip>
@@ -144,6 +198,21 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
       </Card>
 
       <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Dark mode colors
+          </CardTitle>
+          <p className="text-[0.7rem] leading-snug text-muted-foreground">
+            Optional. Leave a swatch empty and the SDK reuses the light colour for dark mode.
+            Switch the phone preview to night to see these.
+          </p>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {NIGHT_COLORS.map(([k, l]) => ColorRow("night", state.night, k, l, true))}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Shape (radius)</CardTitle></CardHeader>
         <CardContent className="pt-0">
           {SHAPE.map(([k, l]) => SliderRow("shape", k, l, num(state.shape[k], 0) as number, 0, 64, 1, "px",
@@ -177,6 +246,46 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
           <Separator className="my-2" />
           {GatedSliderRow("bubbleCornerRadius", "Bubble radius", 20, 0, 64, 1, "px")}
           {GatedSliderRow("messageFontSize", "Message font size", 15, 10, 40, 1, "px")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Environment &amp; identity</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          {SelectRow("environment", "Environment", ["DEV", "STAGE", "DEMO", "PROD", "EKS"])}
+          <Separator className="my-2" />
+          {ConfigTextRow("guestApiKey", "Guest API key", "required for anonymous sessions")}
+          {ConfigTextRow("geoApiKey", "Google geo key", "advice feed stays empty without it")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Journey &amp; locale</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          {SelectRow("mode", "Mode", ["FULL_JOURNEY", "CHAT_ONLY"])}
+          {SelectRow("appearance", "Appearance", ["DAY", "NIGHT", "AUTO"])}
+          <Separator className="my-2" />
+          {ConfigTextRow("languageCode", "Language code", 'e.g. "en", "hi"')}
+          {ConfigTextRow("defaultCountryCode", "Country code", 'e.g. "IN", "KE"')}
+          {ConfigTextRow("defaultStateCode", "State code", "seed geography")}
+          <Separator className="my-2" />
+          {SwitchRow("showDrawer", "Show drawer")}
+          {SwitchRow("showHistory", "Show chat history")}
+          {SwitchRow("showSettings", "Show settings")}
+          {SwitchRow("showNameScreen", "Show name screen")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Features</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          {SwitchRow("enableVoice", "Voice questions")}
+          {SwitchRow("enableImages", "Photo questions")}
+          {SwitchRow("enableWeather", "Weather")}
+          {SwitchRow("enableSsfr", "SSFR advisory")}
+          <Separator className="my-2" />
+          {SwitchRow("enableAgenticChat", "Agentic streaming chat", "2.0.0 opt-in")}
+          {SwitchRow("enableAnalytics", "Analytics events", "off by default; hooks fire regardless")}
         </CardContent>
       </Card>
     </div>

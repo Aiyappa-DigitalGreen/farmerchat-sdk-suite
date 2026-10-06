@@ -62,10 +62,10 @@ export function StreamProgress(props: { text: string; status?: string | null }) 
   }, [showStallCandidate, text.length]);
 
   if (showToolProgress) {
-    return <InlineProgress label={(status ?? '').trim() || label('chat_getting_answer', 'Getting your answer…')} />;
+    return <InlineProgress label={(status ?? '').trim() || label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />;
   }
   if (showStallCandidate && stalled) {
-    return <InlineProgress label={label('chat_stream_paused_resuming', 'Paused, resuming…')} />;
+    return <InlineProgress label={label('fc_v2_app_label_response_paused_resuming', 'Paused, resuming…')} />;
   }
   return null;
 }
@@ -88,10 +88,10 @@ export function StreamErrorCard(props: {
 }) {
   const label = useLabel();
   const title = props.hasPartial
-    ? label('chat_stream_connection_stopped', 'Connection stopped. Your partial answer is saved.')
+    ? label('fc_v2_app_label_connection_stopped_partial_saved', 'Connection stopped. Your partial answer is saved.')
     : props.errorKind === 'NETWORK'
-      ? label('error_no_internet_short', 'No internet connection')
-      : label('chat_stream_error', 'Something went wrong');
+      ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
+      : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
 
   return (
     <div className="fcsdk-stream-error" role="alert">
@@ -102,7 +102,7 @@ export function StreamErrorCard(props: {
         <span>{title}</span>
       </div>
       <button type="button" className="fcsdk-btn-primary fcsdk-stream-error-retry" onClick={props.onRetry}>
-        {label('chat_retry', 'Try again')}
+        {label('fc_v2_app_label_try_again', 'Try again')}
       </button>
     </div>
   );
@@ -145,12 +145,12 @@ export function AlignmentSurface(props: {
 
   const heading =
     kind === 'GPS_PROMPT'
-      ? label('chat_align_share_location', 'Share location')
+      ? label('fc_v2_app_label_share_location', 'Share location')
       : kind === 'UPLOAD_PHOTO'
-        ? label('chat_align_add_photo', 'Add one clear photo')
+        ? label('fc_v2_app_label_add_one_clear_photo', 'Add one clear photo')
         : kind === 'CONFIRM'
-          ? label('chat_align_please_confirm', 'Please Confirm')
-          : label('chat_align_choose_one', 'Choose one');
+          ? label('fc_v2_app_label_please_confirm', 'Please Confirm')
+          : label('fc_v2_app_label_choose_one', 'Choose one');
 
   return (
     <div className={`fcsdk-alignment${isEscalate ? ' fcsdk-alignment--escalate' : ''}`}>
@@ -197,7 +197,7 @@ export function AlignmentSurface(props: {
           <span aria-hidden>{Icon.info}</span>
           <span>{label('chat_align_no_option', "Don't see your option?")}</span>
           <button type="button" className="fcsdk-alignment-hatch-action" onClick={props.onTypeInstead}>
-            {label('chat_align_type_or_say', 'Type or say it.')}
+            {label('fc_v2_app_label_type_or_say_it', 'Type or say it.')}
           </button>
         </div>
       ) : null}

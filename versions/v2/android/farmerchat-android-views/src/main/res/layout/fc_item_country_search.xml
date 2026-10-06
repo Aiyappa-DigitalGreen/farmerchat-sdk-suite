@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First list item of the country picker. The app renders `item { SearchInput(... padding(bottom = 10.dp)) }`.
+     OutlinedTextField is 56dp tall; the leading icon is 23dp in foregroundSecondary. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="16dp">
+
+    <EditText
+        android:id="@+id/fcCountrySearch"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@drawable/fc_bg_search_field"
+        android:drawableStart="@drawable/fc_ic_search"
+        android:drawablePadding="16dp"
+        android:drawableTint="@color/fc_foreground_secondary"
+        android:imeOptions="actionSearch"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingStart="12dp"
+        android:paddingEnd="16dp"
+        android:textColor="@color/fc_foreground_primary"
+        android:textColorHint="@color/fc_form_placeholder"
+        android:textCursorDrawable="@null"
+        android:textSize="17sp"
+        tools:hint="Search" />
+</FrameLayout>

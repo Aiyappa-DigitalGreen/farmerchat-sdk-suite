@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+         SIM number pre-fill on the Auth screen is HOST-OPT-IN: the SDK declares neither of these
+         (a library manifest merges into every host and these are sensitive), so it reads SIM
+         numbers only when the host asks for them, as here.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+
     <application
         android:name=".SampleApp"
         android:allowBackup="true"
@@ -19,6 +27,10 @@
         <activity
             android:name=".InlineActivity"
             android:exported="false" />
+        <!-- Exported so the verification harness can start it with `am start`. -->
+        <activity
+            android:name=".EmbeddedHostActivity"
+            android:exported="true" />
     </application>
 
 </manifest>

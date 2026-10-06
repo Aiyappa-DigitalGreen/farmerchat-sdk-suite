@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.widgets
 
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import android.content.Context
 import android.util.AttributeSet
 import android.view.Gravity
@@ -20,15 +21,15 @@ internal class VoiceClipView @JvmOverloads constructor(
     private val playButton = ImageButton(context).apply {
         background = ContextCompat.getDrawable(context, R.drawable.fc_bg_circle_surface)
         setImageResource(R.drawable.fc_ic_play)
-        setColorFilter(ContextCompat.getColor(context, R.color.fc_green700))
+        setColorFilter(FcTokens.color(context, R.color.fc_green700))
         contentDescription = null
     }
     private val progressBar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
         max = 1000
-        progressTintList = ContextCompat.getColorStateList(context, R.color.fc_white)
+        progressTintList = FcTokens.colorStateList(context, R.color.fc_white)
     }
     private val durationLabel = TextView(context).apply {
-        setTextColor(ContextCompat.getColor(context, R.color.fc_white))
+        setTextColor(FcTokens.color(context, R.color.fc_white))
         textSize = 12f
     }
 

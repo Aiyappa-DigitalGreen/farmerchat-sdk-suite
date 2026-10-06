@@ -87,7 +87,7 @@ public struct FCStreamErrorCard: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(fail)
                 Text(title)
-                    .font(.system(size: 15))
+                    .fcTextStyle(theme.typography.titleSmall)
                     .foregroundColor(theme.content.foregroundPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -140,13 +140,13 @@ struct FCAlignmentChipView: View {
         Button(action: onTap) {
             HStack(spacing: 10) {
                 Text("\(number)")
-                    .font(.system(size: 12, weight: .bold))
+                    .fcTextStyle(theme.typography.labelMedium)
                     .foregroundColor(selected ? theme.content.buttonPrimaryForeground : accent)
                     .frame(width: 20, height: 20)
                     .background(selected ? accent : accent.opacity(0.14))
                     .clipShape(Circle())
                 Text(label)
-                    .font(.system(size: 15, weight: .medium))
+                    .fcTextStyle(theme.typography.labelMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -253,7 +253,7 @@ public struct FCAlignmentSurface: View {
 
             if !isEscalate && !additive {
                 Text(headingText)
-                    .font(.system(size: 17, weight: .semibold))
+                    .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
                 Spacer().frame(height: 16)
             }
@@ -293,11 +293,11 @@ public struct FCAlignmentSurface: View {
                         AgenticLabels.dontSeeYourOption,
                         AgenticLabels.dontSeeYourOptionFallback
                     ))
-                    .font(.system(size: 13))
+                    .fcTextStyle(theme.typography.bodySmall)
                     .foregroundColor(theme.content.foregroundSecondary)
                     Button(action: onTypeInstead) {
                         Text(fcLabel(AgenticLabels.typeOrSayIt, AgenticLabels.typeOrSayItFallback))
-                            .font(.system(size: 13, weight: .semibold))
+                            .fcTextStyle(theme.typography.bodySmall)
                             .foregroundColor(theme.content.buttonPrimaryAccent)
                     }
                     .buttonStyle(.plain)

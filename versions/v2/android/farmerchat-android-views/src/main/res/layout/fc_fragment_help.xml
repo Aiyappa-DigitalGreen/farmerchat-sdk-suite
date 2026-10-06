@@ -22,16 +22,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="32dp">
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcHelpFaqTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="How to use FarmerChat" />
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcLineHeightSp="22"
+                app:fcTextWeight="600" />
 
             <LinearLayout
                 android:id="@+id/fcHelpFaqCard"
@@ -39,17 +42,23 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/fc_bg_card_md"
-                android:orientation="vertical" />
+                android:orientation="vertical" 
+                android:divider="@drawable/fc_divider_list"
+                android:showDividers="middle"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="4dp"/>
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcHelpMoreTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="More" />
+                android:layout_marginTop="24dp"
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcLineHeightSp="22"
+                app:fcTextWeight="600" />
 
             <LinearLayout
                 android:id="@+id/fcHelpMoreCard"
@@ -57,27 +66,36 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/fc_bg_card_md"
-                android:orientation="vertical" />
+                android:orientation="vertical" 
+                android:divider="@drawable/fc_divider_list"
+                android:showDividers="middle"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="4dp"/>
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcHelpVersion"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="32dp"
                 android:gravity="center"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                tools:text="FarmerChat v1.0.0" />
+                app:fcTextColor="@color/fc_foreground_secondary"
+                app:fcTextSizeSp="13"
+                app:fcTextAlign="center" />
 
-            <TextView
+            <!-- Compose parity (HelpScreen.kt:251): BOTH footer lines are foregroundSecondary.
+                 This was foreground_tertiary (#D4D4D8) on a near-white surface — the copyright
+                 rendered, but was effectively unreadable. -->
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcHelpCopyright"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:gravity="center"
-                android:textColor="@color/fc_foreground_tertiary"
-                android:textSize="12sp"
-                tools:text="© Digital Green" />
+                app:fcTextColor="@color/fc_foreground_secondary"
+                app:fcTextSizeSp="13"
+                app:fcTextAlign="center" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

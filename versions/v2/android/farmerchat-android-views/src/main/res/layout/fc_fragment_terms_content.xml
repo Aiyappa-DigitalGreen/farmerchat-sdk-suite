@@ -19,15 +19,14 @@
         android:layout_width="match_parent"
         android:layout_height="56dp">
 
-        <TextView
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
             android:id="@+id/fcTouContentTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            tools:text="Terms of Use" />
+            app:fcTextColor="@color/fc_foreground_primary"
+            app:fcTextSizeSp="17"
+            app:fcTextWeight="700" />
 
         <ImageButton
             android:id="@+id/fcTouContentClose"

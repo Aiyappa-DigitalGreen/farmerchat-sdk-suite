@@ -1,27 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Compose parity (Lists.kt:88): a single-line ListItem row is a FIXED 48dp, not wrap_content
+     plus padding. 16dp top+bottom made each row ~8dp taller than the app's, and the error
+     ACCUMULATED down the list — by the footer the two screens were 146px apart. -->
+<!-- App ListItem (components/list/ListItem.kt), no icon, no right text:
+     label bodyMedium 17sp at its NATURAL width (never weighted), then 12dp + a 24dp
+     foregroundPrimary chevron straight after it. A label that fills the row squeezes the
+     chevron out, exactly as the app's first FAQ row shows. The 16dp sides belong to the
+     ListCard, so dividers are inset like the app's. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="?attr/selectableItemBackground"
+    android:layout_height="48dp"
     android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="16dp">
+    android:orientation="horizontal">
 
     <TextView
         android:id="@+id/fcHelpRowTitle"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
         android:textColor="@color/fc_foreground_primary"
-        android:textSize="15sp"
+        android:textSize="17sp"
+        android:maxLines="1"
+        android:ellipsize="end"
         tools:text="How do I ask a question?" />
 
     <ImageView
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="12dp"
         android:importantForAccessibility="no"
         android:src="@drawable/fc_ic_chevron_right"
-        app:tint="@color/fc_foreground_tertiary" />
+        app:tint="@color/fc_foreground_primary" />
 </LinearLayout>

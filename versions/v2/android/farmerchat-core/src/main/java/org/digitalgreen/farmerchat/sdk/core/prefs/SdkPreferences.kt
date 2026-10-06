@@ -93,9 +93,17 @@ class SdkPreferences(context: Context) {
 
         // ---- chat ----
         const val NEW_CONVERSATION_ID = "new_conversation_id"
+
         /** Effective base URL of the last init — used to invalidate env-scoped cache. */
         const val LAST_BASE_URL = "last_base_url"
         const val FIRST_QUERY_ASKED = "isFirstQueryAsked"
+        /**
+         * RESERVED — declared to match the app's key name, but nothing in the SDK reads or writes
+         * it. The app caches the Home feed here and serves it instead of calling the API while its
+         * `AppConstants.IS_PROFILE_LOADED` dirty flag is false. That optimisation is deliberately
+         * NOT ported; see `docs/04-parity-matrix.md` §"Home feed caching — NOT ported". Do not
+         * assume a value is present.
+         */
         const val CACHED_HOME_FEED_RESPONSE = "cached_home_feed_response"
 
         // ---- permission counters ----
@@ -104,6 +112,17 @@ class SdkPreferences(context: Context) {
         const val MICROPHONE_PERMISSION_DENY_COUNT = "microphone_permission_deny_count"
         const val CAMERA_PERMISSION_ATTEMPT_COUNT = "camera_permission_attempt_count"
         const val MICROPHONE_PERMISSION_ATTEMPT_COUNT = "microphone_permission_attempt_count"
+
+        // ---- navigation ----
+        /**
+         * The screen the farmer was last on, so a process death can put them back.
+         *
+         * Android kills the app when a runtime permission is toggled in system Settings, which
+         * is exactly what the SDK asks a farmer to do for the microphone. The activity is then
+         * recreated with the nav graph back at Splash, so `routeFromSplash()` re-decided from
+         * prefs and dropped them on Home — losing the thread they were reading.
+         */
+        const val RESUME_SCREEN = "resume_screen"
 
         // ---- UI ----
         const val APPEARANCE_MODE = "appearance_mode"

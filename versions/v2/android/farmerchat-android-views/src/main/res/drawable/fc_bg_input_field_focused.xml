@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focused input. Compose parity (Form.kt:39,48): the focused border is `borderActive`
+     (Green500 #00C950) — measured on the app at (60,480) = (0,201,80). Views had one static
+     grey border for both states, so a focused field looked identical to an idle one. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_input_background"/>
+    <stroke android:width="2dp" android:color="@color/fc_green500"/>
+    <corners android:radius="12dp"/>
+</shape>

@@ -1,0 +1,2985 @@
+[
+ {
+  "id": "android-compose",
+  "name": "Android",
+  "flavour": "Jetpack Compose",
+  "badge": "Kotlin · minSdk 26",
+  "intro": [
+   "The Compose SDK embeds the FarmerChat journey in a modern Android app. It is the reference flavour &mdash; the screens here are direct ports of the FarmerChat app itself, so this is the closest match to what farmers already use.",
+   "Everything ships as two artifacts: <code>farmerchat-core</code> (networking, session, state machines, no UI) and <code>farmerchat-android-compose</code> (the screens). You depend on the latter; it pulls in the former."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the repository to your Gradle project"
+     },
+     {
+      "k": "p",
+      "html": "The SDK resolves from your declared repositories. Today that means your local Maven cache; a hosted repository slots into the same block when one exists."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "settings.gradle.kts",
+        "lang": "kotlin",
+        "fname": "settings.gradle.kts",
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+       },
+       {
+        "label": "settings.gradle",
+        "lang": "groovy",
+        "fname": "settings.gradle",
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "To populate <code>mavenLocal()</code>, publish once from the SDK checkout:"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "shell",
+        "lang": "shell",
+        "fname": null,
+        "code": "cd versions/v2/android\n./gradlew publishToMavenLocal"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the dependency to your app"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin DSL",
+        "lang": "kotlin",
+        "fname": "app/build.gradle.kts",
+        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0\")\n}"
+       },
+       {
+        "label": "Groovy",
+        "lang": "groovy",
+        "fname": "app/build.gradle",
+        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0'\n}"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Toolchain floor",
+      "paras": [
+       "The Compose flavour needs <strong>AGP 8.13+</strong> and <code>minSdk 26</code>. Older toolchains fail at runtime with a <code>VerifyError</code> rather than at build time, so check this first if the journey crashes on launch."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "p",
+      "html": "Call <code>initialize</code> once, from your <code>Application</code>. Everything else throws until you do."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": "MyApp.kt",
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this, // the Application IS the Context\n            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+       },
+       {
+        "label": "Java",
+        "lang": "java",
+        "fname": "MyApp.java",
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        );\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Register the Application class",
+      "paras": [
+       "Add <code>android:name=\".MyApp\"</code> to the <code>&lt;application&gt;</code> tag in your manifest. Without it <code>onCreate</code> never runs, <code>initialize</code> never happens, and every later call throws &mdash; with nothing in the build to warn you."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Open the journey"
+     },
+     {
+      "k": "p",
+      "html": "<code>launch</code> starts the SDK's own activity. This is the one-line integration."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "// From a composable\nval context = LocalContext.current\nButton(onClick = { FarmerChat.launch(context) }) {\n    Text(\"Ask FarmerChat\")\n}"
+       },
+       {
+        "label": "Java",
+        "lang": "java",
+        "fname": null,
+        "code": "findViewById(R.id.askButton).setOnClickListener(v ->\n    FarmerChat.INSTANCE.launch(this)\n);"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or embed it in your own navigation"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatRoot</code> is the journey as a composable, for hosts that own their scaffold. It expects <code>initialize</code> to have run."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "composable(\"farmerchat\") {\n    FarmerChatRoot(modifier = Modifier.fillMaxSize())\n}"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Every surface of the journey can be switched off. The defaults give the full farmer experience; trim it to fit your app."
+     },
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "p",
+      "html": "The most common trim: skip onboarding and the advice feed, and land the farmer directly in chat with history and language still reachable."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)    // moves history + language into the chat app bar\n    .showHistory(true)    // past-advice icon\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Turn off a question mode"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableVoice(false)   // no mic on the composer or the home tiles\n    .enableImages(false)  // no camera\n    .build()"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "By default the SDK owns identity: farmers start as guests and can sign in with a phone number and OTP inside the journey. If your app already knows who the farmer is, supply the token instead and the SDK skips its own auth UI."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "After your own refresh, push the new token in without reconfiguring:"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChat.updateTokens(access = newAccess, refresh = newRefresh)\n\n// Session state\nval signedIn = FarmerChat.isAuthenticated()\nFarmerChat.logout { success -> /* … */ }"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK ships the FarmerChat look by default. Override the parts that must match your app &mdash; anything you leave unset keeps the FarmerChat value."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,  // fully rounded, the current default\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .bubbleCornerRadius(18)\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Buttons are pills",
+      "paras": [
+       "<code>buttonCornerRadius</code> defaults to <code>999</code> (a full pill) as of the 2026-09-15 design pass. Pass a smaller value to square them off."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "All farmer-facing text is served by the backend and resolved per language, so the journey localises itself once the farmer picks a language. To override a specific string, key it by the canonical label key."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK emits the same events the FarmerChat app tracks, with the same names and properties, through a listener you provide. It bundles no third-party analytics SDK &mdash; forward the events to whatever you already use."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK requests permissions at the moment a farmer uses the feature, and degrades gracefully when one is refused. You declare them; the host app owns the manifest."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "AndroidManifest.xml",
+        "lang": "xml",
+        "fname": "app/src/main/AndroidManifest.xml",
+        "code": "<uses-permission android:name=\"android.permission.INTERNET\" />\n<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\n\n<!-- Voice questions -->\n<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n<!-- Photo questions -->\n<uses-permission android:name=\"android.permission.CAMERA\" />\n<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />\n<!-- Weather + location-specific advice -->\n<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />\n<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />\n<uses-feature android:name=\"android.hardware.location.gps\" android:required=\"false\" />"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "Only declare what you enable. If you set <code>enableVoice(false)</code>, drop <code>RECORD_AUDIO</code> &mdash; a permission you never exercise still shows on your store listing."
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "// Open chat already asking something\nFarmerChat.openChat(context, question = \"Why are my tomato leaves yellow?\")\n\n// Or reopen a past conversation\nFarmerChat.openChat(context, conversationId = savedId)"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "p",
+      "html": "Opt in to the streaming agentic endpoint. Left off, chat keeps the synchronous request/response contract."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAgenticChat(true)\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Point at your own backend"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .customBaseUrl(\"https://farmerchat.internal.example/\")\n    .build()"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "android-views",
+  "name": "Android",
+  "flavour": "XML Views",
+  "badge": "Kotlin · minSdk 26",
+  "intro": [
+   "The Views flavour is for Android codebases that have not moved to Jetpack Compose. It runs the same journey through fragments and XML layouts, against the identical <code>farmerchat-core</code>, so behaviour and API match the Compose flavour.",
+   "Reach for it when adding Compose to your app is the bigger change. If your app already uses Compose, prefer that flavour &mdash; it is the reference implementation."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the repository to your Gradle project"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "settings.gradle.kts",
+        "lang": "kotlin",
+        "fname": "settings.gradle.kts",
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+       },
+       {
+        "label": "settings.gradle",
+        "lang": "groovy",
+        "fname": "settings.gradle",
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the dependency to your app"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin DSL",
+        "lang": "kotlin",
+        "fname": "app/build.gradle.kts",
+        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0\")\n}"
+       },
+       {
+        "label": "Groovy",
+        "lang": "groovy",
+        "fname": "app/build.gradle",
+        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0'\n}"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Do not add both flavours",
+      "paras": [
+       "If a module ends up with <code>farmerchat-android-compose</code> on the classpath as well, the Compose implementation wins and you silently get that UI instead."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "p",
+      "html": "Identical to the Compose flavour &mdash; <code>initialize</code> lives in <code>farmerchat-core</code> and is shared."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": "MyApp.kt",
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this,\n            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+       },
+       {
+        "label": "Java",
+        "lang": "java",
+        "fname": "MyApp.java",
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .build()\n        );\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Register the Application class",
+      "paras": [
+       "Add <code>android:name=\".MyApp\"</code> to the <code>&lt;application&gt;</code> tag in your manifest. Without it <code>onCreate</code> never runs, <code>initialize</code> never happens, and every later call throws &mdash; with nothing in the build to warn you."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Open the journey"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "askButton.setOnClickListener { FarmerChat.launch(this) }"
+       },
+       {
+        "label": "Java",
+        "lang": "java",
+        "fname": null,
+        "code": "askButton.setOnClickListener(v -> FarmerChat.INSTANCE.launch(this));"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or embed the fragment"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatFragment</code> hosts the journey inside your own activity, for hosts that own the navigation container."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "supportFragmentManager.beginTransaction()\n    .replace(R.id.container, FarmerChatFragment())\n    .commit()"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The configuration surface is shared with the Compose flavour &mdash; same builder, same semantics."
+     },
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)\n    .showHistory(true)\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "By default the SDK owns identity: farmers start as guests and can sign in with a phone number and OTP inside the journey. If your app already knows who the farmer is, supply the token instead and the SDK skips its own auth UI."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "After your own refresh, push the new token in without reconfiguring:"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChat.updateTokens(access = newAccess, refresh = newRefresh)\n\n// Session state\nval signedIn = FarmerChat.isAuthenticated()\nFarmerChat.logout { success -> /* … */ }"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Same theme object as Compose. The Views flavour resolves it into its own drawables and styles at runtime."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .build()"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "All farmer-facing text is served by the backend and resolved per language, so the journey localises itself once the farmer picks a language. To override a specific string, key it by the canonical label key."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK emits the same events the FarmerChat app tracks, with the same names and properties, through a listener you provide. It bundles no third-party analytics SDK &mdash; forward the events to whatever you already use."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Declared by the host app; requested by the SDK at the point of use."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "AndroidManifest.xml",
+        "lang": "xml",
+        "fname": "app/src/main/AndroidManifest.xml",
+        "code": "<uses-permission android:name=\"android.permission.INTERNET\" />\n<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\n\n<!-- Voice questions -->\n<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n<!-- Photo questions -->\n<uses-permission android:name=\"android.permission.CAMERA\" />\n<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />\n<!-- Weather + location-specific advice -->\n<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />\n<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />\n<uses-feature android:name=\"android.hardware.location.gps\" android:required=\"false\" />"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChat.openChat(context, question = \"Why are my tomato leaves yellow?\")\nFarmerChat.openChat(context, conversationId = savedId)"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Kotlin",
+        "lang": "kotlin",
+        "fname": null,
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAgenticChat(true)\n    .build()"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Known gaps in this flavour",
+      "paras": [
+       "The Views flavour is a re-creation of the Compose screens rather than a port of the app, and a few affordances are not built: SIM-number prefill on the auth screen, the WhatsApp OTP-less vendor handoff, and the voice waveform animation."
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ios-swiftui",
+  "name": "iOS",
+  "flavour": "SwiftUI",
+  "badge": "Swift · iOS 16+",
+  "intro": [
+   "The SwiftUI SDK embeds the FarmerChat journey as a single view you can present or push. It targets iOS 16+ and ships as two Swift packages: <code>FarmerChatCore</code> (no UI) and <code>FarmerChatSwiftUI</code> (the screens).",
+   "If your app is UIKit-based, use the UIKit flavour instead &mdash; it targets iOS 15 and keeps SwiftUI out of its public surface."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the package to your project"
+     },
+     {
+      "k": "p",
+      "html": "Until a tagged release exists, depend on a local checkout. Swift Package Manager accepts a filesystem path anywhere it accepts a URL."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Local path",
+        "lang": "swift",
+        "fname": "Package.swift",
+        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatSwiftUI\")\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+       },
+       {
+        "label": "Remote (once tagged)",
+        "lang": "swift",
+        "fname": "Package.swift",
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/digitalgreenorg/farmerchat-sdk-suite.git\",\n        from: \"1.0.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "In Xcode: <strong>File &rarr; Add Package Dependencies &rarr; Add Local&hellip;</strong> and pick the <code>FarmerChatSwiftUI</code> folder."
+     },
+     {
+      "k": "warn",
+      "tag": "No release tag yet",
+      "paras": [
+       "The repository currently has <strong>no git tags</strong>, so the remote form above cannot resolve. Use the local path until <code>ios-v1.0.0</code> is pushed."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "p",
+      "html": "Call <code>initialize</code> once at app start, before presenting any FarmerChat view."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": "MyApp.swift",
+        "code": "import SwiftUI\nimport FarmerChatCore\n\n@main\nstruct MyApp: App {\n    init() {\n        _ = FarmerChat.initialize(\n            config: FarmerChatConfig(\n                environment: .prod,\n                guestApiKey: \"<your guest API key>\",\n                geoApiKey: \"<your Google Geolocation key>\",\n                languageCode: \"en\",\n                defaultCountryCode: \"IN\"\n            )\n        )\n    }\n\n    var body: some Scene {\n        WindowGroup { ContentView() }\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Present the journey"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatView</code> is the whole journey. Present it full-screen, or push it onto a navigation stack."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "import SwiftUI\nimport FarmerChatSwiftUI\n\nstruct ContentView: View {\n    @State private var showFarmerChat = false\n\n    var body: some View {\n        Button(\"Ask FarmerChat\") { showFarmerChat = true }\n            .fullScreenCover(isPresented: $showFarmerChat) {\n                FarmerChatView()\n            }\n    }\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or use the floating launcher"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "ZStack(alignment: .bottomTrailing) {\n    MyHomeScreen()\n    FarmerChatFabButton()\n        .padding(20)\n}"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The configuration mirrors every other platform, field for field."
+     },
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,      // moves history + language into the chat app bar\n    showNameScreen: false\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Turn off a question mode"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableVoice: false,   // no mic\n    enableImages: false   // no camera\n)"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Guest by default, with phone/OTP sign-in inside the journey. Supply your own token to skip the SDK's auth UI."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
+       }
+      ]
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChat.shared.updateTokens(access: newAccess, refresh: newRefresh)\n\nlet signedIn = FarmerChat.shared.isAuthenticated\nawait FarmerChat.shared.logout()\n\n// Cold + live auth state\nlet sub = FarmerChat.shared.onAuthStateChanged.sink { isAuthed in\n    print(\"signed in:\", isAuthed)\n}"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Override only what must match your app; unset values keep the FarmerChat look."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Buttons are pills",
+      "paras": [
+       "The button corner radius defaults to <code>999</code> (a full pill), matching Android. A host <code>buttonCornerRadius</code> still overrides it."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Labels are served per language. Override individual strings with the generated <code>FCLabels</code> constants &mdash; never a hand-typed key."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK emits the same events the FarmerChat app tracks, through a handler you provide. No third-party analytics SDK is bundled."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Usage descriptions are a host responsibility &mdash; iOS terminates the app if one is missing when the SDK asks. Declare only what you enable."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Info.plist",
+        "lang": "xml",
+        "fname": "Info.plist",
+        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "// Set the target, then present FarmerChatView\nFarmerChat.shared.openChat(question: \"Why are my tomato leaves yellow?\")\nFarmerChat.shared.openChat(conversationId: savedId)"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(environment: .prod, enableAgenticChat: true)"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Point at your own backend"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    customBaseURL: \"https://farmerchat.internal.example/\"\n)"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ios-uikit",
+  "name": "iOS",
+  "flavour": "UIKit",
+  "badge": "Swift · iOS 15+",
+  "intro": [
+   "The UIKit SDK runs the journey through genuinely UIKit-native screens in a <code>UINavigationController</code>. It targets <strong>iOS 15</strong> and keeps SwiftUI out of its public surface, so it drops into older codebases without forcing a migration.",
+   "Written in Swift. If your app is Objective-C, everything here works through the Objective-C facade &mdash; see that flavour."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the package to your project"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "SPM — local path",
+        "lang": "swift",
+        "fname": "Package.swift",
+        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit\")\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatUIKit\"])\n]"
+       },
+       {
+        "label": "CocoaPods",
+        "lang": "ruby",
+        "fname": "Podfile",
+        "code": "# Local development pod (no trunk release yet)\npod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'\n\n# Once a release is tagged:\n# pod 'FarmerChatUIKit', '~> 1.0'"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "CocoaPods needs a tag",
+      "paras": [
+       "The podspec's <code>source</code> points at a git tag. The repository has <strong>no tags</strong> today, so only the <code>:path =&gt;</code> form resolves."
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "One pod, both modules",
+      "paras": [
+       "The CocoaPods spec bundles <code>FarmerChatCore</code> into the same pod. SPM consumers take the two packages separately."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": "AppDelegate.swift",
+        "code": "import FarmerChatCore\n\nfunc application(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?\n) -> Bool {\n    _ = FarmerChat.initialize(\n        config: FarmerChatConfig(\n            environment: .prod,\n            guestApiKey: \"<your guest API key>\",\n            geoApiKey: \"<your Google Geolocation key>\",\n            languageCode: \"en\",\n            defaultCountryCode: \"IN\"\n        )\n    )\n    return true\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Present the journey"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatViewController</code> is a <code>UINavigationController</code> running the whole journey. Present it or push it."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "import FarmerChatUIKit\n\n@objc private func askTapped() {\n    let vc = FarmerChatViewController()\n    vc.modalPresentationStyle = .fullScreen\n    present(vc, animated: true)\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or use the floating launcher"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "let fab = FarmerChatFabButton(title: \"Ask FarmerChat\")\nview.addSubview(fab)\nfab.translatesAutoresizingMaskIntoConstraints = false\nNSLayoutConstraint.activate([\n    fab.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),\n    fab.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)\n])"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,\n    showNameScreen: false\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Guest by default, with phone/OTP sign-in inside the journey. Supply your own token to skip the SDK's auth UI."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
+       }
+      ]
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChat.shared.updateTokens(access: newAccess, refresh: newRefresh)\n\nlet signedIn = FarmerChat.shared.isAuthenticated\nawait FarmerChat.shared.logout()\n\n// Cold + live auth state\nlet sub = FarmerChat.shared.onAuthStateChanged.sink { isAuthed in\n    print(\"signed in:\", isAuthed)\n}"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Override only what must match your app; unset values keep the FarmerChat look."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Buttons are pills",
+      "paras": [
+       "The button corner radius defaults to <code>999</code> (a full pill), matching Android. A host <code>buttonCornerRadius</code> still overrides it."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Labels are served per language. Override individual strings with the generated <code>FCLabels</code> constants &mdash; never a hand-typed key."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK emits the same events the FarmerChat app tracks, through a handler you provide. No third-party analytics SDK is bundled."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Usage descriptions are a host responsibility &mdash; iOS terminates the app if one is missing when the SDK asks. Declare only what you enable."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Info.plist",
+        "lang": "xml",
+        "fname": "Info.plist",
+        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChat.shared.openChat(question: \"Why are my tomato leaves yellow?\")"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Swift",
+        "lang": "swift",
+        "fname": null,
+        "code": "FarmerChatConfig(environment: .prod, enableAgenticChat: true)"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ios-objc",
+  "name": "iOS",
+  "flavour": "Objective-C",
+  "badge": "Obj-C · iOS 15+",
+  "intro": [
+   "Pure Objective-C codebases reach the SDK through a dedicated facade in <code>FarmerChatUIKit</code>. Import the module and use the <code>FC</code>-prefixed types &mdash; no Swift file is required anywhere in your project.",
+   "The facade exists because Swift structs, <code>String</code>-backed enums, <code>async</code> functions and Combine publishers cannot cross into Objective-C. Each has an explicit equivalent below."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the package to your project"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "CocoaPods",
+        "lang": "ruby",
+        "fname": "Podfile",
+        "code": "# Local development pod (no trunk release yet)\npod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'"
+       },
+       {
+        "label": "SPM — local path",
+        "lang": "swift",
+        "fname": "Package.swift",
+        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit\")\n]"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Import the module"
+     },
+     {
+      "k": "p",
+      "html": "The facade is a Swift module, so import it as a module rather than a header."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "@import FarmerChatUIKit;"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": "AppDelegate.m",
+        "code": "@import FarmerChatUIKit;\n\n- (BOOL)application:(UIApplication *)application\ndidFinishLaunchingWithOptions:(NSDictionary *)launchOptions {\n\n    FCFarmerChatConfiguration *cfg =\n        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];\n    cfg.guestApiKey        = @\"<your guest API key>\";\n    cfg.geoApiKey          = @\"<your Google Geolocation key>\";\n    cfg.languageCode       = @\"en\";\n    cfg.defaultCountryCode = @\"IN\";\n\n    [FCFarmerChat initializeWithConfiguration:cfg];\n    return YES;\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Present the journey"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "// Present modally from the current view controller\n[FCFarmerChat presentFrom:self animated:YES completion:nil];\n\n// Or take the view controller and place it yourself\nUIViewController *journey = [FCFarmerChat makeViewController];\n[self.navigationController pushViewController:journey animated:YES];"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or use the floating launcher"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatFabButton</code>'s own initialisers have defaulted parameters, which do not bridge, so Objective-C gets factory methods instead."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "UIButton *fab = [FCFarmerChat makeFabButton];\n[self.view addSubview:fab];\n\n// …or fully specified\nUIButton *custom =\n    [FCFarmerChat makeFabButtonWithQuestion:@\"Weather?\"\n                                      title:@\"Ask\"\n                            backgroundColor:UIColor.systemGreenColor\n                               contentColor:UIColor.whiteColor\n                                systemImage:@\"leaf.fill\"];"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "FCFarmerChatConfiguration *cfg =\n    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];\ncfg.guestApiKey    = @\"<your guest API key>\";\ncfg.mode           = FCModeChatOnly;\ncfg.showDrawer     = NO;   // moves history + language into the chat app bar\ncfg.showHistory    = YES;\ncfg.showSettings   = NO;\ncfg.showNameScreen = NO;"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Turn off a question mode"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "cfg.enableVoice  = NO;   // no mic\ncfg.enableImages = NO;   // no camera"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The Swift <code>tokenProvider</code> is an <code>async</code> function, which Objective-C cannot express. You get a block that hands you a completion block to call."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "cfg.authMode    = FCAuthModeHostToken;\ncfg.accessToken = [MyAuth currentAccessToken];\n\ncfg.tokenProvider = ^(void (^done)(NSString *_Nullable)) {\n    [MyAuth refreshWithCompletion:^(NSString *token) {\n        done(token);   // safe to call from any queue; call it exactly once\n    }];\n};"
+       }
+      ]
+     },
+     {
+      "k": "p",
+      "html": "Session state and sign-out:"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "[FCFarmerChat updateTokensWithAccessToken:newAccess refreshToken:newRefresh];\n\nBOOL signedIn = FCFarmerChat.isAuthenticated;\n[FCFarmerChat logoutWithCompletion:^{ NSLog(@\"signed out\"); }];\n\n// Combine is not representable in Obj-C, so auth state is a block + token.\nFCAuthObservation *obs =\n    [FCFarmerChat observeAuthState:^(BOOL isAuthed) { NSLog(@\"%d\", isAuthed); }];\n// Keep obs alive; call -invalidate to stop."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Colours are <code>UIColor</code>. Optional numbers are <code>NSNumber *</code> &mdash; leaving one nil means &ldquo;SDK default&rdquo;, which is not the same as passing <code>0</code>."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "cfg.appearance         = FCAppearanceAuto;\ncfg.userBubbleColor    = UIColor.systemGray6Color;\ncfg.bubbleCornerRadius = @(18);\ncfg.messageFontSize    = @(15);\ncfg.fabBackgroundColor = UIColor.systemGreenColor;"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "<code>FCLabels</code> is a Swift enum and therefore invisible to Objective-C. <code>FCLabelKeys</code> exposes the same canonical keys as class properties."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "cfg.stringOverrides = @{\n    FCLabelKeys.recentChats   : @\"Past advice\",\n    FCLabelKeys.shareLocation : @\"Share my farm\"\n};"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Two renamed keys",
+      "paras": [
+       "Members whose name is a C keyword are suffixed <code>Label</code>: <code>FCLabelKeys.continueLabel</code> and <code>FCLabelKeys.autoLabel</code>. A bare <code>continue</code> cannot be a selector."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Callbacks are blocks. <code>onError</code>'s code is an <code>NSNumber *</code> and is nil when the failure carried no HTTP status &mdash; which is not the same as status 0."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "cfg.enableAnalytics = YES;   // default NO\n\ncfg.onEvent = ^(NSString *name, NSDictionary<NSString *, NSString *> *props) {\n    [MyAnalytics track:name properties:props];\n};\ncfg.onScreenView     = ^(NSString *screen)    { [MyAnalytics screen:screen]; };\ncfg.onChatOpened     = ^{ };\ncfg.onMessageSent    = ^(NSString *text)      { };\ncfg.onAnswerReceived = ^(NSString *messageId) { };\ncfg.onError = ^(NSNumber *_Nullable code, NSString *message) {\n    [MyLogger warn:code message:message];\n};"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Usage descriptions are a host responsibility &mdash; iOS terminates the app if one is missing when the SDK asks. Declare only what you enable."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Info.plist",
+        "lang": "xml",
+        "fname": "Info.plist",
+        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Objective-C",
+        "lang": "objc",
+        "fname": null,
+        "code": "[FCFarmerChat openChatWithQuestion:@\"Why are my tomato leaves yellow?\"\n                    conversationId:nil];"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Bridging reference"
+     },
+     {
+      "k": "p",
+      "html": "Every difference between the Swift and Objective-C surfaces, and why it exists:"
+     },
+     {
+      "k": "table",
+      "head": [
+       "Swift",
+       "Objective-C",
+       "Why"
+      ],
+      "rows": [
+       [
+        "<code>FarmerChatConfig</code> (struct)",
+        "<code>FCFarmerChatConfiguration</code>",
+        "Swift structs cannot be exposed to Obj-C at all"
+       ],
+       [
+        "String-backed enums",
+        "<code>FCEnvironment</code>, <code>FCMode</code>, <code>FCAuthMode</code>, <code>FCAppearance</code>",
+        "<code>@objc</code> enums must be Int-backed"
+       ],
+       [
+        "<code>CGFloat?</code>",
+        "<code>NSNumber *</code>",
+        "Obj-C has no optional scalar; nil &ne; 0"
+       ],
+       [
+        "<code>Color?</code>",
+        "<code>UIColor *</code>",
+        "SwiftUI <code>Color</code> is not representable"
+       ],
+       [
+        "<code>() async -&gt; String?</code>",
+        "block taking a completion block",
+        "Obj-C has no <code>async</code>"
+       ],
+       [
+        "<code>logout() async</code>",
+        "<code>+logoutWithCompletion:</code>",
+        "same"
+       ],
+       [
+        "<code>AnyPublisher&lt;Bool&gt;</code>",
+        "<code>+observeAuthState:</code>",
+        "Combine is not representable"
+       ]
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Not bridged",
+      "paras": [
+       "The full <code>theme</code> struct, and the SDK internals (<code>prefs</code>, <code>labels</code>, <code>analytics</code>, <code>api</code>, <code>session</code>). The individual colour options above cover most theming; full theming needs a one-file Swift bridge on your side."
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "react-native",
+  "name": "React Native",
+  "flavour": "iOS + Android",
+  "badge": "TypeScript",
+  "intro": [
+   "The React Native SDK renders the journey with native components on both platforms from one JavaScript integration. It is a TypeScript package with peer dependencies on React Navigation, AsyncStorage and Expo AV.",
+   "Use it when you want a single integration across both stores. For deeper native control, the Android and iOS SDKs expose the same configuration surface."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the package"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "npm",
+        "lang": "shell",
+        "fname": null,
+        "code": "npm install @digitalgreenorg/farmerchat-react-native"
+       },
+       {
+        "label": "yarn",
+        "lang": "shell",
+        "fname": null,
+        "code": "yarn add @digitalgreenorg/farmerchat-react-native"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Not on npm yet",
+      "paras": [
+       "<code>npm view @digitalgreenorg/farmerchat-react-native</code> returns 404. Until it is published, install from the local checkout: <code>npm install ../farmerchat-sdk-suite/versions/v2/react-native/packages/farmerchat-react-native</code>"
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Install the peer dependencies"
+     },
+     {
+      "k": "p",
+      "html": "The SDK does not bundle navigation or storage &mdash; it uses the ones your app already has."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "npm",
+        "lang": "shell",
+        "fname": null,
+        "code": "npm install \\\n  @react-navigation/native \\\n  @react-navigation/native-stack \\\n  @react-navigation/drawer \\\n  @react-native-async-storage/async-storage \\\n  expo-av"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "p",
+      "html": "Call <code>initialize</code> once, at module scope or in your root component before rendering any FarmerChat view."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": "App.tsx",
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Render the journey"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatView</code> is the whole journey. Give it a full screen in your navigator."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChatView } from '@digitalgreenorg/farmerchat-react-native';\n\nfunction FarmerChatScreen() {\n  return <FarmerChatView />;\n}\n\n// In your navigator\n<Stack.Screen\n  name=\"FarmerChat\"\n  component={FarmerChatScreen}\n  options={{ headerShown: false }}\n/>"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or use the floating launcher"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatFab</code> reveals the journey in a full-screen modal with a close button &mdash; no navigator wiring needed."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChatFab } from '@digitalgreenorg/farmerchat-react-native';\n\n<View style={{ flex: 1 }}>\n  <MyHomeScreen />\n  <FarmerChatFab />\n</View>"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Turn off a question mode"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableVoice: false,   // no mic\n  enableImages: false,  // no camera\n});"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Guest by default, with phone/OTP sign-in inside the journey. Supply your own token to skip the SDK's auth UI."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  // Called at init when no accessToken was given, and again on a 401.\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
+       }
+      ]
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "const signedIn = FarmerChat.isAuthenticated();\nFarmerChat.logout();\n\nconst unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {\n  console.log('signed in:', isAuthed);\n});"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Override only what must match your app; unset values keep the FarmerChat look."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    brandPrimary: '#00C950',\n    shape: {\n      cardCornerRadius: 24,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n  },\n  messageFontSize: 15,\n});"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "Override individual strings using the generated <code>Labels</code> constants."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { Labels } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  stringOverrides: {\n    [Labels.RECENT_CHATS]: 'Past advice',\n    [Labels.SHARE_LOCATION]: 'Share my farm',\n  },\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The SDK emits the same events the FarmerChat app tracks, through a listener you provide."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onChatOpened: () => {},\n  onMessageSent: (text) => {},\n  onAnswerReceived: (messageId) => {},\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "React Native apps still ship native manifests. Declare permissions in both."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Android",
+        "lang": "xml",
+        "fname": "android/app/src/main/AndroidManifest.xml",
+        "code": "<uses-permission android:name=\"android.permission.INTERNET\" />\n<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\n\n<!-- Voice questions -->\n<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n<!-- Photo questions -->\n<uses-permission android:name=\"android.permission.CAMERA\" />\n<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />\n<!-- Weather + location-specific advice -->\n<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />\n<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />\n<uses-feature android:name=\"android.hardware.location.gps\" android:required=\"false\" />"
+       },
+       {
+        "label": "iOS",
+        "lang": "xml",
+        "fname": "ios/MyApp/Info.plist",
+        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });\nFarmerChat.openChat({ conversationId: savedId });"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Embed chat inline"
+     },
+     {
+      "k": "p",
+      "html": "<code>FarmerChatInlineView</code> renders the chat inside your own layout rather than taking the screen."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChatInlineView } from '@digitalgreenorg/farmerchat-react-native';\n\n<View style={{ height: 480 }}>\n  <FarmerChatInlineView />\n</View>"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "web",
+  "name": "Web",
+  "flavour": "React",
+  "badge": "TypeScript · React 18",
+  "intro": [
+   "The Web SDK renders the journey in the browser as a React component, or mounts imperatively into any DOM element from a non-React app. React 18 is a peer dependency.",
+   "Session state persists to <code>localStorage</code> under the <code>fc_sdk_</code> prefix, so a returning farmer keeps their language, identity and conversation history."
+  ],
+  "sections": [
+   {
+    "id": "install",
+    "title": "Install the FarmerChat SDK",
+    "blocks": [
+     {
+      "k": "warn",
+      "tag": "Before you start &mdash; read this",
+      "paras": [
+       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
+       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Add the package"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "npm",
+        "lang": "shell",
+        "fname": null,
+        "code": "npm install @digitalgreenorg/farmerchat-web"
+       },
+       {
+        "label": "yarn",
+        "lang": "shell",
+        "fname": null,
+        "code": "yarn add @digitalgreenorg/farmerchat-web"
+       },
+       {
+        "label": "pnpm",
+        "lang": "shell",
+        "fname": null,
+        "code": "pnpm add @digitalgreenorg/farmerchat-web"
+       }
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "Not on npm yet",
+      "paras": [
+       "<code>npm view @digitalgreenorg/farmerchat-web</code> returns 404. Until it is published, install from the local checkout: <code>npm install ../farmerchat-sdk-suite/versions/v2/web/packages/farmerchat-web</code>"
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Peer dependencies"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "npm",
+        "lang": "shell",
+        "fname": null,
+        "code": "npm install react@^18 react-dom@^18"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "launch",
+    "title": "Launch the journey",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Initialize the SDK"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": "main.tsx",
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Render the journey"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "React",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChatView } from '@digitalgreenorg/farmerchat-web';\n\nexport default function FarmerChatPage() {\n  return (\n    <div style={{ height: '100vh' }}>\n      <FarmerChatView />\n    </div>\n  );\n}"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or mount imperatively"
+     },
+     {
+      "k": "p",
+      "html": "For apps that are not React, <code>mount</code> renders into any element and returns an unmount handle."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "JavaScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nconst handle = FarmerChat.mount(\n  document.getElementById('farmerchat'),\n  { environment: 'PROD', guestApiKey: '<your guest API key>' }\n);\n\n// later\nhandle.unmount();"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Or use the floating launcher"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "React",
+        "lang": "ts",
+        "fname": null,
+        "code": "import { FarmerChatFab } from '@digitalgreenorg/farmerchat-web';\n\n<FarmerChatFab />"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "scope",
+    "title": "Scope the experience",
+    "blocks": [
+     {
+      "k": "table",
+      "head": [
+       "Option",
+       "What it controls"
+      ],
+      "rows": [
+       [
+        "<code>environment</code>",
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+       ],
+       [
+        "<code>guestApiKey</code>",
+        "Key for anonymous (guest) sessions. Required unless you supply your own token."
+       ],
+       [
+        "<code>geoApiKey</code>",
+        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+       ],
+       [
+        "<code>languageCode</code>",
+        "Initial language, e.g. <code>\"en\"</code>, <code>\"hi\"</code>. The farmer can change it in-journey."
+       ],
+       [
+        "<code>defaultCountryCode</code> / <code>defaultStateCode</code>",
+        "Seed geography used before the farmer shares a location."
+       ],
+       [
+        "<code>mode</code>",
+        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+       ],
+       [
+        "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
+        "Trim the journey surface by surface."
+       ],
+       [
+        "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
+        "Turn individual question modes and features off."
+       ],
+       [
+        "<code>enableAgenticChat</code>",
+        "Opt into streaming agentic chat. Default off keeps the synchronous 1.0.0 contract."
+       ],
+       [
+        "<code>enableAnalytics</code>",
+        "Telemetry master switch. <strong>Default off</strong> &mdash; events are built but dropped until you opt in."
+       ],
+       [
+        "<code>authMode</code> + <code>accessToken</code> / <code>tokenProvider</code>",
+        "Supply your own identity instead of the SDK-owned phone/OTP flow."
+       ],
+       [
+        "<code>stringOverrides</code>",
+        "Replace any server label. Keys must be canonical <code>fc_v2_app_label_*</code> keys."
+       ]
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Chat only"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Why the icons appear",
+      "paras": [
+       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "identity",
+    "title": "Identity and authentication",
+    "blocks": [
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
+       }
+      ]
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "const signedIn = FarmerChat.isAuthenticated();\nFarmerChat.logout();\n\nconst unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {\n  console.log('signed in:', isAuthed);\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Where the session lives",
+      "paras": [
+       "Tokens and preferences persist to <code>localStorage</code> under the <code>fc_sdk_</code> prefix. Clearing site data signs the farmer out."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "theming",
+    "title": "Theming",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The theme resolves to CSS custom properties on the SDK root, so it composes with your own stylesheet rather than fighting it."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    colors: { brandPrimary: '#00C950' },\n    shape: {\n      cardCornerRadius: 16,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n    typography: { fontFamily: 'Public Sans, system-ui, sans-serif' },\n  },\n});"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "labels",
+    "title": "Labels and languages",
+    "blocks": [
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  stringOverrides: {\n    fc_v2_app_label_recent_chats: 'Past advice',\n  },\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Use the generated key constants",
+      "paras": [
+       "Labels resolve as <code>&lt;key&gt;_&lt;lang&gt;</code> against the canonical <code>fc_v2_app_label_*</code> keys. A hand-typed short key silently never matches, and your override is ignored without an error. Always use the generated constants."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "analytics",
+    "title": "Analytics",
+    "blocks": [
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
+       }
+      ]
+     },
+     {
+      "k": "note",
+      "tag": "Off by default",
+      "paras": [
+       "<code>enableAnalytics</code> defaults to <strong>false</strong> on every platform. Events are still constructed with their real names, properties and ordering &mdash; they are dropped at the single dispatch point, so enabling telemetry later cannot change any other behaviour."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "permissions",
+    "title": "Permissions",
+    "blocks": [
+     {
+      "k": "p",
+      "html": "The browser owns permissions &mdash; there is no manifest to edit. The SDK asks at the point of use and degrades when a farmer declines."
+     },
+     {
+      "k": "table",
+      "head": [
+       "Capability",
+       "Browser requirement"
+      ],
+      "rows": [
+       [
+        "Voice questions",
+        "<code>getUserMedia</code> microphone prompt. Requires a secure context (HTTPS or localhost)."
+       ],
+       [
+        "Photo questions",
+        "A file input; camera capture where the browser supports it."
+       ],
+       [
+        "Weather &amp; local advice",
+        "<code>navigator.geolocation</code> prompt, with an IP-based fallback when declined."
+       ]
+      ]
+     },
+     {
+      "k": "warn",
+      "tag": "HTTPS is required",
+      "paras": [
+       "Microphone and geolocation are unavailable on plain <code>http://</code> outside localhost. Voice questions silently never start if you serve the page insecurely."
+      ]
+     }
+    ]
+   },
+   {
+    "id": "advanced",
+    "title": "Advanced",
+    "blocks": [
+     {
+      "k": "sub",
+      "html": "Deep-link into a question"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });\nFarmerChat.openChat({ conversationId: savedId });"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Streaming agentic chat"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });"
+       }
+      ]
+     },
+     {
+      "k": "sub",
+      "html": "Point at your own backend"
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "TypeScript",
+        "lang": "ts",
+        "fname": null,
+        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  customBaseUrl: 'https://farmerchat.internal.example/',\n});"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]

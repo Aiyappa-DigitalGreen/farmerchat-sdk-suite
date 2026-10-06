@@ -3,18 +3,22 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Insets are applied in FullScreenMessageView (not fitsSystemWindows): the app's glow bar
+         extends BEHIND the status bar, so only the bar's content is pushed down. -->
     <LinearLayout
+        android:id="@+id/fcFsmRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:fitsSystemWindows="true">
+        android:orientation="vertical">
 
         <!-- App bar with yellow glow -->
         <FrameLayout
+            android:id="@+id/fcFsmAppBar"
             android:layout_width="match_parent"
             android:layout_height="64dp">
 
             <ImageView
+                android:id="@+id/fcFsmGlow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="fitXY"
@@ -27,7 +31,7 @@
                 android:layout_height="42dp"
                 android:layout_gravity="start|center_vertical"
                 android:layout_marginStart="16dp"
-                android:background="@drawable/fc_bg_appbar_chip"
+                android:background="@drawable/fc_bg_appbar_chip_round"
                 android:contentDescription="@null"
                 android:padding="10dp"
                 android:src="@drawable/fc_ic_back"
@@ -53,7 +57,7 @@
                 android:layout_height="42dp"
                 android:layout_gravity="end|center_vertical"
                 android:layout_marginEnd="16dp"
-                android:background="@drawable/fc_bg_appbar_chip"
+                android:background="@drawable/fc_bg_appbar_chip_round"
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"

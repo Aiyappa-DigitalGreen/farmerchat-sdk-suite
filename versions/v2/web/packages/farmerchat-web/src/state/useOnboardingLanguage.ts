@@ -3,7 +3,7 @@
  * splash/udf OnboardingAction/OnboardingState (docs/01 §3.1/§3.2).
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
 import type { GeoResponse, SupportedLanguage, SupportedLanguageGroup } from '../core/types';
@@ -231,6 +231,40 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
     },
     [analytics, api, labels, patch, store],
   );
+
+  /**
+   * Auto-select the first language when nothing is chosen (app parity:
+   * `OnboardingSharedViewModel.kt:597-609`).
+   *
+   * The app resolves a selection the moment `get_languages` succeeds — persisted/config first,
+   * else `allLanguages.first()` — then applies it and fetches ITS labels. Web preselected nothing
+   * at all, so a fresh visitor got no radio selected, a disabled "Get started", and the entire
+   * screen in English even when their region resolved to another language. Verified as a real
+   * regression on android by a side-by-side device comparison (docs/04, 2026-09-08) and fixed
+   * there in core; this is the same omission on web.
+   *
+   * Written as an effect rather than a call inside `fetchSupportedLanguages` because
+   * `selectLanguage` is declared after it — an effect also keeps it correct when the list arrives
+   * from the silent retry. `autoSelectedRef` makes it fire once per mount, so it never fights a
+   * farmer who then picks a different language (which would re-run the label fetch).
+   */
+  const autoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (autoSelectedRef.current) return;
+    if (state.selectedLanguageId !== null) return;
+    if (state.languageState.status !== 'success') return;
+    const groups = state.languageState.data;
+    const first =
+      groups.flatMap((g) => g.priority_view ?? [])[0] ??
+      groups.flatMap((g) => g.expanded_view ?? [])[0];
+    if (!first) return;
+    // A persisted language wins over the first one, matching the app's precedence.
+    const storedId = store.getInt(PrefKeys.SELECTED_LANGUAGE_ID);
+    const all = groups.flatMap((g) => [...(g.priority_view ?? []), ...(g.expanded_view ?? [])]);
+    const preferred = (storedId ? all.find((l) => l.id === storedId) : undefined) ?? first;
+    autoSelectedRef.current = true;
+    void selectLanguage(preferred);
+  }, [state.languageState, state.selectedLanguageId, selectLanguage, store]);
 
   const fetchLegalLinks = useCallback(async () => {
     const res = await api.getPrivacyPolicy();

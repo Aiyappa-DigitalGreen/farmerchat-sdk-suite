@@ -28,6 +28,10 @@ rootProject.name = "farmerchat-android-sdk"
 include(":farmerchat-core")
 include(":farmerchat-android-compose")
 include(":farmerchat-android-views")
+
+// Optional analytics adapter. NOT part of the SDK packages — root CLAUDE.md §6 bans vendor
+// analytics SDKs inside those; this is a separate artifact a host opts into.
+include(":farmerchat-analytics-posthog")
 // project(...)-based samples (visual/dev iteration):
 include(":sample-compose")
 include(":sample-views")

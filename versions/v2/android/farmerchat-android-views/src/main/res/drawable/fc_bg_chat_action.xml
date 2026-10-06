@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The answer action pill (Share / Save / Listen).
+
+  App parity: `ActionButton` resolves `radius >= Radius.Rounded` to a plain
+  `RoundedCornerShape(percent = 50)` — a TRUE pill with semicircular ends, deliberately WITHOUT
+  the app-wide corner smoothing. A large literal radius clamps to half the 42dp height, which is
+  the shape-drawable equivalent. `fc_bg_suggested` (12dp corners) was being reused here and read
+  as a rounded rectangle instead.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_surface_reading_secondary"/>
+    <corners android:radius="100dp"/>
+</shape>

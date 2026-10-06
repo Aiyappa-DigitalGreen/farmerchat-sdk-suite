@@ -62,7 +62,11 @@ object ApiPriorityContext {
     private fun normalizeApiName(apiName: String): String {
         var path = apiName.split("?").first()
 
-        // Strip environment base-path prefixes so lookups match regardless of env.
+        // Strip environment base-path prefixes so lookups match regardless of env. STAGE now
+        // points at a host with NO base path (https://demo.agent.farmer.chat/), so its
+        // removePrefix below is simply a no-op and the trailing removePrefix("/") does the work —
+        // priority lookup is unaffected. The stage prefix stays listed for the commented-out
+        // farmstack host in FarmerChatConfig.kt.
         path = path
             .removePrefix("/mobile-app-dev/")
             .removePrefix("/mobile-app-stage/")

@@ -9,6 +9,6 @@
     android:paddingTop="16dp"
     android:paddingBottom="6dp"
     android:textColor="@color/fc_foreground_secondary"
-    android:textSize="13sp"
+    android:textSize="17sp"
     android:textStyle="bold"
     tools:text="Today" />

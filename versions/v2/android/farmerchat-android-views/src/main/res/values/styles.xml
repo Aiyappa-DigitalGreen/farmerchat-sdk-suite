@@ -2,15 +2,22 @@
 <resources>
     <style name="FcDrawerRow">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingEnd">20dp</item>
-        <item name="android:paddingTop">14dp</item>
-        <item name="android:paddingBottom">14dp</item>
+        <!-- Compose parity (Drawer.kt DrawerButton): 52dp tall, 14dp horizontal padding,
+             12dp icon gap, labelMedium (15sp/600). The icon is NOT tinted — fc_icon_* carry
+             their own #00C950 fill, and the tint that used to be here overrode the app's green
+             icons to flat white. -->
+        <item name="android:layout_height">52dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
         <item name="android:textSize">15sp</item>
-        <item name="android:textColor">@color/fc_foreground_primary</item>
-        <item name="android:drawablePadding">14dp</item>
-        <item name="android:drawableTint">@color/fc_foreground_primary</item>
+        <!-- labelMedium is nominally 600 (Type.kt), but Compose SYNTHESISES that against the
+             system sans family and lands heavier than a TextView's `textFontWeight=600`, which
+             renders close to regular. Measured against the app on emulator-5554: `bold` matches
+             the app's row weight and ink width (x..513); 600 came out visibly lighter (x..496).
+             Kept as bold on the measurement, against the nominal token value. -->
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/fc_brand_foreground_primary</item>
+        <item name="android:drawablePadding">12dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:background">?attr/selectableItemBackground</item>
     </style>
@@ -40,19 +47,42 @@
         <item name="android:textColor">@color/fc_white</item>
     </style>
 
+    <!--
+      Answer action pill (Share / Save / Listen).
+
+      App parity with `ActionButton` at the agentic call site (ChatResponseActions.kt:110):
+      42dp tall, 23dp icon, `surfaceReadingSecondary` fill, `foregroundPrimary` for BOTH glyph
+      and label, a true pill, and 12dp/16dp padding with a 10dp gap. `labelMedium` is
+      15sp/weight 600, so the label is medium-weight, not regular.
+
+      Was: 12dp-corner `fc_bg_suggested`, 14dp symmetric padding, 8dp gap, regular weight.
+    -->
     <style name="FcChatAction">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@drawable/fc_bg_suggested</item>
-        <item name="android:paddingStart">14dp</item>
-        <item name="android:paddingEnd">14dp</item>
-        <item name="android:paddingTop">10dp</item>
-        <item name="android:paddingBottom">10dp</item>
-        <item name="android:drawablePadding">8dp</item>
+        <item name="android:layout_height">42dp</item>
+        <item name="android:background">@drawable/fc_bg_chat_action</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:drawablePadding">10dp</item>
         <item name="android:drawableTint">@color/fc_foreground_primary</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/fc_foreground_primary</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!--
+      The "AI may be wrong. Please double-check." note under an agentic answer. App parity:
+      `labelSmall` (13sp / weight 600) in `foregroundSecondary`, beside an 18dp info glyph
+      tinted `buttonPrimaryAccent`. See ChatResponseActions.kt:96.
+    -->
+    <style name="FcChatAiWarningText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/fc_foreground_secondary</item>
     </style>
 
     <style name="FcAppBarTitle">
@@ -80,17 +110,22 @@
         <item name="android:orientation">vertical</item>
         <item name="android:gravity">center</item>
         <item name="android:background">@drawable/fc_bg_card_md</item>
-        <item name="android:paddingTop">14dp</item>
+        <!-- Compose parity (SettingsScreen.kt:473): top 16 / bottom 14, and a 10dp gap between
+             icon and label. Views had 14/14 with no gap and a 24dp icon against the app's 18dp,
+             so the tile block rendered 16px taller and pushed every section below it out of
+             alignment — the dominant remaining defect on this screen. -->
+        <item name="android:paddingTop">16dp</item>
         <item name="android:paddingBottom">14dp</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
 
+    <!-- App parity (SettingsScreen.kt:463): the Day/Night/Auto caption is labelSmall = 13sp. -->
     <style name="FcAppearanceButtonLabel">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">6dp</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/fc_foreground_primary</item>
     </style>
 
@@ -98,5 +133,28 @@
     <style name="FcShapeRounded16">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- App PhotoInput.kt tile: weight 1 x 168dp, surfaceTertiary 16dp, centred 32dp icon,
+         8dp gap, labelMedium (15sp / 600) in foregroundSecondary. -->
+    <style name="FcPhotoTile">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">168dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/fc_bg_photo_tile</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:foreground">?android:attr/selectableItemBackground</item>
+    </style>
+
+    <style name="FcPhotoTileLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textColor">@color/fc_foreground_secondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textFontWeight">600</item>
     </style>
 </resources>

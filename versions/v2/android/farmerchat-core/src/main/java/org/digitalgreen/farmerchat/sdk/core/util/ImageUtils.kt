@@ -41,9 +41,14 @@ object ImageUtils {
 
             // Bounds pass for downsampling
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(imageUri)?.use {
+            // With inJustDecodeBounds decodeStream ALWAYS returns null (it only fills [bounds]),
+            // so its result must not be the "unreadable" signal — using it rejected every photo
+            // before upload ("Failed to process image"). Unreadable = no stream, or no size.
+            val opened = resolver.openInputStream(imageUri)?.use {
                 BitmapFactory.decodeStream(it, null, bounds)
-            } ?: return@withContext null
+                true
+            } ?: false
+            if (!opened || bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
 
             var sampleSize = 1
             var width = bounds.outWidth

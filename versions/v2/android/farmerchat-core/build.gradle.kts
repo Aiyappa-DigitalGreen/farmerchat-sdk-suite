@@ -21,6 +21,15 @@ android {
     defaultConfig {
         minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
+        // ONE source of truth for the SDK version: the Gradle version the artifacts publish
+        // under. Three places used to hardcode "1.0.0" while the root build published 2.0.0 —
+        // including the Device-Info header sent on EVERY request, so a 2.0.0 SDK reported itself
+        // to the backend as 1.0.0.
+        buildConfigField("String", "SDK_VERSION_NAME", "\"${project.version}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

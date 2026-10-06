@@ -54,6 +54,13 @@ private val FOLLOWUPS_BLOCK_REGEX = Regex("```followups[\\s\\S]*?```")
  */
 private const val TOOL_STATUS_MIN_DWELL_MS = 700L
 
+/**
+ * [FarmerChatConfig.simulateAgenticStream] reveal pacing: ~40 words/s on a short answer, and a
+ * long one takes no more than 80 frames (~2.4 s) so the farmer never waits on the animation.
+ */
+private const val REVEAL_FRAME_MS = 30L
+private const val REVEAL_MAX_FRAMES = 80
+
 /** `triggered_input_type` the app sends when an alignment chip selection drives the query. */
 private const val ALIGN_CHIP_SEL = "align_chip_sel"
 
@@ -76,6 +83,25 @@ internal fun sanitizeAgenticStreamText(raw: String): String {
     if (fenceStart >= 0) text = text.substring(0, fenceStart)
     val tokenStart = text.indexOf("<<")
     if (tokenStart >= 0) text = text.substring(0, tokenStart)
+    return text.trimEnd()
+}
+
+/**
+ * Clean-up for a SETTLED agentic answer (terminal `metadata.response` or `done.answer`).
+ *
+ * The app renders `metadata.response` verbatim because its backend sends it clean. The stage
+ * backend (mobile-app-stage, 2026-10-06) was observed leaking the control block into it: a weather
+ * answer ended with a literal ```` ```followups ["Will it rain later today?", ...] ``` ````, which the
+ * markdown renderer (no fence support, same as the app's) printed as raw text under the answer.
+ * Strips that block (closed, or unclosed at the end) and complete `<<...>>` markers; unlike
+ * [sanitizeAgenticStreamText] it does not cut at a lone `<<`, since a finished answer has no
+ * half-arrived tokens. A pure trim on a clean answer.
+ */
+internal fun sanitizeAgenticFinalText(raw: String): String {
+    var text = FOLLOWUPS_BLOCK_REGEX.replace(raw, "")
+    text = CONTROL_TOKEN_REGEX.replace(text, "")
+    val fenceStart = text.indexOf("```followups")
+    if (fenceStart >= 0) text = text.substring(0, fenceStart)
     return text.trimEnd()
 }
 
@@ -309,8 +335,21 @@ class ChatViewModel(
             )
         }
         // No answer yet → fetch it like a normal question.
+        //
+        // Routed through the ACTION, not straight into `initializeWithQuestion`: the action handler
+        // is what builds `SendQueryProperties`, sets `pendingSendQueryProperties` and fires
+        // Send_Query_Initiated. Calling the private helper directly sent the query but emitted
+        // NEITHER Send_Query_Initiated NOR Send_Query (the latter is gated on the pending props
+        // being non-null), so a content-card query whose pre-generated answer came back blank was
+        // invisible in analytics. The card tap originates on Home, so screen_name follows.
         if (answer.isNullOrBlank()) {
-            initializeWithQuestion(question)
+            initializeWithQuestionAction(
+                ChatAction.InitializeWithQuestion(
+                    question = question,
+                    originScreenName = AnalyticsScreens.HOME,
+                    userMessageImageUri = action.userMessageImageUri
+                )
+            )
         }
     }
 
@@ -345,19 +384,18 @@ class ChatViewModel(
             isPush = action.isPush,
             isInApp = action.isInApp,
             isSSFR = action.isSSFR,
-            channel = action.channel
+            channel = action.channel,
+            // App parity (ChatViewModel.kt:229): the agentic content-card tap stamps click_type
+            // Image_Card / Text_Card. The fields already existed in SendQueryProperties
+            // (Analytics.kt:580) but nothing ever set them, so agentic card taps were
+            // indistinguishable from a typed question in analytics.
+            isImageCard = action.contentCardTriggerType == "image_card",
+            isTextCard = action.contentCardTriggerType == "text_card"
         )
         pendingSendQueryProperties = props
         analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, props.toAnalyticsProperties())
 
-        val triggeredInputTypeOverride = when {
-            action.isPush -> "push"
-            action.isInApp -> "in-app"
-            action.isWeatherAdviceCTA -> "weather"
-            action.isSSFR -> "ssfr"
-            !action.channel.isNullOrBlank() -> action.channel
-            else -> null
-        }
+        val triggeredInputTypeOverride = resolveTriggeredInputType(action)
 
         if (action.isPush) {
             // Push queries always start a fresh conversation when possible.
@@ -378,13 +416,15 @@ class ChatViewModel(
                 }
                 initializeWithQuestion(
                     action.question, action.transcriptionId, action.audioUri,
-                    action.isWeatherAdviceCTA, triggeredInputTypeOverride, action.ssfrCrop
+                    action.isWeatherAdviceCTA, triggeredInputTypeOverride, action.ssfrCrop,
+                    action.userMessageImageUri
                 )
             }
         } else {
             initializeWithQuestion(
                 action.question, action.transcriptionId, action.audioUri,
-                action.isWeatherAdviceCTA, triggeredInputTypeOverride, action.ssfrCrop
+                action.isWeatherAdviceCTA, triggeredInputTypeOverride, action.ssfrCrop,
+                action.userMessageImageUri
             )
         }
     }
@@ -395,7 +435,12 @@ class ChatViewModel(
         audioUri: Uri? = null,
         isWeatherAdviceCTA: Boolean = false,
         triggeredInputTypeOverride: String? = null,
-        ssfrCrop: String? = null
+        ssfrCrop: String? = null,
+        /**
+         * Display-only artwork for the user's bubble (Home content card). The query is still sent
+         * as TEXT — app parity, `ChatViewModel.kt:868`.
+         */
+        userMessageImageUri: Uri? = null
     ) {
         if (question.isBlank()) return
         clearAudioPlayback()
@@ -406,7 +451,12 @@ class ChatViewModel(
         _state.update { current ->
             current.copy(
                 messages = messagesWithPreGenerated +
-                    ChatMessage.UserMessage(question, audioUri = audioUri) +
+                    ChatMessage.UserMessage(
+                        question,
+                        imageUri = userMessageImageUri,
+                        audioUri = audioUri,
+                        userBubbleImageWideBanner = userMessageImageUri != null
+                    ) +
                     ChatMessage.LoadingPlaceholder(id = placeholderId),
                 isLoading = true,
                 errorMessage = null,
@@ -549,7 +599,12 @@ class ChatViewModel(
         _state.update { current ->
             current.copy(
                 messages = messagesWithPreGenerated +
-                    ChatMessage.UserMessage(questionForDisplayAndApi, imageUri = imageUri) +
+                    ChatMessage.UserMessage(
+                        questionForDisplayAndApi,
+                        imageUri = imageUri,
+                        // App parity (ChatViewModel.kt:1138): a sent photo is the wide banner.
+                        userBubbleImageWideBanner = true
+                    ) +
                     ChatMessage.LoadingPlaceholder(id = placeholderId),
                 isLoading = true,
                 errorMessage = null,
@@ -806,6 +861,9 @@ class ChatViewModel(
         if (config.enableAgenticChat) {
             // 2.0.0 opt-in: streams #27a. Launches its own coroutine.
             streamAgenticAnswer(request, placeholderId)
+        } else if (config.simulateAgenticStream) {
+            // One synchronous #27 reply, presented through the agentic UI.
+            revealSynchronousAnswer(request, placeholderId)
         } else {
             // 1.0.0 default: one synchronous #27 reply.
             scope.launch {
@@ -813,6 +871,89 @@ class ChatViewModel(
                     handleTextPromptResult(result, placeholderId)
                 }
             }
+        }
+    }
+
+    /**
+     * [FarmerChatConfig.simulateAgenticStream]: a synchronous #27 answer shown the way a streamed
+     * one is. The wire is untouched (one request, one JSON reply); only the bubble's lifecycle
+     * follows [streamAgenticAnswer] — status while waiting, text revealed word by word, then the
+     * shared settle through [handleTextPromptResult] with `isAgentic = true`, or the stream error
+     * card on failure.
+     */
+    private fun revealSynchronousAnswer(request: TextPromptRequest, placeholderId: String?) {
+        val streamId = placeholderId ?: UUID.randomUUID().toString()
+        scope.launch {
+            updateStreamingResponse(streamId, "", streamingStatusLabel())
+            chatUseCase.getTextPrompt(request).collect { result ->
+                val data = (result as? ApiResult.Success)?.data
+                val alignmentKind = org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+                    .fromType(data?.alignments?.type)
+                val answer = (data?.response ?: data?.translated_response ?: data?.message)
+                    ?.takeIf { it.isNotBlank() }
+                // Same "is this an answer" test handleTextPromptResult applies; an exclusive
+                // surface's prompt is its message, so it settles without a reveal.
+                val settles = data != null && !data.error &&
+                    (answer != null || (alignmentKind != null && !alignmentKind.isAdditive))
+                if (!settles && data != null && data.error && !data.message.isNullOrBlank()) {
+                    // The server explained the failure: show its words, as the #27 path does.
+                    // The stream bubble has the placeholder's id, so it is what gets removed.
+                    handleTextPromptResult(result, streamId)
+                    return@collect
+                }
+                if (!settles) {
+                    pendingSendQueryProperties?.let { base ->
+                        analytics.track(
+                            AnalyticsEvents.SEND_QUERY,
+                            base.copy(isValidQuery = false).toAnalyticsProperties()
+                        )
+                    }
+                    pendingSendQueryProperties = null
+                    // Same classification as the real stream (AgenticChatDataSource): only a
+                    // transport failure (IOException — no connection, timeout, DNS) is NETWORK. A
+                    // response that could not be read was mislabelled "No internet connection".
+                    val error = result as? ApiResult.Error
+                    val kind = when {
+                        error == null -> StreamErrorKind.SERVER // 200 with error / empty answer
+                        error.code != null -> StreamErrorKind.SERVER
+                        error.isTimeout || error.throwable is java.io.IOException -> StreamErrorKind.NETWORK
+                        else -> StreamErrorKind.UNKNOWN
+                    }
+                    Log.w(
+                        TAG,
+                        "chat answer failed: kind=$kind code=${error?.code} timeout=${error?.isTimeout} " +
+                            "message=${error?.message ?: data?.message}",
+                        error?.throwable
+                    )
+                    interruptAgentic(streamId, "", kind)
+                    return@collect
+                }
+                if (answer != null && (alignmentKind == null || alignmentKind.isAdditive)) {
+                    revealAnswer(streamId, answer)
+                }
+                handleTextPromptResult(result, placeholderId, reuseId = streamId, isAgentic = true)
+            }
+        }
+    }
+
+    /** Answers render with the agentic UI: a real stream or the simulated one over #27. */
+    private val agenticUi: Boolean
+        get() = config.enableAgenticChat || config.simulateAgenticStream
+
+    /** Word-boundary prefixes of [text] into the streaming bubble, at most [REVEAL_MAX_FRAMES]. */
+    private suspend fun revealAnswer(streamId: String, text: String) {
+        val cuts = Regex("\\s+").findAll(text).map { it.range.last + 1 }.toList() + text.length
+        val step = (cuts.size + REVEAL_MAX_FRAMES - 1) / REVEAL_MAX_FRAMES
+        var i = step - 1
+        while (i < cuts.size) {
+            var prefix = text.substring(0, cuts[i])
+            // Hold back an unclosed `**` so a half-revealed bold span never shows raw asterisks.
+            if (Regex("\\*\\*").findAll(prefix).count() % 2 == 1) {
+                prefix = prefix.substring(0, prefix.lastIndexOf("**"))
+            }
+            updateStreamingResponse(streamId, sanitizeStreamingText(prefix), null)
+            delay(REVEAL_FRAME_MS)
+            i += step
         }
     }
 
@@ -864,7 +1005,8 @@ class ChatViewModel(
                     // interruption, even if the transport dropped right after.
                     done != null && (!done.answer.isNullOrBlank() || fallbackText.isNotEmpty()) ->
                         finalizeAgenticAnswer(
-                            text = done.answer?.takeIf { it.isNotBlank() } ?: fallbackText,
+                            text = done.answer?.let(::sanitizeAgenticFinalText)
+                                ?.takeIf { it.isNotBlank() } ?: fallbackText,
                             followUps = done.followUps.takeIf { it.isNotEmpty() },
                             messageId = null,
                             streamId = streamId,
@@ -890,6 +1032,15 @@ class ChatViewModel(
 
             try {
                 agenticChatDataSource.stream(request).collect { event: AgenticEvent ->
+                    // Debug builds: what the stream actually sent (progress text included), so a
+                    // missing status line can be told apart from one the server never sent.
+                    if (config.debugLogging) Log.d(TAG, "stream event: " + when (event) {
+                        is AgenticEvent.Status -> "status stage=${event.stage}"
+                        is AgenticEvent.ToolCall -> "tool_call ${event.name} status_text=${event.statusText}"
+                        is AgenticEvent.ToolResult -> "tool_result ${event.name} status_text=${event.statusText}"
+                        is AgenticEvent.TextDelta -> "text_delta (${event.delta.length} chars)"
+                        else -> event::class.simpleName
+                    })
                     when (event) {
                         // Progress ping, the FIRST event on both live captures and the only sign
                         // of life during time-to-first-delta (6.7 s on the captured answer). Shown
@@ -952,7 +1103,12 @@ class ChatViewModel(
                             // what makes a mid-stream `surface` and the terminal
                             // `metadata.alignments` one message rather than two.
                             handleTextPromptResult(
-                                ApiResult.Success(event.response), placeholderId, reuseId = streamId
+                                ApiResult.Success(event.response),
+                                placeholderId,
+                                reuseId = streamId,
+                                // Without this the rebuilt message loses `isAgentic` and the
+                                // answer renders the legacy (non-agentic) action row.
+                                isAgentic = true
                             )
                         }
 
@@ -1382,7 +1538,18 @@ class ChatViewModel(
          * message id: a fresh id is absent from that set, so the typewriter would replay over
          * text the farmer just watched stream in.
          */
-        reuseId: String? = null
+        reuseId: String? = null,
+        /**
+         * True when the agentic stream (#27a) is finalizing through this shared path.
+         *
+         * This function REBUILDS the settled [ChatMessage.AiResponse] from the response, so every
+         * flag not passed here is destroyed. `isAgentic` was one of them: a streamed answer that
+         * ended with a `metadata` event — the normal prose case — reached the UI with the flag
+         * cleared, and the answer then rendered the LEGACY action row (Share + Save + Listen, no
+         * accuracy note) instead of the app's agentic row (note above Share + Listen, no Save).
+         * See ChatResponseActions.kt:85 in fc-compose-agentic.
+         */
+        isAgentic: Boolean = false
     ) {
         when (result) {
             is ApiResult.Success -> {
@@ -1393,6 +1560,7 @@ class ChatViewModel(
                 // prompt IS the message. Fall back to alignments.message so it is not mistaken for
                 // an empty answer and turned into an error.
                 val answerText = (data.response ?: data.translated_response ?: data.message)
+                    ?.let { if (isAgentic) sanitizeAgenticFinalText(it) else it }
                     ?.takeIf { it.isNotBlank() }
                     ?: (if (alignmentKind != null && !alignmentKind.isAdditive) {
                         data.alignments?.message.orEmpty()
@@ -1409,23 +1577,12 @@ class ChatViewModel(
                 markFirstQueryAsked()
                 val aiId = reuseId ?: UUID.randomUUID().toString()
                 _state.update { current ->
-                    val settled = ChatMessage.AiResponse(
-                        text = answerText,
-                        id = aiId,
-                        messageId = data.message_id,
-                        // 2.0.0: an alignment surface asks the user to clarify/confirm
-                        // instead of (or alongside) answering. Exclusive surfaces replace
-                        // the answer, additive ones sit below it — see AlignmentKind.
+                    val settled = buildSettledAiResponse(
+                        data = data,
+                        answerText = answerText,
+                        aiId = aiId,
                         alignmentKind = alignmentKind,
-                        alignmentChips = data.alignments?.chips,
-                        alignmentMessage = if (alignmentKind?.isAdditive == true) {
-                            data.alignments?.message
-                        } else null,
-                        // The live payload carries the triggering query at BOTH the top level and
-                        // inside `context`; taking only the former loses it on a surface that fills
-                        // in just `context`, and with it the capability re-send.
-                        alignmentOriginalQuery = data.alignments?.effectiveOriginalQuery,
-                        alignmentBlocking = data.alignments?.blocking == true
+                        isAgentic = isAgentic
                     )
                     // Replace in place when the id already exists — the agentic path passes its
                     // stream id, so a bubble that streamed (or already rendered a mid-stream
@@ -1536,7 +1693,12 @@ class ChatViewModel(
                                 messages = current.messages.filterNot { it.id == placeholderId } +
                                     ChatMessage.AiResponse(
                                         text = data.response,
-                                        messageId = data.message_id
+                                        messageId = data.message_id,
+                                        // Photo answers come from the synchronous image endpoint,
+                                        // but wear the same agentic action row as every other
+                                        // answer when the agentic UI is on (product request;
+                                        // the app keeps its legacy row here).
+                                        isAgentic = agenticUi
                                     ),
                                 isLoading = false,
                                 errorMessage = null,
@@ -1672,7 +1834,10 @@ class ChatViewModel(
                                 3 -> mapped += ChatMessage.AiResponse(
                                     text = item.response_text.orEmpty(),
                                     id = uiId,
-                                    messageId = item.message_id
+                                    messageId = item.message_id,
+                                    // History has no per-message agentic flag: mirror the current
+                                    // UI, as the app does (ChatViewModel.kt:1343-1357).
+                                    isAgentic = agenticUi
                                 )
                                 7 -> {
                                     lastFollowUps = item.questions
@@ -1794,4 +1959,60 @@ class ChatViewModel(
     companion object {
         private const val TAG = "FcSdkChatViewModel"
     }
+}
+
+/**
+ * Builds the settled answer for a #27 reply, or for the `metadata` event that terminates a #27a
+ * stream.
+ *
+ * Extracted from [handleTextPromptResult] and `internal` so the flags it must carry are pinned by
+ * [org.digitalgreen.farmerchat.sdk.core.ui.chat.SettledAiResponseTest] rather than by review. This
+ * builder REPLACES the streaming message wholesale, so any field it forgets is destroyed — which
+ * is exactly how `isAgentic` was lost, silently downgrading every streamed answer's footer to the
+ * legacy Share/Save/Listen row. Add a field to `AiResponse` that the agentic path depends on, and
+ * it must be threaded through here too.
+ */
+internal fun buildSettledAiResponse(
+    data: org.digitalgreen.farmerchat.sdk.core.model.TextPromptResponse,
+    answerText: String,
+    aiId: String,
+    alignmentKind: org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind?,
+    isAgentic: Boolean
+): ChatMessage.AiResponse = ChatMessage.AiResponse(
+    text = answerText,
+    id = aiId,
+    messageId = data.message_id,
+    isAgentic = isAgentic,
+    // 2.0.0: an alignment surface asks the user to clarify/confirm instead of (or alongside)
+    // answering. Exclusive surfaces replace the answer, additive ones sit below it — see
+    // AlignmentKind.
+    alignmentKind = alignmentKind,
+    alignmentChips = data.alignments?.chips,
+    alignmentMessage = if (alignmentKind?.isAdditive == true) data.alignments?.message else null,
+    // The live payload carries the triggering query at BOTH the top level and inside `context`;
+    // taking only the former loses it on a surface that fills in just `context`, and with it the
+    // capability re-send.
+    alignmentOriginalQuery = data.alignments?.effectiveOriginalQuery,
+    alignmentBlocking = data.alignments?.blocking == true
+)
+
+/**
+ * `triggered_input_type` for a query entering chat from somewhere other than the composer.
+ *
+ * The ORDER is the contract, not just the values — a query can satisfy several of these at once
+ * (a push that is also a weather CTA), and the app resolves ties by this exact precedence
+ * (fc-compose-agentic `ChatViewModel.kt:235`). Extracted so the ordering is pinned by
+ * [org.digitalgreen.farmerchat.sdk.core.ui.chat.TriggeredInputTypeTest] rather than by review.
+ *
+ * `contentCardTriggerType` sits LAST before the fallthrough: every other entry point outranks a
+ * Home content-card tap.
+ */
+internal fun resolveTriggeredInputType(action: ChatAction.InitializeWithQuestion): String? = when {
+    action.isPush -> "push"
+    action.isInApp -> "in-app"
+    action.isWeatherAdviceCTA -> "weather"
+    action.isSSFR -> "ssfr"
+    !action.channel.isNullOrBlank() -> action.channel
+    !action.contentCardTriggerType.isNullOrBlank() -> action.contentCardTriggerType
+    else -> null
 }

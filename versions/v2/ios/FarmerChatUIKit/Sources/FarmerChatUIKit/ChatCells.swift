@@ -49,7 +49,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         contentView.addSubview(bubble)
 
         textLabel.numberOfLines = 0
-        textLabel.font = .systemFont(ofSize: cfg.messageFontSize ?? 16)
+        textLabel.font = FCUITypography.current.bodyMedium(atSize: cfg.messageFontSize ?? 17).font
 
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -63,7 +63,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         clipButton.setTitleColor(.white, for: .normal)
         clipButton.isHidden = true
 
-        failedLabel.font = .systemFont(ofSize: 12)
+        failedLabel.font = FCUITypography.current.labelSmall.font
         failedLabel.textColor = FCUITheme.red500
         failedLabel.isHidden = true
 
@@ -139,7 +139,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             alignRight(true)
             bubble.backgroundColor = FarmerChat.shared.config.userBubbleColor.map(UIColor.init) ?? FCUITheme.brandSurfacePrimary
             textLabel.textColor = FarmerChat.shared.config.userBubbleTextColor.map(UIColor.init) ?? .white
-            textLabel.text = user.text
+            textLabel.fcSetText(user.text, style: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
             textLabel.isHidden = user.text.isEmpty
             spinner.stopAnimating()
             failedLabel.isHidden = !user.isFailed
@@ -165,7 +165,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             textLabel.textColor = FarmerChat.shared.config.aiBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
             // A streaming answer grows IN PLACE with no typewriter/reveal animation — the text
             // already arrives token by token (2.0.0).
-            textLabel.text = ai.text
+            textLabel.fcSetText(ai.text, style: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
             textLabel.isHidden = ai.text.isEmpty
             spinner.stopAnimating()
             failedLabel.isHidden = true
@@ -235,7 +235,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             alignRight(true)
             bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
             textLabel.textColor = FCUITheme.foregroundPrimary
-            textLabel.text = location.address
+            textLabel.fcSetText(location.address, style: FCUITypography.current.bodyMedium)
             textLabel.isHidden = location.address.isEmpty
             spinner.stopAnimating()
             failedLabel.isHidden = true
@@ -248,7 +248,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             currentText = ""
             alignRight(false)
             bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
-            textLabel.text = fcuiLabel("getting_your_answer", "Getting your answer…")
+            textLabel.text = fcuiLabel(FCLabels.gettingYourAnswer, "Getting your answer…")
             textLabel.textColor = FCUITheme.foregroundSecondary
             textLabel.isHidden = false
             spinner.startAnimating()
@@ -303,13 +303,13 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         if isTtsEnabled {
             actionsRow.addArrangedSubview(makeActionChip(
                 systemImage: "speaker.wave.2.fill",
-                title: fcuiLabel("listen", "Listen"),
+                title: fcuiLabel(FCLabels.listen, "Listen"),
                 action: { [weak self] in self?.onListen?() }
             ))
         }
         actionsRow.addArrangedSubview(makeActionChip(
             systemImage: "square.and.arrow.up",
-            title: fcuiLabel("share", "Share"),
+            title: fcuiLabel(FCLabels.shareDownload, "Share"),
             action: { [weak self] in
                 guard let self else { return }
                 self.onShare?(self.currentText)
@@ -333,7 +333,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         config.background.strokeWidth = 1
         config.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
         let button = UIButton(configuration: config)
-        button.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        button.titleLabel?.font = FCUITypography.current.labelSmall.font
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
     }
@@ -362,7 +362,7 @@ final class FCUIFollowUpChipCell: UICollectionViewCell {
         card.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
         card.translatesAutoresizingMaskIntoConstraints = false
 
-        label.font = .systemFont(ofSize: 16)
+        label.font = FCUITypography.current.bodyMedium.font
         label.textColor = FCUITheme.foregroundPrimary
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -431,14 +431,14 @@ final class FCUIInlineErrorCell: UICollectionViewCell {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        label.font = .systemFont(ofSize: 14)
+        label.font = FCUITypography.current.bodyMedium.font
         label.textColor = FCUITheme.red500
         label.numberOfLines = 0
         label.textAlignment = .center
 
-        retryButton.setTitle(fcuiLabel("try_again", "Try again"), for: .normal)
+        retryButton.setTitle(fcuiLabel(FCLabels.tryAgain, "Try again"), for: .normal)
         retryButton.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
-        retryButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        retryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
         retryButton.addAction(UIAction { [weak self] _ in self?.onRetry?() }, for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [label, retryButton])
@@ -515,11 +515,11 @@ final class FCUILocationBubbleCell: UICollectionViewCell {
         pinStack.translatesAutoresizingMaskIntoConstraints = false
         mapBand.addSubview(pinStack)
 
-        captionLabel.font = .systemFont(ofSize: fontSize)
+        captionLabel.font = FCUITypography.current.bodyMedium(atSize: fontSize).font
         captionLabel.textColor = FCUITheme.foregroundSecondary
         captionLabel.numberOfLines = 1
 
-        addressLabel.font = .systemFont(ofSize: fontSize, weight: .bold)
+        addressLabel.font = FCUITypography.current.bodyMedium(atSize: fontSize).font
         addressLabel.textColor = FCUITheme.foregroundPrimary
         addressLabel.numberOfLines = 0
 

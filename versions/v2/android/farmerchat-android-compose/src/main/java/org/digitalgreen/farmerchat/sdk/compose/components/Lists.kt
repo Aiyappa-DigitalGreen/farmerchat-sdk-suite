@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import androidx.compose.material.icons.outlined.ChevronRight
 
 @Composable
 fun ListCard(
@@ -112,13 +113,17 @@ fun ListItem(
                 Spacer(modifier = Modifier.width(12.dp))
             }
 
+            // App parity (ListItem.kt:88): the LABEL side is never weighted — it keeps its
+            // natural width so a long value never ellipsizes it, and the value side below absorbs
+            // the flexible space instead. Weighting the label inverted that (a long value was
+            // squeezed, the label never truncated) and, on a chevron-only row, pushed the chevron
+            // to the far edge where the app tucks it right after the text.
             Text(
                 text = textLeft,
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.foregroundPrimary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = if (multilineRight) Modifier else Modifier.weight(1f)
+                overflow = TextOverflow.Ellipsis
             )
 
             if (showTextRight && textRight != null) {
@@ -140,7 +145,9 @@ fun ListItem(
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.foregroundSecondary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End
                     )
                 }
             }
@@ -155,7 +162,8 @@ fun ListItem(
             } else if (showChevron) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    // App parity (ListItem.kt:138): ChevronRight, not KeyboardArrowRight.
+                    imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
                     tint = colors.foregroundPrimary

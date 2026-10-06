@@ -12,7 +12,10 @@ public enum FarmerChatEnvironment: String, CaseIterable, Sendable {
     public var baseURL: URL {
         switch self {
         case .dev: return URL(string: "https://farmerchat.farmstack.co/mobile-app-dev/")!
-        case .stage: return URL(string: "https://farmerchat.farmstack.co/mobile-app-stage/")!
+        // STAGE base URL switched to the agentic demo backend (requested 2026-09-08); applies
+        // to debug and release alike. Previous host kept commented for a one-line revert.
+        //   case .stage: return URL(string: "https://farmerchat.farmstack.co/mobile-app-stage/")!
+        case .stage: return URL(string: "https://demo.agent.farmer.chat/")!
         case .demo: return URL(string: "https://farmerchat.farmstack.co/mobile-app-demo/")!
         case .prod: return URL(string: "https://v2.api.farmer.chat/")!
         case .eks: return URL(string: "https://api.farmerchat.in/")!
@@ -210,6 +213,17 @@ public struct FarmerChatConfig: Sendable {
     public var showSettings: Bool
     public var showHistory: Bool
     public var showDrawer: Bool
+    /// Mirrors the app's `show_name_screen` RemoteConfig flag and Android's
+    /// `FarmerChatConfig.showNameScreen`. When false the Enter-Name step is skipped and the
+    /// profile is marked done, so the farmer goes straight past it. Added 2026-09-16 — iOS,
+    /// react-native and web had no equivalent, so hosts could suppress the step on Android only
+    /// (docs/04 "Config-parity audit").
+    public var showNameScreen: Bool
+    /// Telemetry master switch, default **false** — matches android's
+    /// `FarmerChatConfig.enableAnalytics`. Until 2026-09-16 iOS emitted every event to a host's
+    /// `onEvent` unconditionally while android dropped them, so the same host code saw different
+    /// behaviour per platform (docs/04 "Config-parity audit").
+    public var enableAnalytics: Bool
     public var enableSsfr: Bool
 
     // MARK: - C5 String overrides + forced locale
@@ -262,6 +276,8 @@ public struct FarmerChatConfig: Sendable {
         showSettings: Bool = true,
         showHistory: Bool = true,
         showDrawer: Bool = true,
+        showNameScreen: Bool = true,
+        enableAnalytics: Bool = false,
         enableSsfr: Bool = true,
         stringOverrides: [String: String] = [:],
         locale: String? = nil,
@@ -307,6 +323,8 @@ public struct FarmerChatConfig: Sendable {
         self.showSettings = showSettings
         self.showHistory = showHistory
         self.showDrawer = showDrawer
+        self.showNameScreen = showNameScreen
+        self.enableAnalytics = enableAnalytics
         self.enableSsfr = enableSsfr
         self.stringOverrides = stringOverrides
         self.locale = locale

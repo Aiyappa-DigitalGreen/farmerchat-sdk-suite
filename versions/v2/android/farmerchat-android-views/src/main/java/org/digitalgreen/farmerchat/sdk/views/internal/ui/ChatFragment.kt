@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.ui
 
+import org.digitalgreen.farmerchat.sdk.views.internal.util.FcInsets
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
@@ -20,11 +21,13 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
+import org.digitalgreen.farmerchat.sdk.FarmerChatMode
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.audio.AudioPlayback
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
+import org.digitalgreen.farmerchat.sdk.core.labels.AnswerGenerationTips
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
 import org.digitalgreen.farmerchat.sdk.core.ui.location.isLocationObtained
@@ -99,6 +102,8 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     private var ttsPreparedUrl: String? = null
 
     private var lastRenderedLastKey: String? = null
+    /** History page requested by the scroll-up prefetch; the anchor restores once it lands. */
+    private var restoreAnchorPage: Int? = null
     private var initialHistoryScrollDone = false
 
     // History pagination anchors
@@ -122,24 +127,46 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 val state = vm.state.value
                 val nextPage = state.historyNextPage ?: return
                 if (state.isLoading) return
-                if (layoutManager.findFirstVisibleItemPosition() == 0) {
+                if (restoreAnchorKey != null) return // a page is already on its way
+                // App ChatScreen.kt:1244: prefetch older pages within 2 rows of the top.
+                val firstVisible = layoutManager.findFirstVisibleItemPosition()
+                if (firstVisible in 0..2) {
                     val conversationId = arguments?.getString("conversationId") ?: return
-                    // Anchor for position restore after prepend.
-                    val firstRow = adapter.rows.firstOrNull()
-                    restoreAnchorKey = firstRow?.key
-                    restoreAnchorOffset =
-                        layoutManager.findViewByPosition(0)?.top ?: 0
+                    // Anchor for position restore after prepend: the first VISIBLE row (row 0
+                    // may be off screen now that the load starts early).
+                    restoreAnchorKey = adapter.rows.getOrNull(firstVisible)?.key
+                    restoreAnchorOffset = layoutManager.findViewByPosition(firstVisible)?.top ?: 0
+                    restoreAnchorPage = nextPage
                     vm.onAction(ChatAction.LoadChatHistory(conversationId, nextPage))
                 }
             }
         })
 
-        // App bar: Close (home entry) / Menu (history entry); centered logo.
+        // App bar: Back (home entry) / Menu (history entry); centered logo.
+        //
+        // App parity (ChatScreen.kt:173 `actionIcon`): entry from Home shows a BACK ARROW, entry
+        // from History shows Menu. Views showed a CLOSE (✕) for the from-Home case, which
+        // contradicted what the button does — the click handler below pops back to Home unless
+        // the SDK is in CHAT_ONLY, where there is no Home to return to and closing really is
+        // what happens. The icon now follows the behaviour, matching the compose flavour.
         val isHistoryEntry = source == "history"
+        val isChatOnly = graph.config.mode == FarmerChatMode.CHAT_ONLY
         binding.fcChatAppBar.fcAppBarTitle.text = ""
+        // Transparent bar over the root green so fcChatTopGlow shows through, as the app's
+        // LogoAppBar draws its glow inside its own background.
+        binding.fcChatAppBar.root.background = null
         binding.fcChatAppBar.fcAppBarLeft.setImageResource(
-            if (isHistoryEntry) R.drawable.fc_ic_menu else R.drawable.fc_ic_close
+            when {
+                isHistoryEntry -> R.drawable.fc_ic_menu
+                isChatOnly -> R.drawable.fc_ic_close
+                else -> R.drawable.fc_ic_back
+            }
         )
+        // App parity (ChatScreen.kt:1450): from Home the app draws its `leftbutton` drawable — a
+        // 42dp Green800 CIRCLE — rather than the 12dp-cornered chip the other bars use.
+        if (!isHistoryEntry && !isChatOnly) {
+            binding.fcChatAppBar.fcAppBarLeft.setBackgroundResource(R.drawable.fc_bg_appbar_chip_round)
+        }
         binding.fcChatAppBar.fcAppBarLeft.setOnClickListener {
             if (isHistoryEntry && graph.config.showDrawer) {
                 journeyHost()?.openDrawer()
@@ -147,13 +174,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 // Drawer off (CHAT_ONLY): openDrawer() is a no-op, so this would strand the
                 // user in a thread opened from history. Step back to the history list, or exit
                 // if there is nothing to pop.
-                if (!findNavController().popBackStack()) requireActivity().finish()
+                if (!findNavController().popBackStack()) exitJourney()
             } else {
                 graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
                 // CHAT_ONLY has no SDK Home — close exits the SDK back to the host
                 // (parity with android-compose FarmerChatRoot).
                 if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
-                    requireActivity().finish()
+                    exitJourney()
                 } else {
                     NavRoutes.navigateChatClose(findNavController())
                 }
@@ -211,6 +238,11 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         binding.fcChatInputPhotoLabel.text = label(Labels.PHOTO, "Photo")
         binding.fcChatInputSpeakLabel.text = label(Labels.SPEAK, "Speak")
         binding.fcChatInputTypeLabel.text = label(Labels.TYPE, "Type")
+        // Host feature flags — app parity with ios `HomeCells.swift:52-53`. `enableImages` /
+        // `enableVoice` were declared on Android and honoured by NOTHING until 2026-09-16;
+        // see docs/04 "Config-parity audit (2026-09-16)".
+        binding.fcChatInputPhoto.isVisible = graph.config.enableImages
+        binding.fcChatInputSpeak.isVisible = graph.config.enableVoice
         binding.fcChatInputPhoto.setOnClickListener { overlays?.showPhotoInput() }
         binding.fcChatInputSpeak.setOnClickListener { onSpeakClick() }
         binding.fcChatInputType.setOnClickListener { overlays?.showTextInput() }
@@ -220,15 +252,21 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
      * 2.0.0 input: the unified composer replaces the button row entirely.
      *
      * App parity (fc-compose-agentic ChatInputOverlays.kt:57) / Compose parity
-     * (`ChatScreen.kt:1097`): anchored + compact, brand-green sheet on the reading surface, no
-     * idle aura (that is a Home-only first-contact cue). The composer consumes the nav and IME
-     * insets itself, so nothing here adds padding on top of them.
+     * (`ChatScreen.kt:1097`): anchored + compact, brand-green sheet on the reading surface. The
+     * composer consumes the nav and IME insets itself, so nothing here adds padding on top of
+     * them.
+     *
+     * The idle aura is NOT set here because [InputComposerView] does not implement one on any
+     * screen (recorded in docs/04). App 2a5cf2b8 turned the aura on for Chat as well as Home,
+     * and Compose already had it on both — Views shows it on neither.
      */
     private fun setUpComposer() {
         binding.fcChatInputButtons.isVisible = false
         val composer = binding.fcChatComposer
         composer.isVisible = true
         composer.compact = true
+        // App ChatInputOverlays.kt:73 passes `showAura = true` on Chat as well (2a5cf2b8).
+        composer.showAura = true
         composer.setSurfaceColorRes(R.color.fc_green700)
         composer.setFadeColorRes(R.color.fc_surface_reading)
         composer.setPlaceholder(label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."))
@@ -250,6 +288,16 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         attachedPhoto?.let { composer.setPhotoUris(listOf(it)) }
 
         composer.onBarHeightChanged = { height -> reserveComposerSpace(height) }
+        // App ChatScreen.kt:1911-1918: the pill brings the latest question back to the top.
+        composer.onScrollDown = {
+            val lastQuestion = adapter.rows.indexOfLast { it is ChatRow.User }
+            if (lastQuestion >= 0) pinToTop(lastQuestion)
+        }
+        binding.fcChatList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                updateScrollDownPill()
+            }
+        })
         reserveComposerSpace(composer.barHeightPx())
 
         // The composer's own listener reads ROOT insets, but its init-time requestApplyInsets()
@@ -292,9 +340,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     }
 
     private fun reserveComposerSpace(barHeightPx: Int) {
-        val navBottom = ViewCompat.getRootWindowInsets(binding.root)
-            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
-        binding.fcChatList.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0))
+        val navBottom = FcInsets.overlapping(binding.root, WindowInsetsCompat.Type.navigationBars()).bottom
+        // App ChatThreadContent.kt:300-309: contentPadding bottom = composer bar height + 16dp.
+        val extra = (16 * resources.displayMetrics.density).toInt()
+        binding.fcChatList.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0) + extra)
     }
 
     /** One-of initialization per nav args (doc 01 §3.8). */
@@ -318,6 +367,8 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         val isSSFR = args.getBoolean("isSSFR", false)
         val ssfrCrop = args.getString("ssfrCrop")
         val channel = args.getString("channel")
+        val contentCardImageUrl = args.getString("contentCardImageUrl")
+        val contentCardTriggerType = args.getString("contentCardTriggerType")
 
         when {
             source == "history" && conversationId != null ->
@@ -346,22 +397,71 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                         question = question,
                         transcriptionId = transcriptionId,
                         audioUri = audioUri?.toUri(),
+                        // A content-card tap originates on Home, and the app stamps screen_name
+                        // accordingly.
+                        originScreenName = if (contentCardTriggerType != null) {
+                            AnalyticsScreens.HOME
+                        } else {
+                            AnalyticsScreens.CHAT
+                        },
                         isWeatherAdviceCTA = isWeatherAdviceCTA,
                         isSSFR = isSSFR,
                         ssfrCrop = ssfrCrop,
-                        channel = channel
+                        channel = channel,
+                        contentCardTriggerType = contentCardTriggerType,
+                        // Display-only banner; the query still goes out as text.
+                        userMessageImageUri = contentCardImageUrl
+                            ?.takeIf { it.isNotBlank() }
+                            ?.toUri()
                     )
                 )
+        }
+    }
+
+    /**
+     * The tip carousel while an answer is generating.
+     *
+     * App parity (`ChatThreadContent.kt:605`): shown for the whole wait and hidden the moment a
+     * streamed answer produces its first text chunk — so it covers the pre-text "thinking" and
+     * tool phase, and a follow-up wait, where `lastAi` is the PREVIOUS settled answer and is
+     * therefore neither streaming nor blank.
+     *
+     * Without this the views flavour just hid the composer during the wait, leaving a bare strip
+     * where the app shows tips — one of the gaps recorded in docs/04.
+     */
+    private fun updateTips(state: ChatState) {
+        val lastAi = state.messages.lastOrNull { it is ChatMessage.AiResponse }
+            as? ChatMessage.AiResponse
+        val streamingWithText = lastAi != null && lastAi.isStreaming && lastAi.text.isNotBlank()
+        val show = state.isLoading && !streamingWithText
+
+        if (show) {
+            val manager = graph.labelManager
+            binding.fcChatTips.bind(
+                AnswerGenerationTips.discover(
+                    labels = manager.labelMap(),
+                    languageCode = manager.languageCode(),
+                    resolve = { key, fallback -> manager.getLabel(key, fallback) }
+                )
+            )
+            binding.fcChatTips.isVisible = true
+        } else {
+            binding.fcChatTips.isVisible = false
+            binding.fcChatTips.stop()
         }
     }
 
     // ------------------------------------------------------------------ state → rows
 
     private fun observeState() {
+        // The location state drives the GPS prompt's progress row: re-render when it changes.
+        graph.locationPromptManager.state.collectWhenStarted { refreshRows(vm.state.value) }
         vm.state.collectWhenStarted { state ->
             binding.fcChatLoading.isVisible = state.messages.isEmpty() && state.isLoading
             binding.fcChatLoading.text = label(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
-            binding.fcChatAppBar.fcAppBarLogo.isVisible = state.messages.isNotEmpty()
+            // App ChatScreen.kt:1454 `showLogo = uiState is Thread && !isLoading`: the mark is
+            // hidden while an answer is pending and appears when it lands.
+            binding.fcChatAppBar.fcAppBarLogo.isVisible = state.messages.isNotEmpty() && !state.isLoading
 
             // Compose parity (ChatScreen.kt:1103 `visible = !(isThread && state.isLoading)`):
             // the composer slides off-screen while an answer is generating and back when it
@@ -371,23 +471,37 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 binding.fcChatComposer.setBarVisible(!(isThread && state.isLoading))
             }
 
+            updateTips(state)
+
             refreshRows(state)
             handleTtsPlayback(state)
+            maybeRunScrollIndicator(state)
+            binding.fcChatList.post { if (view != null) updateScrollDownPill() }
 
-            // Restore scroll position after a history prepend.
+            // Restore scroll position after a history prepend — once the requested page has
+            // actually landed (historyNextPage moved on), not on whatever emission comes first.
             restoreAnchorKey?.let { anchor ->
+                if (state.historyNextPage == restoreAnchorPage && state.errorMessage == null) return@let
                 val index = adapter.rows.indexOfFirst { it.key == anchor }
                 if (index >= 0) {
                     (binding.fcChatList.layoutManager as LinearLayoutManager)
                         .scrollToPositionWithOffset(index, restoreAnchorOffset)
                 }
                 restoreAnchorKey = null
+                restoreAnchorPage = null
             }
 
-            // One-time scroll-to-bottom when the first history page arrives.
+            // A conversation opened from history starts at its FIRST question. Product decision:
+            // deliberately differs from fc-compose-agentic ChatScreen.kt:1210-1227, which pins the
+            // last question. Older pages still load on a user scroll-up (the listener needs dy < 0).
             if (state.isInitialHistoryLoaded && !initialHistoryScrollDone) {
                 initialHistoryScrollDone = true
-                scrollToBottom()
+                cancelPendingBottomScroll()
+                (binding.fcChatList.layoutManager as? LinearLayoutManager)
+                    ?.scrollToPositionWithOffset(0, 0)
+                // This page's last row is not a NEW message: keep the append-scroll below from
+                // moving the viewport straight back to the end.
+                lastRenderedLastKey = adapter.rows.lastOrNull()?.key
             }
 
             // Scroll when a new message is appended.
@@ -405,18 +519,56 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                     //
                     // So anchor the row ABOVE the stream (the farmer's question) to the top of the
                     // viewport instead, which is exactly what the reserve exists to make possible.
-                    val streamingIndex = adapter.rows.indexOfLast {
-                        it is ChatRow.Ai && (it.message.isStreaming || it.message.isInterrupted)
+                    //
+                    // The anchor follows the RESERVE, not just the streaming flag: a FINISHED
+                    // short answer now holds the reserve too, so scrolling to the bottom the
+                    // moment a stream settled would park the viewport at the far end of the
+                    // freshly reserved space and reintroduce the blank thread at the settle
+                    // transition instead of during the stream. Core's `ChatReserve.kt` owns the
+                    // rule (`holdsChatReserve` via `adapter.holdsReserve`) and documents why;
+                    // this mirrors `chatScrollAnchorIndex`'s semantics — shift the anchor only
+                    // when the FINAL row is the reserve holder, because if a question or a
+                    // placeholder is rendered below it the ordinary bottom anchor is correct.
+                    val lastRowIndex = adapter.rows.lastIndex
+                    val lastRow = adapter.rows.lastOrNull()
+                    // The loading placeholder and a failed question's error row hold the same
+                    // screenful (core `chatScrollAnchorIndex`; app failReserveModifier), so they
+                    // pin the question above them. A freshly shared location pins itself (app
+                    // ChatThreadContent.kt:229-257).
+                    val holdsReserve = lastRow is ChatRow.Loading || lastRow is ChatRow.InlineError ||
+                        (lastRow is ChatRow.Ai && adapter.holdsReserve(lastRow))
+                    val pinIndex = when {
+                        lastRow is ChatRow.Location -> lastRowIndex
+                        holdsReserve && lastRowIndex > 0 -> lastRowIndex - 1
+                        else -> null
                     }
-                    if (streamingIndex > 0) {
-                        (binding.fcChatList.layoutManager as? LinearLayoutManager)
-                            ?.scrollToPositionWithOffset(streamingIndex - 1, 0)
-                            ?: scrollToBottom()
+                    if (pinIndex != null) {
+                        // A follow-up appends [question, placeholder] and the placeholder turns
+                        // into the streaming row a frame later. The earlier step's POSTED
+                        // bottom scroll would then run after this pin and drag the viewport past
+                        // the question onto the empty reserve — the blank thread. Drop it.
+                        cancelPendingBottomScroll()
+                        pinToTop(pinIndex)
                     } else {
                         scrollToBottom()
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * App ChatScreen.kt:335: the GPS prompt that started a location request, while the request is
+     * in flight (permission dialog / enable-GPS / fetching / interstitial). Its surface shows
+     * "Getting your location…" and locks its chips meanwhile.
+     */
+    private fun locationFetchingMessageId(): String? = pendingLocationSourceId?.takeIf {
+        when (graph.locationPromptManager.state.value) {
+            is LocationPromptState.RequestPermission,
+            is LocationPromptState.RequestEnableGps,
+            is LocationPromptState.FetchingLocation,
+            is LocationPromptState.Interstitial -> true
+            else -> false
         }
     }
 
@@ -469,6 +621,8 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                                 isTtsEnabled = state.isTtsEnabled,
                                 isAudioLoading = state.isLoadingSynthesiseAudio,
                                 isAudioPlaying = state.audioPlaybackUrl != null && state.isAudioPlaying,
+                                hasAudioUrl = state.audioPlaybackUrl != null,
+                                locationFetching = message.id == locationFetchingMessageId(),
                                 isStateLoading = state.isLoading
                             )
                         )
@@ -488,14 +642,133 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         adapter.submit(rows)
     }
 
+    private val bottomScroll = Runnable {
+        if (view != null && adapter.itemCount > 0) {
+            binding.fcChatList.smoothScrollToPosition(adapter.itemCount - 1)
+        }
+    }
+
     private fun scrollToBottom() {
         if (adapter.itemCount > 0) {
-            binding.fcChatList.post {
-                if (adapter.itemCount > 0) {
-                    binding.fcChatList.smoothScrollToPosition(adapter.itemCount - 1)
-                }
-            }
+            binding.fcChatList.removeCallbacks(bottomScroll)
+            binding.fcChatList.post(bottomScroll)
         }
+    }
+
+    private var pendingPin: Runnable? = null
+
+    /** App canScrollDown (ChatScreen.kt:1108): a ROW below the last visible one, not just reserve. */
+    private fun hasRowsBelow(): Boolean {
+        val lm = binding.fcChatList.layoutManager as? LinearLayoutManager ?: return false
+        val last = adapter.itemCount - 1
+        return last >= 0 && lm.findLastVisibleItemPosition() in 0 until last
+    }
+
+    private fun updateScrollDownPill() {
+        if (isComposerUi) binding.fcChatComposer.setScrollDownAvailable(hasRowsBelow())
+    }
+
+    // ---- App ScrollIndicator (components/ScrollIndicator.kt, ChatThreadContent.kt:641-672) ----
+    private var indicatorAiCount = -1
+    private var indicatorAnim: android.animation.Animator? = null
+
+    /** Once per new settled answer: wait 1.5s, then bounce the arrow if there is more below. */
+    private fun maybeRunScrollIndicator(state: ChatState) {
+        if (state.isLoading || !state.errorMessage.isNullOrBlank()) return
+        val count = state.messages.count { it is ChatMessage.AiResponse && !it.isStreaming }
+        if (count == indicatorAiCount) return
+        indicatorAiCount = count
+        val indicator = binding.fcChatScrollIndicator
+        indicatorAnim?.cancel()
+        indicator.animate().cancel()
+        indicator.isVisible = false
+        indicator.postDelayed({ if (view != null) runScrollIndicator() }, 1500L)
+    }
+
+    /**
+     * App rule: show while a row is below the viewport, or the last row is TALLER than the
+     * viewport with >= 48dp of it hidden (a reserve-only tail does not count).
+     */
+    private fun indicatorWanted(): Boolean {
+        val list = binding.fcChatList
+        val lm = list.layoutManager as? LinearLayoutManager ?: return false
+        val last = adapter.itemCount - 1
+        if (last < 0) return false
+        if (lm.findLastVisibleItemPosition() < last) return true
+        val v = lm.findViewByPosition(last) ?: return false
+        if (v.height <= list.height) return false
+        val hiddenBelow = v.bottom - (list.height - list.paddingBottom)
+        return hiddenBelow >= (48 * resources.displayMetrics.density)
+    }
+
+    private fun runScrollIndicator() {
+        if (!indicatorWanted()) return
+        val indicator = binding.fcChatScrollIndicator
+        val density = resources.displayMetrics.density
+        (indicator.layoutParams as android.view.ViewGroup.MarginLayoutParams).bottomMargin =
+            binding.fcChatList.paddingBottom
+        indicator.requestLayout()
+        indicator.isVisible = true
+        indicator.alpha = 0f
+        indicator.translationY = 0f
+        indicator.setOnClickListener {
+            // App: animateScrollToItem(lastIndex, Int.MAX_VALUE) — the very bottom.
+            binding.fcChatList.smoothScrollToPosition(adapter.itemCount - 1)
+            indicatorAnim?.cancel()
+            indicator.isVisible = false
+        }
+        val bounceDp = 14f * density
+        fun bounce(): List<android.animation.Animator> = listOf(
+            android.animation.ObjectAnimator.ofFloat(indicator, View.TRANSLATION_Y, 0f, bounceDp)
+                .setDuration(280L),
+            android.animation.ObjectAnimator.ofFloat(indicator, View.TRANSLATION_Y, bounceDp, 0f)
+                .setDuration(320L).apply { startDelay = 0 },
+            android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(150L)
+        )
+        val steps = mutableListOf<android.animation.Animator>(
+            android.animation.ObjectAnimator.ofFloat(indicator, View.ALPHA, 0f, 1f).setDuration(200L),
+            android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(300L)
+        )
+        repeat(3) { steps += bounce() }
+        steps += android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(400L)
+        steps += android.animation.ObjectAnimator.ofFloat(indicator, View.ALPHA, 1f, 0f).setDuration(300L)
+        val set = android.animation.AnimatorSet().apply {
+            playSequentially(steps)
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    indicator.isVisible = false
+                }
+            })
+        }
+        indicatorAnim = set
+        set.start()
+    }
+
+    /**
+     * App ChatThreadContent.kt:259-285: after 150 ms, animate [index] to the TOP of the viewport
+     * (`animateScrollToItem(index, 0)`). Re-requests replace the pending one.
+     */
+    private fun pinToTop(index: Int) {
+        val list = binding.fcChatList
+        pendingPin?.let(list::removeCallbacks)
+        val pin = Runnable {
+            if (view == null || index >= adapter.itemCount) return@Runnable
+            val scroller = object : androidx.recyclerview.widget.LinearSmoothScroller(list.context) {
+                override fun getVerticalSnapPreference(): Int = SNAP_TO_START
+            }
+            scroller.targetPosition = index
+            list.layoutManager?.startSmoothScroll(scroller)
+        }
+        pendingPin = pin
+        list.postDelayed(pin, 150L)
+    }
+
+    /** Cancel a posted [scrollToBottom] and any smooth scroll it already started. */
+    private fun cancelPendingBottomScroll() {
+        binding.fcChatList.removeCallbacks(bottomScroll)
+        pendingPin?.let(binding.fcChatList::removeCallbacks)
+        binding.fcChatList.stopScroll()
     }
 
     // ------------------------------------------------------------------ adapter callbacks
@@ -861,14 +1134,33 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         super.onStop()
     }
 
+    /** Leaves the SDK. Embedded, this returns to the host instead of finishing its activity. */
+    private fun exitJourney() {
+        journeyHost()?.exitJourney() ?: requireActivity().finish()
+    }
+
     override fun onDestroyView() {
+        indicatorAnim?.cancel()
+        indicatorAnim = null
+        pendingPin?.let(binding.fcChatList::removeCallbacks)
         binding.fcChatList.removeCallbacks(clipProgressTicker)
         clipPlayback.release()
         ttsPlayback.release()
         overlays?.release()
         overlays = null
-        vm.onAction(ChatAction.ClearMessages)
         super.onDestroyView()
+    }
+
+    /**
+     * The thread is cleared only when this chat is really destroyed. Opening Past Advice or the
+     * language screen from the toolbar destroys only the VIEW while the chat waits on the back
+     * stack (`isRemoving` is true then too, so it cannot tell the cases apart). Clearing in
+     * onDestroyView wiped the thread, and on return initializeIfNeeded() re-ran the launch args:
+     * the farmer saw the chat restart from their first question.
+     */
+    override fun onDestroy() {
+        if (activity?.isChangingConfigurations != true) vm.onAction(ChatAction.ClearMessages)
+        super.onDestroy()
     }
 
     /**
@@ -898,15 +1190,14 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         bar.fcAppBarLanguage.contentDescription =
             label(Labels.LANGUAGE, "Language")
 
+        // Opened ON TOP of this chat (singleTop, no popUpTo). drawerOptions popped the stack to
+        // its start first, which destroyed this chat and its ViewModel: coming back rebuilt an
+        // empty chat and the farmer lost the whole thread.
         bar.fcAppBarHistory.setOnClickListener {
-            findNavController().navigate(
-                R.id.fc_dest_chat_history, null, NavRoutes.drawerOptions(findNavController())
-            )
+            findNavController().navigate(R.id.fc_dest_chat_history, null, NavRoutes.singleTop())
         }
         bar.fcAppBarLanguage.setOnClickListener {
-            findNavController().navigate(
-                R.id.fc_dest_settings_language, null, NavRoutes.drawerOptions(findNavController())
-            )
+            findNavController().navigate(R.id.fc_dest_settings_language, null, NavRoutes.singleTop())
         }
     }
 }

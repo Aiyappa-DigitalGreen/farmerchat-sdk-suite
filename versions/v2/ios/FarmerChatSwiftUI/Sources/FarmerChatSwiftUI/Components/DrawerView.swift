@@ -39,15 +39,15 @@ public struct FCDrawerView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
-                        drawerRow(icon: "house.fill", title: fcLabel("drawer_home", "Home"), route: "home")
+                        drawerRow(icon: "house.fill", title: fcLabel(FCLabels.home, "Home"), route: "home")
 
                         // Recent-chats section: authenticated (OTP or HOST_TOKEN)
                         // AND showHistory only — guests see the sign-up card
                         // instead (parity with android-compose DrawerContent).
                         if isAuthenticated && FarmerChat.shared.config.showHistory {
                         // Recent questions (max 8)
-                        Text(fcLabel("drawer_recent", "Recent chats"))
-                            .font(.system(size: 13, weight: .semibold))
+                        Text(fcLabel(FCLabels.recentChats, "Recent chats"))
+                            .fcTextStyle(theme.typography.titleMedium)
                             .foregroundColor(theme.content.foregroundSecondary)
                             .textCase(.uppercase)
                             .padding(.horizontal, 20)
@@ -61,10 +61,10 @@ public struct FCDrawerView: View {
                         } else if let historyErrorMessage, recentQuestions.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(historyErrorMessage)
-                                    .font(.system(size: 13))
+                                    .fcTextStyle(theme.typography.bodySmall)
                                     .foregroundColor(theme.content.foregroundSecondary)
-                                Button(fcLabel("try_again", "Try again"), action: onRetryHistory)
-                                    .font(.system(size: 14, weight: .semibold))
+                                Button(fcLabel(FCLabels.tryAgain, "Try again"), action: onRetryHistory)
+                                    .fcTextStyle(theme.typography.bodyMedium)
                                     .foregroundColor(theme.brand.surfacePrimary)
                             }
                             .padding(.horizontal, 20)
@@ -78,7 +78,7 @@ public struct FCDrawerView: View {
                                             .foregroundColor(theme.content.foregroundSecondary)
                                             .frame(width: 22)
                                         Text(question.question)
-                                            .font(.system(size: 15))
+                                            .fcTextStyle(theme.typography.bodyMedium)
                                             .foregroundColor(theme.content.foregroundPrimary)
                                             .lineLimit(1)
                                         Spacer()
@@ -91,8 +91,8 @@ public struct FCDrawerView: View {
                             }
                             if !recentQuestions.isEmpty {
                                 Button(action: onSeeAll) {
-                                    Text(fcLabel("drawer_see_all", "See all"))
-                                        .font(.system(size: 15, weight: .semibold))
+                                    Text(fcLabel(FCLabels.seeAll, "See all"))
+                                        .fcTextStyle(theme.typography.labelMedium)
                                         .foregroundColor(theme.brand.surfacePrimary)
                                         .padding(.horizontal, 20)
                                         .padding(.vertical, 10)
@@ -109,14 +109,14 @@ public struct FCDrawerView: View {
                         // gate keeps guests out of ChatHistory via the drawer.
                         // Order matches the app (components/drawer/DrawerContent.kt) and the
                         // Android SDK: Language -> Settings -> Help, then the history row.
-                        drawerRow(icon: "globe", title: currentLanguage.isEmpty ? fcLabel("drawer_language", "Language") : currentLanguage, route: "settings/language")
+                        drawerRow(icon: "globe", title: currentLanguage.isEmpty ? fcLabel(FCLabels.language, "Language") : currentLanguage, route: "settings/language")
                         if FarmerChat.shared.config.showSettings {
-                            drawerRow(icon: "gearshape.fill", title: fcLabel("drawer_settings", "Settings"), route: "settings")
+                            drawerRow(icon: "gearshape.fill", title: fcLabel(FCLabels.settings, "Settings"), route: "settings")
                         }
-                        drawerRow(icon: "questionmark.circle.fill", title: fcLabel("drawer_help", "Help"), route: "help")
+                        drawerRow(icon: "questionmark.circle.fill", title: fcLabel(FCLabels.help, "Help"), route: "help")
                         // History row: authenticated (OTP or HOST_TOKEN) AND showHistory only.
                         if isAuthenticated && FarmerChat.shared.config.showHistory {
-                            drawerRow(icon: "clock.arrow.circlepath", title: fcLabel("drawer_history", "Recent Chats"), route: "chatHistory")
+                            drawerRow(icon: "clock.arrow.circlepath", title: fcLabel(FCLabels.recentChats, "Recent chats"), route: "chatHistory")
                         }
                     }
                     .padding(.bottom, 20)
@@ -128,8 +128,8 @@ public struct FCDrawerView: View {
                         Button(action: onSignUp) {
                             HStack(spacing: 10) {
                                 Image(systemName: "person.crop.circle.badge.plus")
-                                Text(fcLabel("drawer_sign_up", "Sign up"))
-                                    .font(.system(size: 16, weight: .semibold))
+                                Text(fcLabel(FCLabels.signUp, "Sign up"))
+                                    .fcTextStyle(theme.typography.labelLarge)
                                 Spacer()
                             }
                             .foregroundColor(theme.brand.surfacePrimary)
@@ -156,7 +156,7 @@ public struct FCDrawerView: View {
                     .foregroundColor(isActive ? theme.brand.surfacePrimary : theme.content.foregroundSecondary)
                     .frame(width: 24)
                 Text(title)
-                    .font(.system(size: 16, weight: isActive ? .semibold : .regular))
+                    .fcTextStyle(theme.typography.labelMedium).fontWeight(isActive ? .semibold : .regular)
                     .foregroundColor(theme.content.foregroundPrimary)
                 Spacer()
             }

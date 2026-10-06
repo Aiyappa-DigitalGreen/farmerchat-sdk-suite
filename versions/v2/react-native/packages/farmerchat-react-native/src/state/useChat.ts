@@ -10,6 +10,7 @@ import { apiSuccess, UiStates, type ApiResult, type UiState } from '../core/apiR
 import { AnalyticsEvents } from '../core/analytics';
 import {
   sanitizeAgenticStreamText,
+  sanitizeAgenticFinalText,
   StreamErrorKinds,
   type AgenticDoneEvent,
   type StreamErrorKind,
@@ -484,7 +485,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       const isExclusiveAlignment = alignmentKind !== null && !isAdditiveAlignment(alignmentKind);
       // First NON-NULL of response / translated_response / message (not first non-blank — an
       // empty `response` ends the chain, exactly like Kotlin's `?:` + `takeIf { isNotBlank() }`).
-      const primary = data.response ?? data.translated_response ?? data.message ?? null;
+      const rawPrimary = data.response ?? data.translated_response ?? data.message ?? null;
+      const primary =
+        rawPrimary !== null && ctx.isAgentic === true ? sanitizeAgenticFinalText(rawPrimary) : rawPrimary;
       // An EXCLUSIVE alignment surface arrives with an empty `response` ON PURPOSE: its prompt
       // IS the message. Fall back to alignments.message so it is not mistaken for an empty
       // answer and turned into an error in the farmer's face.
@@ -721,7 +724,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         finalized = true;
         const fallbackText = sanitizeAgenticStreamText(accumulated);
         const done = pendingDone;
-        const doneAnswer = done?.answer ?? null;
+        const doneAnswer = done?.answer != null ? sanitizeAgenticFinalText(done.answer) : null;
         if (
           done !== null &&
           ((doneAnswer !== null && doneAnswer.trim().length > 0) || fallbackText.length > 0)

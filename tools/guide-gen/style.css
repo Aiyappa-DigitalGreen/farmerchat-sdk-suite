@@ -1,0 +1,159 @@
+:root{
+  --ground:#FBFBF8; --surface:#FFFFFF; --surface-2:#F3F4F0;
+  --ink:#101E17; --ink-2:#2B3A32; --muted:#5A6B61; --faint:#8A9890;
+  --line:#E2E5DE; --brand:#08361B; --accent:#00A843; --accent-bright:#00C950;
+  --code-bg:#0B1A12; --code-ink:#DCE8E0;
+  --note-bg:#EEF6F0; --note-line:#BFDCC9;
+  --warn-bg:#FDF3E7; --warn-line:#E8C79A; --warn-ink:#6B4415;
+  --radius:10px;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Public Sans',system-ui,-apple-system,Segoe UI,sans-serif;
+  --serif:'Bitter',Georgia,serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C130F; --surface:#121B16; --surface-2:#18231C;
+  --ink:#E8EFE9; --ink-2:#C6D2C9; --muted:#93A399; --faint:#6E7F75;
+  --line:#223028; --brand:#7FD8A0; --accent:#35D673; --accent-bright:#4BE383;
+  --code-bg:#07110C; --code-ink:#D6E6DB;
+  --note-bg:#10231A; --note-line:#234732;
+  --warn-bg:#2A1F10; --warn-line:#5B4322; --warn-ink:#E8C79A;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C130F; --surface:#121B16; --surface-2:#18231C;
+  --ink:#E8EFE9; --ink-2:#C6D2C9; --muted:#93A399; --faint:#6E7F75;
+  --line:#223028; --brand:#7FD8A0; --accent:#35D673; --accent-bright:#4BE383;
+  --code-bg:#07110C; --code-ink:#D6E6DB;
+  --note-bg:#10231A; --note-line:#234732;
+  --warn-bg:#2A1F10; --warn-line:#5B4322; --warn-ink:#E8C79A;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;
+  line-height:1.65;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent-bright);outline-offset:2px;border-radius:4px}
+
+.masthead{border-bottom:1px solid var(--line);background:var(--surface)}
+.masthead-in{max-width:1200px;margin:0 auto;padding:26px 28px 24px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 8px}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(28px,4vw,40px);line-height:1.12;
+  margin:0 0 14px;letter-spacing:-.015em;text-wrap:balance}
+.lede{max-width:74ch;color:var(--ink-2);margin:0 0 10px;font-size:17px}
+
+/* jump strip — every platform reachable in one click, and visible at rest */
+.jump{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0}
+.jump a{display:inline-flex;flex-direction:column;gap:1px;padding:7px 13px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13.5px;
+  font-weight:600;line-height:1.25;text-decoration:none}
+.jump a:hover{border-color:var(--accent-bright);text-decoration:none}
+.jump .f{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);font-weight:500}
+
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px;display:grid;
+  grid-template-columns:262px minmax(0,1fr);gap:40px;align-items:start}
+
+/* ---------------- navigation: ALWAYS present, never display:none ----------------
+   An earlier version hid this below 980px. The artifact viewport is narrower than
+   that, so readers got no navigation at all and assumed only the first platform
+   was documented. Below 980px it becomes a sticky, collapsible top bar instead. */
+.sidebar{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow-y:auto;
+  padding:16px 14px 20px;margin-top:22px;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px}
+.sidebar > summary{display:none}
+.nav-title{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 10px;font-weight:500}
+.sidebar ol{list-style:none;margin:0;padding:0}
+.nav-plat + .nav-plat{margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
+.nav-plat-a{display:block;font-weight:700;font-size:14px;color:var(--ink);padding:4px 8px;
+  border-radius:7px;line-height:1.25}
+.nav-plat-a:hover{background:var(--surface-2);text-decoration:none}
+.nav-flavour{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--accent);font-weight:500}
+.nav-secs{margin:4px 0 2px;padding:0;display:flex;flex-direction:column}
+.nav-secs a{display:block;padding:3px 10px;font-size:12.8px;color:var(--muted);
+  border-left:2px solid var(--line);line-height:1.45}
+.nav-secs a:hover{color:var(--ink);background:var(--surface-2);text-decoration:none}
+.nav-secs a.on{color:var(--ink);border-left-color:var(--accent-bright);font-weight:600;
+  background:var(--surface-2)}
+
+@media (max-width:980px){
+  .wrap{grid-template-columns:1fr;gap:0;padding:0 18px}
+  /* Collapsible top nav — <details> so it works with zero JavaScript. */
+  .sidebar{position:sticky;top:0;z-index:30;margin:0 -18px;border-radius:0;
+    border-left:0;border-right:0;border-top:0;padding:0;max-height:none;overflow:visible}
+  .sidebar > summary{display:flex;align-items:center;gap:8px;cursor:pointer;
+    padding:11px 18px;font-weight:700;font-size:14px;color:var(--ink);list-style:none}
+  .sidebar > summary::-webkit-details-marker{display:none}
+  .sidebar > summary::before{content:"";width:9px;height:9px;flex:none;
+    border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);
+    transform:rotate(45deg);margin-top:-4px;transition:transform .15s}
+  .sidebar[open] > summary::before{transform:rotate(-135deg);margin-top:2px}
+  .sidebar > summary .hint{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint);font-weight:500;margin-left:auto}
+  .sidebar .nav-body{padding:0 18px 16px;max-height:62vh;overflow-y:auto}
+  .nav-title{display:none}
+}
+@media (min-width:981px){
+  .sidebar .nav-body{display:block !important}
+}
+
+main{padding:0 0 96px;min-width:0}
+.platform{padding-top:38px;scroll-margin-top:12px}
+.platform + .platform{border-top:1px solid var(--line);margin-top:46px}
+.plat-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 6px;font-weight:500}
+.plat-head h2{font-family:var(--serif);font-weight:700;font-size:30px;line-height:1.15;margin:0 0 6px;
+  letter-spacing:-.015em}
+.plat-flavour{color:var(--muted);font-weight:500}
+.plat-badge{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin:0 0 16px}
+.plat-intro{max-width:72ch;color:var(--ink-2);margin:0 0 12px}
+
+.sec{scroll-margin-top:16px;margin-top:34px}
+.sec h3{font-family:var(--serif);font-weight:600;font-size:22px;margin:0 0 12px;letter-spacing:-.01em}
+h4.sub{font-family:var(--sans);font-weight:600;font-size:16px;margin:26px 0 8px}
+p{margin:0 0 14px;max-width:72ch;color:var(--ink-2)}
+code:not(pre code){font-family:var(--mono);font-size:.86em;background:var(--surface-2);
+  border:1px solid var(--line);padding:1px 5px;border-radius:5px;color:var(--ink)}
+
+.cb{margin:0 0 20px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  background:var(--code-bg)}
+.cb-bar{display:flex;align-items:stretch;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.cb-tabs{display:flex;flex:1;min-width:0;overflow-x:auto}
+.cb-tabs.single{align-items:center;padding:0 13px;font-family:var(--mono);font-size:11.5px;
+  color:var(--muted);letter-spacing:.03em}
+.cb-tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;color:var(--muted);
+  padding:8px 13px;cursor:pointer;white-space:nowrap;margin-bottom:-1px}
+.cb-tab:hover{color:var(--ink)}
+.cb-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent-bright)}
+.cb-copy{appearance:none;background:none;border:0;border-left:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--muted);padding:0 12px;cursor:pointer;
+  letter-spacing:.05em;text-transform:uppercase}
+.cb-copy:hover{color:var(--ink);background:var(--surface)}
+.cb pre{margin:0;padding:15px 17px;overflow-x:auto;background:var(--code-bg)}
+.cb code{font-family:var(--mono);font-size:12.9px;line-height:1.72;color:var(--code-ink);
+  white-space:pre;display:block}
+.fname{font-family:var(--mono);font-size:11px;color:var(--faint);padding:8px 17px 0;background:var(--code-bg)}
+.t-k{color:#6FD39A}.t-s{color:#D9C27E}.t-c{color:#5E7A69;font-style:italic}
+.t-n{color:#8FD4E8}.t-a{color:#B8A6E0}
+
+.note{border:1px solid var(--note-line);background:var(--note-bg);border-radius:var(--radius);
+  padding:13px 16px;margin:0 0 20px;max-width:72ch}
+.note.warn{border-color:var(--warn-line);background:var(--warn-bg)}
+.note p{margin:0;font-size:14.5px;color:var(--ink-2)}
+.note p + p{margin-top:8px}
+.note .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:5px;font-weight:500}
+.note.warn .tag{color:var(--warn-ink)}
+
+.tw{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);border-radius:var(--radius)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--surface)}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:500;padding:9px 14px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);white-space:nowrap}
+td{padding:9px 14px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+tr:last-child td{border-bottom:0}
+
+footer{border-top:1px solid var(--line);margin-top:40px;padding:22px 0 60px;font-size:13px;
+  color:var(--faint);max-width:72ch}

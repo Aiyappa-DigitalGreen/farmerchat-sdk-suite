@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.theme
 
+import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -23,6 +24,12 @@ internal object FcRecolor {
         val theme = FcViewTheme.hostTheme() ?: return null
         // Appearance is applied per-activity; resolve for light and let night derive.
         return FcViewTheme.resolve(theme, dark = false)
+    }
+
+    /** [active] for the appearance [context] is actually rendering in (night picks `*Night`). */
+    fun active(context: Context): FcResolvedColors? {
+        val theme = FcViewTheme.hostTheme() ?: return null
+        return FcViewTheme.resolve(theme, FcViewTheme.isNight(context))
     }
 
     /** Recolor a single view's background / tints / text colors if a host theme is active. */
@@ -59,6 +66,12 @@ internal object FcRecolor {
                 }
             }
             is GradientDrawable -> {
+                // Gradient shapes (glows) carry their brand colour in the stops, not the fill.
+                d.colors?.takeIf { stops -> stops.any(colors::isBrand) }?.let { stops ->
+                    val out = d.mutate() as GradientDrawable
+                    out.colors = IntArray(stops.size) { colors.remapColor(stops[it]) }
+                    return out
+                }
                 val current = d.color?.defaultColor ?: return d
                 if (colors.isBrand(current)) {
                     val out = d.mutate() as GradientDrawable

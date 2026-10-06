@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -49,6 +50,7 @@ import org.digitalgreen.farmerchat.sdk.compose.screens.LocationPromptHost
 import org.digitalgreen.farmerchat.sdk.compose.screens.SettingsNameScreen
 import org.digitalgreen.farmerchat.sdk.compose.screens.SettingsScreen
 import org.digitalgreen.farmerchat.sdk.compose.screens.SplashScreen
+import org.digitalgreen.farmerchat.sdk.compose.util.FcInsetTrim
 import org.digitalgreen.farmerchat.sdk.compose.util.isNetworkAvailable
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
@@ -82,7 +84,13 @@ fun FarmerChatRoot(
     modifier: Modifier = Modifier,
     onAppearanceModeChanged: (String) -> Unit = {},
     onLanguageChanged: (String) -> Unit = {},
-    newIntentTick: Int = 0
+    newIntentTick: Int = 0,
+    /**
+     * True when the activity is being RECREATED (non-null savedInstanceState) rather than cold
+     * started — which is what happens after Android kills the app for a permission change made
+     * in system Settings. Routes back to the farmer's last screen instead of re-deciding.
+     */
+    isRecreated: Boolean = false
 ) {
     val graph = FarmerChat.requireGraph()
     val context = LocalContext.current
@@ -127,6 +135,8 @@ fun FarmerChatRoot(
     // Deliberately not a new public API: `FarmerChatScreens` lives in core (off-limits here), so
     // the key is a compose-module literal until core can host the constant. Reported as a gap.
     var termsOfUseRequested by remember { mutableStateOf(false) }
+    // True when the host opened the journey directly on a screen (openScreen) — see leaveSecondaryScreen.
+    var screenOpenedByHost by rememberSaveable { mutableStateOf(false) }
 
     // ------------------------------------------------------------------ navigation helpers
 
@@ -137,6 +147,32 @@ fun FarmerChatRoot(
         }
     }
 
+    /**
+     * The destination to restore after a process death, or null when there is nothing worth
+     * restoring and the normal splash decision should run.
+     *
+     * Chat only resumes when there is a conversation to reopen; a thread that never got an id
+     * cannot be restored, and dropping the farmer into an empty chat would be worse than Home.
+     */
+    fun resumeDestination(): Destination? {
+        return when (graph.prefs.getString(SdkPreferences.Keys.RESUME_SCREEN, "")) {
+            DrawerRoutes.CHAT -> {
+                val conversationId = graph.prefs
+                    .getString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "")
+                    .ifBlank { null }
+                conversationId?.let {
+                    Destination.Chat(source = "resume", conversationId = it)
+                }
+            }
+            DrawerRoutes.CHAT_HISTORY -> Destination.ChatHistory
+            DrawerRoutes.SETTINGS -> Destination.Settings
+            DrawerRoutes.SETTINGS_LANGUAGE -> Destination.SettingsLanguage
+            DrawerRoutes.HELP -> Destination.Help
+            DrawerRoutes.HOME -> Destination.Home
+            else -> null
+        }
+    }
+
     fun navigateFromSplash() {
         // C3: CHAT_ONLY skips onboarding/home and lands directly in a fresh chat.
         // Onboarding is normally where the guest session is established, so in
@@ -144,14 +180,34 @@ fun FarmerChatRoot(
         // otherwise the first authed call 401s ("Authorization credentials were
         // not provided"). Best-effort: navigate even if init fails (chat shows
         // its own retry); the splash stays up until this completes.
+        val chatOnlyPending = graph.routeDecider.peekPendingTarget()
         if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
-            graph.routeDecider.peekPendingTarget() == null
+            (chatOnlyPending == null ||
+                chatOnlyPending is org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget.Screen)
         ) {
             scope.launch {
+                // Each fresh journey = a new conversation (the app's per-Home-entry rule).
+                graph.beginChatOnlyJourney()
                 // Guest session + conversation bootstrap (shared with android-views).
                 graph.ensureChatOnlySession()
                 holdSplash()
-                navigateClearingStack(Destination.Chat(source = "chat_only"))
+                // A screen the HOST asked for (openScreen) is the journey's root: leaving it returns
+                // to the host screen that opened it, not into a chat (views parity).
+                val screen = (graph.routeDecider.consumePendingTarget()
+                    as? org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget.Screen)?.screen
+                val screenDestination: Destination? = when (screen) {
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HISTORY -> Destination.ChatHistory
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP -> Destination.Help
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE -> Destination.SettingsLanguage
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.SETTINGS -> Destination.Settings
+                    else -> null
+                }
+                if (screenDestination != null) {
+                    screenOpenedByHost = true
+                    navigateClearingStack(screenDestination)
+                } else {
+                    navigateClearingStack(Destination.Chat(source = "chat_only"))
+                }
             }
             return
         }
@@ -161,6 +217,19 @@ fun FarmerChatRoot(
         scope.launch {
         graph.ensureSkippedOnboardingBootstrap()
         holdSplash()
+
+        // A recreation after process death resumes where the farmer was, UNLESS a deep link is
+        // pending — an explicit openChat/openScreen target must still win. routeFromSplash()'s
+        // decision tree (docs/01 §2) is deliberately NOT touched here: this returns early
+        // before it, so the frozen tree still governs every genuine cold start.
+        if (isRecreated && graph.routeDecider.peekPendingTarget() == null) {
+            val resumed = resumeDestination()
+            if (resumed != null) {
+                navigateClearingStack(resumed)
+                return@launch
+            }
+        }
+
         when (val route = graph.routeDecider.routeFromSplash()) {
             is SplashRoute.Language -> navigateClearingStack(Destination.Language)
             is SplashRoute.Screen -> {
@@ -172,6 +241,8 @@ fun FarmerChatRoot(
                         navController.navigate(Destination.ChatHistory) { launchSingleTop = true }
                     org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP ->
                         navController.navigate(Destination.Help) { launchSingleTop = true }
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE ->
+                        navController.navigate(Destination.SettingsLanguage) { launchSingleTop = true }
                     SCREEN_TERMS_OF_USE -> termsOfUseRequested = true
                     else -> { /* Home already shown */ }
                 }
@@ -180,7 +251,15 @@ fun FarmerChatRoot(
             is SplashRoute.Home -> navigateClearingStack(Destination.Home)
             is SplashRoute.HomeWithGps -> {
                 navigateClearingStack(Destination.Home)
-                graph.locationPromptManager.triggerFromLocalContext()
+                // App parity (AppNavigator.kt:66-75): a GPS deep link lands on Home and runs the
+                // CAMPAIGN flow (no interstitial, Home's "Getting your location" spinner), tagged
+                // "plotline" because the real source is unknown here.
+                graph.locationPromptManager.triggerFromCampaign(
+                    org.digitalgreen.farmerchat.sdk.core.ui.location.LocationCampaignConfig(
+                        campaignId = route.action.substringBefore("?"),
+                        triggerSource = "plotline"
+                    )
+                )
             }
             is SplashRoute.Chat -> {
                 when (val target = route.target) {
@@ -215,6 +294,39 @@ fun FarmerChatRoot(
         navController.navigate(destination) {
             popUpTo(navController.graph.findStartDestination().id)
             launchSingleTop = true
+        }
+    }
+
+    /**
+     * Where "done" leads after a full-screen settings action.
+     *
+     * CHAT_ONLY hides Home entirely, so clearing the stack to Home would strand the farmer on a
+     * screen the host switched off. Port of the views `NavRoutes.navigateHomeOrChat`.
+     */
+    fun navigateHomeOrChat() {
+        val target = if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
+            Destination.Chat(source = "chat_only")
+        } else {
+            Destination.Home
+        }
+        // Reuse the proven helper: `popUpTo(0) { inclusive = true }`. Hand-rolling
+        // `popUpTo(graph.startDestinationId)` here silently did nothing — the language save
+        // completed (API 200, `languageSubmitSuccess` set) and the farmer stayed on the language
+        // screen with no toast and no way to tell it had worked.
+        navigateClearingStack(target)
+    }
+
+    /**
+     * Leave a secondary screen (history, language): back to the host when the host opened it
+     * as the root ([screenOpenedByHost], nothing beneath), else [navigateHomeOrChat].
+     */
+    fun leaveSecondaryScreen() {
+        when {
+            // Opened over an existing screen (the chat's toolbar): back to THAT screen, state
+            // intact, instead of rebuilding a fresh one (views parity).
+            navController.previousBackStackEntry != null -> navController.popBackStack()
+            screenOpenedByHost -> (context as? Activity)?.finish()
+            else -> navigateHomeOrChat()
         }
     }
 
@@ -334,6 +446,17 @@ fun FarmerChatRoot(
                 destination.hasRoute<Destination.ChatHistory>() -> DrawerRoutes.CHAT_HISTORY
                 else -> ""
             }
+
+            // Remember where the farmer is so a process death can put them back.
+            //
+            // Toggling a runtime permission in system Settings — which the SDK asks a farmer to
+            // do for the microphone — makes Android kill the app. The activity is recreated with
+            // the nav graph back at Splash, and `routeFromSplash()` re-decides from prefs, which
+            // knows nothing about the thread they were reading. Only post-onboarding screens are
+            // recorded; splash/language/name must always re-run their own decision.
+            if (currentRouteId.isNotBlank()) {
+                graph.prefs.putString(SdkPreferences.Keys.RESUME_SCREEN, currentRouteId)
+            }
         }
         navController.addOnDestinationChangedListener(listener)
         onDispose { navController.removeOnDestinationChangedListener(listener) }
@@ -378,7 +501,11 @@ fun FarmerChatRoot(
 
     // ------------------------------------------------------------------ nav graph
 
-    Box(modifier = modifier.fillMaxSize()) {
+    // Embedded (FarmerChatInline / a host placing FarmerChatRoot in its own layout): pad for the
+    // system bars only where they actually overlap this root — see util/FcInsets.kt. Full-window
+    // (FarmerChatActivity) the measured gap is 0 and this is a no-op.
+    FcInsetTrim(modifier = modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Destination.Splash,
@@ -423,7 +550,12 @@ fun FarmerChatRoot(
                         openDrawer = openDrawer,
                         onNavigateToChat = { chat -> navController.navigate(chat) },
                         openTermsOfUseRequested = termsOfUseRequested,
-                        onTermsOfUseRequestConsumed = { termsOfUseRequested = false }
+                        onTermsOfUseRequestConsumed = { termsOfUseRequested = false },
+                        onNavigateToError = { isNetworkError, fromScreen ->
+                            navController.navigate(
+                                Destination.Error(isNetworkError = isNetworkError, fromScreen = fromScreen)
+                            ) { launchSingleTop = true }
+                        }
                     )
                 }
             }
@@ -445,6 +577,20 @@ fun FarmerChatRoot(
                                     launchSingleTop = true
                                 }
                             }
+                        },
+                        // Chat app bar actions. Only rendered when the drawer is OFF (CHAT_ONLY),
+                        // where they are the only route to either screen — parity with the views
+                        // flavour's `setUpAppBarActions`. Opened ON TOP of the chat: popping to the
+                        // start first destroyed this chat's back-stack entry (and its ViewModel), so
+                        // returning rebuilt an empty chat and the thread was lost.
+                        onNavigateToHistory = {
+                            navController.navigate(Destination.ChatHistory) { launchSingleTop = true }
+                        },
+                        onNavigateToLanguage = {
+                            navController.navigate(Destination.SettingsLanguage) { launchSingleTop = true }
+                        },
+                        onBackToHistory = {
+                            if (!navController.popBackStack()) (context as? Activity)?.finish()
                         }
                     )
                 }
@@ -479,16 +625,18 @@ fun FarmerChatRoot(
                 WithDrawer { openDrawer ->
                     LanguageChooserScreen(
                         openDrawer = openDrawer,
+                        onBack = {
+                            if (navController.previousBackStackEntry == null ||
+                                !navController.popBackStack()
+                            ) leaveSecondaryScreen()
+                        },
                         onLanguageSaved = {
-                            // delay(500) already applied in the screen before this call
-                            navigateClearingStack(Destination.Home)
+                            // delay(500) already applied in the screen before this call.
+                            // CHAT_ONLY has no Home to clear back to — parity with the views
+                            // `NavRoutes.leaveSecondaryScreen`: the host, or the chat.
+                            leaveSecondaryScreen()
                         },
-                        onFetchLabelsFailure = {
-                            navController.navigate(Destination.Home) {
-                                popUpTo<Destination.Home>()
-                                launchSingleTop = true
-                            }
-                        },
+                        onFetchLabelsFailure = { leaveSecondaryScreen() },
                         onLabelsChanged = {
                             onLanguageChanged(
                                 graph.prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "en")
@@ -517,6 +665,21 @@ fun FarmerChatRoot(
                     ChatHistoryScreen(
                         vm = chatHistoryVm,
                         openDrawer = openDrawer,
+                        // Drawer-off (CHAT_ONLY): pop back to whatever opened this — the chat
+                        // app bar's Past Advice icon. Falls back to the graph start so the
+                        // farmer can never be stranded with a dead control.
+                        onBack = {
+                            if (screenOpenedByHost && navController.previousBackStackEntry == null) {
+                                leaveSecondaryScreen()
+                            } else if (!navController.popBackStack()) {
+                                navController.navigate(Destination.Chat()) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
                         onOpenChatFromHistory = { conversationId ->
                             navController.navigate(
                                 Destination.Chat(source = "history", conversationId = conversationId)
@@ -648,7 +811,15 @@ fun FarmerChatRoot(
             dialog<Destination.LegalContent>(
                 dialogProperties = androidx.compose.ui.window.DialogProperties(
                     usePlatformDefaultWidth = false,
-                    dismissOnBackPress = true
+                    dismissOnBackPress = true,
+                    // The dialog gets its OWN window, which does not inherit the activity's
+                    // edge-to-edge. With decor fitting system windows (the default) the window
+                    // is inset below the status bar and above the nav bar, so `DefaultAppBar`'s
+                    // own `WindowInsets.statusBars` read returned ZERO and the legal screen
+                    // rendered with a dark band above the app bar and a grey strip below the
+                    // content. Going edge-to-edge here lets the app bar extend behind the
+                    // status bar exactly as it does on every other screen.
+                    decorFitsSystemWindows = false
                 )
             ) { backStackEntry ->
                 val args = backStackEntry.toRoute<Destination.LegalContent>()
@@ -669,5 +840,6 @@ fun FarmerChatRoot(
             visible = globalToast.isVisible,
             onDismiss = { globalToast.dismiss() }
         )
+    }
     }
 }

@@ -27,6 +27,7 @@ import { useLabel, useSdk, useTheme } from '../context';
 import { useHome } from '../../state/useHome';
 import { useEnterName } from '../../state/useEnterName';
 import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
+import { isLocationObtained } from '../../core/locationOutcome';
 import type { WeatherButtonState } from '../components/Buttons';
 import {
   ContentCard,
@@ -182,11 +183,19 @@ export function HomeScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // widget location refresh → reload home
+  // Location updated while on Home → reload feed AND weather. App parity (HomeScreen.kt:276-298):
+  // keyed on the success signals only — the campaign `LocationUpdatedFromWidget`, or a
+  // LocalContext (pill / chat chip) `Continue` with an obtained location — never on a
+  // dismissed / denied flow.
   useEffect(() => {
     return props.locationPrompt.addEventListener((event) => {
-      if (event.kind === 'LocationUpdatedFromWidget') {
-        showToast(label(Labels.LOCATION_UPDATED, 'Location updated'), 'success');
+      const isWidgetUpdate = event.kind === 'LocationUpdatedFromWidget';
+      const isLocalContextSuccess =
+        event.kind === 'Continue' && event.source === 'localContext' && isLocationObtained(event);
+      if (isWidgetUpdate || isLocalContextSuccess) {
+        if (isWidgetUpdate) {
+          showToast(label(Labels.LOCATION_UPDATED, 'Location updated'), 'success');
+        }
         onAction({
           type: 'LoadHome',
           userDeviceTime: new Date().toISOString(),
@@ -298,8 +307,23 @@ export function HomeScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [label]);
 
+  // Read through a ref: onWeatherClick is memoised, so a plain read would freeze at mount.
+  const isScreenLoadingRef = useRef(true);
+  isScreenLoadingRef.current =
+    state.homeFeedState.kind === 'loading' || state.homeFeedState.kind === 'idle';
+
   const onWeatherClick = useCallback(() => {
-    sdk.analytics.track(AnalyticsEvents.WEATHER_FORECAST_VIEWED, {});
+    // App parity (HomeScreen.kt:547-603): offline → No Internet (home_weather); ignore while the
+    // feed is loading or while a location flow is running.
+    if (!props.locationPrompt.isOnline()) {
+      props.onNavigateToError(true, 'home_weather', () => undefined);
+      return;
+    }
+    if (isScreenLoadingRef.current) return;
+    sdk.analytics.track(AnalyticsEvents.WEATHER_FORECAST_VIEWED, {
+      screen_name: ScreenNames.HOME,
+    });
+    if (!props.locationPrompt.isIdle()) return;
     if (props.locationPrompt.hasKnownLocation()) {
       goToWeatherChat();
     } else {
@@ -693,7 +717,13 @@ export function HomeScreen(props: {
 
   const weather = state.weatherState.kind === 'success' ? state.weatherState.data : null;
   const weatherLoading = state.weatherState.kind === 'loading';
-  const isWidgetGpsLoading = props.locationPrompt.state.kind === 'FetchingLocation';
+  // App parity (HomeScreen.kt:236-254): the feed's "Getting your location" spinner is for the
+  // CAMPAIGN source only, across permission → GPS → fetch.
+  const isWidgetGpsLoading =
+    props.locationPrompt.source === 'widget' &&
+    (props.locationPrompt.state.kind === 'RequestPermission' ||
+      props.locationPrompt.state.kind === 'RequestEnableGps' ||
+      props.locationPrompt.state.kind === 'FetchingLocation');
   // App parity: current_temp is a String, rendered verbatim (was Math.round of a number).
   const weatherText = weather?.current_temp ? `${weather.current_temp}°` : '';
 
@@ -968,15 +998,13 @@ function AgenticGradientBand(props: { scrollY: Animated.Value }): React.ReactEle
  *
  * SDK deviations from the Compose reference (all because the RN core lacks the Android-only
  * hooks the Compose pill leans on — recorded in docs/04):
- *  - **No `LocalContext` trigger source.** `useLocationPrompt` exposes `'weather' | 'widget'`
- *    only, so the pill drives the WIDGET flow — which is the silent one (no interstitial), the
- *    behaviour this pill wants. It therefore also reacts to a widget-driven refresh raised
- *    elsewhere; the weather flow stays visually separate because its state carries
- *    `source === 'weather'`.
- *  - **No Blocked state.** There is no location permission deny-count key in the RN store
- *    (`sessionStore.ts` has camera/mic counts only), and inventing one is out of bounds
- *    (root CLAUDE.md §2). A blocked permission surfaces through the shared prompt host's
- *    Recovery / GPS-error path instead, so the pill stays on Invite.
+ *  - **LocalContext source** (app parity): the pill drives `triggerFromLocalContext()`, which goes
+ *    straight to the system dialog (no interstitial) and only reacts to its own flow
+ *    (`source === 'localContext'`).
+ *  - **No Blocked state.** The deny count now exists (`PERMISSION_DENY_COUNT`), but the app's
+ *    Blocked pill also needs a live, resume-refreshed permission check that this pill does not
+ *    keep; a blocked permission re-runs the flow, which lands on the Recovery sheet (as the app's
+ *    tap does), so the pill stays on Invite.
  *  - **Place name from the stored geography keys.** Android reads `APPROX_LOCATION_NAME`, which
  *    core writes from the #16 `display_address`. The RN store has no such key, so the name comes
  *    from `USER_DISTRICT → USER_STATE → USER_COUNTRY_NAME`, all of which #16 already fills.
@@ -995,7 +1023,13 @@ function HomeLocationPill(props: {
   useEffect(
     () =>
       locationPrompt.addEventListener((event) => {
-        if (event.kind !== 'LocationUpdatedFromWidget') return;
+        if (
+          event.kind !== 'Continue' ||
+          event.source !== 'localContext' ||
+          !isLocationObtained(event)
+        ) {
+          return;
+        }
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 2_000);
       }),
@@ -1003,7 +1037,7 @@ function HomeLocationPill(props: {
     [],
   );
 
-  const isThisFlow = locationPrompt.source === 'widget';
+  const isThisFlow = locationPrompt.source === 'localContext';
   // Only show the spinner once acquisition has actually started — not while the OS permission
   // dialog is still up, which reads as "started too early".
   const isSearching =
@@ -1032,7 +1066,8 @@ function HomeLocationPill(props: {
       accessibilityRole="button"
       onPress={() => {
         if (pillState === 'Searching') return; // dead tap mid-search, as in Compose
-        locationPrompt.triggerFromWidget();
+        // App: only start when no other location flow is running.
+        if (locationPrompt.isIdle()) locationPrompt.triggerFromLocalContext();
       }}
       style={({ pressed }) => [
         styles.locationPill,
@@ -1085,7 +1120,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     gap: 12,
-    paddingTop: 2,
+    paddingTop: 0,
     paddingBottom: 16,
   },
   locationPill: {

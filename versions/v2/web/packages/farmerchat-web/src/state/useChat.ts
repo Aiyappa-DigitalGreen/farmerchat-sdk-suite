@@ -20,7 +20,7 @@ import { UiState, idle, loading, success, failure } from './uiState';
 import { blobToBase64, nextLocalId } from './helpers';
 import { Events } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
-import { sanitizeAgenticStreamText } from '../core/agentic';
+import { sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
 import {
@@ -414,9 +414,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       // An EXCLUSIVE alignment surface arrives with an empty `response` ON PURPOSE: its prompt IS
       // the message. Fall back to alignments.message so it is not mistaken for an empty answer
       // and turned into an error.
+      const response = ctx.isAgentic ? sanitizeAgenticFinalText(data.response ?? '') : (data.response ?? '');
       const answerText =
-        (data.response ?? '').trim().length > 0
-          ? (data.response as string)
+        response.trim().length > 0
+          ? response
           : isExclusive
             ? (data.alignments?.message ?? '')
             : '';
@@ -613,7 +614,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         if (finalized || controller.signal.aborted) return;
         finalized = true;
         const fallbackText = sanitizeAgenticStreamText(accumulated);
-        const doneAnswer = (pendingDone?.answer ?? '').trim();
+        const doneAnswer = sanitizeAgenticFinalText(pendingDone?.answer ?? '').trim();
         if (pendingDone && (doneAnswer.length > 0 || fallbackText.length > 0)) {
           // A `done` means the model actually finished → a complete answer, not an interruption,
           // even if the transport dropped right after.

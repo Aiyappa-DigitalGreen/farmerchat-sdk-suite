@@ -17,6 +17,7 @@
 import {
   AgenticStreamDecoder,
   parseAgenticEvent,
+  sanitizeAgenticFinalText,
   sanitizeAgenticStreamText,
 } from '../src/core/agentic.ts';
 import type { AgenticEvent } from '../src/core/agentic.ts';
@@ -325,6 +326,20 @@ check(
   alignmentWireTypes.filter(([, kind]) => isAdditiveAlignment(kind)).map(([wire]) => wire),
   ['gender-select', 'commodity-confirm'],
 );
+
+// ---------------------------------------------------------------------------
+// sanitizeAgenticFinalText (settled answer — stage backend leak, 2026-10-06)
+// ---------------------------------------------------------------------------
+
+check('final: clean answer untouched', sanitizeAgenticFinalText('Use neem oil weekly.'), 'Use neem oil weekly.');
+check(
+  'final: closed followups block removed',
+  sanitizeAgenticFinalText('Conditions are fine.\n\n```followups\n["Will it rain later today?"]\n```'),
+  'Conditions are fine.',
+);
+check('final: unclosed trailing block removed', sanitizeAgenticFinalText('Answer.\n```followups\n["Q?"]'), 'Answer.');
+check('final: control marker removed', sanitizeAgenticFinalText('Answer.<<commodities:chickpea>>'), 'Answer.');
+check('final: lone << kept', sanitizeAgenticFinalText('Ratio a << b holds.'), 'Ratio a << b holds.');
 
 // ---------------------------------------------------------------------------
 

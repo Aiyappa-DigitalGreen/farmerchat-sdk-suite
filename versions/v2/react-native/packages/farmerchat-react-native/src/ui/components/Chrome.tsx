@@ -224,10 +224,16 @@ function AppBarShell(props: {
    * glow in the gradient band behind the whole top section, so the bar itself goes transparent.
    */
   showBackground?: boolean;
+  /**
+   * Compose parity (`HomeAppBar` @ 2cd71328): Home trims its bar to 52 so the logo below it is
+   * not left with a large gap under the vertically-centered menu/weather buttons. Every other
+   * bar — DefaultAppBar, LogoAppBar — keeps 64, exactly as in the app.
+   */
+  barHeightDp?: number;
 }): React.ReactElement {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const barHeight = 64 + insets.top;
+  const barHeight = (props.barHeightDp ?? 64) + insets.top;
   const showBackground = props.showBackground !== false;
   return (
     <View
@@ -281,6 +287,10 @@ export function DefaultAppBar(props: {
           icon={icon}
           background={brand.surfaceSecondary}
           iconColor={brand.foregroundPrimary}
+          // Compose parity (DefaultAppBar `leftRadius` @ 1b961130): every back/close/menu bar
+          // button is the round chip now, matching Home's hamburger. The app kept Radius.MD only
+          // on SettingsName and onboarding Language.
+          style={{ borderRadius: radius.rounded }}
         />
       ) : (
         <View style={{ width: 42 }} />
@@ -317,13 +327,14 @@ export function HomeAppBar(props: {
   const theme = useTheme();
   const brand = theme.brand;
   return (
-    <AppBarShell showBackground={props.showBackground}>
+    <AppBarShell showBackground={props.showBackground} barHeightDp={52}>
       {props.showMenu !== false ? (
         <ActionButton
           onPress={props.onMenuPress}
           icon="menu"
           background={brand.surfaceSecondary}
           iconColor={brand.foregroundPrimary}
+          style={{ borderRadius: radius.rounded }}
           testID="fc-home-menu"
         />
       ) : (
@@ -702,8 +713,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 44,
-    paddingBottom: 56,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   feedError: { alignItems: 'center', gap: 24, padding: 16 },
   feedErrorCircle: {

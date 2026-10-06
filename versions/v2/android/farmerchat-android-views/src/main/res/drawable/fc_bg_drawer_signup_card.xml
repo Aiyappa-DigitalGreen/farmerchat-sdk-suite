@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Drawer sign-up card. Compose parity (Drawer.kt:453-458): surfaceTertiary (Green950) clipped
+     to Radius.LG = 16dp, inset 12dp from the panel edges. Measured on the app: the card is
+     #032E15 spanning x 32..755 inside a 787px panel — 32px ÷ 2.625 = 12dp. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_brand_deep" />
+    <corners android:radius="16dp" />
+</shape>

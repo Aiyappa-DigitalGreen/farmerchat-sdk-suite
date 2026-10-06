@@ -30,7 +30,7 @@ export function LanguageChooserScreen(props: {
 
   useEffect(() => {
     if (state.submitSuccess) {
-      toast.show(label('language_saved_toast', 'Language updated.'));
+      toast.show(label('fc_v2_app_label_language_updated', 'Language updated.'));
       actions.consumeLanguageResult();
       const t = window.setTimeout(() => props.onLanguageSaved(), 500);
       return () => window.clearTimeout(t);
@@ -64,12 +64,12 @@ export function LanguageChooserScreen(props: {
 
   return (
     <div className="fcsdk-screen">
-      <DefaultAppBar title={label('language_chooser_title', 'Choose your language')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
+      <DefaultAppBar title={label('fc_v2_app_label_choose_your_language', 'Choose your language')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
       <div className="fcsdk-scroll fcsdk-pad">
         {!groups ? (
-          <LogoSpinner message={label('language_loading', 'Loading languages…')} />
+          <LogoSpinner message={label('fc_v2_app_label_loading_languages', 'Loading languages…')} />
         ) : (
-          <div role="radiogroup" aria-label={label('language_chooser_title', 'Choose your language')}>
+          <div role="radiogroup" aria-label={label('fc_v2_app_label_choose_your_language', 'Choose your language')}>
             {groups.map((group, gi) => (
               <div key={gi}>
                 {group.display_name ? <div className="fcsdk-sectionheader">{group.display_name}</div> : null}
@@ -79,7 +79,7 @@ export function LanguageChooserScreen(props: {
             ))}
             {groups.some((g) => (g.expanded_view ?? []).length > 0) && !state.expandedLanguages ? (
               <button type="button" className="fcsdk-btn-text" onClick={actions.toggleExpanded}>
-                {label('language_all_languages', 'All languages')} {Icon.chevronDown}
+                {label('fc_v2_app_label_all_languages', 'All languages')} {Icon.chevronDown}
               </button>
             ) : null}
           </div>
@@ -87,7 +87,7 @@ export function LanguageChooserScreen(props: {
       </div>
       <div className="fcsdk-bottombar">
         <PrimaryButton
-          label={state.isSubmitting ? label('language_saving_button', 'Setting language') : label('language_save_button', 'Save language')}
+          label={state.isSubmitting ? label('fc_v2_app_label_setting_language', 'Setting language') : label('fc_v2_app_label_save_language', 'Save language')}
           onClick={() => void actions.submitLanguage()}
           disabled={state.selectedLanguageId === null || state.languageState.status !== 'success'}
           state={state.isSubmitting ? 'loading' : 'default'}

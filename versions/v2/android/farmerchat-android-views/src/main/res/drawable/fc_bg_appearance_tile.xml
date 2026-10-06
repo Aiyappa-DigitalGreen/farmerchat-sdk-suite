@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unselected appearance tile: same surface, no ring, same Radius.LG so selecting a tile does
+     not change its corner radius. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_surface_secondary" />
+    <corners android:radius="16dp" />
+</shape>

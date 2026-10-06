@@ -42,6 +42,17 @@ class FarmerChatActivity : AppCompatActivity(), JourneyHost {
         super.onCreate(savedInstanceState)
         binding = FcJourneyHostBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // App parity (MainActivity.kt:126 `enableEdgeToEdge(navigationBarStyle = light)`): status
+        // bar icons follow day/night (dark on the light surfaces in day mode), nav-bar icons are
+        // always dark. The theme only made both bars transparent, so every screen showed WHITE
+        // status icons on the grey/white backgrounds — barely visible, unlike the app/compose.
+        val isNight = (resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !isNight
+            isAppearanceLightNavigationBars = true
+        }
 
         val graph = FarmerChat.requireGraph()
         val navHost = supportFragmentManager.findFragmentById(R.id.fcNavHost) as NavHostFragment
@@ -96,19 +107,34 @@ class FarmerChatActivity : AppCompatActivity(), JourneyHost {
         controller?.closeDrawer()
     }
 
+    override fun exitJourney() {
+        finish()
+    }
+
     override fun applyAppearance(mode: String) {
         applyLocalNightMode(mode)
     }
 
-    /** Installs the [FcThemeInflaterFactory] when a host theme is configured. */
+    /**
+     * Installs the [FcThemeInflaterFactory].
+     *
+     * Installed for EVERY host, not just themed ones: besides recoloring it applies the app's
+     * per-script line heights ([org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTypography]),
+     * which an unthemed host needs just as much. It previously returned early with no host
+     * theme, so Indic text stayed cramped for every default install.
+     */
     private fun installHostThemeFactory() {
-        val theme = runCatching { FarmerChat.requireGraph().config.theme }.getOrNull() ?: return
-        val resolved = FcViewTheme.resolve(theme, FcViewTheme.isNight(this)) ?: return
+        val theme = runCatching { FarmerChat.requireGraph().config.theme }.getOrNull()
+        val resolved = theme?.let { FcViewTheme.resolve(it, FcViewTheme.isNight(this)) }
+        val languageCode = runCatching {
+            FarmerChat.requireGraph().prefs
+                .getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "en")
+        }.getOrNull()?.ifBlank { "en" } ?: "en"
         LayoutInflaterCompat.setFactory2(
             layoutInflater,
-            FcThemeInflaterFactory(resolved) { parent, name, context, attrs ->
+            FcThemeInflaterFactory(resolved, { parent, name, context, attrs ->
                 delegate.createView(parent, name, context, attrs)
-            }
+            }, languageCode)
         )
     }
 }

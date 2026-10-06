@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focus-aware input background. `state_focused` must come FIRST — a selector takes the first
+     matching item, so the default would otherwise always win. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:drawable="@drawable/fc_bg_input_field_focused" />
+    <item android:drawable="@drawable/fc_bg_input_field" />
+</selector>

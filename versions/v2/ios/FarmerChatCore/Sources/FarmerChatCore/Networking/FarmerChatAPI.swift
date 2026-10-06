@@ -297,7 +297,8 @@ public final class FarmerChatAPI: @unchecked Sendable {
         if let country { query.append(URLQueryItem(name: "country", value: country)) }
         return await client.execute(Endpoint(
             method: .get,
-            path: "api/faqs",
+            // Trailing slash matches the app (`api/faqs/`) — see the android note.
+            path: "api/faqs/",
             query: query,
             name: "faqs"
         ), as: HelpSupportResponse.self)

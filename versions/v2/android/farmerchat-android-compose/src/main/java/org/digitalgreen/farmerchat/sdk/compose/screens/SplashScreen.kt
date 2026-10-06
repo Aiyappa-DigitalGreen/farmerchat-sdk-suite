@@ -99,7 +99,9 @@ fun SplashScreen(
             colorFilter = ColorFilter.tint(brand.foregroundPrimary),
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(72.dp)
+                // App parity (SplashScreen.kt:203): the rotating splash mark is 100dp. The SDK
+                // shipped 72dp — the same element in the same place, 28dp smaller.
+                .size(100.dp)
                 .graphicsLayer { rotationZ = rotation.value }
         )
 

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FcText — a Compose-rendered text view. Its own attribute set rather than reusing the
+         android:* ones, because it is not a TextView and those would not resolve. See FcText.kt
+         for why the flavour renders text through Compose at all. -->
+    <declare-styleable name="FcText">
+        <attr name="fcText" format="string" />
+        <attr name="fcTextSizeSp" format="float" />
+        <attr name="fcTextWeight" format="integer" />
+        <attr name="fcTextColor" format="color|reference" />
+        <attr name="fcMaxLines" format="integer" />
+        <attr name="fcEllipsize" format="boolean" />
+        <attr name="fcDrawableStart" format="reference" />
+        <attr name="fcDrawableTint" format="color|reference" />
+        <attr name="fcDrawableSizeDp" format="float" />
+        <attr name="fcDrawablePaddingDp" format="float" />
+        <!-- Explicit line height. Needed where the app's Text has a bare fontSize and inherits
+             LocalTextStyle's line height (bodyLarge 27sp), e.g. Auth's AgreementCard. -->
+        <attr name="fcLineHeightSp" format="float" />
+        <attr name="fcTextItalic" format="boolean" />
+        <!-- Keep the full line-height box on the first/last line (LineHeightStyle.Trim.None).
+             The app's bare-fontSize Texts that inherit LocalTextStyle measure this way: Auth's
+             AgreementCard title->bullet is exactly 27sp + 8dp. -->
+        <attr name="fcLineHeightUntrimmed" format="boolean" />
+        <attr name="fcTextAlign">
+            <enum name="start" value="0" />
+            <enum name="center" value="1" />
+            <enum name="end" value="2" />
+        </attr>
+    </declare-styleable>
+</resources>

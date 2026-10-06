@@ -214,6 +214,11 @@ export interface UserProfile {
   last_name?: string | null;
   gender?: string | null;
   geography_level2?: string | null;
+  // Present in the app's `FarmerProfile` (#9) and in android's `ProfileUser`, but omitted from
+  // this port until now. They are the readable place names the Home location pill needs — the
+  // bare `geography_level2` is an id — so the profile fetch could not backfill without them.
+  geography_level2_name?: string | null;
+  country_name?: string | null;
   geography_level3?: string | null;
   geography_level4?: string | null;
   geography_level5?: string | null;

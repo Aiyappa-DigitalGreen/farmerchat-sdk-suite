@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material `Icons.Filled.GpsOff` — the Blocked state's glyph in compose LocationButton.kt:156. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path android:fillColor="@android:color/white"
+        android:pathData="M20.94,11L23,11v2h-2.06c-0.43,3.86 -3.49,6.92 -7.35,7.35L13.59,23h-2v-2.06c-1.5,-0.17 -2.88,-0.76 -4.01,-1.65l1.42,-1.42C9.9,18.58 10.9,19 12,19c3.87,0 7,-3.13 7,-7c0,-1.1 -0.42,-2.1 -0.87,-2.99l1.42,-1.42C20.18,8.12 20.77,9.5 20.94,11zM12,5c-1.1,0 -2.1,0.42 -2.99,0.87L7.6,4.46C8.72,3.57 10.1,2.98 11.59,2.81L11.59,1h2v1.81c3.86,0.43 6.92,3.49 7.35,7.35l0,0M2.81,2.81L1.39,4.22l2.27,2.27C3.28,7.32 3.05,8.14 2.95,9L1,9v2h1.95c0.43,3.86 3.49,6.92 7.35,7.35L10.3,20h2v-1.65c0.86,-0.1 1.68,-0.33 2.51,-0.71l2.27,2.27l1.41,-1.41L2.81,2.81z" />
+</vector>

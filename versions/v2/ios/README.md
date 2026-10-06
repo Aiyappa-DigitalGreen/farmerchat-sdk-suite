@@ -170,7 +170,8 @@ FarmerChatConfig(
     enableAgenticChat: true,
 
     // C5 host strings + forced locale
-    stringOverrides: ["chat_title": "Ask AgroBot"],   // host wins over server
+    // Keys are the CANONICAL server keys — use `FCLabels`, never a bare string.
+    stringOverrides: [FCLabels.recentChats: "Past advice"],  // host wins over server
     locale: "hi",                                     // force language
 
     // C4 semantic callbacks (alongside onEvent)
@@ -193,6 +194,130 @@ FarmerChat.shared.openScreen(.chatHistory)   // .home/.settings/.help/.language
 FarmerChatInlineView()          // C1: fills its container, not the whole screen
 FarmerChatViewController()      // C1 UIKit: usable as a child view controller
 ```
+
+## Label keys — BREAKING CHANGE (2026-09-16)
+
+`stringOverrides` keys, and any label you resolve yourself, must be the **canonical**
+`fc_v2_app_label_*` keys. Use the generated `FCLabels` constants in `FarmerChatCore`:
+
+```swift
+FCLabels.recentChats   // "fc_v2_app_label_recent_chats"
+FCLabels.shareLocation // "fc_v2_app_label_share_location"
+```
+
+**What changed.** Until now the SDK's own screens passed bare keys (`"feed_footer"`,
+`"settings_title"`) to its internal label helpers. `LabelManager.label` looks a key up as
+`"<key>_<lang>"`, and the server serves `fc_v2_app_label_<key>_<lang>`, so **none of them ever
+resolved** — every iOS screen rendered its hardcoded English no matter which language the farmer
+selected. 225 call sites were migrated to `FCLabels`; see
+`docs/05-open-questions.md` for the full measurement.
+
+**What you must do.** If you pass `stringOverrides`, re-key them. A host currently overriding
+`"chat_title"` is matching a key the SDK no longer asks for, and that override will silently stop
+applying. There is no deprecation shim, because the old keys never worked against the server
+either — only against this one lookup.
+
+**Still outstanding:** 108 call sites (66 distinct keys) have no canonical counterpart at all and
+still pass literals — `api_error_title`, `feed_footer` and similar. Those are listed in docs/05 and
+need either a backend key or a decision to hardcode the app's English; they are unaffected by this
+change and continue to render their fallback.
+
+## Objective-C hosts
+
+`FarmerChatUIKit` ships an Objective-C facade, so a pure `.m` codebase can use the SDK without
+writing any Swift. Import the module and use the `FC`-prefixed types:
+
+```objc
+@import FarmerChatUIKit;
+
+FCFarmerChatConfiguration *cfg =
+    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+cfg.languageCode      = @"en";
+cfg.defaultCountryCode = @"IN";
+cfg.guestApiKey       = @"<your guest key>";
+cfg.mode              = FCModeChatOnly;   // or FCModeFullJourney
+cfg.showDrawer        = NO;
+cfg.enableAnalytics   = YES;              // default NO, matching Android
+
+// Host-supplied auth (optional). The async Swift tokenProvider becomes a completion block.
+cfg.authMode      = FCAuthModeHostToken;
+cfg.tokenProvider = ^(void (^done)(NSString *_Nullable)) {
+    [MyAuth refreshWithCompletion:^(NSString *token) { done(token); }];
+};
+
+// String overrides MUST use canonical keys — FCLabelKeys, never a hand-typed string.
+cfg.stringOverrides = @{ FCLabelKeys.recentChats : @"Past advice" };
+
+[FCFarmerChat initializeWithConfiguration:cfg];
+
+// Present the journey
+[FCFarmerChat presentFrom:self animated:YES completion:nil];
+
+// …or embed the launcher
+UIButton *fab = [FCFarmerChat makeFabButton];
+[self.view addSubview:fab];
+```
+
+Other members: `+makeViewController`, `+openChatWithQuestion:conversationId:`,
+`+isAuthenticated`, `+logoutWithCompletion:`, `+updateTokensWithAccessToken:refreshToken:`, and
+`+observeAuthState:` (the block form of the Combine `onAuthStateChanged` publisher — keep the
+returned `FCAuthObservation` alive, and call `-invalidate` to stop).
+
+### Bridging notes
+
+| Swift | Objective-C | Why |
+|---|---|---|
+| `FarmerChatConfig` (struct) | `FCFarmerChatConfiguration` (`NSObject`) | Swift structs cannot be exposed to Obj-C at all |
+| String-raw-value enums | `FCEnvironment` / `FCMode` / `FCAuthMode` / `FCAppearance`, `Int`-backed | `@objc` enums must be Int-backed |
+| `CGFloat?` (`bubbleCornerRadius`, `messageFontSize`) | `NSNumber *` | Obj-C has no optional scalar. **nil means "SDK default", not 0** |
+| `Color?` | `UIColor *` | SwiftUI `Color` is not Obj-C representable |
+| `tokenProvider: () async -> String?` | block taking a completion block | Obj-C has no `async` |
+| `logout() async` | `+logoutWithCompletion:` | same |
+| `onAuthStateChanged: AnyPublisher` | `+observeAuthState:` → `FCAuthObservation` | Combine is not Obj-C representable |
+
+### Not bridged
+
+- `theme` (the full `FarmerChatTheme` struct). The individual colour knobs above cover most of it;
+  Obj-C hosts needing full theming must add a one-file Swift bridge.
+- `prefs` / `labels` / `analytics` / `api` / `session` — Swift-only internals, deliberately not
+  part of the Obj-C surface.
+- `pendingChatTarget` / `pendingScreenTarget` Combine subjects. Use
+  `+openChatWithQuestion:conversationId:` instead.
+
+### How this is verified
+
+`swift build` and `xcodebuild` pass whether or not a symbol is visible to Objective-C, so they
+prove nothing here. `Sources/FarmerChatObjCSmoke/FCObjCSmoke.m` is a compile-only target built by
+clang **as Objective-C**, exercising every facade member and `_Static_assert`-ing the enum raw
+values (which are ABI for any host already compiled against them). Build it with:
+
+```sh
+cd FarmerChatUIKit
+SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+xcrun swift build --sdk "$SDK" \
+  -Xswiftc -target -Xswiftc arm64-apple-ios15.0-simulator \
+  -Xcc -target -Xcc arm64-apple-ios15.0-simulator -Xcc -isysroot -Xcc "$SDK"
+```
+
+The `-Xcc` flags are required: without them clang compiles the `.m` against the macOS SDK and
+fails on `Foundation`.
+
+## Analytics is off by default — BREAKING CHANGE (2026-09-16)
+
+`enableAnalytics` now gates every event, **default `false`**, matching Android. A host that wires
+`onEvent` and nothing else will stop receiving events until it opts in:
+
+```
+enableAnalytics: true
+```
+
+Why: until now this platform emitted every event to `onEvent` unconditionally while Android dropped
+them at the dispatch point, so identical host code behaved differently per platform. Events are
+still constructed with their real names, properties and ordering — they are dropped only at
+`track()`, so enabling telemetry later cannot change any other behaviour.
+
+`showNameScreen` was added in the same change (default `true`, so no behaviour change). Set it
+`false` to skip the Enter-Name step, as on Android.
 
 ## Analytics listener
 
@@ -217,6 +342,16 @@ events with `attribute`/`value` props so hosts can map them onto identity.
 
 The SDK checks availability gracefully — missing permissions degrade the
 feature (with a toast), they don't crash.
+
+**Location prompt (2026-10-06 app port).** `LocationPromptManager` runs the app's trigger
+decision tree: only the Weather chip shows the full-screen "Share Location" interstitial;
+the chat `gps-prompt` chip and campaign triggers go straight to the system dialog. A second
+denial (persisted as `fc_sdk_PERMISSION_DENY_COUNT`) opens the "We need your location"
+sheet (Turn on in settings). With Location Services off, Weather continues without a
+location and other sources get a non-retryable "Turn on GPS" screen. A failed fix retries
+once, then falls back to the last-known fix, then ends quietly with no error screen. The
+fix is saved only after `update_user_location` succeeds (guests save immediately). Without
+`NSLocationWhenInUseUsageDescription` the request counts as a denial; it never hangs.
 
 ## Storage & session
 

@@ -67,7 +67,7 @@ export function SettingsNameScreen(props: {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
-        title={label('settings_name_title', 'Name')}
+        title={label('fc_v2_app_label_name', 'Name')}
         navIcon="back"
         onNavPress={props.onBack}
       />
@@ -75,14 +75,14 @@ export function SettingsNameScreen(props: {
         <TextInputField
           value={name}
           onChangeText={(text) => setName(normalizeNameInput(text))}
-          placeholder={label('name_hint', 'Your name')}
+          placeholder={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
           autoFocus
           maxLength={NAME_MAX_LENGTH}
           onSubmitEditing={save}
           testID="fc-settings-name-input"
         />
         <PrimaryButton
-          label={label('name_save', 'Save name')}
+          label={label('fc_v2_app_label_save_name', 'Save name')}
           state={state.updateUserNameState.kind === 'loading' ? 'Loading' : 'Default'}
           enabled={name.trim().length >= 1}
           onPress={save}

@@ -137,14 +137,14 @@ export function SsfrCard(props: { onCropClick: (crop: string) => void }) {
     <div className="fcsdk-ssfr">
       <div style={{ fontWeight: 800, fontSize: 16 }}>{label('ssfr_title', 'Get fertilizer advice for your crop')}</div>
       <div style={{ fontSize: 13.5, opacity: 0.92, marginTop: 4 }}>
-        {label('ssfr_subtitle', 'Site-specific fertilizer recommendations')}
+        {label('fc_v2_app_label_ssfr_advisory_description', 'Site-specific fertilizer recommendations')}
       </div>
       <div className="fcsdk-ssfr-row">
         <button type="button" className="fcsdk-ssfr-chip" onClick={() => props.onCropClick('wheat')}>
-          🌾 {label('ssfr_wheat', 'Wheat')}
+          🌾 {label('fc_v2_app_label_ssfr_wheat', 'Wheat')}
         </button>
         <button type="button" className="fcsdk-ssfr-chip" onClick={() => props.onCropClick('maize')}>
-          🌽 {label('ssfr_maize', 'Maize')}
+          🌽 {label('fc_v2_app_label_ssfr_maize', 'Maize')}
         </button>
       </div>
     </div>
@@ -161,7 +161,7 @@ export function HomeFeedErrorUI(props: { message: string; onRetry: () => void })
       </div>
       <div>{props.message}</div>
       <div style={{ width: 200 }}>
-        <PrimaryButton label={label('feed_try_again', 'Try again')} onClick={props.onRetry} />
+        <PrimaryButton label={label('fc_v2_app_label_try_again', 'Try again')} onClick={props.onRetry} />
       </div>
     </div>
   );

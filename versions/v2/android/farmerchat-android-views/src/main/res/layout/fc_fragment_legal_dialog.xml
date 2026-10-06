@@ -7,29 +7,11 @@
     android:background="@color/fc_surface_secondary"
     android:orientation="vertical">
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp">
-
-        <ImageButton
-            android:id="@+id/fcLegalClose"
-            style="@style/FcAppBarIcon"
-            android:layout_gravity="start|center_vertical"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@null"
-            android:src="@drawable/fc_ic_close"
-            app:tint="@color/fc_foreground_primary" />
-
-        <TextView
-            android:id="@+id/fcLegalTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            tools:text="Terms of use" />
-    </FrameLayout>
+    <!-- Same hand-rolled 56dp white bar Auth had, and the same fix: the shared brand-green
+         include (compose uses `DefaultAppBar` here too — LegalContentScreen.kt:62). -->
+    <include
+        android:id="@+id/fcLegalAppBar"
+        layout="@layout/fc_view_appbar" />
 
     <FrameLayout
         android:layout_width="match_parent"

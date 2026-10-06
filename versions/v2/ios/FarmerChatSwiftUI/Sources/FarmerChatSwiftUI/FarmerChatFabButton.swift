@@ -77,7 +77,7 @@ public struct FarmerChatFabButton: View {
                 }
                 if let label {
                     Text(label)
-                        .font(.system(size: 15, weight: .semibold))
+                        .fcTextStyle(theme.typography.labelMedium)
                         .foregroundColor(fg)
                 }
             }

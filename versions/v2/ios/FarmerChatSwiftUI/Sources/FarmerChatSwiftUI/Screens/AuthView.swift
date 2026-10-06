@@ -72,14 +72,23 @@ struct AuthView: View {
 
     private var phoneEntry: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(fcLabel("auth_title", "Sign up with phone number"))
-                .font(.system(size: 24, weight: .bold))
+            // App parity (AuthScreen.kt:801-814). THREE things were wrong here, not just the
+            // type: the label keys were SDK inventions (`auth_title` / `auth_subtitle`) that
+            // endpoint #3 serves for nobody, so every farmer read the English fallback whatever
+            // their language; the fallback copy itself was invented rather than the app's; and
+            // the headings were left-aligned at 24/16 pt where the app centres them at 22/17.
+            Text(fcLabel(FCLabels.enterYourPhoneNumber, "Enter your phone number"))
+                .fcTextStyle(theme.typography.titleLarge)
                 .foregroundColor(theme.content.foregroundPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
                 .padding(.top, 8)
 
-            Text(fcLabel("auth_subtitle", "We'll send you a verification code"))
-                .font(.system(size: 16))
+            Text(fcLabel(FCLabels.sendOtpSignin, "We'll send a one-time code to sign you in"))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
 
             HStack(spacing: 10) {
                 // CountryCodeSelector
@@ -90,7 +99,7 @@ struct AuthView: View {
                         } else {
                             Text(viewModel.state.selectedCountry?.flag ?? "🌐")
                             Text(viewModel.state.countryCode)
-                                .font(.system(size: 17, weight: .medium))
+                                .fcTextStyle(theme.typography.bodyMedium)
                                 .foregroundColor(theme.content.foregroundPrimary)
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .semibold))
@@ -109,7 +118,10 @@ struct AuthView: View {
                 .buttonStyle(.plain)
 
                 FCTextField(
-                    placeholder: fcLabel("phone_placeholder", "Phone number"),
+                    // App parity (AuthScreen): the phone field's placeholder is the literal digit mask,
+                    // not a label. `phone_placeholder` was never a served key. Matches the same
+                    // fix on android compose — see docs/04 "Label-key resolution audit".
+                    placeholder: "00000 00000",
                     text: Binding(
                         get: { viewModel.state.phoneLocal },
                         set: { viewModel.setPhoneLocal($0) }
@@ -122,7 +134,7 @@ struct AuthView: View {
 
             if let phoneError = viewModel.state.phoneError {
                 Text(phoneError)
-                    .font(.system(size: 13))
+                    .fcTextStyle(theme.typography.labelSmall)
                     .foregroundColor(FCPrimitive.red500)
             }
 
@@ -164,11 +176,11 @@ struct AuthView: View {
         Button {
             router.openLegal(
                 url: "https://digitalgreen.org/privacy-policy/",
-                title: fcLabel("privacy_policy", "Privacy policy")
+                title: fcLabel(FCLabels.privacyPolicy, "Privacy policy")
             )
         } label: {
-            Text(fcLabel("auth_legal", "By continuing you agree to our Terms and Privacy policy"))
-                .font(.system(size: 12))
+            Text(fcLabel(FCLabels.termsPrivacyAgreement, "By continuing you agree to our Terms and Privacy policy"))
+                .fcTextStyle(theme.typography.bodySmall)
                 .foregroundColor(theme.content.foregroundSecondary)
                 .multilineTextAlignment(.leading)
         }
@@ -180,14 +192,21 @@ struct AuthView: View {
 
     private var otpEntry: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(fcLabel("otp_title", "Enter the 4-digit code"))
-                .font(.system(size: 24, weight: .bold))
+            // App parity (AuthScreen.kt:1039-1050) — same three problems as the phone step:
+            // invented keys, invented copy, wrong type and alignment. Note the app's OTP
+            // subtitle carries NO phone-number parameter; it is a fixed sentence.
+            Text(fcLabel(FCLabels.enterCodeWeSent, "Enter the code we sent"))
+                .fcTextStyle(theme.typography.titleLarge)
                 .foregroundColor(theme.content.foregroundPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
                 .padding(.top, 8)
 
-            Text(fcLabel("otp_subtitle", "Sent to {phone}", params: ["phone": viewModel.phoneE164]))
-                .font(.system(size: 16))
+            Text(fcLabel(FCLabels.checkYourMessagesCode, "Check your messages for the code"))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
 
             FCOtpInput(
                 otp: Binding(
@@ -201,12 +220,12 @@ struct AuthView: View {
 
             if let otpError = viewModel.state.otpError {
                 Text(otpError)
-                    .font(.system(size: 13))
+                    .fcTextStyle(theme.typography.labelSmall)
                     .foregroundColor(FCPrimitive.red500)
             }
 
             FCPrimaryButton(
-                title: fcLabel("verify", "Verify"),
+                title: fcLabel(FCLabels.verify, "Verify"),
                 state: viewModel.state.verifyOtpState.isLoading ? .loading : .normal,
                 enabled: viewModel.state.otp.count == AuthViewModel.otpLength,
                 action: { viewModel.verifyOtp() }
@@ -215,15 +234,15 @@ struct AuthView: View {
             // Countdown / resend / start-over.
             if viewModel.state.otpSecondsRemaining > 0 {
                 Text(fcLabel("otp_resend_in", "Resend code in {time}", params: ["time": timerText]))
-                    .font(.system(size: 14))
+                    .fcTextStyle(theme.typography.bodySmall)
                     .foregroundColor(theme.content.foregroundSecondary)
                     .frame(maxWidth: .infinity)
             } else {
                 HStack(spacing: 20) {
-                    Button(fcLabel("otp_resend", "Resend code")) { viewModel.resendOtp() }
-                    Button(fcLabel("otp_start_over", "Start over")) { viewModel.startOver() }
+                    Button(fcLabel(FCLabels.resendCode, "Resend code")) { viewModel.resendOtp() }
+                    Button(fcLabel(FCLabels.startOver, "Start over")) { viewModel.startOver() }
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .fcTextStyle(theme.typography.labelLarge)
                 .foregroundColor(theme.brand.surfacePrimary)
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
@@ -254,13 +273,13 @@ struct CountryPickerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("select_country", "Select country"),
+                title: fcLabel(FCLabels.selectCountryCode, "Select country"),
                 leading: .close,
                 onLeadingTap: { dismiss() }
             )
 
             FCTextField(
-                placeholder: fcLabel("search", "Search"),
+                placeholder: fcLabel(FCLabels.search, "Search"),
                 text: $search
             )
             .padding(.horizontal, 16)
@@ -281,7 +300,7 @@ struct CountryPickerSheet: View {
             }
 
             FCPrimaryButton(
-                title: fcLabel("save", "Save"),
+                title: fcLabel(FCLabels.save, "Save"),
                 enabled: (pending ?? selected) != nil,
                 action: {
                     if let choice = pending ?? selected {

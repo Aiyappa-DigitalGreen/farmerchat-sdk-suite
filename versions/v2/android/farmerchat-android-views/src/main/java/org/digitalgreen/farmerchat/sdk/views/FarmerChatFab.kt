@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views
 
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -42,7 +43,7 @@ class FarmerChatFab @JvmOverloads constructor(
         val hasExplicitTint = attrs != null &&
             (0 until attrs.attributeCount).any { attrs.getAttributeName(it) == "backgroundTint" }
         if (!hasExplicitTint) {
-            val bg = config?.fabBackgroundColor ?: context.getColor(R.color.fc_green700)
+            val bg = config?.fabBackgroundColor ?: FcTokens.color(context, R.color.fc_green700)
             backgroundTintList = ColorStateList.valueOf(bg)
         }
         imageTintList = ColorStateList.valueOf(config?.fabContentColor ?: Color.WHITE)

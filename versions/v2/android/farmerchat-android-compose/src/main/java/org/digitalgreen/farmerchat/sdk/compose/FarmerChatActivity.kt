@@ -30,10 +30,18 @@ class FarmerChatActivity : ComponentActivity() {
     private var languageCodeState = mutableStateOf("en")
     private var newIntentTickState = mutableIntStateOf(0)
 
+    /**
+     * Whether this instance came back from a process death rather than a cold start. Android
+     * kills the app when a runtime permission is toggled in system Settings — the flow the SDK
+     * sends a farmer through for the microphone — so this is the common case, not an edge case.
+     */
+    private var isRecreated = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        isRecreated = savedInstanceState != null
 
         if (!FarmerChat.isInitialized) {
             Log.e(
@@ -73,7 +81,8 @@ class FarmerChatActivity : ComponentActivity() {
                 FarmerChatRoot(
                     onAppearanceModeChanged = { mode -> appearanceModeState.value = mode },
                     onLanguageChanged = { code -> languageCodeState.value = code },
-                    newIntentTick = newIntentTick
+                    newIntentTick = newIntentTick,
+                    isRecreated = isRecreated
                 )
             }
         }

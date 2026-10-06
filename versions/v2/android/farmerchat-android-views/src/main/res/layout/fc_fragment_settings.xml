@@ -22,16 +22,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="32dp"
+            android:paddingBottom="32dp">
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcAppearanceTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="Appearance" />
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcTextWeight="600" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -44,15 +46,18 @@
                     style="@style/FcAppearanceButton">
                     <ImageView
                         android:id="@+id/fcModeDayIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:importantForAccessibility="no"
-                        android:src="@drawable/fc_ic_sun"
+                        android:src="@drawable/fc_icon_mode_day"
                         app:tint="@color/fc_foreground_primary" />
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcModeDayLabel"
+                        android:layout_marginTop="10dp"
                         style="@style/FcAppearanceButtonLabel"
-                        tools:text="Day" />
+                        app:fcTextSizeSp="13"
+                        app:fcLineHeightSp="18"
+                        app:fcTextWeight="600" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -61,15 +66,18 @@
                     android:layout_marginStart="8dp">
                     <ImageView
                         android:id="@+id/fcModeNightIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:importantForAccessibility="no"
-                        android:src="@drawable/fc_ic_moon"
+                        android:src="@drawable/fc_icon_mode_night"
                         app:tint="@color/fc_foreground_primary" />
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcModeNightLabel"
+                        android:layout_marginTop="10dp"
                         style="@style/FcAppearanceButtonLabel"
-                        tools:text="Night" />
+                        app:fcTextSizeSp="13"
+                        app:fcLineHeightSp="18"
+                        app:fcTextWeight="600" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -78,90 +86,257 @@
                     android:layout_marginStart="8dp">
                     <ImageView
                         android:id="@+id/fcModeAutoIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:importantForAccessibility="no"
-                        android:src="@drawable/fc_ic_auto"
+                        android:src="@drawable/fc_icon_mode_auto"
                         app:tint="@color/fc_foreground_primary" />
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcModeAutoLabel"
+                        android:layout_marginTop="10dp"
                         style="@style/FcAppearanceButtonLabel"
-                        tools:text="Auto" />
+                        app:fcTextSizeSp="13"
+                        app:fcLineHeightSp="18"
+                        app:fcTextWeight="600" />
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcAppearanceHint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                tools:text="FarmerChat adjusts with your phone settings" />
+                android:layout_marginTop="10dp"
+                app:fcTextColor="@color/fc_foreground_secondary"
+                app:fcTextSizeSp="13" />
 
-            <TextView
-                android:id="@+id/fcAccountTitle"
+            <!--
+              "My Farm" — the location section. App parity (SettingsScreen.kt:194) and compose
+              parity (SettingsScreen.kt:279). The views flavour had no location section at all, so
+              a farmer on this flavour could neither see the location their advice was based on nor
+              change it from Settings.
+            -->
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                android:id="@+id/fcMyFarmTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="28dp"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="Account details" />
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcTextWeight="600" />
 
             <LinearLayout
-                android:id="@+id/fcNameRow"
+                android:id="@+id/fcLocationRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/fc_bg_card_md"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/fcNameRowLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/fc_foreground_secondary"
-                        android:textSize="13sp"
-                        tools:text="Your name" />
-
-                    <TextView
-                        android:id="@+id/fcNameRowValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="16sp"
-                        tools:text="Asha" />
-                </LinearLayout>
+                android:minHeight="58dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="4dp">
+                <!-- ListCard(16 / 6 / 4) around a fixed 48dp ListItem = 58dp, text centred 30dp
+                     down. The 16dp all-round padding centred it 1.5dp high in a 57dp row. -->
 
                 <ImageView
                     android:layout_width="20dp"
                     android:layout_height="20dp"
+                    android:layout_marginEnd="12dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/fc_icon_location"
+                    app:tint="@color/fc_foreground_primary" />
+
+                <!-- Compose routes this row through the shared `ListItem` (SettingsScreen.kt:303),
+                     so it inherits that component's styling: BOTH sides bodyMedium 17sp, label
+                     foregroundPrimary at its natural width, value foregroundSecondary weighted and
+                     end-aligned, then a 24dp chevron. Views had the two inverted (13sp grey label
+                     over a 16sp dark value) and NO chevron, so the value sat further right than
+                     the app's and the affordance was missing. -->
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                    android:id="@+id/fcLocationRowLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:fcTextColor="@color/fc_foreground_primary"
+                    app:fcTextSizeSp="17" />
+
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                    android:id="@+id/fcLocationRowValue"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    app:fcMaxLines="1"
+                    app:fcEllipsize="true"
+                    app:fcTextColor="@color/fc_foreground_secondary"
+                    app:fcTextSizeSp="17"
+                    app:fcLineHeightSp="25"
+                    app:fcTextAlign="end" />
+                <!-- ListItem `textRight` defaults to ONE line with ellipsis; the value wrapped to
+                     two lines here, making the row 84px taller than the app's. -->
+
+                <ProgressBar
+                    android:id="@+id/fcLocationRowSpinner"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="8dp"
+                    android:indeterminateTint="@color/fc_green500"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
                     android:importantForAccessibility="no"
                     android:src="@drawable/fc_ic_chevron_right"
-                    app:tint="@color/fc_foreground_tertiary" />
+                    app:tint="@color/fc_foreground_primary" />
             </LinearLayout>
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                android:id="@+id/fcLocationHelper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                app:fcTextColor="@color/fc_foreground_secondary"
+                app:fcTextSizeSp="15"
+                app:fcLineHeightSp="22" />
+            <!-- bodySmall 15/22, not caption: SettingsScreen.kt location helper. -->
+
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                android:id="@+id/fcAccountTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcTextWeight="600" />
+
+            <!--
+              Read-only phone row. App parity (SettingsScreen.kt:310) and compose parity
+              (SettingsScreen.kt:362): "Account details" opens with the farmer's phone number,
+              above the name. Non-tappable and with NO chevron — it is information, not an action
+              — and it shows an em dash for a guest, who has no verified number.
+              The views flavour had no phone row at all.
+            -->
+            <!-- App parity: BOTH account rows live in ONE card with a hairline between them
+                 (measured on the app: a single white surface y1345..1575 with a divider at
+                 y1460). Views rendered two separate cards with a 10dp gap. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/fc_bg_card_md"
+                android:orientation="vertical"
+                android:divider="@drawable/fc_divider_list"
+                android:showDividers="middle"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="4dp">
+
+                <LinearLayout
+                    android:id="@+id/fcPhoneRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginEnd="12dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_icon_phone"
+                        app:tint="@color/fc_foreground_primary" />
+
+                    <!-- App parity (ListItem.kt:88, mirrored in compose Lists.kt:116): a settings
+                         row is ONE line — label on the left at its natural width, value pushed to the
+                         right edge and weighted so a long value never squeezes the label. This was a
+                         VERTICAL stack (13sp label above a 16sp value), which made every account row
+                         two lines tall and left the value column empty. -->
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                        android:id="@+id/fcPhoneRowLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:fcTextColor="@color/fc_foreground_primary"
+                        app:fcTextSizeSp="17" />
+
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                        android:id="@+id/fcPhoneRowValue"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        app:fcTextColor="@color/fc_foreground_secondary"
+                        app:fcTextSizeSp="17"
+                        app:fcTextAlign="end" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/fcNameRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginEnd="12dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_icon_name"
+                        app:tint="@color/fc_foreground_primary" />
+
+                    <!-- App parity (ListItem.kt:88, mirrored in compose Lists.kt:116): a settings
+                         row is ONE line — label on the left at its natural width, value pushed to the
+                         right edge and weighted so a long value never squeezes the label. This was a
+                         VERTICAL stack (13sp label above a 16sp value), which made every account row
+                         two lines tall and left the value column empty. -->
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                        android:id="@+id/fcNameRowLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:fcTextColor="@color/fc_foreground_primary"
+                        app:fcTextSizeSp="17" />
+
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                        android:id="@+id/fcNameRowValue"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        app:fcTextColor="@color/fc_foreground_secondary"
+                        app:fcTextSizeSp="17"
+                        app:fcTextAlign="end" />
+
+                    <!-- Compose parity (Lists.kt:168): 24dp, tinted foregroundPrimary. It was 20dp
+                         at foreground_tertiary (#D4D4D8), which on white was all but invisible —
+                         measured against the app, whose chevron is #000000. -->
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/fc_ic_chevron_right"
+                        app:tint="@color/fc_foreground_primary" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcLogoutButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="28dp"
                 android:background="@drawable/fc_bg_secondary_button"
                 android:gravity="center"
-                android:padding="14dp"
-                android:textColor="@color/fc_foreground_primary"
-                android:textSize="16sp"
-                tools:text="Logout" />
+                android:paddingTop="13dp"
+                android:paddingBottom="13dp"
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="17"
+                app:fcLineHeightSp="22"
+                app:fcTextWeight="600"
+                app:fcTextAlign="center" />
+            <!-- App SecondaryButton: 48dp = 13 + 22sp line + 13 (FcText has no vertical gravity), labelLarge 17/22 w600. -->
         </LinearLayout>
     </ScrollView>
 

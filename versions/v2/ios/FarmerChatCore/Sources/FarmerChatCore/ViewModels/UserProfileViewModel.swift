@@ -28,7 +28,7 @@ public final class UserProfileViewModel: ObservableObject {
                 profileState = .success(profile)
             case .error(let error):
                 profileState = .error(
-                    message: error.message ?? env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                    message: error.message ?? env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                     code: error.code,
                     isNetworkError: error.isNetworkError
                 )

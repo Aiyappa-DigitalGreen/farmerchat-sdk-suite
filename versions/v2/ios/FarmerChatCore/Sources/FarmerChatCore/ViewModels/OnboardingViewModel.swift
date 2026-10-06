@@ -153,7 +153,7 @@ public final class OnboardingViewModel: ObservableObject {
 
         state.guestInitState = .loading
         let initResult = await env.session.ensureGuestSession(lat: lat, long: lng, accuracy: accuracy)
-        state.guestInitState = UiState.from(initResult, fallbackMessage: labels.label("error_generic", fallback: "Something went wrong. Please try again."))
+        state.guestInitState = UiState.from(initResult, fallbackMessage: labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."))
         switch initResult {
         case .success(let response):
             // Endpoint #2 400s on a blank `country_code`, and a fresh guest on an unresolvable
@@ -245,10 +245,22 @@ public final class OnboardingViewModel: ObservableObject {
             } else if let code = preselectCode, let match = all.first(where: { $0.code == code }) {
                 state.selectedLanguageId = match.id
                 state.languageCode = match.code
+            } else if let first = all.first {
+                // App parity (OnboardingSharedViewModel.kt:597-609): with no stored and no
+                // config-provided language the app falls back to the FIRST language, applies it
+                // and fetches ITS labels. Without this fallback a fresh install showed no radio
+                // selected, a disabled-looking CTA, and the whole screen in English even for a
+                // farmer whose region resolved to another language — confirmed on android by a
+                // side-by-side device comparison (docs/04, 2026-09-08) and fixed there in core.
+                //
+                // Routed through selectLanguage so the auto-selection is identical to a tap
+                // (label fetch + prefs write), not a bare state assignment that would leave the
+                // language unapplied.
+                selectLanguage(first.id)
             }
         case .error(let error):
             state.languageState = .error(
-                message: error.message ?? labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                message: error.message ?? labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                 code: error.code,
                 isNetworkError: error.isNetworkError
             )
@@ -320,7 +332,7 @@ public final class OnboardingViewModel: ObservableObject {
     private func submitLanguage() async {
         guard let languageId = state.selectedLanguageId, !state.isSubmittingLanguage else { return }
         guard let userId = env.session.userId else {
-            state.submitErrorMessage = labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+            state.submitErrorMessage = labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
             return
         }
         state.isSubmittingLanguage = true
@@ -349,7 +361,7 @@ public final class OnboardingViewModel: ObservableObject {
                 state.errorFromScreen = "language"
             } else {
                 state.submitErrorMessage = error.message
-                    ?? labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+                    ?? labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
             }
         }
     }

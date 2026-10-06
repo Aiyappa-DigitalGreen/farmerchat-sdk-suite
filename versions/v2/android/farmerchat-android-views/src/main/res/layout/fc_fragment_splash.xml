@@ -14,8 +14,8 @@
 
     <ImageView
         android:id="@+id/fcSplashLogo"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
         android:layout_gravity="center"
         android:importantForAccessibility="no"
         android:src="@drawable/fc_logo_mark"

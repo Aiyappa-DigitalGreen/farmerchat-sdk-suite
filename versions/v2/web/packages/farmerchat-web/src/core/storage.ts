@@ -48,6 +48,11 @@ export const PrefKeys = {
   // permissions (web keeps deny/attempt counters for parity)
   MIC_PERMISSION_DENY_COUNT: 'MIC_PERMISSION_DENY_COUNT',
   CAMERA_PERMISSION_DENY_COUNT: 'CAMERA_PERMISSION_DENY_COUNT',
+  /**
+   * Location permission deny counter — the app's own key (`deny_count`, docs/01 §3.15; Android SDK
+   * `SdkPreferences.Keys.PERMISSION_DENY_COUNT`). Two denies → the "We need your location" sheet.
+   */
+  PERMISSION_DENY_COUNT: 'deny_count',
   // ui
   APPEARANCE_MODE: 'APPEARANCE_MODE',
   FONT_SIZE: 'FONT_SIZE',

@@ -52,10 +52,23 @@ internal class HomeFeedAdapter(
     private var items: List<Item> = emptyList()
     private val multiSelections = mutableMapOf<String, MutableSet<String>>()
 
-    fun submit(sections: List<SectionDto>, ssfrEnabled: Boolean, dismissedIds: Set<String>) {
+    /**
+     * @param showHeader false in composer (agentic) mode. Compose parity
+     *   (`HomeScreen.kt:926`, `if (!isComposerUi) { item("feedHeader") … }`): in composer mode the
+     *   header above the feed ALREADY shows `FOR_YOUR_FARM_TODAY`, so emitting the in-feed header
+     *   too printed the same served string twice, stacked — observed on emulator-5554 as
+     *   "ರೈತರು ಹೆಚ್ಚು ಏನು ಕೇಳುತ್ತಿದ್ದಾರೆ ಎಂದು ತಿಳಿಯಿರಿ" rendered large and then again small.
+     *   Compose has always guarded this; views did not.
+     */
+    fun submit(
+        sections: List<SectionDto>,
+        ssfrEnabled: Boolean,
+        dismissedIds: Set<String>,
+        showHeader: Boolean = true
+    ) {
         items = buildList {
             if (ssfrEnabled) add(Item.Ssfr)
-            add(Item.Header)
+            if (showHeader) add(Item.Header)
             sections
                 .filter { it.type != "plotline_widget" }
                 .filterNot { dismissedIds.contains(it.stableId()) }
@@ -86,6 +99,32 @@ internal class HomeFeedAdapter(
     private class SelectHolder(val binding: FcItemHomeSelectCardBinding) : RecyclerView.ViewHolder(binding.root)
     private class FooterHolder(val binding: FcItemHomeFooterBinding) : RecyclerView.ViewHolder(binding.root)
 
+    /**
+     * App FeedFooter.kt: once the footer is on screen the text fades in over 900ms and the hand
+     * waves three times (+16 / -12 degrees, pivot at its base, after a 200ms delay), then settles.
+     * A RecyclerView item is bound as it scrolls into view, which is the app's visibility trigger.
+     */
+    private fun animateFooter(fb: FcItemHomeFooterBinding) {
+        val wave = fb.fcFeedFooterWave
+        val text = fb.fcFeedFooterText
+        wave.animate().cancel(); text.animate().cancel()
+        wave.alpha = 0f; text.alpha = 0f; wave.rotation = 0f
+        wave.post { wave.pivotX = wave.width / 2f; wave.pivotY = wave.height.toFloat() }
+        wave.animate().alpha(1f).setDuration(900).start()
+        text.animate().alpha(1f).setDuration(900).start()
+        val ease = androidx.interpolator.view.animation.FastOutSlowInInterpolator()
+        val steps = listOf(16f to 160L, -12f to 180L, 16f to 160L, -12f to 180L, 16f to 160L, -12f to 180L, 0f to 160L)
+        val rotate = android.animation.AnimatorSet().apply {
+            playSequentially(steps.map { (deg, ms) ->
+                android.animation.ObjectAnimator.ofFloat(wave, android.view.View.ROTATION, deg).apply {
+                    duration = ms; interpolator = ease
+                }
+            })
+            startDelay = 200
+        }
+        rotate.start()
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
@@ -112,11 +151,13 @@ internal class HomeFeedAdapter(
                 is SelectHolder -> bindSelect(holder, item.section)
             }
             is Item.Footer -> {
-                (holder as FooterHolder).binding.fcFeedFooterText.text =
+                val fb = (holder as FooterHolder).binding
+                fb.fcFeedFooterText.text =
                     callbacks.labelFor(
                         org.digitalgreen.farmerchat.sdk.core.labels.Labels.HAVE_A_GREAT_DAY_COME_BACK_TOMORROW,
                         "Have a great day,\ncome back tomorrow"
                     )
+                animateFooter(fb)
             }
         }
     }
@@ -172,8 +213,30 @@ internal class HomeFeedAdapter(
             b.fcCardImageOverlay.setMode(AiImageOverlayView.Mode.HIDDEN)
         }
 
-        val headline = section.title?.takeIf { it.isNotBlank() }
-            ?: section.question_text.orEmpty()
+        // App ContentCard: an image card carries the view-count badge; a text-only card may open
+        // with the personalisation tag (meta.asset_name). Title top spacing follows from which
+        // header is present: image -> 8 + 4dp, tag -> 10 + 4dp, neither -> 18 + 4dp.
+        val viewCount = section.badge?.takeIf { it.show == true }?.count
+        b.fcCardViewBadge.isVisible = hasImage && viewCount != null
+        b.fcCardViewCount.text = viewCount.orEmpty()
+        // App parity (HomeScreen.kt:1337-1355): Home never passes `personalizationLabel`, so the
+        // app shows NO tag even when `meta.asset_name` is set. Kept as a null so the spacing rule
+        // below still reads the same as the app's ContentCard.
+        val tag: String? = null
+        b.fcCardPersonalization.isVisible = tag != null
+        b.fcCardPersonalizationLabel.text = tag.orEmpty()
+        val density = b.root.resources.displayMetrics.density
+        b.fcCardTitle.setPadding(
+            b.fcCardTitle.paddingLeft,
+            ((when { hasImage -> 12; tag != null -> 14; else -> 22 }) * density).toInt(),
+            b.fcCardTitle.paddingRight,
+            0
+        )
+
+        // App HomeScreen.kt ContentCard(headline = section.question_text ?: section.title): the
+        // QUESTION wins. Views preferred `title`, so the goat card read "Goat (Meat) - Colostrum
+        // Management" where the app reads "Why \"Pehla Doodh\" is a MUST for Strong Goat Kids!".
+        val headline = section.question_text ?: section.title.orEmpty()
         b.fcCardTitle.isVisible = headline.isNotBlank()
         b.fcCardTitle.text = headline
         b.fcCardCta.text = callbacks.labelFor(
@@ -217,7 +280,7 @@ internal class HomeFeedAdapter(
             val text = android.widget.TextView(context).apply {
                 textSize = if (isMulti) 15f else 17f
                 setTextColor(
-                    androidx.core.content.ContextCompat.getColor(
+                    org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens.color(
                         context, R.color.fc_foreground_primary
                     )
                 )

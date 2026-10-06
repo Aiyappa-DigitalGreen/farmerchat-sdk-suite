@@ -1,6 +1,10 @@
 /* FarmerChat Theme Studio — theme model, schema, and presets.
  *
  * Field set == the SDK's shipped, overridable surface (verified against source).
+ * That surface includes an optional DARK palette, which every platform supports under a
+ * different name — android `.brandPrimaryNight(...)`, web `theme.dark`, react-native
+ * `theme.colors.dark`, iOS `darkBrandPrimary:`. The studio edits one set and each generator
+ * emits its own shape; see export.ts.
  * Deliberately NOT exposed: aiBubbleColor / aiAvatarEmoji / showUserAvatar
  * (not shipped — see ../../../docs/04-parity-matrix.md), so we never generate
  * config a platform can't consume. This schema is FROZEN — adding or removing a
@@ -47,12 +51,17 @@ export interface Chat {
   messageFontSize: NumOrEmpty
 }
 
+/** Optional dark-mode overrides. Empty string on a key = omit it = inherit the light value. */
+export type NightColors = Record<keyof Colors, string>
+
 export interface ThemeState {
   colors: Colors
+  night: NightColors
   shape: Shape
   typography: Typography
   fab: Fab
   chat: Chat
+  config: Config
 }
 
 export type PlatformId = "web" | "rn" | "android" | "ios"
@@ -70,6 +79,13 @@ export const COLORS: [keyof Colors, string][] = [
   ["onSurface", "On surface (text)"],
   ["error", "Error"],
 ]
+
+/**
+ * The dark palette, same keys as [COLORS]. Optional by design: the SDK falls back to the light
+ * value for any night colour left unset, so an empty field must stay OUT of the exported config
+ * rather than being emitted as a duplicate of the light one.
+ */
+export const NIGHT_COLORS: [keyof Colors, string][] = COLORS
 
 export const SHAPE: [keyof Shape, string][] = [
   ["cardCornerRadius", "Card radius"],
@@ -97,12 +113,75 @@ export const PLATFORMS: [PlatformId, string][] = [
   ["ios", "iOS"],
 ]
 
+function emptyNight(): NightColors {
+  return {
+    brandPrimary: "", brandPrimaryDark: "", brandAccent: "", onBrand: "",
+    background: "", readingSurface: "", cardSurface: "",
+    onBackground: "", onSurface: "", error: "",
+  }
+}
+
 function palette(o: string[]): Colors {
   return {
     brandPrimary: o[0], brandPrimaryDark: o[1], brandAccent: o[2], onBrand: o[3],
     background: o[4], readingSurface: o[5], cardSurface: o[6],
     onBackground: o[7], onSurface: o[8], error: o[9],
   }
+}
+
+/**
+ * Runtime configuration — journey, features and environment.
+ *
+ * NO-HALLUCINATION: every field below is a real builder method on the Android
+ * `FarmerChatConfig.Builder` AND a real field on the iOS / React Native / web
+ * configs, so the same knob emits on all four platforms. Defaults mirror the
+ * SDK's own (`FarmerChatConfig.kt`), and the emitters print a line ONLY when a
+ * value differs from the default — so the generated snippet stays as short as
+ * the host's actual customisation.
+ *
+ * `enableComposerUi` is deliberately absent: Android/RN/web have it, iOS does not.
+ */
+export interface Config {
+  environment: "DEV" | "STAGE" | "DEMO" | "PROD" | "EKS"
+  guestApiKey: string
+  geoApiKey: string
+  languageCode: string
+  defaultCountryCode: string
+  defaultStateCode: string
+  appearance: "DAY" | "NIGHT" | "AUTO"
+  mode: "FULL_JOURNEY" | "CHAT_ONLY"
+  showDrawer: boolean
+  showHistory: boolean
+  showSettings: boolean
+  showNameScreen: boolean
+  enableVoice: boolean
+  enableImages: boolean
+  enableWeather: boolean
+  enableSsfr: boolean
+  enableAgenticChat: boolean
+  enableAnalytics: boolean
+}
+
+/** The SDK's own defaults, verbatim from `FarmerChatConfig.kt`. */
+export const CONFIG_DEFAULTS: Config = {
+  environment: "PROD",
+  guestApiKey: "",
+  geoApiKey: "",
+  languageCode: "",
+  defaultCountryCode: "",
+  defaultStateCode: "",
+  appearance: "AUTO",
+  mode: "FULL_JOURNEY",
+  showDrawer: true,
+  showHistory: true,
+  showSettings: true,
+  showNameScreen: true,
+  enableVoice: true,
+  enableImages: true,
+  enableWeather: true,
+  enableSsfr: true,
+  enableAgenticChat: false,
+  enableAnalytics: false,
 }
 
 export interface Preset {
@@ -115,10 +194,15 @@ function preset(colors: string[], sw: string): Preset {
     sw,
     values: {
       colors: palette(colors),
-      shape: { cardCornerRadius: 24, buttonCornerRadius: 12, inputCornerRadius: 12 },
+      // Presets ship no dark overrides — the SDK reuses the light palette for both modes
+      // unless the designer opts in, and inventing a dark palette per preset would be a
+      // fabricated design decision.
+      night: emptyNight(),
+      shape: { cardCornerRadius: 24, buttonCornerRadius: 999, inputCornerRadius: 12 },
       typography: { fontFamily: "", typeScale: 1 },
       fab: { fabLabel: "", fabBackgroundColor: "", fabContentColor: "" },
       chat: { userBubbleColor: "", userBubbleTextColor: "", aiBubbleTextColor: "", bubbleCornerRadius: "", messageFontSize: "" },
+      config: { ...CONFIG_DEFAULTS },
     },
   }
 }

@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -53,7 +54,6 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.Green700
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
-import org.digitalgreen.farmerchat.sdk.compose.util.hasLocationPermission
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.vm.rememberCoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
@@ -64,6 +64,10 @@ import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
+import androidx.compose.foundation.border
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import org.digitalgreen.farmerchat.sdk.compose.theme.caption
 
 /**
  * Settings (doc 01 §3.10). Appearance Day/Night/Auto selector, "My Farm" location row,
@@ -130,7 +134,7 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val hasExactLocation = remember(resumeTick, locationState) {
-        locationManager.hasStoredLocation() && hasLocationPermission(context)
+        locationManager.hasStoredLocation() && locationManager.hasCurrentLocationPermission()
     }
     // Derived fresh every recomposition (cheap prefs read) rather than cached, so a permission
     // revocation is picked up immediately via resumeTick above.
@@ -209,8 +213,11 @@ fun SettingsScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             DefaultAppBar(
-                title = label(Labels.SETTINGS, "Settings"),
+                // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+                showGlow = false,
+title = label(Labels.SETTINGS, "Settings"),
                 leftIcon = Icons.Filled.Menu,
+                leftRadius = Radius.Rounded,
                 onLeftClick = openDrawer
             )
 
@@ -218,19 +225,29 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    // App parity (SettingsScreen.kt:128): 20dp sides / 32dp ends, 28dp between
+                    // sections. A flat 16dp put every section title 16dp high and closed the
+                    // section gaps by 12dp.
+                    .padding(horizontal = 20.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(28.dp)
             ) {
-                // Appearance
+                // Appearance — app SettingsScreen.kt:132: each section groups its own title and
+                // content at 10dp; the 28dp above separates SECTIONS, not a title from its card.
+                Column(
+                  modifier = Modifier.fillMaxWidth(),
+                  verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                 Text(
                     text = label(Labels.APPEARANCE, "Appearance"),
-                    style = MaterialTheme.typography.titleSmall,
+                    // App parity (SettingsScreen.kt:137): labelLarge, not titleSmall.
+                    style = MaterialTheme.typography.labelLarge,
                     color = colors.foregroundPrimary
                 )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // App parity (SettingsScreen.kt:398): 6dp between the three tiles.
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     AppearanceModeButton(
                         label = label(Labels.DAY, "Day"),
@@ -264,11 +281,12 @@ fun SettingsScreen(
                             "FarmerChat adjusts with your phone settings"
                         )
                     },
-                    style = MaterialTheme.typography.bodySmall,
+                    // App parity (SettingsScreen.kt:184): the app's `caption` (13/18 @400).
+                    // This was bodySmall (15/22), which wrapped the hint onto a second line.
+                    style = caption,
                     color = colors.foregroundSecondary
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
+                }
 
                 // My Farm (2.0.0)
                 Column(
@@ -277,7 +295,8 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = label(Labels.MY_FARM, "My Farm"),
-                        style = MaterialTheme.typography.titleSmall,
+                        // App parity (SettingsScreen.kt:195): labelLarge, not titleSmall.
+                        style = MaterialTheme.typography.labelLarge,
                         color = colors.foregroundPrimary
                     )
 
@@ -344,12 +363,15 @@ fun SettingsScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
                 // Account details
+                Column(
+                  modifier = Modifier.fillMaxWidth(),
+                  verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                 Text(
                     text = label(Labels.ACCOUNT_DETAILS, "Account details"),
-                    style = MaterialTheme.typography.titleSmall,
+                    // App parity (SettingsScreen.kt:302): labelLarge, not titleSmall.
+                    style = MaterialTheme.typography.labelLarge,
                     color = colors.foregroundPrimary
                 )
 
@@ -368,15 +390,17 @@ fun SettingsScreen(
                     ListItem(
                         iconRes = R.drawable.fc_icon_name,
                         textLeft = label(Labels.YOUR_NAME, "Your name"),
-                        textRight = userName.ifBlank { null },
+                        // App parity (SettingsScreen.kt:321): an em dash when unset, never an
+                        // absent value — otherwise the row shows only a chevron.
+                        textRight = userName.trim().takeIf { it.isNotEmpty() } ?: "—",
+                        textRightMaxLines = 4,
                         onClick = {
                             graph.analytics.track(AnalyticsEvents.EDIT_PROFILE_CLICK)
                             onNameClick()
                         }
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 if (isAuthenticated) {
                     SecondaryButton(
@@ -426,32 +450,43 @@ private fun AppearanceModeButton(
     modifier: Modifier = Modifier
 ) {
     val colors = LocalContentColors.current
-    val bg = if (selected) colors.surfaceActive else colors.surfaceSecondary
+    // App parity (SettingsScreen.kt:420-444): the tile surface NEVER changes — selection is a
+    // 2dp borderActive ring on the same surfaceSecondary card, and the icon stays
+    // foregroundPrimary. The SDK filled the selected tile with surfaceActive and tinted its icon
+    // green instead, which read as a different component. Radius is LG, the icon 18dp, and the
+    // height comes from the content (top 16 / bottom 14, 10dp gap), not a fixed 76dp.
+    val borderColor = if (selected) colors.borderActive else Color.Transparent
 
     Column(
         modifier = modifier
-            .height(76.dp)
-            .background(bg, SmoothShapes.rounded(Radius.MD))
+            .clip(SmoothShapes.rounded(Radius.LG))
+            .background(colors.surfaceSecondary)
+            .border(
+                width = 2.dp,
+                color = borderColor,
+                shape = SmoothShapes.rounded(Radius.LG)
+            )
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = onClick
             )
-            .padding(vertical = 12.dp),
+            .padding(top = 16.dp, bottom = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         androidx.compose.foundation.Image(
             painter = painterResource(id = iconRes),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(
-                if (selected) colors.borderActive else colors.foregroundPrimary
-            ),
-            modifier = Modifier.size(26.dp)
+            colorFilter = ColorFilter.tint(colors.foregroundPrimary),
+            modifier = Modifier.size(18.dp)
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
+            // App parity (SettingsScreen.kt:463): the Day/Night/Auto chip caption is labelSmall
+            // (13sp). The SDK had labelMedium (15sp) — the one place on this screen where it
+            // overshot rather than undershot.
+            style = MaterialTheme.typography.labelSmall,
             color = colors.foregroundPrimary
         )
     }

@@ -81,13 +81,17 @@ export interface Navigator {
 /**
  * routeFromSplash (docs/01 §2 AppNavigator):
  * `!isLanguageSelected` → Language; `!isProfileDone && !hasSeenNameScreenOnce`
- * → Name (web has no Remote Config; `show_name_screen` defaults to shown);
- * else consume PendingTarget → Chat/ChatQuery/Home. All popUpTo(0){inclusive}.
+ * → Name, unless `showNameScreen` is false — which stands in for the app's
+ * `show_name_screen` RemoteConfig flag (web has no Remote Config). When false the
+ * profile is marked done and the step is skipped, matching Android
+ * `RouteDecider.routeFromSplash`. Else consume PendingTarget → Chat/ChatQuery/Home.
+ * All popUpTo(0){inclusive}.
  */
 export function computeRouteFromSplash(
   store: SessionStore,
   pending: PendingTarget | null,
   mode: FarmerChatMode = 'FULL_JOURNEY',
+  showNameScreen: boolean = true,
 ): Route {
   const languageDone = store.getBool(PrefKeys.LANGUAGE_DONE, false);
   if (!languageDone) return { name: 'language' };
@@ -101,7 +105,12 @@ export function computeRouteFromSplash(
 
   const nameDone = store.getBool(PrefKeys.KEY_NAME_DONE, false);
   const nameSeen = store.getBool(PrefKeys.KEY_NAME_SCREEN_SEEN, false);
-  if (!nameDone && !nameSeen) return { name: 'name' };
+  if (!nameDone && !nameSeen) {
+    if (showNameScreen) return { name: 'name' };
+    // Host suppressed the step: mark the profile done and fall through so a later
+    // launch does not re-evaluate it. Android does the same in RouteDecider:90.
+    store.setBool(PrefKeys.KEY_NAME_DONE, true);
+  }
 
   if (pending) {
     if (pending.type === 'chat') {
@@ -117,7 +126,11 @@ export function computeRouteFromSplash(
   return { name: 'home' };
 }
 
-export function useNavigator(store: SessionStore, mode: FarmerChatMode = 'FULL_JOURNEY'): Navigator {
+export function useNavigator(
+  store: SessionStore,
+  mode: FarmerChatMode = 'FULL_JOURNEY',
+  showNameScreen: boolean = true,
+): Navigator {
   const [stack, setStack] = useState<Route[]>([{ name: 'splash' }]);
   const pendingRef = useRef<PendingTarget | null>(null);
 
@@ -168,7 +181,7 @@ export function useNavigator(store: SessionStore, mode: FarmerChatMode = 'FULL_J
 
   const routeFromSplash = useCallback(() => {
     const pending = pendingRef.current;
-    const route = computeRouteFromSplash(store, pending, mode);
+    const route = computeRouteFromSplash(store, pending, mode, showNameScreen);
     if (route.name === 'chat') pendingRef.current = null;
     setStack([route]);
   }, [store, mode]);

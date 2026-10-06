@@ -41,8 +41,8 @@ export function SplashScreen(props: { onReady: () => void }) {
       <div className="fcsdk-logo-mark" aria-hidden>
         <LogoGlyph />
       </div>
-      <div style={{ fontWeight: 800, fontSize: 22 }}>{label('app_name', 'FarmerChat')}</div>
-      <Toast message={showToast ? label('splash_loading', 'FarmerChat is starting…') : null} />
+      <div style={{ fontWeight: 800, fontSize: 22 }}>{label('fc_v2_app_label_farmerchat', 'FarmerChat')}</div>
+      <Toast message={showToast ? label('fc_v2_app_label_farmerchat_starting', 'FarmerChat is starting…') : null} />
     </div>
   );
 }

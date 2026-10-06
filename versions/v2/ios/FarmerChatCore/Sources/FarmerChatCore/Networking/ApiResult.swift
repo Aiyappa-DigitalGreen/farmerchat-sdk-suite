@@ -125,7 +125,7 @@ public enum ErrorHandler {
         case 500...599:
             return labels.label("error_server", fallback: "Our servers are having trouble. Please try again shortly.")
         default:
-            return labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+            return labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
         }
     }
 }

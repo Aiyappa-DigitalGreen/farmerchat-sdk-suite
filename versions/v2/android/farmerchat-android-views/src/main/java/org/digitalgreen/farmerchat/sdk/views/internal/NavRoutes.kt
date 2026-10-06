@@ -2,7 +2,9 @@ package org.digitalgreen.farmerchat.sdk.views.internal
 
 import android.os.Bundle
 import androidx.core.os.bundleOf
+import androidx.fragment.app.Fragment
 import androidx.navigation.NavController
+import androidx.navigation.fragment.findNavController
 import androidx.navigation.NavOptions
 import org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget
 import org.digitalgreen.farmerchat.sdk.core.navigation.SplashRoute
@@ -29,12 +31,60 @@ internal object NavRoutes {
      * C3 CHAT_ONLY: skip onboarding/home and land directly in a fresh chat,
      * clearing the whole back stack (mirrors Compose FarmerChatRoot).
      */
-    fun navigateChatOnly(navController: NavController) {
-        navController.navigate(
-            R.id.fc_dest_chat,
-            chatArgs(source = "chat_only"),
-            clearStackOptions(navController)
-        )
+    fun navigateChatOnly(navController: NavController, target: PendingTarget? = null) {
+        // A screen the HOST asked for (FarmerChatLaunch.screen / openScreen) is the journey's
+        // root, marked [ARG_EXIT_TO_HOST]: Back from it returns to the host screen that opened
+        // it (e.g. the host's settings or menu), not into a chat the farmer never opened.
+        if (target is PendingTarget.Screen) {
+            val dest = screenDestination(target.screen)
+            if (dest != null) {
+                navController.navigate(dest, bundleOf(ARG_EXIT_TO_HOST to true), clearStackOptions(navController))
+                return
+            }
+        }
+        val args = when (target) {
+            // "history" is what makes ChatFragment load the thread; with the drawer off its
+            // back control pops, finds nothing beneath, and exits to the host.
+            is PendingTarget.Chat -> chatArgs(source = "history", conversationId = target.chatId)
+            is PendingTarget.ChatQuery -> chatArgs(
+                source = "chat_only",
+                question = target.question,
+                channel = target.channel,
+                preGeneratedAnswer = target.preGeneratedAnswer,
+                followUpQuestions = target.followUpQuestions,
+                imageUri = target.imageUri,
+                audioUri = target.audioUri
+            )
+            else -> chatArgs(source = "chat_only")
+        }
+        navController.navigate(R.id.fc_dest_chat, args, clearStackOptions(navController))
+    }
+
+    /** Arg on a host-requested root screen: leaving it leaves the journey (see navigateChatOnly). */
+    const val ARG_EXIT_TO_HOST = "fc_exit_to_host"
+
+    private fun screenDestination(screen: String): Int? = when (screen) {
+        org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HISTORY -> R.id.fc_dest_chat_history
+        org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP -> R.id.fc_dest_help
+        org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE -> R.id.fc_dest_settings_language
+        org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.SETTINGS -> R.id.fc_dest_settings
+        else -> null
+    }
+
+    /**
+     * Leave a secondary screen (chat history, language chooser): back to the host when the host
+     * opened it directly ([ARG_EXIT_TO_HOST]), else Home — or the chat in CHAT_ONLY.
+     */
+    fun leaveSecondaryScreen(fragment: Fragment) {
+        val nav = fragment.findNavController()
+        when {
+            // Opened over an existing screen (the chat's toolbar): go back to THAT screen, state
+            // intact, instead of rebuilding a fresh one.
+            nav.previousBackStackEntry != null -> nav.popBackStack()
+            fragment.arguments?.getBoolean(ARG_EXIT_TO_HOST) == true ->
+                fragment.journeyHost()?.exitJourney() ?: fragment.requireActivity().finish()
+            else -> navigateHomeOrChat(nav)
+        }
     }
 
     /**
@@ -82,7 +132,15 @@ internal object NavRoutes {
         isWeatherAdviceCTA: Boolean = false,
         isSSFR: Boolean = false,
         ssfrCrop: String? = null,
-        channel: String? = null
+        channel: String? = null,
+        /**
+         * AGENTIC content-card tap: the card artwork, shown as a DISPLAY-ONLY banner on the user
+         * bubble. Kept separate from [imageUri] on purpose — that one routes the query through
+         * image analysis (#28), which this path must not do.
+         */
+        contentCardImageUrl: String? = null,
+        /** AGENTIC content-card tap: "image_card" / "text_card" → triggered_input_type + click_type. */
+        contentCardTriggerType: String? = null
     ): Bundle = bundleOf(
         "source" to source,
         "question" to question,
@@ -97,7 +155,9 @@ internal object NavRoutes {
         "isWeatherAdviceCTA" to isWeatherAdviceCTA,
         "isSSFR" to isSSFR,
         "ssfrCrop" to ssfrCrop,
-        "channel" to channel
+        "channel" to channel,
+        "contentCardImageUrl" to contentCardImageUrl,
+        "contentCardTriggerType" to contentCardTriggerType
     )
 
     fun errorArgs(isNetworkError: Boolean, fromScreen: String): Bundle = bundleOf(
@@ -156,6 +216,8 @@ internal object NavRoutes {
                         navController.navigate(R.id.fc_dest_chat_history)
                     org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP ->
                         navController.navigate(R.id.fc_dest_help)
+                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE ->
+                        navController.navigate(R.id.fc_dest_settings_language)
                     else -> Unit
                 }
             }

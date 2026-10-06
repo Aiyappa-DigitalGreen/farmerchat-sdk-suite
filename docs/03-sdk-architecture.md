@@ -16,6 +16,9 @@ Applies to all six packages. Read `01-app-specification.md` (screens/nav/lifecyc
 
 ```
 FarmerChat.initialize(config: FarmerChatConfig)
+                                  // Android v2 (2.2.0): a repeat call rebuilds the graph only when environment,
+                                  // mode or showDrawer/showHistory/showSettings differ — lets one host offer a
+                                  // full-journey AND a CHAT_ONLY entry. Other platforms: first config wins (docs/04 gap).
 FarmerChat.launch(...)            // Android: Activity/Compose entry; iOS: UIViewController/View; RN: <FarmerChatView/>; Web: <FarmerChat/> or mount(el)
 FarmerChat.openChat(question?, conversationId?)   // deep-link style entry
 FarmerChat.updateTokens(accessToken, refreshToken?)  // HOST_TOKEN: push a freshly-refreshed token at runtime (refresh omitted preserves stored)
@@ -87,6 +90,61 @@ Navigation graph, back-stack semantics (`popUpTo` equivalents), and the `routeFr
 ## Design tokens (shared)
 Green brand surface (`#146152`-family as in app theme), reading surface for chat, day/night palettes, logo-spinner loading affordance, full-screen green error/message layout. Each platform defines tokens in its idiom (Compose theme / UIKit+SwiftUI assets / TS theme object) matching the app's `theme/` package.
 
+### Type scale (v2)
+
+The app declares 13 slots (the Material3 scale it uses, plus a separate `caption`) and varies
+**line height** per script while holding size and weight fixed — six tables selected by
+`typographyForLanguage(code)` in `theme/Type.kt`, because Devanagari, Ethiopic, Kannada, Oriya and
+Telugu need more leading than Roman at the same point size. Platforms must carry both the slots and
+the per-script tables; see docs/04 for current per-platform status.
+
+**Where the numbers live:** `FarmerChatCore/Theme/FCTypeScale.swift` holds the scale as data —
+`FCTypeSpec` (size, total line box, weight), `FCTypeScale` (the 13 slots), `FCScript` +
+`FCScript.forLanguage(_:)` (the port of `typographyForLanguage`), and a plain `FCFontWeight` enum
+so Core carries no UI-framework type. Both iOS flavours resolve from this one copy; neither
+restates a number. This matters because the two flavours need **different arithmetic** over the
+same numbers:
+
+| Flavour | Mechanism | Total line box? | Arithmetic |
+|---|---|---|---|
+| Compose (reference) | `TextStyle.lineHeight` | yes | use the number |
+| SwiftUI | `.lineSpacing` | **no — additive leading** | subtract `UIFont.lineHeight` |
+| UIKit | `NSParagraphStyle.min/maximumLineHeight` | yes | use the number |
+| React Native | `TextStyle.lineHeight` | yes | use the number |
+| CSS | `line-height` | yes | use the number |
+
+**iOS public surface (added 2026-09-09):**
+
+| Symbol | Shape |
+|---|---|
+| `FCTypography` | the 13 resolved slots — `displayLarge/Medium/Small`, `titleLarge/Medium/Small`, `bodyLarge/Medium/Small`, `labelLarge/Medium/Small`, `caption` |
+| `FCTypography.forLanguage(_:typeScale:fontName:)` | resolves the script-correct, host-scaled scale; cached per (script, typeScale, fontName) |
+| `FCTypography.roman` | the scale-1.0 roman default |
+| `FCTypography.bodyLarge(atSize:)` / `.bodyMedium(atSize:)` | one slot re-resolved at a host-supplied point size, for `config.messageFontSize`; preserves the script's line-height ratio |
+| `FCTextStyle` | one resolved slot — `size`, `lineHeight`, `lineSpacing`, `weight`, `font` |
+| `FCTheme.typography` | the resolved scale for the current language + host theme |
+| `View.fcTextStyle(_:)` | applies font + the script-correct `lineSpacing` in one call |
+| `PreferenceStore.languageDidChange` (Core) | emits on an actual change of `selectedLanguageCode`, so language-derived UI can rebuild |
+
+`FarmerChatUIKit` mirrors it, resolving the same Core specs into UIKit types:
+
+| Symbol | Shape |
+|---|---|
+| `FCUITypography` | the 13 resolved slots, plus `bodyMedium(atSize:)` / `bodyLarge(atSize:)` |
+| `FCUITypography.forLanguage(_:typeScale:fontName:)` | cached resolve, as SwiftUI's |
+| `FCUITypography.current` | the scale for the farmer's language + host theme; UIKit has no environment to inherit, so this reads the same prefs and host config `FCTheme` does |
+| `FCUITextStyle` | `size`, `lineHeight`, `font: UIFont`, `paragraphStyle(alignment:lineBreakMode:)` |
+| `UILabel.fcApplyFont(_:)` | font/weight only — safe anywhere, sufficient for single-line labels |
+| `UILabel.fcSetText(_:style:)` | sets the string **with** line height; must be the call that sets the text, and bakes in `textColor`/`textAlignment` |
+| `UIButton.fcApplyTitleFont(_:)`, `UITextField.fcApplyFont(_:)` | as above for those types |
+
+Two deliberate exclusions on both flavours. `Image(systemName:)` / icon point sizes stay raw,
+because Compose sizes icons with `Modifier.size(dp)`, which does **not** track font scale while
+`sp` does — putting icons on the scale would make them grow with `typeScale` where Android's do
+not. Monospaced timers stay raw so a live countdown does not jitter on proportional digits.
+`FCTheme.font(size:weight:)` remains as the escape hatch for genuinely off-scale sizes (a
+glyph-as-text, an offscreen render canvas).
+
 ---
 
 ## Versioning (added 2026-09-02)
@@ -102,10 +160,17 @@ versions/v2/android/  ios/  react-native/  web/   v2.0.0  agentic streaming (#27
 | Version | Chat transport | App source of truth |
 |---|---|---|
 | 1.0.0 | Synchronous JSON, #27 | `fc-compose` @ `9f5e4ca` (v4.0.3) |
-| 2.0.0 | Agentic SSE streaming, #27a | `fc-compose-agentic` @ `0c8c740f` (v4.1.3, versionCode 108) |
+| 2.0.0 | Agentic SSE streaming, #27a | `fc-compose-agentic` @ `193dbd64` (v4.1.3, versionCode 108) |
 
 Both publish to the same group at different versions, so a host selects one with an ordinary
 dependency coordinate and gets that version's whole flow.
+
+**`FarmerChatConfig.environment` keeps the same shape in both versions, but `stage` no longer
+resolves to the same URL** (2026-09-08): 2.0.0 points it at `https://demo.agent.farmer.chat/`,
+1.0.0 keeps `https://farmerchat.farmstack.co/mobile-app-stage/`. Nothing in the public surface
+above changes — a host still passes `stage` — so this is invisible at the API and visible only in
+where the traffic goes. The per-environment URLs, the probe of the new host and the revert
+instructions live in `docs/02-api-reference.md` §Base URLs.
 
 **Trade-off, recorded deliberately:** the trees are independent copies, so a fix in one does not
 reach the other and must be applied twice. This was chosen over a shared codebase with a feature

@@ -63,7 +63,12 @@ object ApiConstants {
     const val POST_LOGOUT_APP = "api/user/logout/"
 
     // Help & Support (no trailing slash — some envs 404 with it)
-    const val GET_HELP_SUPPORT = "api/faqs"
+    // Trailing slash is REQUIRED and load-bearing: the app declares `api/faqs/`
+    // (fc-compose `ApiConstants.kt:31`, fc-compose-agentic `ApiConstants.kt:32`, and both
+    // priority tables), and the react-native/web ports already had it. Android and iOS were the
+    // two that dropped it, so Help was the one endpoint the SDK asked for on a different path
+    // than the app.
+    const val GET_HELP_SUPPORT = "api/faqs/"
 
     // Google Geolocation
     const val GEOLOCATION = "geolocate"
@@ -71,4 +76,32 @@ object ApiConstants {
 
     /** Default guest-init API-Key; overridable via [FarmerChatConfig.guestApiKey]. */
     const val DEFAULT_GUEST_USER_API_KEY = "Y2K3kW5R9uQ0fL2X8zI7hT3aJ7"
+
+    /**
+     * Default Google Geolocation key, so an integrator gets a working location fallback without
+     * having to obtain one. Overridable via [FarmerChatConfig.geoApiKey].
+     *
+     * ⚠️ NOT A SECRET, and it cannot be made into one. This ships inside the AAR: `unzip` the
+     * artifact and `strings` the dex and it falls straight out. `internal` visibility, ProGuard
+     * and native storage all only raise the effort — none of them prevent extraction from an
+     * artifact that runs on someone else's device. Treat this exactly as you would a key printed
+     * in the README.
+     *
+     * What you CAN do on the Google Cloud side, and what you cannot:
+     *   - DO restrict this key to the **Geolocation API only**. That caps the blast radius of an
+     *     extracted key to this one API instead of every API on the project.
+     *   - Do NOT add the "Android apps" application restriction. That check relies on
+     *     `X-Android-Package` + `X-Android-Cert` headers, and [GoogleGeoApi.geolocate] sends
+     *     neither — it is a plain Retrofit POST with `?key=`. Turning it on would break
+     *     geolocation for every host rather than protect the key. Making it viable means adding
+     *     those headers AND registering each integrator's package + signing SHA-1, at which point
+     *     those integrators can use the key for their own calls anyway.
+     *   - IP restrictions are not usable either: the callers are phones on mobile networks.
+     * So until the proxy below exists, an extracted key is billable against this project.
+     *
+     * The durable fix is to stop shipping it at all: proxy `geolocate` through the FarmerChat
+     * backend, which already fronts every other call, and delete this constant. Tracked in
+     * docs/05-open-questions.md.
+     */
+    const val DEFAULT_GEO_API_KEY = "AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo"
 }

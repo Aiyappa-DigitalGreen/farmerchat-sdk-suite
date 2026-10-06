@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -65,7 +66,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -84,10 +85,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.delay
 import org.digitalgreen.farmerchat.sdk.compose.R
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.theme.LightContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import org.digitalgreen.farmerchat.sdk.compose.util.label
+import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 
 // -----------------------------------------------------------------------------
 // Composer geometry — single source of truth for the anchored TextInput.
@@ -114,6 +118,9 @@ private val ComposerActionIcon = 22.dp
 private val ComposerActionIconCompact = 20.dp
 private val ComposerVoiceIcon = 22.dp
 private val ComposerVoiceIconCompact = 20.dp
+
+/** The attached-photo strip: a 64dp [PhotoThumbnail] plus its 10dp bottom gap. */
+private val ComposerAttachmentStrip = 74.dp
 
 /** Padding below the button row, inside the composer sheet. Figma floating: 12. */
 private val ComposerAtRestGap = 12.dp
@@ -166,17 +173,25 @@ private fun auraColorAt(t: Float): Color {
  * internal padding for screens (chat) that prefer a tighter composer.
  */
 @Composable
-fun composerBarHeight(floating: Boolean = false, compact: Boolean = false): Dp {
-    val navBar = WindowInsets.navigationBars
-        .asPaddingValues()
-        .calculateBottomPadding()
+fun composerBarHeight(
+    floating: Boolean = false,
+    compact: Boolean = false,
+    /**
+     * True while a photo is attached. The composer grows by the thumbnail strip when it is, and
+     * callers reserve this height as bottom content padding — so without this the composer grew
+     * OVER the last message instead of the list making room for it.
+     */
+    hasAttachment: Boolean = false
+): Dp {
+    val navBar = fcNavigationBarsBottom()
     val topInside = if (compact) ComposerTopInsideCompact else ComposerTopInside
     val buttonRow = if (compact) ComposerButtonRowCompact else ComposerButtonRow
     val atRestGap = if (compact) ComposerAtRestGapCompact else ComposerAtRestGap
     // Floating: sit max(nav inset, design gap) above the screen bottom — clears the
     // gesture pill / 3-button bar without stacking an extra gap on top of the inset.
     val restingBottom = if (floating) maxOf(navBar, FloatingBottomGap) else navBar
-    return topInside + buttonRow + atRestGap + restingBottom
+    val attachment = if (hasAttachment) ComposerAttachmentStrip else 0.dp
+    return topInside + buttonRow + atRestGap + restingBottom + attachment
 }
 
 @SuppressLint("UseOfNonLambdaOffsetOverload")
@@ -198,7 +213,13 @@ fun InputComposer(
     onRemovePhoto: (Int) -> Unit = {},
     showScrollButton: Boolean = false,
     onScrollToBottom: () -> Unit = {},
-    placeholder: String = "Ask about your farm...",
+    /**
+     * App parity: the app resolves this through LabelManager, so it must default to the SERVED
+     * label, not a raw literal. `HomeScreen` happened to pass `label(ASK_ABOUT_YOUR_FARM, …)`
+     * explicitly, which masked the bug there; `ChatScreen` takes the default and rendered the
+     * English fallback on a Kannada device. `UserInput`'s own composer already defaults this way.
+     */
+    placeholder: String = label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."),
     /** When non-null and length > 1, the placeholder crossfades through this list every ~3s. */
     placeholders: List<String>? = null,
     /** Launcher mode: when non-null, taps on the text field area fire this instead of focusing the field, and the BasicTextField is not rendered. */
@@ -219,6 +240,10 @@ fun InputComposer(
     showAura: Boolean = true,
 ) {
     val contentColors = LocalContentColors.current
+    // Host feature flags. `enableImages` / `enableVoice` are public FarmerChatConfig switches that
+    // were declared and honoured by NOTHING on Android until 2026-09-16, while ios / react-native /
+    // web all gated on them — see docs/04 "Config-parity audit (2026-09-16)".
+    val fcCfg = FarmerChat.requireGraph().config
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     var isFocused by remember { mutableStateOf(false) }
     var placeholderIndex by remember { mutableIntStateOf(0) }
@@ -246,7 +271,7 @@ fun InputComposer(
     }
     // System nav-bar inset (≈24dp gesture, ≈48dp 3-button) — used to seat the floating
     // composer the right distance above the screen bottom in either navigation mode.
-    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navBarBottom = fcNavigationBarsBottom()
     val currentIsFocused by rememberUpdatedState(isFocused)
 
     LaunchedEffect(isKeyboardVisible) {
@@ -491,8 +516,9 @@ fun InputComposer(
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Camera button (hidden when image attached or text being typed)
-                    if (photoUris.isEmpty() && textFieldValue.text.isBlank()) {
+                    // Camera button (hidden when image attached, text being typed, or the host
+                    // disabled images via FarmerChatConfig.enableImages)
+                    if (fcCfg.enableImages && photoUris.isEmpty() && textFieldValue.text.isBlank()) {
                         CompositionLocalProvider(LocalContentColors provides LightContentColors) {
                             val buttonColors = LocalContentColors.current
                             Box(
@@ -535,9 +561,12 @@ fun InputComposer(
                                 // Stroke the field's exact (smooth) outline so the aura hugs
                                 // the edge with no gap. Centered + clipped to the field = an
                                 // inside border; width*2 → ~sw of it shows inside.
-                                val edgePath = Path()
-                                (inputShape.createOutline(size, LayoutDirection.Ltr, this) as? Outline.Generic)
-                                    ?.let { edgePath.addPath(it.path) }
+                                // addOutline, not an `as? Outline.Generic` cast: SmoothShapes.rounded
+                                // is a RoundedCornerShape, whose outline is Outline.Rounded — the
+                                // cast was always null, so the path was empty and NO aura drew.
+                                val edgePath = Path().apply {
+                                    addOutline(inputShape.createOutline(size, LayoutDirection.Ltr, this@drawWithCache))
+                                }
                                 val coreStroke = Stroke(width = sw * 2f)
                                 // Wider, fainter strokes stacked under the core make a soft inner
                                 // bloom — a real-looking glow with NO GPU blur shader, so it stays
@@ -576,7 +605,7 @@ fun InputComposer(
                         if (photoUris.isNotEmpty()) {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                modifier = Modifier.padding(bottom = 10.dp)
+                                modifier = Modifier.padding(top = 10.dp, bottom = 10.dp)
                             ) {
                                 // Single image per query — render only the first attachment.
                                 itemsIndexed(photoUris.take(1)) { index, uri ->
@@ -678,7 +707,10 @@ fun InputComposer(
                         )
                     }
 
-                    // Mic or Send button — flips icon based on whether there's content
+                    // Mic or Send button — flips icon based on whether there's content. With
+                    // FarmerChatConfig.enableVoice off there is no mic state, so the button only
+                    // exists when there is something to send.
+                    if (hasContent || fcCfg.enableVoice) {
                     CompositionLocalProvider(LocalContentColors provides LightContentColors) {
                         val buttonColors = LocalContentColors.current
                         Box(
@@ -718,6 +750,7 @@ fun InputComposer(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }

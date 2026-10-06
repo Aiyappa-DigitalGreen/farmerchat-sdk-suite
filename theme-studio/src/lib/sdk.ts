@@ -1,8 +1,11 @@
 /* FarmerChat Theme Studio — SDK download/setup metadata.
  *
  * NO-HALLUCINATION: every fact here is grounded in the repo, not invented.
- *   - versions: only real, shipped versions (see web package.json, iOS podspec
- *     / git tag ios-v1.0.0, android project.version) — all 1.0.0 today.
+ *   - versions: only real, shipped versions, and they differ PER PLATFORM.
+ *     android `build.gradle.kts` declares 2.0.0 (versions/v2); the iOS podspec,
+ *     web `core/version.ts` and the RN package.json under versions/v2 were never
+ *     bumped and still declare 1.0.0. A single global version would therefore
+ *     print `npm install ...@2.0.0`, which does not exist — hence `SdkMeta.versions`.
  *   - package ids, install methods, peer deps, requirements, Info.plist keys:
  *     verbatim from INTEGRATION.md (which is derived from the SDK sources).
  *   - repo URL: from ios/FarmerChatUIKit/FarmerChatUIKit.podspec `:git`.
@@ -14,14 +17,16 @@ import type { PlatformId, ThemeState } from "./theme"
 
 export const SDK_REPO = "https://github.com/digitalgreenorg/farmerchat-sdk-suite"
 
-/** Real, shipped versions only (newest first). */
-export const SDK_VERSIONS = ["1.0.0"] as const
+/** Union of every platform's shipped versions (newest first) — the selector's options. */
+export const SDK_VERSIONS = ["2.0.0", "1.0.0"] as const
 export type SdkVersion = (typeof SDK_VERSIONS)[number]
 
 export interface SdkMeta {
   id: PlatformId
   name: string
   packageId: string
+  /** Versions this platform actually publishes (newest first). */
+  versions: readonly string[]
   /** Compatibility badges (from INTEGRATION.md). */
   reqs: string[]
   /** Language hint for the install fence. */
@@ -42,6 +47,7 @@ export const SDK_META: SdkMeta[] = [
     id: "web",
     name: "Web",
     packageId: "@digitalgreenorg/farmerchat-web",
+    versions: ["1.0.0"],
     reqs: ["React 18"],
     installLang: "bash",
     codeLang: "tsx",
@@ -68,6 +74,7 @@ export const SDK_META: SdkMeta[] = [
     id: "rn",
     name: "React Native",
     packageId: "@digitalgreenorg/farmerchat-react-native",
+    versions: ["1.0.0"],
     reqs: ["Expo 52+", "RN 0.76+"],
     installLang: "bash",
     codeLang: "tsx",
@@ -90,17 +97,27 @@ export const SDK_META: SdkMeta[] = [
   {
     id: "android",
     name: "Android",
-    packageId: "org.digitalgreen:farmerchat-android-compose",
-    reqs: ["Compose or Views"],
+    // groupId is org.digitalgreen.FARMERCHAT — see versions/v2/android/build.gradle.kts
+    // (`farmerChatGroup`). It was previously written as plain `org.digitalgreen`, which is not a
+    // coordinate that resolves anywhere.
+    packageId: "org.digitalgreen.farmerchat:farmerchat-android-compose",
+    versions: ["2.0.0", "1.0.0"],
+    reqs: ["Compose or Views", "AGP 8.13+ (Compose flavour)"],
     installLang: "kotlin",
     codeLang: "kotlin",
     install: (v) =>
       [
         "// build.gradle.kts (app)",
         "dependencies {",
-        `    implementation("org.digitalgreen:farmerchat-android-compose:${v}")`,
-        `    // XML hosts: use "org.digitalgreen:farmerchat-android-views:${v}" instead`,
+        `    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:${v}")`,
+        "",
+        "    // XML/Fragment hosts: the Views artifact additionally provides a real",
+        "    // FarmerChatFab View (the Compose one is a @Composable). Adding BOTH is",
+        "    // supported — FarmerChat.launch() prefers the Compose Activity when present.",
+        `    // implementation("org.digitalgreen.farmerchat:farmerchat-android-views:${v}")`,
         "}",
+        "",
+        "// farmerchat-core arrives transitively via the POM — do not add it explicitly.",
       ].join("\n"),
     usage: [
       "// Anywhere after initialize():",
@@ -111,16 +128,20 @@ export const SDK_META: SdkMeta[] = [
       "Scaffold(floatingActionButton = { FarmerChatFab() }) { ... }",
     ].join("\n"),
     notes: [
-      "Host needs no manifest changes — the SDK declares its Activity + FileProvider.",
-      "Camera / mic / location permissions are declared by the SDK and requested at use.",
+      "The SDK declares its own Activity + FileProvider, and the camera / mic / location permissions it requests at use.",
       "launch() resolves whichever UI artifact is present; Compose wins if both.",
+      "Compose flavour needs AGP 8.13+ in the HOST. Older toolchains (8.9.x) mis-dex the SDK's InputComposer and the app dies on the chat screen with java.lang.VerifyError. The Views flavour is unaffected.",
+      "minSdk below 26: add tools:overrideLibrary=\"org.digitalgreen.farmerchat.sdk.views, org.digitalgreen.farmerchat.sdk.compose, org.digitalgreen.farmerchat.sdk.core\" to your <uses-sdk> — the compose entry is required whenever the Compose artifact is present.",
+      "Analytics are OFF by default in 2.0.0 (enableAnalytics). The generated initialize() sets it explicitly so it is never a silent surprise.",
+      "SIM number pre-fill on the Auth screen is host-opt-in: declare READ_PHONE_STATE + READ_PHONE_NUMBERS to enable it; the SDK declares neither and stays silent without them.",
     ],
-    source: `${SDK_REPO}/tree/main/android`,
+    source: `${SDK_REPO}/tree/main/versions/v2/android`,
   },
   {
     id: "ios",
     name: "iOS",
     packageId: "FarmerChatCore · FarmerChatSwiftUI · FarmerChatUIKit",
+    versions: ["1.0.0"],
     reqs: ["SwiftUI iOS 16+", "UIKit iOS 15+"],
     installLang: "swift",
     codeLang: "swift",
@@ -152,6 +173,17 @@ export const SDK_META: SdkMeta[] = [
     sourceTag: (v) => `ios-v${v}`,
   },
 ]
+
+/**
+ * The version a card should actually show.
+ *
+ * The selector lists the union across platforms, but a platform must never advertise a version it
+ * does not publish — printing `npm install ...@2.0.0` for web would be exactly the fabrication
+ * this file's header forbids. Falls back to the platform's newest.
+ */
+export function resolveVersion(meta: SdkMeta, selected: string): string {
+  return meta.versions.includes(selected) ? selected : meta.versions[0]
+}
 
 /** Full themed quick-start doc (Markdown) for one platform + version. */
 export function quickStart(state: ThemeState, meta: SdkMeta, version: string): string {

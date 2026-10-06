@@ -18,7 +18,7 @@
         android:layout_height="20dp"
         android:importantForAccessibility="no"
         android:src="@drawable/fc_icon_keyboard"
-        app:tint="@color/fc_foreground_secondary" />
+        app:tint="@color/fc_brand_foreground_secondary" />
 
     <TextView
         android:id="@+id/fcDrawerQuestionTitle"
@@ -28,7 +28,7 @@
         android:layout_marginStart="12dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/fc_foreground_primary"
+        android:textColor="@color/fc_brand_foreground_primary"
         android:textSize="14sp"
         tools:text="How do I treat leaf rust?" />
 </LinearLayout>

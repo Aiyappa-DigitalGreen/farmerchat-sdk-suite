@@ -1,67 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- App parity: AuthScreen.kt `CountryPickerScreen`.
+     DefaultAppBar (Close, round chip, no glow) → LazyColumn(horizontal 20dp, top 16dp,
+     spacedBy 6dp) whose FIRST item is the search field (it scrolls with the list) → a fixed
+     surfaceSecondary bottom area (24dp sides, 12dp top, 40dp bottom) holding a 56dp
+     PrimaryButton. The previous version was a different design: dark-on-grey 56dp bar with a
+     back arrow, a pinned search box, plain RadioButton rows with no card or flag. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/fcCountryPickerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/fc_surface_primary"
     android:orientation="vertical"
     android:fitsSystemWindows="true">
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp">
-
-        <ImageButton
-            android:id="@+id/fcCountryPickerClose"
-            style="@style/FcAppBarIcon"
-            android:layout_gravity="start|center_vertical"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@null"
-            android:src="@drawable/fc_ic_back"
-            app:tint="@color/fc_foreground_primary" />
-
-        <TextView
-            android:id="@+id/fcCountryPickerTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            tools:text="Select country code" />
-    </FrameLayout>
-
-    <EditText
-        android:id="@+id/fcCountrySearch"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:background="@drawable/fc_bg_input_field"
-        android:drawableStart="@drawable/fc_ic_search"
-        android:drawablePadding="8dp"
-        android:drawableTint="@color/fc_foreground_secondary"
-        android:inputType="text"
-        android:maxLines="1"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:textColor="@color/fc_foreground_primary"
-        android:textColorHint="@color/fc_foreground_tertiary"
-        android:textSize="15sp"
-        android:importantForAutofill="no"
-        tools:hint="Search" />
+    <include
+        android:id="@+id/fcCountryPickerAppBar"
+        layout="@layout/fc_view_appbar" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/fcCountryList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp" />
+        android:clipToPadding="false"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp" />
 
-    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
-        android:id="@+id/fcCountrySaveButton"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="20dp" />
+        android:background="@color/fc_surface_secondary"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="40dp">
+
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+            android:id="@+id/fcCountrySaveButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp" />
+    </FrameLayout>
 </LinearLayout>

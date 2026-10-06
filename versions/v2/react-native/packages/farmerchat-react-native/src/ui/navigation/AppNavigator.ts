@@ -84,9 +84,11 @@ export class AppNavigator {
   /**
    * routeFromSplash() decision tree (docs/01 §2 AppNavigator):
    *  1. !isLanguageSelected → Language
-   *  2. !isProfileDone && !hasSeenNameScreenOnce → Name
-   *     (the app consults RemoteConfig show_name_screen; the SDK has no Remote
-   *      Config — the name screen is always part of the flow, docs/03 §screens)
+   *  2. !isProfileDone && !hasSeenNameScreenOnce → Name, unless
+   *     `FarmerChatConfig.showNameScreen` is false, which stands in for the app's
+   *     `show_name_screen` RemoteConfig flag (the SDK has no Remote Config). When
+   *     false the profile is marked done and the step is skipped — matching Android
+   *     `RouteDecider.routeFromSplash`.
    *  3. else consume PendingTarget → Chat / ChatQuery / Gps(Home) / Home
    * All with popUpTo(0){inclusive} (reset).
    */
@@ -106,8 +108,13 @@ export class AppNavigator {
       return;
     }
     if (!this.sdk.isProfileDone && !this.sdk.hasSeenNameScreenOnce) {
-      this.resetTo([{ name: 'Name' }]);
-      return;
+      if (this.sdk.config.showNameScreen) {
+        this.resetTo([{ name: 'Name' }]);
+        return;
+      }
+      // Host suppressed the step: mark the profile done and fall through so a later
+      // launch does not re-evaluate it. Android does the same in RouteDecider:90.
+      this.sdk.markProfileDone();
     }
     const target = this.sdk.consumePendingTarget();
     if (target) {

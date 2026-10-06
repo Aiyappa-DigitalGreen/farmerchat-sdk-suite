@@ -50,7 +50,12 @@ object ApiConstants {
     const val POST_LOGOUT_APP = "api/user/logout/"
 
     // Help & Support (no trailing slash — some envs 404 with it)
-    const val GET_HELP_SUPPORT = "api/faqs"
+    // Trailing slash is REQUIRED and load-bearing: the app declares `api/faqs/`
+    // (fc-compose `ApiConstants.kt:31`, fc-compose-agentic `ApiConstants.kt:32`, and both
+    // priority tables), and the react-native/web ports already had it. Android and iOS were the
+    // two that dropped it, so Help was the one endpoint the SDK asked for on a different path
+    // than the app.
+    const val GET_HELP_SUPPORT = "api/faqs/"
 
     // Google Geolocation
     const val GEOLOCATION = "geolocate"

@@ -77,7 +77,13 @@ internal class EnterNameFragment : BaseFragment(R.layout.fc_fragment_enter_name)
         binding.fcNameSaveButton.setOnClickListener { save() }
         binding.fcNameSkipButton.setOnClickListener { skip() }
 
+        // Compose/app parity: the field takes focus AND the keyboard opens on entry (the compose
+        // screen shows it open). requestFocus alone left the keyboard closed on views.
         binding.fcNameInput.requestFocus()
+        binding.fcNameInput.post {
+            androidx.core.view.ViewCompat.getWindowInsetsController(binding.fcNameInput)
+                ?.show(androidx.core.view.WindowInsetsCompat.Type.ime())
+        }
 
         vm.state.collectWhenStarted { state ->
             when (val update = state.updateUserNameState) {

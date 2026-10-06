@@ -52,7 +52,7 @@ export function FarmerChatRoot(props: {
   inline?: boolean;
 }) {
   const { services } = props;
-  const navigator = useNavigator(services.store, services.config.mode);
+  const navigator = useNavigator(services.store, services.config.mode, services.config.showNameScreen);
   const toast = useToastState();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [legal, setLegal] = useState<{ url: string; title: string } | null>(null);
@@ -345,7 +345,7 @@ export function FarmerChatRoot(props: {
         ) : null}
 
         {legal ? <LegalContentModal url={legal.url} title={legal.title} onClose={() => setLegal(null)} /> : null}
-        <LocationPromptOverlay state={locationState} actions={locationActions} />
+        <LocationPromptOverlay state={locationState} actions={locationActions} hideError={current.name === 'home'} />
       </div>
     </SdkProvider>
   );
@@ -369,6 +369,8 @@ export function FarmerChatRoot(props: {
             onOpenDrawer={() => setDrawerOpen(true)}
             onOpenChat={openChat}
             locationActions={locationActions}
+            locationState={locationState}
+            onNavigateToError={(isNetworkError, fromScreen) => navigateToError(isNetworkError, fromScreen)}
             openTermsOfUseRequested={termsOfUseRequested}
             onTermsOfUseRequestConsumed={() => setTermsOfUseRequested(false)}
           />
@@ -413,6 +415,8 @@ export function FarmerChatRoot(props: {
             onLogOutClick={() => void handleLogout()}
             showNameUpdatedToast={showNameUpdatedToast}
             onToastConsumed={() => setShowNameUpdatedToast(false)}
+            locationState={locationState}
+            locationActions={locationActions}
           />
         );
       case 'settingsName':

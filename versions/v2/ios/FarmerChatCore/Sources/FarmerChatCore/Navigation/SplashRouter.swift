@@ -4,10 +4,11 @@ import Foundation
 /// packages so SwiftUI and UIKit route identically:
 ///
 /// 1. `!isLanguageSelected` → Language
-/// 2. `!isProfileDone && !hasSeenNameScreenOnce` → Name
-///    (the app additionally consults RemoteConfig `show_name_screen`; the SDK
-///    has no Firebase — see docs/05-open-questions.md — so the name screen is
-///    shown unless already done/seen)
+/// 2. `!isProfileDone && !hasSeenNameScreenOnce` → Name, unless
+///    `FarmerChatConfig.showNameScreen` is false, which stands in for the app's
+///    `show_name_screen` RemoteConfig flag (the SDK has no Firebase). When it is
+///    false the profile is marked done and the step is skipped — matching
+///    Android `RouteDecider.routeFromSplash`.
 /// 3. else consume PendingTarget → Chat / Home
 public enum SplashRoute: Equatable, Sendable {
     case language
@@ -30,7 +31,12 @@ public enum SplashRouter {
         let profileDone = prefs.bool(.nameDone)
         let seenNameScreen = prefs.bool(.nameScreenSeen)
         if !profileDone && !seenNameScreen {
-            return .name
+            if env.config.showNameScreen {
+                return .name
+            }
+            // Host suppressed the step: mark the profile done and fall through, so a later
+            // launch does not re-evaluate it. Android does the same in RouteDecider:90.
+            prefs.setBool(true, .nameDone)
         }
 
         // 3. Pending deep-link target (FarmerChat.openChat).

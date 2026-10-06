@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Selected radio row (language rows, Home select-card options).
+     NOT `fc_surface_active` (#2900C950) applied once. Compose's RadioButton applies that
+     translucent token TWICE — `Surface(color = bg)` and again on the inner Row via
+     `Containers.flat(background = bg)` (Form.kt:271,277) — and the app does the same. Two
+     composites over the page produce this opaque value.
+     Measured three ways on emulator-5554, all at the same pixel: the app #A6E1C0, compose
+     #A6E1C0, views #C6E6D5 — views was the only one applying it once. Stated as the composite
+     result because a single XML shape cannot stack an alpha twice. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/fc_surface_active"/>
+    <solid android:color="@color/fc_surface_active_double"/>
     <corners android:radius="12dp"/>
 </shape>

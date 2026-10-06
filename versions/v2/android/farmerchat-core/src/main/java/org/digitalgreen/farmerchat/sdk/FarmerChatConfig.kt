@@ -7,7 +7,14 @@ import androidx.annotation.ColorInt
  */
 enum class FarmerChatEnvironment(val baseUrl: String) {
     DEV("https://farmerchat.farmstack.co/mobile-app-dev/"),
-    STAGE("https://farmerchat.farmstack.co/mobile-app-stage/"),
+    // STAGE base URL switched to the agentic demo backend (requested 2026-09-08). It applies to
+    // BOTH debug and release — the SDK has one base URL per environment, not per build type.
+    // The previous farmstack stage host is kept immediately below, commented, so this is a
+    // one-line revert.
+    //   STAGE("https://farmerchat.farmstack.co/mobile-app-stage/"),
+    // The trailing slash is REQUIRED: every path is joined as `baseUrl + "api/..."`, so without
+    // it the first request would resolve to `...farmer.chatapi/user/...`.
+    STAGE("https://demo.agent.farmer.chat/"),
     DEMO("https://farmerchat.farmstack.co/mobile-app-demo/"),
     PROD("https://v2.api.farmer.chat/"),
     EKS("https://api.farmerchat.in/");
@@ -52,6 +59,8 @@ class FarmerChatHooks internal constructor(
     val onScreenView: ((name: String) -> Unit)?,
     val onError: ((code: Int, message: String) -> Unit)?,
     val onSessionStart: (() -> Unit)?,
+    /** The user picked a language inside the SDK (id + code as the backend knows them). */
+    val onLanguageChanged: ((languageId: Int, languageCode: String) -> Unit)? = null,
 )
 
 /**
@@ -130,6 +139,25 @@ class FarmerChatConfig private constructor(
      */
     val enableAgenticChat: Boolean,
     /**
+     * Master switch for TELEMETRY leaving the SDK. **Defaults to `false`.**
+     *
+     * When false, every analytics event, user identity and user attribute is built exactly as
+     * normal — same names, same properties, same call sites, same order — and then dropped at the
+     * single dispatch point instead of reaching [onEvent], [FarmerChatAnalyticsListener],
+     * [onUserIdentified] or [onUserAttribute]. Nothing else changes: the SDK does not skip work,
+     * take a different branch, or behave differently in any way that a farmer or the backend
+     * could observe.
+     *
+     * The C4 semantic hooks (`onChatOpened`, `onMessageSent`, `onAnswerReceived`, `onScreenView`,
+     * `onError`) are **NOT** gated by this. They are product callbacks a host wires for behaviour,
+     * not telemetry to an analytics vendor, and silencing them would be a functional regression.
+     *
+     * ⚠️ This default is deliberately OFF and is a behaviour change for hosts that were already
+     * receiving events: set `.enableAnalytics(true)` to restore delivery. It exists so an
+     * integration can be wired end-to-end and reviewed before any data is emitted.
+     */
+    val enableAnalytics: Boolean,
+    /**
      * Whether Home and Chat use the unified floating InputComposer instead of the legacy
      * Photo/Speak/Type button row.
      *
@@ -147,6 +175,18 @@ class FarmerChatConfig private constructor(
      * Read it through [resolvedComposerUi], never directly.
      */
     val enableComposerUi: Boolean?,
+    /**
+     * Present SYNCHRONOUS (#27) answers with the agentic chat UI, for a backend that does not
+     * serve #27a yet. **Default false.**
+     *
+     * The wire is unchanged: one synchronous #27 request, one JSON reply. Only the presentation
+     * follows the agentic path — the "getting your answer" status while waiting, the answer
+     * revealed word by word, the agentic action row (accuracy note, Share, Listen), and the
+     * stream error card with retry on failure. Also turns the composer on when
+     * [enableComposerUi] is left `null`. Ignored when [enableAgenticChat] is true (a real
+     * stream wins).
+     */
+    val simulateAgenticStream: Boolean = false,
     /**
      * Minimum time the splash/loading screen stays visible, in milliseconds.
      *
@@ -245,7 +285,14 @@ class FarmerChatConfig private constructor(
     /** Highest-precedence label overrides (labelKey → string), win over server labels. */
     val stringOverrides: Map<String, String>,
     /** Force this language code regardless of device/onboarding. */
-    val locale: String?
+    val locale: String?,
+
+    /**
+     * Host backend path overrides: SDK path → host path, both relative to the base URL
+     * (e.g. `"api/language/v2/get_labels/" to "api/language/get_labels/"`). For hosts whose
+     * backend serves an endpoint under an older/different path. Empty = SDK paths unchanged.
+     */
+    val endpointOverrides: Map<String, String> = emptyMap()
 ) {
 
     /** The base URL actually used: [customBaseUrl] when set (non-blank), else [environment]'s. */
@@ -254,13 +301,13 @@ class FarmerChatConfig private constructor(
 
     /**
      * Whether the unified InputComposer is shown: the host's explicit [enableComposerUi], else
-     * [enableAgenticChat] (the historical collapse).
+     * [enableAgenticChat] (the historical collapse) or [simulateAgenticStream].
      *
      * Every UI call site MUST read this rather than [enableComposerUi] directly — that field
      * defaults to `null` meaning "derive", and a raw read is a nullable Boolean, not a decision.
      */
     val resolvedComposerUi: Boolean
-        get() = enableComposerUi ?: enableAgenticChat
+        get() = enableComposerUi ?: (enableAgenticChat || simulateAgenticStream)
 
     fun newBuilder(): Builder = Builder(environment)
         .customBaseUrl(customBaseUrl)
@@ -274,7 +321,9 @@ class FarmerChatConfig private constructor(
         // RC-mirroring knobs: these MUST round-trip or newBuilder() silently resets a host's
         // feature gating back to the defaults.
         .enableAgenticChat(enableAgenticChat)
+        .enableAnalytics(enableAnalytics)
         .enableComposerUi(enableComposerUi)
+        .simulateAgenticStream(simulateAgenticStream)
         .showNameScreen(showNameScreen)
         .onEvent(onEvent)
         .onUserIdentified(onUserIdentified)
@@ -307,6 +356,8 @@ class FarmerChatConfig private constructor(
         .onSessionStart(hooks.onSessionStart)
         .stringOverrides(stringOverrides)
         .locale(locale)
+        .onLanguageChanged(hooks.onLanguageChanged)
+        .endpointOverrides(endpointOverrides)
 
     class Builder(private val environment: FarmerChatEnvironment) {
         private var customBaseUrl: String? = null
@@ -324,7 +375,9 @@ class FarmerChatConfig private constructor(
         private var enableImages: Boolean = true
         private var enableWeather: Boolean = true
         private var enableAgenticChat: Boolean = false
+        private var enableAnalytics: Boolean = false
         private var enableComposerUi: Boolean? = null
+        private var simulateAgenticStream: Boolean = false
         private var minSplashDurationMs: Long = DEFAULT_MIN_SPLASH_DURATION_MS
         private var onEvent: ((String, Map<String, Any?>) -> Unit)? = null
         private var onUserIdentified: ((String) -> Unit)? = null
@@ -361,6 +414,8 @@ class FarmerChatConfig private constructor(
         private var onScreenView: ((String) -> Unit)? = null
         private var onError: ((Int, String) -> Unit)? = null
         private var onSessionStart: (() -> Unit)? = null
+        private var onLanguageChanged: ((Int, String) -> Unit)? = null
+        private var endpointOverrides: Map<String, String> = emptyMap()
 
         private var stringOverrides: Map<String, String> = emptyMap()
         private var locale: String? = null
@@ -387,11 +442,23 @@ class FarmerChatConfig private constructor(
         fun enableAgenticChat(enabled: Boolean) = apply { enableAgenticChat = enabled }
 
         /**
+         * Let analytics events, user identity and user attributes reach the host. Default
+         * **false** — see [FarmerChatConfig.enableAnalytics]. Semantic hooks are unaffected.
+         */
+        fun enableAnalytics(enabled: Boolean) = apply { enableAnalytics = enabled }
+
+        /**
          * Show the unified InputComposer in Home/Chat, independently of [enableAgenticChat]
          * (the app's `v2_composer_ui_enabled` flag). `null` = follow [enableAgenticChat],
          * which is the historical behaviour.
          */
         fun enableComposerUi(enabled: Boolean?) = apply { enableComposerUi = enabled }
+
+        /**
+         * Agentic chat UI over the synchronous #27 endpoint (no streaming on the wire). Default
+         * false — see [FarmerChatConfig.simulateAgenticStream].
+         */
+        fun simulateAgenticStream(enabled: Boolean) = apply { simulateAgenticStream = enabled }
 
         /**
          * Keep the splash/loading screen up for at least [ms] milliseconds (a floor, not an
@@ -450,6 +517,12 @@ class FarmerChatConfig private constructor(
         fun onScreenView(cb: ((String) -> Unit)?) = apply { onScreenView = cb }
         fun onError(cb: ((Int, String) -> Unit)?) = apply { onError = cb }
         fun onSessionStart(cb: (() -> Unit)?) = apply { onSessionStart = cb }
+        /** Language picked inside the SDK — keep the host's own language state in step. */
+        fun onLanguageChanged(cb: ((languageId: Int, languageCode: String) -> Unit)?) =
+            apply { onLanguageChanged = cb }
+
+        /** SDK path → host path (relative to the base URL) for a host backend on other paths. */
+        fun endpointOverrides(overrides: Map<String, String>) = apply { endpointOverrides = overrides }
 
         // C5 -------------------------------------------------------------
         fun stringOverrides(overrides: Map<String, String>) = apply { stringOverrides = overrides }
@@ -470,7 +543,9 @@ class FarmerChatConfig private constructor(
             enableImages = enableImages,
             enableWeather = enableWeather,
             enableAgenticChat = enableAgenticChat,
+            enableAnalytics = enableAnalytics,
             enableComposerUi = enableComposerUi,
+            simulateAgenticStream = simulateAgenticStream,
             minSplashDurationMs = minSplashDurationMs,
             onEvent = onEvent,
             onUserIdentified = onUserIdentified,
@@ -498,10 +573,11 @@ class FarmerChatConfig private constructor(
             messageFontSizeSp = messageFontSizeSp,
             hooks = FarmerChatHooks(
                 onChatOpened, onMessageSent, onAnswerReceived,
-                onScreenView, onError, onSessionStart
+                onScreenView, onError, onSessionStart, onLanguageChanged
             ),
             stringOverrides = stringOverrides,
-            locale = locale
+            locale = locale,
+            endpointOverrides = endpointOverrides
         )
     }
 

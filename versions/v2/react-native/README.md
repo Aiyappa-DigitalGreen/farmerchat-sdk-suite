@@ -55,3 +55,21 @@ Notes:
 - `example/metro.config.js` is required: the package is a symlinked `file:` dependency carrying its own `node_modules`, so Metro must watch the package folder, resolve modules only from `example/node_modules`, and block the package's `node_modules` (otherwise duplicate React → invalid-hook-call crash).
 - `expo-asset` must stay a **direct** dependency of the example: npm nests it under `expo/node_modules`, where `@expo/metro-config` cannot resolve it (`The required package expo-asset cannot be found`).
 - If the automatic Expo Go download fails, install it manually: fetch the `androidClientUrl` from `https://api.expo.dev/v2/versions` (sdkVersions → 52.0.0) and `adb install` the APK, then open `exp://127.0.0.1:8081` after `adb reverse tcp:8081 tcp:8081`.
+
+## Analytics is off by default — BREAKING CHANGE (2026-09-16)
+
+`enableAnalytics` now gates every event, **default `false`**, matching Android. A host that wires
+`onEvent` and nothing else will stop receiving events until it opts in:
+
+```
+enableAnalytics: true
+```
+
+Why: until now this platform emitted every event to `onEvent` unconditionally while Android dropped
+them at the dispatch point, so identical host code behaved differently per platform. Events are
+still constructed with their real names, properties and ordering — they are dropped only at
+`track()`, so enabling telemetry later cannot change any other behaviour.
+
+`showNameScreen` was added in the same change (default `true`, so no behaviour change). Set it
+`false` to skip the Enter-Name step, as on Android.
+

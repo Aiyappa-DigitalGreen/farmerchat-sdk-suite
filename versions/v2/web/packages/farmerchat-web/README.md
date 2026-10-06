@@ -269,3 +269,21 @@ on Node's native TypeScript support. Both new suites parse in React-free modules
 package intentionally has **no test framework**, so the suite is a plain assertion
 script that exits non-zero on failure. `test/ts-extension-hook.mjs` is a short
 `node:module` resolve hook that lets Node load the extensionless imports inside `src/`.
+
+## Analytics is off by default — BREAKING CHANGE (2026-09-16)
+
+`enableAnalytics` now gates every event, **default `false`**, matching Android. A host that wires
+`onEvent` and nothing else will stop receiving events until it opts in:
+
+```
+enableAnalytics: true
+```
+
+Why: until now this platform emitted every event to `onEvent` unconditionally while Android dropped
+them at the dispatch point, so identical host code behaved differently per platform. Events are
+still constructed with their real names, properties and ordering — they are dropped only at
+`track()`, so enabling telemetry later cannot change any other behaviour.
+
+`showNameScreen` was added in the same change (default `true`, so no behaviour change). Set it
+`false` to skip the Enter-Name step, as on Android.
+

@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     id("maven-publish")
 }
 
@@ -36,6 +37,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        compose = true
     }
     publishing {
         singleVariant("release") {
@@ -44,8 +46,28 @@ android {
     }
 }
 
+// `ViewsAppParityTest` reads the layout and values XML off the filesystem at runtime, which
+// Gradle does not otherwise treat as an input to a JVM test task. Without this the task reports
+// UP-TO-DATE after a resource-only change and the guard silently does not run — verified by
+// mutating four resources and watching three of them go undetected.
+tasks.withType<Test>().configureEach {
+    inputs.dir(layout.projectDirectory.dir("src/main/res"))
+        .withPropertyName("parityTestResources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
     api(project(":farmerchat-core"))
+
+    // Compose — for TEXT RENDERING ONLY. See `FcComposeText`.
+    //
+    // Deliberately the raw Compose libraries and NOT `:farmerchat-android-compose`: depending on
+    // that module would put its `FarmerChatActivity` on every views host's classpath, and
+    // `FarmerChat.resolveActivityClass()` tries the compose activity FIRST — so a views host would
+    // silently start the Compose UI instead. See docs/04 and the views-flavour memory.
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.foundation)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -61,6 +83,8 @@ dependencies {
     implementation(libs.androidx.navigation.ui)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.core.splashscreen)
+
+    testImplementation(libs.junit)
 
     implementation(libs.coil)
     implementation(libs.coil.svg)

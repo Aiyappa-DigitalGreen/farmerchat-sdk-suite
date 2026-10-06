@@ -36,7 +36,7 @@ export function LanguageChooserScreen(props: {
   // On success (+labels loaded) → toast → delayed onLanguageSaved (500 ms nav delay)
   useEffect(() => {
     if (state.submitSuccess) {
-      showToast(label('language_saved', 'Language updated'), 'success');
+      showToast(label('fc_v2_app_label_language_updated', 'Language updated'), 'success');
       settings.consumeLanguageResult();
       const timer = setTimeout(() => props.onLanguageSaved(), 500);
       return () => clearTimeout(timer);
@@ -66,13 +66,13 @@ export function LanguageChooserScreen(props: {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
-        title={label('language_chooser_title', 'Choose your language')}
+        title={label('fc_v2_app_label_choose_your_language', 'Choose your language')}
         navIcon="menu"
         onNavPress={props.onOpenDrawer}
       />
       {languageGroups === null ? (
         <View style={styles.spinnerWrap}>
-          <LogoSpinnerVertical message={label('language_loading', 'Loading languages…')} />
+          <LogoSpinnerVertical message={label('fc_v2_app_label_loading_languages', 'Loading languages…')} />
         </View>
       ) : (
         <>
@@ -100,7 +100,7 @@ export function LanguageChooserScreen(props: {
               >
                 {state.expandedLanguages
                   ? label('language_show_less', 'Show fewer languages')
-                  : label('language_all', 'All languages')}
+                  : label('fc_v2_app_label_all_languages', 'All languages')}
               </Text>
             ) : null}
           </ScrollView>
@@ -108,8 +108,8 @@ export function LanguageChooserScreen(props: {
             <PrimaryButton
               label={
                 state.isSubmitting
-                  ? label('language_saving', 'Setting language')
-                  : label('language_save', 'Save language')
+                  ? label('fc_v2_app_label_setting_language', 'Setting language')
+                  : label('fc_v2_app_label_save_language', 'Save language')
               }
               state={state.isSubmitting ? 'Loading' : 'Default'}
               enabled={state.selectedLanguageId !== null && state.fetchingLabelsForId === null}

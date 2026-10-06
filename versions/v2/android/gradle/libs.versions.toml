@@ -25,8 +25,10 @@ playServicesLocation = "21.3.0"
 coreSplashscreen = "1.2.0"
 playServicesAuthApiPhone = "18.3.0"
 junit = "4.13.2"
+posthogAndroid = "3.11.2"
 
 [libraries]
+posthog-android = { group = "com.posthog", name = "posthog-android", version.ref = "posthogAndroid" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activity" }

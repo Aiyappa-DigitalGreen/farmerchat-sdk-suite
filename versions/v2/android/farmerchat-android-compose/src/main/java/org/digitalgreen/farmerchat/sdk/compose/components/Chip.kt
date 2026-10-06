@@ -124,7 +124,10 @@ fun Chip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else null,
+                // REQUESTED: chip labels are bold in every state. The app bolds only the
+                // SELECTED chip (`if (selected) FontWeight.Bold else null`, Chip.kt:127) and
+                // leaves the rest at labelMedium's 600. Recorded in docs/05.
+                fontWeight = FontWeight.Bold,
                 color = labelColor,
                 modifier = Modifier.weight(1f)
             )
@@ -191,8 +194,10 @@ private fun ChipNumberBadge(number: Int, type: ChipType, enabled: Boolean) {
     ) {
         Text(
             text = number.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
+            // App parity (Chip.kt:197): the badge number is labelMedium with the style's own
+            // weight. The SDK had labelSmall + SemiBold, so the number rendered smaller and
+            // lighter than the app's.
+            style = MaterialTheme.typography.labelMedium,
             color = fg
         )
     }

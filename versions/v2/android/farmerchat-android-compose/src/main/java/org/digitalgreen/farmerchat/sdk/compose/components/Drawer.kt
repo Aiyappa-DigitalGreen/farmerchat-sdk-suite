@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -205,7 +206,7 @@ fun DrawerContent(
     showHistory: Boolean = true
 ) {
     val brandColors = LocalBrandColors.current
-    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navBarPadding = fcNavigationBarsBottom()
     val analytics = FarmerChat.requireGraph().analytics
 
     fun trackMenuOptionClick(option: String) {

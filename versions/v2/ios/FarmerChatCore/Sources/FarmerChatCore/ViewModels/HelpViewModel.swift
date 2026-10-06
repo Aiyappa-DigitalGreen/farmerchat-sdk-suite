@@ -25,7 +25,7 @@ public final class HelpViewModel: ObservableObject {
             let result = await env.api.faqs(lang: lang, limit: 5, theme: theme, country: country)
             helpState = UiState.from(
                 result,
-                fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+                fallbackMessage: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
             )
         }
     }

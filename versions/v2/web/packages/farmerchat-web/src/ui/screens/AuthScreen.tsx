@@ -87,7 +87,7 @@ export function AuthScreen(props: {
           ))}
         </div>
         <div className="fcsdk-bottombar">
-          <PrimaryButton label={label('auth_country_save', 'Save')} onClick={() => setShowCountryPicker(false)} disabled={!state.selectedCountry} />
+          <PrimaryButton label={label('fc_v2_app_label_save', 'Save')} onClick={() => setShowCountryPicker(false)} disabled={!state.selectedCountry} />
         </div>
       </div>
     );
@@ -95,7 +95,7 @@ export function AuthScreen(props: {
 
   return (
     <div className="fcsdk-screen">
-      <DefaultAppBar title={label('auth_title', 'Sign up')} leadingIcon="close" onLeadingClick={props.onClose} />
+      <DefaultAppBar title={label('fc_v2_app_label_sign_up', 'Sign up')} leadingIcon="close" onLeadingClick={props.onClose} />
       {state.step === 'phoneEntry' ? (
         <PhoneEntryContent
           state={state}
@@ -121,9 +121,16 @@ function PhoneEntryContent(props: {
 
   return (
     <div className="fcsdk-scroll fcsdk-pad">
-      <h2 style={{ margin: '4px 0 4px', fontSize: 21 }}>{label('auth_phone_title', 'Enter your phone number')}</h2>
-      <p style={{ margin: '0 0 16px', color: 'var(--fc-text-muted)' }}>
-        {label('auth_phone_subtitle', 'We will send you a verification code')}
+      {/* App parity (AuthScreen.kt:801-814). Three problems, as on iOS and react-native:
+          `auth_phone_title` / `auth_phone_subtitle` are SDK-invented keys endpoint #3 serves for
+          nobody (so every farmer read English whatever their language); the subtitle copy was
+          invented rather than the app's; and the heading was 21px left-aligned where the app
+          centres titleLarge (22px). */}
+      <h2 style={{ margin: '4px 0 8px', fontSize: 22, textAlign: 'center' }}>
+        {label('fc_v2_app_label_enter_your_phone_number', 'Enter your phone number')}
+      </h2>
+      <p style={{ margin: '0 0 16px', color: 'var(--fc-text-muted)', textAlign: 'center' }}>
+        {label('fc_v2_app_label_send_otp_signin', "We'll send a one-time code to sign you in")}
       </p>
 
       {state.countries.status === 'loading' ? (
@@ -137,14 +144,16 @@ function PhoneEntryContent(props: {
             </span>
             <span>{state.countryCode}</span>
           </button>
+          {/* App parity: the placeholder is the literal digit mask, and the app never
+              auto-focuses the phone field (only its OTP input). The accessible name keeps a
+              real served key -- `auth_phone_placeholder` was never one. */}
           <TextInput
             value={state.phoneLocal}
             onChange={actions.setPhoneLocal}
-            placeholder={label('auth_phone_placeholder', 'Phone number')}
+            placeholder="00000 00000"
             inputMode="tel"
             type="tel"
-            autoFocus
-            ariaLabel={label('auth_phone_placeholder', 'Phone number')}
+            ariaLabel={label('fc_v2_app_label_enter_your_phone_number', 'Enter your phone number')}
           />
           {state.phoneError ? <div className="fcsdk-error-inline" style={{ marginTop: 6 }}>{state.phoneError}</div> : null}
 
@@ -186,9 +195,13 @@ function OtpEntryContent(props: { state: ReturnType<typeof useAuth>[0]; actions:
 
   return (
     <div className="fcsdk-scroll fcsdk-pad" style={{ textAlign: 'center' }}>
-      <h2 style={{ margin: '4px 0 4px', fontSize: 21 }}>{label('auth_otp_title', 'Enter the 4-digit code')}</h2>
+      {/* App parity (AuthScreen.kt:1039-1050) — same three problems. The app's OTP subtitle is a
+          FIXED sentence: it interpolates no phone number. */}
+      <h2 style={{ margin: '4px 0 8px', fontSize: 22 }}>
+        {label('fc_v2_app_label_enter_code_we_sent', 'Enter the code we sent')}
+      </h2>
       <p style={{ margin: '0 0 18px', color: 'var(--fc-text-muted)' }}>
-        {label('auth_otp_subtitle', 'Sent to {phone}', { phone: `${state.countryCode} ${state.phoneLocal}` })}
+        {label('fc_v2_app_label_check_your_messages_code', 'Check your messages for the code')}
       </p>
       <OtpInput value={state.otp} onChange={actions.setOtp} />
       {state.otpError ? <div className="fcsdk-error-inline" style={{ marginTop: 10 }}>{state.otpError}</div> : null}
@@ -196,7 +209,7 @@ function OtpEntryContent(props: { state: ReturnType<typeof useAuth>[0]; actions:
 
       <div style={{ marginTop: 18 }}>
         <PrimaryButton
-          label={label('auth_verify_button', 'Verify')}
+          label={label('fc_v2_app_label_verify', 'Verify')}
           onClick={() => void actions.verifyOtp()}
           disabled={state.otp.length !== 4 || verified}
           state={verifying ? 'loading' : 'default'}
@@ -210,8 +223,8 @@ function OtpEntryContent(props: { state: ReturnType<typeof useAuth>[0]; actions:
       </div>
       {state.timerExpired ? (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-          <TextButton label={label('auth_resend_button', 'Resend code')} onClick={() => void actions.resendOtp()} />
-          <TextButton label={label('auth_start_over_button', 'Start over')} onClick={actions.startOver} />
+          <TextButton label={label('fc_v2_app_label_resend_code', 'Resend code')} onClick={() => void actions.resendOtp()} />
+          <TextButton label={label('fc_v2_app_label_start_over', 'Start over')} onClick={actions.startOver} />
         </div>
       ) : null}
     </div>

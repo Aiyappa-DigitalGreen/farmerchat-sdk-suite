@@ -281,6 +281,24 @@ export const Labels = {
   ACCEPT_AND_CONTINUE: 'fc_v2_app_label_accept_and_continue',
   /** "Your location:" — caption above the address on the location chat bubble. */
   YOUR_LOCATION: 'fc_v2_app_label_your_location',
+
+  // ---- Settings "My Farm" location row (2.0.0). Verbatim from the Android core `Labels.kt`
+  // (MY_FARM..LOCATION_HELPER_CHANGE_ANYTIME at :373-385); all seven are in
+  // test/fixtures/servedLabelKeys.json. ----
+  /** "My Farm" — settings section heading. */
+  MY_FARM: 'fc_v2_app_label_my_farm',
+  /** "Location" */
+  LOCATION: 'fc_v2_app_label_location',
+  /** "Estimated" — location precision caption. */
+  ESTIMATED: 'fc_v2_app_label_estimated',
+  /** "approximate" — location precision badge. */
+  APPROXIMATE: 'fc_v2_app_label_approximate',
+  /** "Share your location for better advice." */
+  LOCATION_HELPER_SHARE: 'fc_v2_app_label_share_your_location_for_better_advice',
+  /** "Advice and weather for this area." */
+  LOCATION_HELPER_ADVICE_WEATHER: 'fc_v2_app_label_advice_and_weather_for_this_area',
+  /** "Change anytime." */
+  LOCATION_HELPER_CHANGE_ANYTIME: 'fc_v2_app_label_change_anytime',
 } as const;
 
 export type LabelKey = (typeof Labels)[keyof typeof Labels];

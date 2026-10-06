@@ -23,6 +23,7 @@ final class FCUIHomeViewController: UIViewController {
     private let errorStack = UIStackView()
     private var didLoad = false
     private var lastClip: RecordedClip?
+    private var didBindLocation = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -61,6 +62,63 @@ final class FCUIHomeViewController: UIViewController {
             .store(in: &cancellables)
 
         initialLoad()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        bindLocationPrompt()
+    }
+
+    /// App HomeScreen.kt location wiring, bound once the nav controller is reachable.
+    private func bindLocationPrompt() {
+        guard !didBindLocation, let nav = navigationController as? FarmerChatViewController else { return }
+        didBindLocation = true
+        let prompt = nav.locationPrompt
+
+        prompt.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                // Campaign-only "Getting your location" spinner (app `isWidgetGpsLoading`).
+                self.render(self.viewModel.state)
+                // A location Error while Home is the visible screen → shared Error screen, flow
+                // closed silently (app HomeScreen.kt:256-266). Gated on Home being on top: it
+                // stays alive under Chat, where the chat chip's errors belong to the global host.
+                guard case .error(let type) = state, self.isVisibleTopScreen else { return }
+                self.presentError(isNetworkError: type == .noNetwork, fromScreen: "home")
+                prompt.dismiss(emitContinue: false)
+            }
+            .store(in: &cancellables)
+
+        // Reload feed AND weather on a Campaign update or a LocalContext success
+        // (app HomeScreen.kt:282-298) — never on a dismiss/deny.
+        prompt.events
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard event == .locationUpdatedFromWidget || event == .locationSaved(source: .localContext) else { return }
+                let userId = FarmerChat.shared.session.userId
+                self?.viewModel.onAction(.loadHome(
+                    userDeviceTime: HomeViewModel.currentDeviceTime(),
+                    userId: userId,
+                    skipLoadingCheck: true
+                ))
+                self?.viewModel.onAction(.loadWeather(userId: userId, skipLoadingCheck: true))
+            }
+            .store(in: &cancellables)
+    }
+
+    private var isVisibleTopScreen: Bool {
+        navigationController?.topViewController === self
+            && navigationController?.presentedViewController == nil
+    }
+
+    private func presentError(isNetworkError: Bool, fromScreen: String) {
+        guard let nav = navigationController, !(nav.presentedViewController is FCUIErrorViewController) else { return }
+        // The error VC dismisses itself on "Try again", which lands back on Home (the app's
+        // `fromScreen` "home" / "home_weather" retry in place); `fromScreen` is kept for parity
+        // with the SwiftUI route, which carries it on the destination.
+        _ = fromScreen
+        nav.present(FCUIErrorViewController(isNetworkError: isNetworkError) {}, animated: true)
     }
 
     private func initialLoad() {
@@ -163,13 +221,13 @@ final class FCUIHomeViewController: UIViewController {
 
         let label = UILabel()
         label.tag = 1
-        label.font = .systemFont(ofSize: 16)
+        label.font = FCUITypography.current.bodyLarge.font
         label.textColor = FCUITheme.foregroundSecondary
         label.textAlignment = .center
         label.numberOfLines = 0
 
         let retry = UIButton(type: .system)
-        retry.setTitle(fcuiLabel("try_again", "Try again"), for: .normal)
+        retry.setTitle(fcuiLabel(FCLabels.tryAgain, "Try again"), for: .normal)
         retry.setTitleColor(.white, for: .normal)
         retry.backgroundColor = FCUITheme.buttonPrimarySurface
         retry.layer.cornerRadius = 22
@@ -196,6 +254,14 @@ final class FCUIHomeViewController: UIViewController {
     // MARK: - Rendering
 
     private func render(_ state: HomeState) {
+        let campaignGpsLoading = (navigationController as? FarmerChatViewController)?
+            .locationPrompt.isCampaignLocationLoading ?? false
+        if campaignGpsLoading {
+            // App `isWidgetGpsLoading`: only a CAMPAIGN flow replaces the feed with the spinner.
+            spinner.startAnimating()
+            errorStack.isHidden = true
+            collectionView.isHidden = true
+        } else {
         switch state.homeFeedState {
         case .idle, .loading:
             spinner.startAnimating()
@@ -211,6 +277,7 @@ final class FCUIHomeViewController: UIViewController {
             errorStack.isHidden = true
             collectionView.isHidden = false
             applySnapshot(feed, state: state)
+        }
         }
 
         if let weather = state.weatherState.value, let temp = weather.currentTemp, !temp.isEmpty {
@@ -261,15 +328,22 @@ final class FCUIHomeViewController: UIViewController {
     }
 
     private func weatherTapped() {
-        FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
-        // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
-        let question = fcuiLabel("WHAT_IS_THE_PRESENT_WEATHER", "What is the present weather?")
-        // Route through the LocationPromptManager (interstitial → permission →
-        // fetch), then open Chat once the location is known (app parity).
+        let question = fcuiLabel(FCLabels.whatIsThePresentWeather, "What is the present weather?")
         guard let nav = navigationController as? FarmerChatViewController else {
+            FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
             openChat(FCUIChatArgs(question: question, isWeatherAdviceCTA: true))
             return
         }
+        // App HomeScreen.kt:545-575 order: offline → No Internet error (home_weather); ignore while
+        // the feed is loading; track; ignore while a location flow is already running.
+        if !nav.locationPrompt.isOnline {
+            presentError(isNetworkError: true, fromScreen: "home_weather")
+            return
+        }
+        if viewModel.state.homeFeedState.isLoading { return }
+        FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
+        guard nav.locationPrompt.state == .idle else { return }
+        // Route through the LocationPromptManager, then open Chat (app parity).
         if nav.locationPrompt.isLocationKnown {
             openChat(FCUIChatArgs(question: question, isWeatherAdviceCTA: true))
         } else {
@@ -281,17 +355,17 @@ final class FCUIHomeViewController: UIViewController {
 
     private func typeTapped() {
         let alert = UIAlertController(
-            title: fcuiLabel("input_type", "Type"),
+            title: fcuiLabel(FCLabels.type, "Type"),
             message: fcuiLabel("type_placeholder", "Ask anything about your farm"),
             preferredStyle: .alert
         )
         alert.addTextField()
-        alert.addAction(UIAlertAction(title: fcuiLabel("send", "Send"), style: .default) { [weak self, weak alert] _ in
+        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.send, "Send"), style: .default) { [weak self, weak alert] _ in
             guard let question = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !question.isEmpty else { return }
             self?.openChat(FCUIChatArgs(question: question))
         })
-        alert.addAction(UIAlertAction(title: fcuiLabel("cancel", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.cancel, "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -354,7 +428,7 @@ final class FCUIHomeViewController: UIViewController {
                     followUpQuestions: response.followUpQuestions ?? []
                 ))
             } else {
-                self.showToast(fcuiLabel("error_generic", "Something went wrong. Please try again."))
+                self.showToast(fcuiLabel(FCLabels.somethingWentWrongPleaseTryAgain, "Something went wrong. Please try again."))
             }
         }
     }

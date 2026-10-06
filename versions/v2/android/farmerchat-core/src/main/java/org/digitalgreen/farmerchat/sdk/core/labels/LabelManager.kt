@@ -58,6 +58,19 @@ class LabelManager(
 
     fun getLabelCount(): Int = prefs.getLanguageLabels()?.size ?: 0
 
+    /**
+     * The raw `get_labels` map (`${key}_${lang}` → text), or empty before labels load.
+     *
+     * Exposed for convention-discovered label families, where the keys are not known ahead of
+     * time and so cannot go through [getLabel] — today only the answer-generation tips
+     * (see [AnswerGenerationTips]). Prefer [getLabel] for every enumerated string: it applies
+     * host overrides and the language fallback chain, which a raw map read does not.
+     */
+    fun labelMap(): Map<String, String> = prefs.getLanguageLabels() ?: emptyMap()
+
+    /** The language code label resolution is currently using — the locale override, else the selection. */
+    fun languageCode(): String = currentLanguageCode()
+
     fun saveLabels(labels: Map<String, String>) {
         prefs.saveLanguageLabels(labels)
     }

@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:layout_marginStart="16dp"
     android:layout_marginEnd="16dp"
-    android:layout_marginBottom="12dp"
+    android:layout_marginBottom="16dp"
     android:background="@drawable/fc_bg_card"
     android:orientation="vertical">
 
@@ -35,8 +35,92 @@
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:visibility="gone" />
+
+        <!-- App ViewCountBadge: TopEnd, 12dp in, 28dp tall, scrim, 8dp/10dp sides, 20dp
+             brand-secondary eye, 5dp, labelSmall count in brand-primary. -->
+        <LinearLayout
+            android:id="@+id/fcCardViewBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="12dp"
+            android:background="@drawable/fc_bg_view_count_badge"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="10dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/fc_ic_visibility"
+                app:tint="@color/fc_brand_foreground_secondary" />
+
+            <TextView
+                android:id="@+id/fcCardViewCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:includeFontPadding="false"
+                android:textColor="@color/fc_brand_foreground_primary"
+                android:textSize="13sp"
+                android:textFontWeight="600"
+                android:fontFamily="sans-serif" />
+        </LinearLayout>
     </FrameLayout>
 
+    <!-- App PersonalizationTag (text-only cards with meta.asset_name): 18dp top / 18dp start /
+         24dp end, a 36dp glow box holding the 22dp icon, 6dp, labelMedium label. Followed by
+         a 10dp spacer; without a tag the card opens with 18dp. -->
+    <LinearLayout
+        android:id="@+id/fcCardPersonalization"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="18dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="24dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:clipChildren="false">
+
+            <View
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:layout_marginStart="-12dp"
+                android:layout_marginTop="-12dp"
+                android:background="@drawable/fc_glow_personalization" />
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/fc_icon_personalization" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/fcCardPersonalizationLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="15sp"
+            android:textFontWeight="600"
+            android:fontFamily="sans-serif" />
+    </LinearLayout>
+
+    <!-- Stays a TextView deliberately. `FcText` in a RECYCLED row was measured and rejected:
+         one composition host per row took scroll jank from 0.00% to 3.25% (legacy 17.86% ->
+         96.19%) and the 99th-percentile frame from 24ms to 73ms — 4x the 16.7ms budget. FcText
+         is for static screens only; see FcText.kt and docs/04. -->
     <TextView
         android:id="@+id/fcCardTitle"
         android:layout_width="match_parent"

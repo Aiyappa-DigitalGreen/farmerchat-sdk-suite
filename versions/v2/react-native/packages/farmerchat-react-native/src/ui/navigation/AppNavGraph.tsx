@@ -185,7 +185,9 @@ export function AppNavGraph(): React.ReactElement {
   // Settings logout: logoutApp + prefClearAll (preserve appearance) → Splash popUpTo(0)
   const handleLogout = useCallback(() => {
     void sdk.session.logout().then(() => {
-      locationPrompt.dismissError();
+      // Silent reset: an emission here would settle an armed chat surface the farmer never
+      // triggered.
+      locationPrompt.clearState();
       appNavigator.navigateLogoutToSplash();
     });
   }, [appNavigator, locationPrompt, sdk]);
@@ -232,6 +234,17 @@ export function AppNavGraph(): React.ReactElement {
       consumeTermsOfUseRequest,
     ],
   );
+
+  // App HomeScreen.kt:258-266: a location Error while Home is the visible screen goes to the
+  // shared Error screen (network flag = NoNetwork, fromScreen "home") and the flow is closed
+  // WITHOUT a Continue. Done here rather than in HomeScreen because Home stays mounted under Chat
+  // in the native stack — keyed on the visible route, a chat-chip GPS error is never swallowed.
+  const locationState = locationPrompt.state;
+  useEffect(() => {
+    if (locationState.kind !== 'Error' || currentRoute !== 'Home') return;
+    errorManager.navigateToError(locationState.errorType === 'NoNetwork', 'home', () => undefined);
+    locationPrompt.dismiss(false);
+  }, [currentRoute, errorManager, locationPrompt, locationState]);
 
   const currentLanguage = sdk.store.getString(
     StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME,
@@ -306,7 +319,7 @@ export function AppNavGraph(): React.ReactElement {
           </Drawer.Screen>
         </Drawer.Navigator>
       </NavigationContainer>
-      <LocationPromptHost prompt={locationPrompt} />
+      <LocationPromptHost prompt={locationPrompt} suppressError={currentRoute === 'Home'} />
     </GraphContext.Provider>
   );
 }
@@ -460,9 +473,11 @@ function SettingsRoute(): React.ReactElement {
     handleLogout,
     showNameUpdatedToast,
     setShowNameUpdatedToast,
+    locationPrompt,
   } = useGraph();
   return (
     <SettingsScreen
+      locationPrompt={locationPrompt}
       onOpenDrawer={openDrawer}
       onNameClick={() => appNavigator.push('SettingsName')}
       onSignUpClick={handleSignUpClick}

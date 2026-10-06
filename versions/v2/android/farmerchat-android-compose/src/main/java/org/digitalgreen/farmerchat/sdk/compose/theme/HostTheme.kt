@@ -66,6 +66,9 @@ internal fun resolveBrandColors(theme: FarmerChatTheme?, dark: Boolean): BrandCo
         foregroundSecondary = accent,
         feedbackSuccess = accent,
         feedbackFail = fail,
+        // The sweep's green stop follows the host accent so the Share border stays coherent with a
+        // host brand; cyan and yellow are fixed design primitives, exactly as in the app.
+        accentGradientGreen = accent,
     )
 }
 
@@ -126,12 +129,12 @@ data class FcShapes(
 )
 
 val LocalFcShapes = staticCompositionLocalOf {
-    FcShapes(card = Radius.XXL, button = Radius.MD, input = Radius.MD)
+    FcShapes(card = Radius.XXL, button = Radius.Rounded, input = Radius.MD)
 }
 
 internal fun resolveShapes(theme: FarmerChatTheme?): FcShapes = FcShapes(
     card = theme?.cardCornerRadius?.dp ?: Radius.XXL,
-    button = theme?.buttonCornerRadius?.dp ?: Radius.MD,
+    button = theme?.buttonCornerRadius?.dp ?: Radius.Rounded,
     input = theme?.inputCornerRadius?.dp ?: Radius.MD,
 )
 

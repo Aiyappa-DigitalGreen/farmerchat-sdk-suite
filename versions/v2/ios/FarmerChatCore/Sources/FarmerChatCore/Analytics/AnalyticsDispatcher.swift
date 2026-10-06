@@ -55,6 +55,13 @@ public enum AnalyticsEvents {
     public static let gpsLocationShared = "GPS_Location_Shared"
     public static let gpsLocationSkipped = "GPS_Location_Skipped"
     public static let gpsLocationFailed = "GPS_Location_Failed"
+    // App GPS funnel (GpsAnalyticsEvents.kt / OnboardingAnalyticsEvents.kt), character-for-character.
+    public static let locationUpdateTriggered = "Location_Update_Triggered"
+    public static let permissionPopupShown = "Permission_popup_shown"
+    public static let locationPermissionPromptTriggered = "location_permission_prompt_triggered"
+    public static let permissionFallbackSettingShown = "Permission_Fallback_Default_Setting_Shown"
+    public static let permissionFallbackSettingClicked = "Permission_Fallback_Default_Setting_Clicked"
+    public static let permissionFallbackSettingCanceled = "Permission_Fallback_Default_Setting_Canceled"
 
     // Force-update / misc parity constants (app casing).
     public static let forceUpdatePopupUpdateClicked = "Force_Update_Popup_Update_clicked"
@@ -82,6 +89,8 @@ public enum ScreenNames {
     public static let error = "Error Screen"
     public static let fullScreenMessage = "Full Screen Message"
     public static let locationPrompt = "GPS Interstitial Screen"
+    /// App `AnalyticsScreens.GPS` — `screen_name` on every GPS funnel event.
+    public static let gps = "GPS Screen"
 }
 
 /// Fan-out point for analytics. The SDK never embeds third-party analytics
@@ -91,20 +100,30 @@ public final class AnalyticsDispatcher: @unchecked Sendable {
     /// Semantic screen callbacks (docs/07 C4). Fired alongside raw events.
     private let onScreenView: (@Sendable (String) -> Void)?
     private let onChatOpened: (@Sendable () -> Void)?
+    /// Telemetry master switch — `FarmerChatConfig.enableAnalytics`, default FALSE.
+    ///
+    /// Everything upstream is unchanged when it is false: events are still constructed with their
+    /// real names and properties, at the real call sites, in the real order. They are dropped
+    /// HERE, at the single dispatch point, so turning telemetry on later cannot change any other
+    /// behaviour. Mirrors android `core/analytics/Analytics.kt`.
+    private let enabled: Bool
     private let lock = NSLock()
     private var userAttributes: [String: String] = [:]
 
     public init(
         handler: FarmerChatEventHandler?,
         onScreenView: (@Sendable (String) -> Void)? = nil,
-        onChatOpened: (@Sendable () -> Void)? = nil
+        onChatOpened: (@Sendable () -> Void)? = nil,
+        enabled: Bool = false
     ) {
+        self.enabled = enabled
         self.handler = handler
         self.onScreenView = onScreenView
         self.onChatOpened = onChatOpened
     }
 
     public func track(_ name: String, props: [String: String] = [:]) {
+        guard enabled else { return }
         handler?(name, props)
     }
 

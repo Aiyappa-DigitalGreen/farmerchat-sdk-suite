@@ -1,6 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.compose.theme
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,10 @@ val Sky700 = Color(0xFF0069A8)
 // Sun
 val Sun300 = Color(0xFFF9FF47)
 
+// Accent gradient stops (Share button conic/sweep border)
+val Cyan400 = Color(0xFF22D3EE)
+val Yellow300 = Color(0xFFFFF947)
+
 // Red
 val Red500 = Color(0xFFE5533D)
 
@@ -66,7 +71,30 @@ data class BrandColors(
     val foregroundSecondary: Color,
     val feedbackSuccess: Color,
     val feedbackFail: Color,
-)
+    // Accent gradient stops for the Share button's conic/sweep border. Defaulted so a host that
+    // constructs BrandColors itself stays source-compatible — the app has no such constructor.
+    val accentGradientGreen: Color = Green500,
+    val accentGradientCyan: Color = Cyan400,
+    val accentGradientYellow: Color = Yellow300,
+) {
+    /**
+     * Compose equivalent of the design's
+     * `conic-gradient(from 0deg at 50% 50%, green 0deg, cyan 90deg, green 180deg, yellow 270deg, green 360deg)`.
+     *
+     * A sweep gradient IS Compose's conic gradient, but its 0 degrees starts at 3 o'clock (right)
+     * whereas CSS `conic-gradient(from 0deg)` starts at 12 o'clock (top). The stops below are
+     * therefore rotated +90 degrees (shifted by 0.25) so the visual orientation matches the design:
+     * top = green, right = cyan, bottom = green, left = yellow.
+     */
+    val accentSweepBorder: Brush
+        get() = Brush.sweepGradient(
+            0.00f to accentGradientCyan,   // right  (CSS 90)
+            0.25f to accentGradientGreen,  // bottom (CSS 180)
+            0.50f to accentGradientYellow, // left   (CSS 270)
+            0.75f to accentGradientGreen,  // top    (CSS 0/360)
+            1.00f to accentGradientCyan,   // back to right
+        )
+}
 
 val BrandSemanticColors = BrandColors(
     surfacePrimary = Green700,
@@ -76,6 +104,9 @@ val BrandSemanticColors = BrandColors(
     foregroundSecondary = Green500,
     feedbackSuccess = Green500,
     feedbackFail = Red500,
+    accentGradientGreen = Green500,
+    accentGradientCyan = Cyan400,
+    accentGradientYellow = Yellow300,
 )
 
 // ---------------------------------------------------------------------------

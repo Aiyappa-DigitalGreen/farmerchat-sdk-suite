@@ -94,6 +94,12 @@ class TimeoutTypeInterceptor(
             .connectTimeout(effectiveTimeout.toLong(), TimeUnit.SECONDS)
             .readTimeout(effectiveTimeout.toLong(), TimeUnit.SECONDS)
             .writeTimeout(effectiveTimeout.toLong(), TimeUnit.SECONDS)
+            // A bound on the WHOLE attempt. The three above are per step, and OkHttp re-arms the
+            // connect timeout for every route it tries: an unreachable host with a dozen
+            // addresses (googleapis.com from a network that drops it) turned the 5 s geolocate
+            // into minutes, and the CHAT_ONLY splash waits on geolocate. 2x leaves slow-but-alive
+            // responses (a long #27 answer) untouched.
+            .callTimeout(effectiveTimeout * 2L, TimeUnit.SECONDS)
             .build()
 
         val response = clientWithTimeout.newCall(newRequest).execute()

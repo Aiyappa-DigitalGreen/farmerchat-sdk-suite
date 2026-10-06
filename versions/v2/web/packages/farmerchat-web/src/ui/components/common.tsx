@@ -209,6 +209,14 @@ export function OtpInput(props: { value: string; onChange: (v: string) => void; 
   const length = props.length ?? 4;
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
+  // App parity (app `OtpInput.kt:46-52`): the OTP input auto-focuses on mount — it is the ONE
+  // field the app focuses, which is why the phone field deliberately does not. Android's
+  // `Form.kt:401` OtpInput already ports this (`autoFocus = true` + a LaunchedEffect); RN's
+  // does too. Web was the only platform where no field took focus at all.
+  useEffect(() => {
+    refs.current[0]?.focus();
+  }, []);
+
   // Web OTP API: autofill the code from an SMS when the browser supports it.
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('credentials' in navigator)) return;
@@ -299,32 +307,73 @@ export function ListItem(props: { icon?: ReactNode; text: string; onClick?: () =
 export function FullScreenMessage(props: {
   title: string;
   subtitle?: string;
+  /** Glyph illustration, or any node (e.g. an image) when {@link illustrationNode} is given. */
   illustration: string;
+  illustrationNode?: ReactNode;
+  /**
+   * Larger message under the title (Compose `mainMessage`). When present, [title] renders as the
+   * small app-bar title, as the app's FullScreenMessage does.
+   */
+  mainMessage?: string;
   primaryLabel: string;
   onPrimary: () => void;
   primaryLoading?: boolean;
+  primaryDisabled?: boolean;
+  primaryState?: PrimaryButtonState;
   secondaryLabel?: string;
   onSecondary?: () => void;
   onClose?: () => void;
+  /** Leading Back (←) action (Compose `leftIcon`). */
+  onBack?: () => void;
+  /** Trailing text action, e.g. "Skip" (Compose `rightLabel`). */
+  rightLabel?: string;
+  onRight?: () => void;
 }) {
+  const withHeaderTitle = props.mainMessage !== undefined;
   return (
     <div className="fcsdk-fullmsg">
       <div className="fcsdk-appbar" style={{ background: 'transparent' }}>
-        {props.onClose ? (
+        {props.onBack ? (
+          <button type="button" className="fcsdk-iconbtn" aria-label="back" onClick={props.onBack}>
+            {Icon.back}
+          </button>
+        ) : props.onClose ? (
           <button type="button" className="fcsdk-iconbtn" aria-label="close" onClick={props.onClose}>
             {Icon.close}
           </button>
+        ) : withHeaderTitle ? (
+          <span className="fcsdk-fullmsg-barspacer" aria-hidden />
+        ) : null}
+        {withHeaderTitle ? <div className="fcsdk-fullmsg-bartitle">{props.title}</div> : null}
+        {props.rightLabel && props.onRight ? (
+          <button type="button" className="fcsdk-fullmsg-barright" onClick={props.onRight}>
+            {props.rightLabel}
+          </button>
+        ) : withHeaderTitle ? (
+          <span className="fcsdk-fullmsg-barspacer" aria-hidden />
         ) : null}
       </div>
       <div className="fcsdk-fullmsg-body">
-        <div className="fcsdk-fullmsg-illustration" aria-hidden>
-          {props.illustration}
-        </div>
-        <div className="fcsdk-fullmsg-title">{props.title}</div>
+        {props.illustrationNode !== undefined ? (
+          <div className="fcsdk-fullmsg-illustration fcsdk-fullmsg-illustration--node" aria-hidden>
+            {props.illustrationNode}
+          </div>
+        ) : (
+          <div className="fcsdk-fullmsg-illustration" aria-hidden>
+            {props.illustration}
+          </div>
+        )}
+        <div className="fcsdk-fullmsg-title">{withHeaderTitle ? props.mainMessage : props.title}</div>
         {props.subtitle ? <div className="fcsdk-fullmsg-sub">{props.subtitle}</div> : null}
       </div>
       <div className="fcsdk-fullmsg-footer">
-        <PrimaryButton label={props.primaryLabel} onClick={props.onPrimary} light state={props.primaryLoading ? 'loading' : 'default'} />
+        <PrimaryButton
+          label={props.primaryLabel}
+          onClick={props.onPrimary}
+          light
+          disabled={props.primaryDisabled}
+          state={props.primaryLoading ? 'loading' : (props.primaryState ?? 'default')}
+        />
         {props.secondaryLabel && props.onSecondary ? <SecondaryButton label={props.secondaryLabel} onClick={props.onSecondary} /> : null}
       </div>
     </div>

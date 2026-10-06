@@ -2,38 +2,29 @@ package org.digitalgreen.farmerchat.sdk.compose.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.text.AnnotatedString
@@ -49,7 +40,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.digitalgreen.farmerchat.sdk.compose.R
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
@@ -58,6 +48,8 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
 private sealed class MarkdownBlock {
     data class Header(val text: String, val level: Int) : MarkdownBlock()
     data class Paragraph(val text: String) : MarkdownBlock()
+    /** `> text` — answers use it for tips. Not in the app's parser, which showed the `>`. */
+    data class Quote(val text: String) : MarkdownBlock()
     data class BulletItem(val text: String) : MarkdownBlock()
     data class NumberedItem(val number: String, val text: String) : MarkdownBlock()
     data class Table(
@@ -79,7 +71,12 @@ fun MarkdownText(
     modifier: Modifier = Modifier,
     color: Color = LocalContentColors.current.foregroundPrimary,
     tableBleed: Dp = 0.dp,
-    onTableAction: (String) -> Unit = {},
+    /**
+     * Reserved. The table block used to carry a pair of "Save plan" / "Set reminders" buttons
+     * that called this; the app removed them in 1b0553d2 and so has the SDK. Kept because it is
+     * part of this composable's published signature — no caller in the tree passes it.
+     */
+    @Suppress("UNUSED_PARAMETER") onTableAction: (String) -> Unit = {},
     /** Optional content flowed inline right after the final word (e.g. a pause spinner). */
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -127,6 +124,7 @@ fun MarkdownText(
                 // Consecutive list items get tighter spacing
                 block is MarkdownBlock.BulletItem && prevBlock is MarkdownBlock.BulletItem -> 5.dp
                 block is MarkdownBlock.NumberedItem && prevBlock is MarkdownBlock.NumberedItem -> 5.dp
+                block is MarkdownBlock.Quote && prevBlock is MarkdownBlock.Quote -> 5.dp
                 // Consecutive paragraphs get more breathing room
                 block is MarkdownBlock.Paragraph && prevBlock is MarkdownBlock.Paragraph -> 20.dp
                 else -> 12.dp
@@ -169,6 +167,26 @@ fun MarkdownText(
                         color = color,
                         inlineContent = trailingMap,
                     )
+                }
+
+                // A 3dp rounded bar in borderDefault (the divider's colour), text 12dp after it.
+                is MarkdownBlock.Quote -> {
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(50))
+                                .background(colors.borderDefault)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = withTrailing(parseBoldText(block.text), isLastBlock),
+                            style = type.bodyMedium,
+                            color = color,
+                            inlineContent = trailingMap,
+                        )
+                    }
                 }
 
                 is MarkdownBlock.BulletItem -> {
@@ -216,7 +234,6 @@ fun MarkdownText(
                         block = block,
                         textColor = color,
                         bleed = tableBleed,
-                        onAction = onTableAction,
                     )
                 }
             }
@@ -229,145 +246,271 @@ private fun MarkdownTable(
     block: MarkdownBlock.Table,
     textColor: Color,
     bleed: Dp,
-    onAction: (String) -> Unit,
+) {
+    val columnCount = block.headers.size
+    if (columnCount == 0) return
+
+    // App parity (MarkdownText.kt @ 10a87f9c..04b38e8f). The answer format now sends "cards": a
+    // 3-column table whose header row carries the card title in the first cell and leaves the
+    // other two empty (`| Saturday, 19 Sep | | |`). Each body row is a label / value / meaning
+    // triple. This is detected strictly (see [isCard]) and rendered by [MarkdownAnswerCard].
+    //
+    // Anything else keeps the existing behaviour: a genuine multi-column grid still renders as
+    // single-column stacked cards (one per data row) so it never pans horizontally, and a lone
+    // single-column table falls back to the simple weighted list.
+    when {
+        block.isCard() -> MarkdownAnswerCard(block = block, textColor = textColor)
+        columnCount >= 2 -> MarkdownRowCards(block = block, textColor = textColor)
+        else -> MarkdownWeightedTable(block = block, textColor = textColor, bleed = bleed)
+    }
+}
+
+/**
+ * A card is a 3-column table whose header row holds the card title in the first cell and nothing
+ * in the other two — e.g. `| Saturday, 19 Sep | | |`. This is the sole test that separates a card
+ * from an ordinary grid (a grid has text in at least one of the trailing header cells). Cells are
+ * already trimmed by the parser, so the header list can be tested directly.
+ */
+private fun MarkdownBlock.Table.isCard(): Boolean =
+    headers.size == 3 && headers[0].isNotEmpty() && headers.drop(1).all { it.isEmpty() }
+
+/**
+ * Renders one answer card: the header's first cell as the card title, then one "reading" per body
+ * row. A divider line sits under the title and between every reading. The card keeps its filled
+ * surface (surfaceReadingSecondary) — only the in-between separator lines are added.
+ *
+ * Each reading is a label / value / meaning triple — the label (row[0]) sits small and muted above
+ * the value (row[1], emphasised), and the meaning (row[2]) is a plain-language line beneath the
+ * value. The meaning is the whole point of the format — the line a farmer who cannot read the
+ * figure relies on — so it stays readable (foregroundSecondary, never the faint tertiary tone) and
+ * is only dropped when the source cell is empty.
+ */
+@Composable
+private fun MarkdownAnswerCard(
+    block: MarkdownBlock.Table,
+    textColor: Color,
+) {
+    val colors = LocalContentColors.current
+    val type = MaterialTheme.typography
+    val shape = SmoothShapes.rounded(Radius.LG)
+    val title = stripCellMarkup(block.headers.getOrNull(0).orEmpty())
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.surfaceReadingSecondary)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (title.isNotEmpty()) {
+            Text(
+                text = parseBoldText(title),
+                style = type.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = textColor,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(colors.borderDefault)
+            )
+        }
+
+        block.rows.forEachIndexed { rowIdx, row ->
+            val cellLabel = stripCellMarkup(row.getOrNull(0).orEmpty())
+            val value = stripCellMarkup(row.getOrNull(1).orEmpty())
+            val meaning = stripCellMarkup(row.getOrNull(2).orEmpty())
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (cellLabel.isNotEmpty()) {
+                    Text(
+                        text = parseBoldText(cellLabel),
+                        style = type.bodySmall,
+                        color = colors.foregroundSecondary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Text(
+                    text = parseBoldText(value),
+                    style = type.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = textColor,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (meaning.isNotEmpty()) {
+                    Text(
+                        text = parseBoldText(meaning),
+                        style = type.bodyMedium,
+                        color = colors.foregroundSecondary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                    )
+                }
+            }
+            // Separator line between readings — the card edge closes the last one.
+            if (rowIdx != block.rows.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(colors.borderDefault)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Stacked-card treatment for any multi-column (2+) table. One card per data row: the first cell
+ * becomes the card's title header and each remaining column is a label (its column header) /
+ * value pair. Label is muted above a bold value — regardless of the source GFM alignment, which
+ * is why this branch ignores `block.alignments`.
+ */
+@Composable
+private fun MarkdownRowCards(
+    block: MarkdownBlock.Table,
+    textColor: Color,
 ) {
     val colors = LocalContentColors.current
     val type = MaterialTheme.typography
     val columnCount = block.headers.size
-    if (columnCount == 0) return
+    val shape = SmoothShapes.rounded(Radius.LG)
 
-    val cellHorizontalPadding: Dp = 12.dp
-    val cellVerticalPadding: Dp = 10.dp
-    val minColumnWidth: Dp = 160.dp
-    val shape = SmoothShapes.rounded(Radius.SM)
-    val scrollState = rememberScrollState()
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Fake action buttons sit above the table so they don't collide with the
-        // bottom-anchored answer actions (Listen / Share / Save). Treatment matches
-        // those primary action buttons.
-        /*Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            ActionButton(
-                icon = ImageVector.vectorResource(R.drawable.fc_icon_save),
-                label = "Save plan",
-                onClick = { onAction("Plan saved") },
-                modifier = Modifier.weight(1f),
-            )
-            ActionButton(
-                icon = ImageVector.vectorResource(R.drawable.fc_icon_timer),
-                label = "Set reminders",
-                onClick = { onAction("Reminders set") },
-                modifier = Modifier.weight(1f),
-            )
-        }*/
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Table bleeds toward the screen edges by expanding past its parent's
-        // horizontal padding, but keeps a balanced 16dp inset from each screen
-        // edge. Only the table + gradient wrapper bleeds — buttons above stay
-        // aligned with the rest of the answer column.
-        val screenEdgeInset = 16.dp
-        val sideBleed = (bleed - screenEdgeInset).coerceAtLeast(0.dp)
-
-        // 1–2 column tables fill the available width with weighted cells (no
-        // scroll). 3+ column tables keep a fixed per-column min width and
-        // overflow horizontally so the user can pan to see more — the right
-        // edge gets a fade hint when that's the case.
-        val isScrollable = columnCount >= 3
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .bleedHorizontally(start = sideBleed, end = sideBleed)
-                .height(IntrinsicSize.Min)
-        ) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        block.rows.forEach { row ->
+            val title = stripCellMarkup(row.getOrNull(0).orEmpty())
             Column(
                 modifier = Modifier
-                    .then(if (isScrollable) Modifier.horizontalScroll(scrollState) else Modifier.fillMaxWidth())
+                    .fillMaxWidth()
                     .clip(shape)
-                    .border(1.dp, colors.borderDefault, shape)
+                    .background(colors.surfaceReadingSecondary)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // Header
-                Row(
-                    modifier = Modifier
-                        .then(if (isScrollable) Modifier else Modifier.fillMaxWidth())
-                        .background(colors.surfaceTertiary)
-                ) {
-                    block.headers.forEachIndexed { colIdx, headerCell ->
-                        val cellModifier =
-                            if (isScrollable) Modifier.width(minColumnWidth)
-                            else Modifier.weight(1f)
-                        Text(
-                            text = parseBoldText(stripCellMarkup(headerCell)),
-                            style = type.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                textAlign = block.alignments.getOrNull(colIdx) ?: TextAlign.Start,
-                            ),
-                            color = textColor,
-                            modifier = cellModifier
-                                .padding(horizontal = cellHorizontalPadding, vertical = cellVerticalPadding)
-                        )
-                    }
+                if (title.isNotEmpty()) {
+                    Text(
+                        text = parseBoldText(title),
+                        style = type.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = textColor,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.borderDefault)
+                    )
                 }
 
-                // Body rows alternate between pure white (surfaceSecondary) and the
-                // same neutral tone as the user chat bubble (surfaceReadingSecondary)
-                // — softer than the previous tertiary tint.
-                block.rows.forEachIndexed { rowIdx, row ->
-                    val rowBg = if (rowIdx % 2 == 0) colors.surfaceSecondary else colors.surfaceReadingSecondary
-                    Row(
-                        modifier = Modifier
-                            .then(if (isScrollable) Modifier else Modifier.fillMaxWidth())
-                            .background(rowBg)
+                for (colIdx in 1 until columnCount) {
+                    val cellLabel = stripCellMarkup(block.headers.getOrNull(colIdx).orEmpty())
+                    val value = stripCellMarkup(row.getOrNull(colIdx).orEmpty())
+                    // Single-column stacked layout: the label is its own full-width row and the
+                    // value sits directly below it, also full width. This replaces the earlier
+                    // side-by-side (weighted) pair so long labels and values each get the whole
+                    // card width instead of wrapping inside a narrow half-column.
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        for (colIdx in 0 until columnCount) {
-                            val cellText = row.getOrNull(colIdx).orEmpty()
-                            val cellModifier =
-                                if (isScrollable) Modifier.width(minColumnWidth)
-                                else Modifier.weight(1f)
-                            Text(
-                                text = parseBoldText(stripCellMarkup(cellText)),
-                                style = type.bodySmall.copy(
-                                    textAlign = block.alignments.getOrNull(colIdx) ?: TextAlign.Start,
-                                ),
-                                color = textColor,
-                                modifier = cellModifier
-                                    .padding(horizontal = cellHorizontalPadding, vertical = cellVerticalPadding)
-                            )
-                        }
+                        Text(
+                            text = parseBoldText(cellLabel),
+                            style = type.bodySmall,
+                            color = colors.foregroundSecondary,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = parseBoldText(value),
+                            style = type.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = textColor,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
+        }
+    }
+}
 
-            // Right-edge scroll-hint gradient — only when the table actually
-            // overflows. Fades out as the user reaches the right edge so the
-            // last column isn't obscured at end-of-scroll.
-            if (isScrollable) {
-                val hintAlpha by remember(scrollState) {
-                    derivedStateOf {
-                        val remaining = (scrollState.maxValue - scrollState.value).toFloat()
-                        (remaining / 120f).coerceIn(0f, 1f)
-                    }
-                }
-                Box(
+/**
+ * Compact weighted grid, used only for a lone single-column table. Columns share the width so
+ * nothing overflows; the block may bleed toward the screen edges via [bleed] to line up with the
+ * rest of the answer.
+ */
+@Composable
+private fun MarkdownWeightedTable(
+    block: MarkdownBlock.Table,
+    textColor: Color,
+    bleed: Dp,
+) {
+    val colors = LocalContentColors.current
+    val type = MaterialTheme.typography
+    val columnCount = block.headers.size
+
+    val cellHorizontalPadding: Dp = 12.dp
+    val cellVerticalPadding: Dp = 10.dp
+    val shape = SmoothShapes.rounded(Radius.SM)
+
+    // The table bleeds toward the screen edges by expanding past its parent's horizontal
+    // padding, but keeps a balanced 16dp inset from each screen edge.
+    val screenEdgeInset = 16.dp
+    val sideBleed = (bleed - screenEdgeInset).coerceAtLeast(0.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bleedHorizontally(start = sideBleed, end = sideBleed)
+            .clip(shape)
+            .border(1.dp, colors.borderDefault, shape)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surfaceTertiary)
+        ) {
+            block.headers.forEachIndexed { colIdx, headerCell ->
+                Text(
+                    text = parseBoldText(stripCellMarkup(headerCell)),
+                    style = type.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        textAlign = block.alignments.getOrNull(colIdx) ?: TextAlign.Start,
+                    ),
+                    color = textColor,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(48.dp)
-                        .alpha(hintAlpha)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    colors.surfaceReadingPrimary.copy(alpha = 0f),
-                                    colors.surfaceReadingPrimary,
-                                )
-                            )
-                        )
+                        .weight(1f)
+                        .padding(horizontal = cellHorizontalPadding, vertical = cellVerticalPadding)
                 )
+            }
+        }
+
+        // Body rows alternate between pure white (surfaceSecondary) and the same neutral tone as
+        // the user chat bubble (surfaceReadingSecondary) — softer than a tertiary tint.
+        block.rows.forEachIndexed { rowIdx, row ->
+            val rowBg = if (rowIdx % 2 == 0) colors.surfaceSecondary else colors.surfaceReadingSecondary
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(rowBg)
+            ) {
+                for (colIdx in 0 until columnCount) {
+                    val cellText = row.getOrNull(colIdx).orEmpty()
+                    Text(
+                        text = parseBoldText(stripCellMarkup(cellText)),
+                        style = type.bodySmall.copy(
+                            textAlign = block.alignments.getOrNull(colIdx) ?: TextAlign.Start,
+                        ),
+                        color = textColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = cellHorizontalPadding, vertical = cellVerticalPadding)
+                    )
+                }
             }
         }
     }
@@ -445,6 +588,9 @@ private fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
             }
             trimmed.startsWith("- ") || trimmed.startsWith("* ") -> {
                 blocks.add(MarkdownBlock.BulletItem(trimmed.substring(2)))
+            }
+            trimmed.startsWith(">") -> {
+                blocks.add(MarkdownBlock.Quote(trimmed.trimStart('>').trim()))
             }
             trimmed.matches(Regex("^\\d+\\.\\s.*")) -> {
                 val number = trimmed.substringBefore(".").trim()

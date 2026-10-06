@@ -111,6 +111,50 @@ class AuthViewModel(
         setCountryCode(code)
     }
 
+    /**
+     * Whether the SIM should be consulted at all for the phone country/number.
+     *
+     * App parity (`AuthScreen.kt:261`): the app reads the SIM **only when no country ISO has been
+     * resolved yet** (`if (savedIso.isBlank())`). That guard is not cosmetic — it prevents a race
+     * this SDK hit in testing: the deferred GPS `applyIso` calls `selectCountry`, which clears
+     * `phoneLocal`, so a SIM pre-fill applied first was silently wiped a few milliseconds later.
+     * Consulting the SIM only when there is no resolved country removes the collision entirely,
+     * because `applyIso` no-ops on a blank ISO.
+     */
+    fun shouldAutoDetectFromSim(): Boolean =
+        prefs.getString(SdkPreferences.Keys.USER_COUNTRY_CODE, "").isBlank()
+
+    /**
+     * Pre-fills the phone fields from a SIM line number (app parity, `AuthScreen.kt:271`).
+     *
+     * Splits against the dial codes already loaded from endpoint #5 rather than a phone-number
+     * library — see [org.digitalgreen.farmerchat.sdk.core.util.PhoneNumberSplitter].
+     *
+     * A number with no recognisable country code sets ONLY the local part: the country the user
+     * (or GPS) already chose is left alone, because guessing it from an ambiguous number is worse
+     * than leaving it. Returns true when anything was applied, so the caller can tell whether the
+     * SIM actually resolved.
+     */
+    fun applySimNumber(raw: String): Boolean {
+        val number = raw.trim()
+        if (number.isEmpty()) return false
+        val dialCodes = _state.value.countries.map { it.phone_country_code }
+        val split = org.digitalgreen.farmerchat.sdk.core.util.PhoneNumberSplitter
+            .split(number, dialCodes)
+        return if (split != null) {
+            val (code, local) = split
+            // setCountryCode clears phoneLocal, so the local part must be applied after it.
+            setCountryCodeFromSim(code)
+            setPhoneLocal(local)
+            true
+        } else {
+            val digits = number.filter { it.isDigit() }
+            if (digits.isEmpty()) return false
+            setPhoneLocal(digits)
+            true
+        }
+    }
+
     fun selectCountry(country: CountryItem) {
         _state.update {
             it.copy(
@@ -221,25 +265,35 @@ class AuthViewModel(
         }
     }
 
-    /** Endpoint #20: which OTP channels (SMS / WhatsApp) are enabled for the country. */
+    /**
+     * Endpoint #20: which OTP channels (SMS / WhatsApp) are enabled for the country.
+     *
+     * 1:1 with the app's `refreshOtpModeForCountry` (ui/auth/AuthViewModel.kt:362): the dial code
+     * is sent WITHOUT the leading `+`. The SDK used to pass `+91` (`%2B91` on the wire), for
+     * which the backend returns no row, so the null-item fallback enabled BOTH channels and
+     * Auth showed a "Send via WhatsApp" button the app does not (India on stage returns
+     * `whatsapp_enabled = false`). A missing row or an error leaves the current channels
+     * untouched, as the app does.
+     */
     fun refreshOtpModeForCountry(phoneCountryCode: String) {
+        val stripped = phoneCountryCode.replace("+", "").trim()
+        if (stripped.isEmpty()) return
         scope.launch {
-            phoneAuth.getOtpMode(phoneCountryCode).collect { result ->
+            phoneAuth.getOtpMode(stripped).collect { result ->
                 when (result) {
                     is ApiResult.Success -> {
-                        val item = result.data.firstOrNull()
+                        val item = result.data.firstOrNull() ?: return@collect
                         _state.update {
                             it.copy(
                                 availableChannels = AvailableChannels(
-                                    smsEnabled = item?.sms_enabled ?: true,
-                                    whatsappEnabled = item?.whatsapp_enabled ?: true
+                                    smsEnabled = item.sms_enabled,
+                                    whatsappEnabled = item.whatsapp_enabled
                                 )
                             )
                         }
                     }
                     is ApiResult.Error -> {
-                        // Conservative default: both channels available.
-                        _state.update { it.copy(availableChannels = AvailableChannels()) }
+                        // Non-blocking: keep whatever is showing (default = both channels).
                     }
                 }
             }

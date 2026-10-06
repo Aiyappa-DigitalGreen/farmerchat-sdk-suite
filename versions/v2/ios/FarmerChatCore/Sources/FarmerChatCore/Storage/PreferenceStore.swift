@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// All preference keys the SDK persists, grouped exactly like the app's
 /// `PreferenceHelperManager` key groups (doc 02 §Session & persistence).
@@ -53,6 +54,8 @@ public enum PrefKey: String, CaseIterable, Sendable {
     case micAttemptCount = "MIC_ATTEMPT_COUNT"
     case cameraDenyCount = "CAMERA_DENY_COUNT"
     case cameraAttemptCount = "CAMERA_ATTEMPT_COUNT"
+    /// Location permission deny count — the app's `PreferenceKeys.PERMISSION_DENY_COUNT`.
+    case permissionDenyCount = "PERMISSION_DENY_COUNT"
 
     // UI
     case appearanceMode = "APPEARANCE_MODE"
@@ -72,6 +75,16 @@ public enum PrefKey: String, CaseIterable, Sendable {
 public final class PreferenceStore: @unchecked Sendable {
     private let defaults: UserDefaults
 
+    /// Emits the new language code whenever `selectedLanguageCode` is written.
+    ///
+    /// UI that derives from the language — the per-script type scale in particular — has no
+    /// other way to learn about the change: `UserDefaults` is outside SwiftUI's observation
+    /// graph, and the six writers live in three different view models, one of which
+    /// (`OnboardingViewModel`) is created per screen and observed by nothing above it. Every
+    /// writer goes through `setString`, so publishing here catches all of them without each
+    /// one having to remember.
+    public let languageDidChange = PassthroughSubject<String, Never>()
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
@@ -83,10 +96,17 @@ public final class PreferenceStore: @unchecked Sendable {
     }
 
     public func setString(_ value: String?, _ key: PrefKey) {
+        let previous = key == .selectedLanguageCode ? defaults.string(forKey: key.namespaced) : nil
         if let value {
             defaults.set(value, forKey: key.namespaced)
         } else {
             defaults.removeObject(forKey: key.namespaced)
+        }
+        // Only on an actual change: the language is re-written on several paths that often
+        // set the same value (session restore, label reload), and each one would otherwise
+        // rebuild the theme for nothing.
+        if key == .selectedLanguageCode, let value, value != previous {
+            languageDidChange.send(value)
         }
     }
 

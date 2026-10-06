@@ -17,6 +17,7 @@ import org.digitalgreen.farmerchat.sdk.views.internal.BaseFragment
 import org.digitalgreen.farmerchat.sdk.views.internal.coreVm
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+import org.digitalgreen.farmerchat.sdk.views.internal.util.applySystemBarBackdrop
 
 /** Settings → Name (doc 01 §3.11). */
 internal class SettingsNameFragment : BaseFragment(R.layout.fc_fragment_settings_name) {
@@ -33,10 +34,21 @@ internal class SettingsNameFragment : BaseFragment(R.layout.fc_fragment_settings
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FcFragmentSettingsNameBinding.bind(view)
+        // Green status-bar inset + surface nav-bar strip, as the app paints them.
+        binding.root.applySystemBarBackdrop()
 
         binding.fcSettingsNameAppBar.fcAppBarTitle.text = label(Labels.NAME, "Name")
         binding.fcSettingsNameAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_ic_back)
+        binding.fcSettingsNameLabel.text = label(Labels.YOUR_NAME, "Your name")
         binding.fcSettingsNameInput.hint = label(Labels.ENTER_YOUR_NAME, "Enter your name")
+        // Compose parity (SettingsNameScreen.kt:148, `autofocus = true`): this screen exists to
+        // type a name, so the field takes focus and the keyboard opens on entry. Views opened it
+        // unfocused, costing the user a tap.
+        binding.fcSettingsNameInput.requestFocus()
+        binding.fcSettingsNameInput.post {
+            androidx.core.view.ViewCompat.getWindowInsetsController(binding.fcSettingsNameInput)
+                ?.show(androidx.core.view.WindowInsetsCompat.Type.ime())
+        }
         binding.fcSettingsNameSave.text = label(Labels.SAVE_NAME, "Save name")
         binding.fcSettingsNameAppBar.fcAppBarLeft.setOnClickListener { findNavController().popBackStack() }
 
@@ -46,6 +58,13 @@ internal class SettingsNameFragment : BaseFragment(R.layout.fc_fragment_settings
         binding.fcSettingsNameInput.setText(savedName)
         binding.fcSettingsNameInput.setSelection(savedName.length)
 
+        // App parity (SettingsNameScreen.kt:149 `isButtonEnabled = trimmedName.length in
+        // 1..MAX && !isSaving`): the button is disabled (dimmed) until a name is entered.
+        fun refreshSaveEnabled() {
+            val hasName = binding.fcSettingsNameInput.text?.toString().orEmpty().trim().isNotEmpty()
+            binding.fcSettingsNameSave.setButtonEnabled(hasName)
+        }
+        refreshSaveEnabled()
         binding.fcSettingsNameInput.doAfterTextChanged { editable ->
             val raw = editable?.toString().orEmpty()
             val normalized = EnterNameViewModel.normalizeNameInput(raw)
@@ -53,6 +72,7 @@ internal class SettingsNameFragment : BaseFragment(R.layout.fc_fragment_settings
                 binding.fcSettingsNameInput.setText(normalized)
                 binding.fcSettingsNameInput.setSelection(normalized.length)
             }
+            refreshSaveEnabled()
         }
 
         binding.fcSettingsNameSave.setOnClickListener { save() }

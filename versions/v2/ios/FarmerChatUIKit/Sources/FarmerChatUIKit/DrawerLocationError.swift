@@ -192,11 +192,11 @@ final class FCUIDrawerViewController: UIViewController {
         }
 
         // Rows
-        stack.addArrangedSubview(navRow(icon: "house.fill", title: fcuiLabel("drawer_home", "Home"), route: "home"))
+        stack.addArrangedSubview(navRow(icon: "house.fill", title: fcuiLabel(FCLabels.home, "Home"), route: "home"))
 
         // Recent-chats section only for authenticated users with showHistory on.
         if showRecentChats {
-            stack.addArrangedSubview(sectionHeader(fcuiLabel("drawer_recent", "Recent chats")))
+            stack.addArrangedSubview(sectionHeader(fcuiLabel(FCLabels.recentChats, "Recent chats")))
             recentContainer.axis = .vertical
             recentContainer.spacing = 2
             stack.addArrangedSubview(recentContainer)
@@ -208,27 +208,27 @@ final class FCUIDrawerViewController: UIViewController {
         // History row: authenticated (OTP or HOST_TOKEN) AND showHistory only —
         // keeps guests out of ChatHistory via the drawer. Settings row stays C3.
         if showRecentChats {
-            stack.addArrangedSubview(navRow(icon: "clock.arrow.circlepath", title: fcuiLabel("drawer_history", "Recent Chats"), route: "chatHistory"))
+            stack.addArrangedSubview(navRow(icon: "clock.arrow.circlepath", title: fcuiLabel(FCLabels.recentChats, "Recent chats"), route: "chatHistory"))
         }
         let lang = settingsVM.currentLanguageDisplay
-        stack.addArrangedSubview(navRow(icon: "globe", title: lang.isEmpty ? fcuiLabel("drawer_language", "Language") : lang, route: "settings/language"))
+        stack.addArrangedSubview(navRow(icon: "globe", title: lang.isEmpty ? fcuiLabel(FCLabels.language, "Language") : lang, route: "settings/language"))
         if FarmerChat.shared.config.showSettings {
-            stack.addArrangedSubview(navRow(icon: "gearshape.fill", title: fcuiLabel("drawer_settings", "Settings"), route: "settings"))
+            stack.addArrangedSubview(navRow(icon: "gearshape.fill", title: fcuiLabel(FCLabels.settings, "Settings"), route: "settings"))
         }
-        stack.addArrangedSubview(navRow(icon: "questionmark.circle.fill", title: fcuiLabel("drawer_help", "Help"), route: "help"))
+        stack.addArrangedSubview(navRow(icon: "questionmark.circle.fill", title: fcuiLabel(FCLabels.help, "Help"), route: "help"))
     }
 
     private func rebuildRecent() {
         recentContainer.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if chatHistoryVM.state.isLoading && chatHistoryVM.recentQuestions.isEmpty {
-            let label = rowLabel(fcuiLabel("loading", "Loading…"), color: FCUITheme.foregroundSecondary)
+            let label = rowLabel(fcuiLabel(FCLabels.loading, "Loading..."), color: FCUITheme.foregroundSecondary)
             recentContainer.addArrangedSubview(label)
             return
         }
         if let error = chatHistoryVM.historyErrorMessage, chatHistoryVM.recentQuestions.isEmpty {
             recentContainer.addArrangedSubview(rowLabel(error, color: FCUITheme.foregroundSecondary))
             let retry = UIButton(type: .system)
-            retry.setTitle(fcuiLabel("try_again", "Try again"), for: .normal)
+            retry.setTitle(fcuiLabel(FCLabels.tryAgain, "Try again"), for: .normal)
             retry.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
             retry.contentHorizontalAlignment = .leading
             retry.addAction(UIAction { [weak self] _ in self?.chatHistoryVM.refresh() }, for: .touchUpInside)
@@ -249,9 +249,9 @@ final class FCUIDrawerViewController: UIViewController {
         }
         if !chatHistoryVM.recentQuestions.isEmpty {
             let seeAll = UIButton(type: .system)
-            seeAll.setTitle(fcuiLabel("drawer_see_all", "See all"), for: .normal)
+            seeAll.setTitle(fcuiLabel(FCLabels.seeAll, "See all"), for: .normal)
             seeAll.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
-            seeAll.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+            seeAll.titleLabel?.font = FCUITypography.current.labelMedium.font
             seeAll.contentHorizontalAlignment = .leading
             seeAll.addAction(UIAction { [weak self] _ in self?.close { self?.onSeeAll() } }, for: .touchUpInside)
             seeAll.translatesAutoresizingMaskIntoConstraints = false
@@ -304,8 +304,8 @@ final class FCUIDrawerViewController: UIViewController {
 
     private func sectionHeader(_ text: String) -> UIView {
         let label = UILabel()
-        label.text = text.uppercased()
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.text = text
+        label.font = FCUITypography.current.titleMedium.font
         label.textColor = FCUITheme.foregroundSecondary
         label.translatesAutoresizingMaskIntoConstraints = false
         let wrap = UIView()
@@ -322,7 +322,7 @@ final class FCUIDrawerViewController: UIViewController {
     private func rowLabel(_ text: String, color: UIColor) -> UIView {
         let label = UILabel()
         label.text = text
-        label.font = .systemFont(ofSize: 14)
+        label.font = FCUITypography.current.bodySmall.font
         label.textColor = color
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -361,7 +361,7 @@ final class FCUIDrawerViewController: UIViewController {
         let button = UIButton(type: .system)
         var config = UIButton.Configuration.plain()
         config.image = UIImage(systemName: "person.crop.circle.badge.plus")
-        config.title = fcuiLabel("drawer_sign_up", "Sign up")
+        config.title = fcuiLabel(FCLabels.signUp, "Sign up")
         config.imagePadding = 10
         config.contentInsets = NSDirectionalEdgeInsets(top: 16, leading: 20, bottom: 16, trailing: 20)
         config.baseForegroundColor = FCUITheme.brandSurfacePrimary
@@ -395,11 +395,15 @@ final class FCUIDrawerViewController: UIViewController {
     }
 }
 
-// MARK: - Location prompt host (port of LocationPromptHost / LocationPromptHostView)
+// MARK: - Location prompt host (port of the app's ui/location/LocationPromptHost.kt)
 
-/// Global overlay driven by `LocationPromptManager.state`: interstitial →
-/// permission/fetch (interstitial stays for the weather flow) → recovery sheet /
-/// error. Added above the whole nav stack by `FarmerChatViewController`.
+/// Global overlay driven by `LocationPromptManager.state`, added above the whole nav stack by
+/// `FarmerChatViewController`.
+///
+/// Only the WEATHER entry ever shows the full-screen interstitial. While the system dialog / GPS
+/// check / fetch run, Weather keeps it up but INERT (no back/skip, CTA disabled); every other
+/// source (chat gps-prompt chip, campaigns) shows nothing, so the system dialog appears over the
+/// current screen. Screen_Viewed/Exited for the interstitial are emitted by the Core manager.
 final class FCUILocationPromptHost: UIViewController {
     private let manager: LocationPromptManager
     private var cancellables = Set<AnyCancellable>()
@@ -439,121 +443,263 @@ final class FCUILocationPromptHost: UIViewController {
         case .idle:
             break
         case .interstitial:
-            showInterstitial(loading: false)
+            mount(makeInterstitial(inert: false, fetching: false))
         case .requestPermission, .requestEnableGps, .fetchingLocation:
-            // Weather and the 2.0.0 chat capability chip keep the interstitial overlay (loading
-            // CTA) — Compose's host keeps it for every source; widget/deeplink are silent triggers
-            // by design and show nothing.
-            if manager.source == .weather || manager.source == .localContext {
-                showInterstitial(loading: true)
+            if manager.source == .weather {
+                mount(makeInterstitial(inert: true, fetching: state == .fetchingLocation))
             }
         case .recovery:
-            showRecovery()
+            let container = UIView()
+            if manager.source == .weather {
+                pin(makeInterstitial(inert: true, fetching: false), in: container)
+            }
+            pin(makeRecovery(), in: container)
+            mount(container)
         case .error(let type):
-            showError(type)
+            mount(makeError(type))
         }
         // Only intercept touches while showing content (clear pass-through otherwise).
         view.isUserInteractionEnabled = currentContent != nil
     }
 
-    private func mount(_ content: UIView) {
+    private func pin(_ content: UIView, in container: UIView) {
         content.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(content)
+        container.addSubview(content)
         NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: view.topAnchor),
-            content.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            content.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            content.topAnchor.constraint(equalTo: container.topAnchor),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor)
         ])
+    }
+
+    private func mount(_ content: UIView) {
+        pin(content, in: view)
         currentContent = content
     }
 
-    private func showInterstitial(loading: Bool) {
-        FarmerChat.shared.analytics.screenViewed(ScreenNames.locationPrompt)
+    // MARK: Full-screen message with the app's DefaultAppBar (title, ← back, "Skip")
+
+    private func makeMessage(
+        barTitle: String,
+        main: String,
+        subtitle: String,
+        symbolName: String,
+        primaryTitle: String,
+        chevron: Bool,
+        loading: Bool,
+        primaryEnabled: Bool,
+        onPrimary: @escaping () -> Void,
+        onBack: (() -> Void)?,
+        skipTitle: String?,
+        onSkip: (() -> Void)?
+    ) -> UIView {
         let message = FCUIFullScreenMessageView(
-            title: fcuiLabel("location_title", "Share Location"),
-            subtitle: fcuiLabel("location_subtitle", "Get weather alerts and advice specific to your farm's location"),
-            symbolName: "location.circle",
-            primaryTitle: loading
-                ? fcuiLabel("location_fetching", "Getting your location…")
-                : fcuiLabel("location_share_cta", "Share location"),
-            secondaryTitle: fcuiLabel("skip", "Skip")
+            title: main, subtitle: subtitle, symbolName: symbolName,
+            primaryTitle: primaryTitle, secondaryTitle: nil
         )
-        message.primaryButton.isEnabled = !loading
-        message.primaryButton.addAction(UIAction { [weak self] _ in self?.manager.shareLocationTapped() }, for: .touchUpInside)
-        message.secondaryButton.addAction(UIAction { [weak self] _ in self?.manager.skipTapped() }, for: .touchUpInside)
-        mount(message)
+        let primary = message.primaryButton
+        primary.isEnabled = primaryEnabled && !loading
+        primary.addAction(UIAction { _ in onPrimary() }, for: .touchUpInside)
+        if chevron && !loading {
+            primary.setImage(UIImage(systemName: "chevron.right"), for: .normal)
+            primary.tintColor = FCUITheme.green800
+            primary.semanticContentAttribute = .forceRightToLeft
+            primary.imageEdgeInsets = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: -8)
+        }
+        if loading {
+            let spinner = UIActivityIndicatorView(style: .medium)
+            spinner.color = FCUITheme.green800
+            spinner.startAnimating()
+            spinner.translatesAutoresizingMaskIntoConstraints = false
+            primary.addSubview(spinner)
+            NSLayoutConstraint.activate([
+                spinner.centerYAnchor.constraint(equalTo: primary.centerYAnchor),
+                spinner.leadingAnchor.constraint(equalTo: primary.leadingAnchor, constant: 20)
+            ])
+        }
+
+        let bar = UIStackView()
+        bar.axis = .horizontal
+        bar.spacing = 8
+        bar.alignment = .center
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        if let onBack {
+            let back = UIButton(type: .system)
+            back.setImage(UIImage(systemName: "arrow.left"), for: .normal)
+            back.tintColor = .white
+            back.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            back.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            back.addAction(UIAction { _ in onBack() }, for: .touchUpInside)
+            bar.addArrangedSubview(back)
+        }
+        let title = UILabel()
+        title.text = barTitle
+        title.font = FCUITypography.current.titleMedium.font
+        title.textColor = .white
+        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        bar.addArrangedSubview(title)
+        if let skipTitle, let onSkip {
+            let skip = UIButton(type: .system)
+            skip.setTitle(skipTitle, for: .normal)
+            skip.titleLabel?.font = FCUITypography.current.labelLarge.font
+            skip.setTitleColor(.white, for: .normal)
+            skip.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            skip.addAction(UIAction { _ in onSkip() }, for: .touchUpInside)
+            bar.addArrangedSubview(skip)
+        }
+        message.addSubview(bar)
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: message.safeAreaLayoutGuide.topAnchor, constant: 10),
+            bar.leadingAnchor.constraint(equalTo: message.leadingAnchor, constant: onBack == nil ? 20 : 8),
+            bar.trailingAnchor.constraint(equalTo: message.trailingAnchor, constant: -12)
+        ])
+        return message
     }
 
-    private func showError(_ type: LocationErrorType) {
-        let title: String
-        let subtitle: String
+    private func makeInterstitial(inert: Bool, fetching: Bool) -> UIView {
+        makeMessage(
+            barTitle: fcuiLabel(FCLabels.shareLocation, "Share Location"),
+            main: fcuiLabel(FCLabels.getAdviceYourArea, "Get advice for your area"),
+            subtitle: fcuiLabel(
+                FCLabels.locationHelpsSuggestions,
+                "Your location helps us suggest crops, weather, and pests near you."
+            ),
+            symbolName: "iphone",
+            primaryTitle: fetching
+                ? fcuiLabel(FCLabels.gettingYourLocation, "Getting your location...")
+                : fcuiLabel(FCLabels.shareLocation, "Share Location"),
+            chevron: true,
+            loading: fetching,
+            primaryEnabled: !inert,
+            onPrimary: { [weak self] in self?.manager.shareLocationTapped() },
+            onBack: inert ? nil : { [weak self] in self?.manager.cancel() },
+            skipTitle: inert ? nil : fcuiLabel(FCLabels.skip, "Skip"),
+            onSkip: inert ? nil : { [weak self] in self?.manager.skipTapped() }
+        )
+    }
+
+    /// Error screens have their own title and NO back/skip; the CTA retries when the error is
+    /// retryable and otherwise closes the flow (`LocationPromptManager.onErrorCta`).
+    private func makeError(_ type: LocationErrorType) -> UIView {
+        let barTitle: String
+        let main: String
+        let sub: String
+        let symbol: String
         switch type {
         case .noNetwork:
-            title = fcuiLabel("no_internet_title", "No internet connection")
-            subtitle = fcuiLabel("no_internet_message", "You appear to be offline. Check your connection and try again.")
+            barTitle = fcuiLabel(FCLabels.noInternetConnection, "No internet connection")
+            main = fcuiLabel(FCLabels.farmerchatNeedsTheInternet, "FarmerChat needs \nthe internet")
+            // Not in the generated FCLabels; the served key from Android
+            // `Labels.CHECK_MOBILE_DATA_WIFI_SIGNAL`, through the usual fallback.
+            sub = fcuiLabel("fc_v2_app_label_check_mobile_data_wi-fi_signal", "Check mobile data or Wi-Fi signal")
+            symbol = "sun.max"
         case .gpsUnavailable:
-            title = fcuiLabel("location_gps_unavailable_title", "Location is turned off")
-            subtitle = fcuiLabel("location_gps_unavailable_message", "Turn on Location Services to share your farm's location.")
+            barTitle = fcuiLabel(FCLabels.turnOnGps, "Turn on GPS")
+            main = fcuiLabel(FCLabels.getLocalAdvice, "Get local advice")
+            sub = fcuiLabel(
+                FCLabels.locationGpsTurnedOffTurningHelps,
+                "Location and GPS are turned off. Turning this on helps us tailor answers to your area."
+            )
+            symbol = "iphone"
         case .locationFailed:
-            title = fcuiLabel("location_failed_title", "Couldn't get your location")
-            subtitle = fcuiLabel("location_failed_message", "We couldn't find your location. Please try again.")
+            barTitle = fcuiLabel(FCLabels.somethingWentWrong, "Something went wrong")
+            main = fcuiLabel(FCLabels.couldntGetYourLocation, "Couldn't get your location")
+            sub = fcuiLabel(FCLabels.pleaseTryAgain, "Please try again.")
+            symbol = "iphone"
         }
-        let message = FCUIFullScreenMessageView(
-            title: title, subtitle: subtitle, symbolName: "sun.max",
-            primaryTitle: fcuiLabel("try_again", "Try again"),
-            secondaryTitle: fcuiLabel("skip", "Skip")
+        return makeMessage(
+            barTitle: barTitle, main: main, subtitle: sub, symbolName: symbol,
+            primaryTitle: fcuiLabel(FCLabels.tryAgain, "Try again"),
+            chevron: false, loading: false, primaryEnabled: true,
+            onPrimary: { [weak self] in self?.manager.onErrorCta() },
+            onBack: nil, skipTitle: nil, onSkip: nil
         )
-        message.primaryButton.addAction(UIAction { [weak self] _ in self?.manager.shareLocationTapped() }, for: .touchUpInside)
-        message.secondaryButton.addAction(UIAction { [weak self] _ in self?.manager.dismissError() }, for: .touchUpInside)
-        mount(message)
     }
 
-    private func showRecovery() {
+    // MARK: Recovery sheet ("We need your location")
+
+    private func makeRecovery() -> UIView {
         let dim = UIView()
         dim.backgroundColor = UIColor.black.withAlphaComponent(0.4)
-        dim.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(dismissRecovery)))
+        dim.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(closeRecovery)))
 
         let sheet = UIView()
-        sheet.backgroundColor = FCUITheme.surfacePrimary
+        sheet.backgroundColor = FCUITheme.neutral150
         sheet.layer.cornerRadius = 24
         sheet.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         sheet.translatesAutoresizingMaskIntoConstraints = false
+        sheet.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(sheetPanned(_:))))
 
-        let icon = UIImageView(image: UIImage(systemName: "location.slash"))
-        icon.tintColor = FCUITheme.foregroundSecondary
-        icon.contentMode = .scaleAspectFit
-        icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 36, weight: .regular)
+        // The app shows the country `farmer_looking_at_phone_square` image here. The iOS packages
+        // are asset-free (SF-symbol illustrations), so the 382pt slot carries the symbol instead.
+        let imagePanel = UIView()
+        imagePanel.backgroundColor = FCUITheme.green800
+        imagePanel.layer.cornerRadius = 24
+        imagePanel.layer.cornerCurve = .continuous
+        imagePanel.clipsToBounds = true
+        imagePanel.heightAnchor.constraint(equalToConstant: 382).isActive = true
+        let symbol = UIImageView(image: UIImage(systemName: "iphone"))
+        symbol.tintColor = FCUITheme.green500
+        symbol.contentMode = .scaleAspectFit
+        symbol.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 120, weight: .light)
+        symbol.translatesAutoresizingMaskIntoConstraints = false
+        imagePanel.addSubview(symbol)
+        let close = UIButton(type: .system)
+        close.setImage(UIImage(systemName: "xmark"), for: .normal)
+        close.tintColor = .black
+        close.backgroundColor = .white
+        close.layer.cornerRadius = 14
+        close.layer.cornerCurve = .continuous
+        close.accessibilityLabel = fcuiLabel(FCLabels.close, "Close")
+        close.translatesAutoresizingMaskIntoConstraints = false
+        close.addTarget(self, action: #selector(closeRecovery), for: .touchUpInside)
+        imagePanel.addSubview(close)
+        NSLayoutConstraint.activate([
+            symbol.centerXAnchor.constraint(equalTo: imagePanel.centerXAnchor),
+            symbol.centerYAnchor.constraint(equalTo: imagePanel.centerYAnchor),
+            close.topAnchor.constraint(equalTo: imagePanel.topAnchor, constant: 12),
+            close.trailingAnchor.constraint(equalTo: imagePanel.trailingAnchor, constant: -12),
+            close.widthAnchor.constraint(equalToConstant: 44),
+            close.heightAnchor.constraint(equalToConstant: 44)
+        ])
+
         let title = UILabel()
-        title.text = fcuiLabel("location_recovery_title", "We need your location")
-        title.font = .systemFont(ofSize: 20, weight: .bold)
-        title.textColor = FCUITheme.foregroundPrimary
+        title.textColor = .black
         title.textAlignment = .center
         title.numberOfLines = 0
+        title.text = fcuiLabel(FCLabels.weNeedYourLocation, "We need your location")
+        title.font = UIFont.systemFont(ofSize: FCUITypography.current.titleLarge.font.pointSize, weight: .semibold)
         let body = UILabel()
-        body.text = fcuiLabel("location_recovery_message", "Location access is turned off. Turn it on in Settings to get local advice.")
-        body.font = .systemFont(ofSize: 15)
-        body.textColor = FCUITheme.foregroundSecondary
+        body.textColor = .black
         body.textAlignment = .center
         body.numberOfLines = 0
-        let settings = FCUIPrimaryButton(title: fcuiLabel("location_open_settings", "Turn on in settings"))
+        body.text = fcuiLabel(
+            FCLabels.locationTailorAdvice,
+            "Sharing your location helps FarmerChat tailor advice to your farm."
+        )
+        body.font = FCUITypography.current.bodyMedium.font
+
+        let settings = FCUIPrimaryButton(title: fcuiLabel(FCLabels.turnOnInSettings, "Turn on in settings"))
+        settings.constraints.first { $0.firstAttribute == .height }?.constant = 56
+        settings.setImage(UIImage(systemName: "chevron.right"), for: .normal)
+        settings.tintColor = FCUITheme.green500
+        settings.semanticContentAttribute = .forceRightToLeft
+        settings.imageEdgeInsets = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: -8)
         settings.addAction(UIAction { [weak self] _ in
             self?.manager.recoveryConfirmed()
             if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
         }, for: .touchUpInside)
-        let cancel = UIButton(type: .system)
-        cancel.setTitle(fcuiLabel("cancel", "Cancel"), for: .normal)
-        cancel.setTitleColor(FCUITheme.foregroundSecondary, for: .normal)
-        cancel.addAction(UIAction { [weak self] _ in self?.manager.dismissError() }, for: .touchUpInside)
 
-        let sheetStack = UIStackView(arrangedSubviews: [icon, title, body, settings, cancel])
-        sheetStack.axis = .vertical
-        sheetStack.spacing = 14
-        sheetStack.alignment = .fill
-        sheetStack.isLayoutMarginsRelativeArrangement = true
-        sheetStack.layoutMargins = UIEdgeInsets(top: 24, left: 20, bottom: 28, right: 20)
-        sheetStack.translatesAutoresizingMaskIntoConstraints = false
-        sheet.addSubview(sheetStack)
+        let stack = UIStackView(arrangedSubviews: [imagePanel, title, body, settings])
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.setCustomSpacing(16, after: imagePanel)
+        stack.alignment = .fill
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.layoutMargins = UIEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        sheet.addSubview(stack)
 
         let container = UIView()
         container.addSubview(dim)
@@ -567,14 +713,34 @@ final class FCUILocationPromptHost: UIViewController {
             sheet.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             sheet.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             sheet.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            sheetStack.topAnchor.constraint(equalTo: sheet.topAnchor),
-            sheetStack.leadingAnchor.constraint(equalTo: sheet.leadingAnchor),
-            sheetStack.trailingAnchor.constraint(equalTo: sheet.trailingAnchor),
-            sheetStack.bottomAnchor.constraint(equalTo: sheet.safeAreaLayoutGuide.bottomAnchor)
+            sheet.topAnchor.constraint(greaterThanOrEqualTo: container.safeAreaLayoutGuide.topAnchor),
+            stack.topAnchor.constraint(equalTo: sheet.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: sheet.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: sheet.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: sheet.safeAreaLayoutGuide.bottomAnchor)
         ])
-        mount(container)
+        return container
     }
 
-    @objc private func dismissRecovery() { manager.dismissError() }
+    /// Close button / backdrop / swipe-down: `Permission_Fallback_Default_Setting_Canceled`, then
+    /// continue without location (pending navigation runs).
+    @objc private func closeRecovery() { manager.recoveryClosed() }
+
+    @objc private func sheetPanned(_ pan: UIPanGestureRecognizer) {
+        guard let sheet = pan.view else { return }
+        let dy = max(0, pan.translation(in: sheet).y)
+        switch pan.state {
+        case .changed:
+            sheet.transform = CGAffineTransform(translationX: 0, y: dy)
+        case .ended, .cancelled:
+            if dy > 100 {
+                manager.recoveryClosed()
+            } else {
+                UIView.animate(withDuration: 0.2) { sheet.transform = .identity }
+            }
+        default:
+            break
+        }
+    }
 }
 #endif

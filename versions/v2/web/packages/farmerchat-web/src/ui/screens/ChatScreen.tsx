@@ -15,7 +15,7 @@ import { capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
 import type { AlignmentKind } from '../../core/alignment';
 import type { AlignmentChip } from '../../core/types';
 import { PrefKeys } from '../../core/storage';
-import type { LocationPromptActions } from '../../state/useLocationPrompt';
+import { isLocationSuccess, type LocationPromptActions } from '../../state/useLocationPrompt';
 import { TextInputOverlay, VoiceInputOverlay, PhotoInputOverlay, PrimaryInputButtons, VoiceClip, InputKind } from '../components/inputs';
 import { InputComposer, ComposerAttachment, InputComposerHandle } from '../components/InputComposer';
 import { LocationChatBubble } from '../components/LocationChatBubble';
@@ -152,7 +152,9 @@ export function ChatScreen(props: {
           // to Home or Settings can never land on this surface. The hook refuses to arm while
           // another location flow is in progress (Compose's `Idle` guard).
           props.locationActions.triggerFromLocalContext((outcome) => {
-            if (outcome.kind === 'continue' && outcome.reason === 'location_fetched') {
+            // Success = a fix is stored: 'location_fetched', or 'post_settings_preference_exists'
+            // (permission re-granted from the Recovery sheet with a fix already saved).
+            if (isLocationSuccess(outcome)) {
               void actions.sendLocationSharedQuery(messageId, resolveLocationAddress());
               return;
             }
@@ -302,7 +304,7 @@ export function ChatScreen(props: {
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SHARE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
-      const result = await shareAnswerCard(question, ai.text, label('app_name', 'FarmerChat'));
+      const result = await shareAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
       if (result === 'failed') toast.show(label('chat_share_failed', 'Could not share the answer.'));
     },
     [chat.messages, label, services.analytics, toast],
@@ -312,7 +314,7 @@ export function ChatScreen(props: {
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SAVE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
-      const ok = await downloadAnswerCard(question, ai.text, label('app_name', 'FarmerChat'));
+      const ok = await downloadAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
       if (!ok) toast.show(label('chat_download_failed', 'Could not download the answer.'));
       else toast.show(label('chat_download_done', 'Answer saved.'));
     },
@@ -343,7 +345,7 @@ export function ChatScreen(props: {
           {isHistoryEntry ? Icon.menu : Icon.close}
         </button>
         <div className="fcsdk-appbar-title">
-          {hasThread && !chat.isLoading ? `${Icon.logo} ${label('app_name', 'FarmerChat')}` : ''}
+          {hasThread && !chat.isLoading ? `${Icon.logo} ${label('fc_v2_app_label_farmerchat', 'FarmerChat')}` : ''}
         </div>
       </div>
 
@@ -357,14 +359,14 @@ export function ChatScreen(props: {
       >
         {chat.isLoadingMoreHistory ? (
           <div className="fcsdk-loadmore">
-            <LogoSpinner message={label('chat_loading_more', 'Loading more…')} />
+            <LogoSpinner message={label('fc_v2_app_label_loading_more', 'Loading more…')} />
           </div>
         ) : null}
 
         <div className="fcsdk-thread">
           {chat.messages.map((msg) => {
             if (msg.kind === 'loading') {
-              return <ThinkingIndicator key={msg.id} label={label('chat_getting_answer', 'Getting your answer…')} />;
+              return <ThinkingIndicator key={msg.id} label={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />;
             }
             if (msg.kind === 'user') {
               return <UserBubble key={msg.id} message={msg} onRetry={chat.failedMessageId === msg.id ? () => void actions.retryLastRequest() : undefined} />;
@@ -375,7 +377,7 @@ export function ChatScreen(props: {
             if (msg.kind === 'location') {
               return (
                 <div key={msg.id} className="fcsdk-bubble-location-row">
-                  <LocationChatBubble address={msg.address} label={label('chat_your_location', 'Your location:')} />
+                  <LocationChatBubble address={msg.address} label={label('fc_v2_app_label_your_location', 'Your location:')} />
                 </div>
               );
             }
@@ -461,7 +463,7 @@ export function ChatScreen(props: {
                         className="fcsdk-action-chip"
                         onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
                       >
-                        {Icon.chat} {label('chat_read_full_advice', 'Read full advice')}
+                        {Icon.chat} {label('fc_v2_app_label_read_full_advice', 'Read full advice')}
                       </button>
                     </div>
                   ) : (
@@ -478,13 +480,23 @@ export function ChatScreen(props: {
                             ? label('chat_listen_loading', 'Preparing…')
                             : chat.isAudioPlaying
                               ? label('chat_listen_pause', 'Pause')
-                              : label('chat_listen', 'Listen')}
+                              : label('fc_v2_app_label_listen', 'Listen')}
                         </button>
                       ) : null}
                       {!ai.hideShareIcon ? (
                         <>
-                          <button type="button" className="fcsdk-action-chip" onClick={() => void share(ai)}>
-                            {Icon.share} {label('chat_share', 'Share')}
+                          {/* App parity (ChatResponseActions.kt @ bda80659): only the AGENTIC
+                              Share carries the accent sweep border; the legacy one stays plain. */}
+                          <button
+                            type="button"
+                            className={
+                              ai.isAgentic && !ai.isPreGenerated
+                                ? 'fcsdk-action-chip fcsdk-action-chip--accent'
+                                : 'fcsdk-action-chip'
+                            }
+                            onClick={() => void share(ai)}
+                          >
+                            {Icon.share} {label('fc_v2_app_label_share_download', 'Share')}
                           </button>
                           <button type="button" className="fcsdk-action-chip" onClick={() => void download(ai)}>
                             {Icon.download} {label('chat_download', 'Download')}
@@ -495,12 +507,12 @@ export function ChatScreen(props: {
                   )
                 ) : null}
                 {revealed && !ai.isStreaming && followUps.length > 0 && !ai.hideFollowUpQuestion ? (
-                  <div className="fcsdk-followups fcsdk-fade-in">
+                  <div className="fcsdk-followups fcsdk-fade-in-only">
                     <div className="fcsdk-followups-title">
                       <span className="fcsdk-followups-dot" aria-hidden />
                       {chat.clarificationRequired
                         ? label('chat_clarify_options', 'Did you mean:')
-                        : label('chat_related_questions', 'Related questions')}
+                        : label('fc_v2_app_label_related_questions', 'You can also ask')}
                     </div>
                     <div className="fcsdk-followups-list">
                       {followUps.map((q, i) => (
@@ -533,13 +545,13 @@ export function ChatScreen(props: {
                     void actions.retryLastRequest();
                   }}
                 >
-                  {Icon.retry} {label('chat_retry', 'Try again')}
+                  {Icon.retry} {label('fc_v2_app_label_try_again', 'Try again')}
                 </button>
               </div>
             </div>
           ) : null}
 
-          {isInitialLoading && chat.messages.length === 0 ? <LogoSpinner message={label('chat_loading', 'Loading…')} /> : null}
+          {isInitialLoading && chat.messages.length === 0 ? <LogoSpinner message={label('fc_v2_app_label_loading', 'Loading…')} /> : null}
         </div>
       </div>
 
@@ -566,7 +578,7 @@ export function ChatScreen(props: {
           compact
           showAura={false}
           visible={!chat.isLoading && overlay === null}
-          placeholder={label('chat_composer_placeholder', 'Ask about your farm...')}
+          placeholder={label('fc_v2_app_label_ask_about_your_farm', 'Ask about your farm...')}
           attachments={attachments}
           onRemoveAttachment={(index) => setAttachments((list) => list.filter((_, i) => i !== index))}
           onReady={(handle) => {
@@ -577,9 +589,9 @@ export function ChatScreen(props: {
           onSend={sendFromComposer}
           enableImages={services.config.enableImages}
           enableVoice={services.config.enableVoice}
-          photoLabel={label('input_photo', 'Photo')}
-          voiceLabel={label('input_speak', 'Speak')}
-          sendLabel={label('chat_send', 'Send')}
+          photoLabel={label('fc_v2_app_label_photo', 'Photo')}
+          voiceLabel={label('fc_v2_app_label_speak', 'Speak')}
+          sendLabel={label('fc_v2_app_label_send', 'Send')}
           removeLabel={label('photo_remove', 'Remove image')}
         />
       ) : overlay === null ? (
@@ -668,7 +680,7 @@ function UserBubble(props: { message: UserMessage; onRetry?: () => void }) {
       {m.text ? <span>{m.text}</span> : null}
       {m.isFailed && props.onRetry ? (
         <button type="button" className="fcsdk-action-chip" onClick={props.onRetry} style={{ alignSelf: 'flex-end' }}>
-          {Icon.retry} {label('chat_retry', 'Try again')}
+          {Icon.retry} {label('fc_v2_app_label_try_again', 'Try again')}
         </button>
       ) : null}
     </div>

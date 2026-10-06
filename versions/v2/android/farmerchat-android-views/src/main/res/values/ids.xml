@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- View tag: the Listen pill's SoundWaveDrawable, so a rebind can stop its animation. -->
+    <item name="fcListenWaveTag" type="id" />
+</resources>

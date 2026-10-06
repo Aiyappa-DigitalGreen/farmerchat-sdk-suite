@@ -1,5 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The farmer's own question bubble.
+
+  App parity (components/chat/UserChatBubble.kt:74): `surfaceReadingSecondary` fill with THREE
+  corners at Radius.XL (20dp) and the bottom-end corner SQUARE (0dp). The views flavour drew it
+  `green700` with white text and a 6dp bottom-end corner, so every question in the thread read as
+  a saturated green chat bubble where the app shows a neutral grey one with black text.
+
+  `FarmerChatConfig.userBubbleColor` / `userBubbleTextColor` still override both at runtime
+  (ChatAdapter.bindUser) — this is only the DEFAULT, and the default must be the app's.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/fc_green700"/>
-    <corners android:topLeftRadius="20dp" android:topRightRadius="20dp" android:bottomLeftRadius="20dp" android:bottomRightRadius="6dp"/>
+    <solid android:color="@color/fc_surface_reading_secondary"/>
+    <corners
+        android:topLeftRadius="20dp"
+        android:topRightRadius="20dp"
+        android:bottomLeftRadius="20dp"
+        android:bottomRightRadius="0dp"/>
 </shape>

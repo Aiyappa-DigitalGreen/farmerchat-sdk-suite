@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FarmerChatComposerFragment: the SDK composer on a HOST screen. The root fills the host's
+    container but is not clickable, so everything except the composer bar (and an open voice /
+    photo sheet) lets touches through to the host content underneath.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fcHostComposerRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.InputComposerView
+        android:id="@+id/fcHostComposer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom" />
+
+    <include
+        android:id="@+id/fcHostComposerOverlays"
+        layout="@layout/fc_view_input_overlays" />
+
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+        android:id="@+id/fcHostComposerToast"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone" />
+</FrameLayout>

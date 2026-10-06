@@ -186,6 +186,23 @@ export function sanitizeAgenticStreamText(raw: string): string {
   return text.replace(/\s+$/, '');
 }
 
+/**
+ * Clean-up for a SETTLED agentic answer (terminal `metadata.response` or `done.answer`).
+ *
+ * The stage backend (mobile-app-stage, 2026-10-06) was observed leaking the control block into
+ * `metadata.response`: a weather answer ended with a literal followups fence that the renderer
+ * printed as raw text (Android v2 fix: `sanitizeAgenticFinalText`). Strips that block (closed, or
+ * unclosed at the end) and complete `<<...>>` markers; unlike {@link sanitizeAgenticStreamText} it
+ * does not cut at a lone `<<`. A pure trim on a clean answer.
+ */
+export function sanitizeAgenticFinalText(raw: string): string {
+  let text = raw.replace(FOLLOWUPS_BLOCK_REGEX, '');
+  text = text.replace(CONTROL_TOKEN_REGEX, '');
+  const fenceStart = text.indexOf('```followups');
+  if (fenceStart >= 0) text = text.slice(0, fenceStart);
+  return text.replace(/\s+$/, '');
+}
+
 // ---------------------------------------------------------------------------
 // Event parsing
 // ---------------------------------------------------------------------------

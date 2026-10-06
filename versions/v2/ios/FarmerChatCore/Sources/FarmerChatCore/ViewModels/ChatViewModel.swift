@@ -45,6 +45,31 @@ func sanitizeAgenticStreamText(_ raw: String) -> String {
     return text
 }
 
+/// Clean-up for a SETTLED agentic answer (terminal `metadata.response` or `done.answer`).
+///
+/// The stage backend (mobile-app-stage, 2026-10-06) was observed leaking the control block into
+/// `metadata.response`: a weather answer ended with a literal ```` ```followups [...] ``` ```` that
+/// the renderer printed as raw text (Android v2 fix: `sanitizeAgenticFinalText`). Strips that block
+/// (closed, or unclosed at the end) and complete `<<...>>` markers; unlike
+/// `sanitizeAgenticStreamText` it does not cut at a lone `<<`. A pure trim on a clean answer.
+func sanitizeAgenticFinalText(_ raw: String) -> String {
+    var text = raw
+    for regex in [fcFollowupsBlockRegex, fcControlTokenRegex] {
+        guard let regex else { continue }
+        text = regex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: NSRange(text.startIndex..<text.endIndex, in: text),
+            withTemplate: ""
+        )
+    }
+    if let fence = text.range(of: "```followups") {
+        text = String(text[text.startIndex..<fence.lowerBound])
+    }
+    while let last = text.last, last.isWhitespace { text.removeLast() }
+    return text
+}
+
 // MARK: - Message model (port of chat/udf ChatMessage)
 
 public enum ChatMessage: Identifiable, Sendable, Equatable {
@@ -520,7 +545,7 @@ public final class ChatViewModel: ObservableObject {
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
-                message: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                message: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                 retry: { [weak self] in
                     await self?.sendQuestionInternal(
                         question, transcriptionId: transcriptionId, audioURL: audioURL,
@@ -628,6 +653,7 @@ public final class ChatViewModel: ObservableObject {
     ) async -> Bool {
         let alignmentKind = AlignmentKind.fromType(response.alignments?.type)
         var text = response.translatedResponse ?? response.response ?? ""
+        if isAgentic { text = sanitizeAgenticFinalText(text) }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            let alignmentKind, !alignmentKind.isAdditive {
             // An EXCLUSIVE alignment surface arrives with `response` EMPTY on purpose: its prompt
@@ -702,12 +728,13 @@ public final class ChatViewModel: ObservableObject {
             if finalized { return }
             finalized = true
             let fallbackText = sanitizeAgenticStreamText(builder)
-            let doneAnswer = pendingDone?.answer?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let doneAnswer = sanitizeAgenticFinalText(pendingDone?.answer ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             if let done = pendingDone, !doneAnswer.isEmpty || !fallbackText.isEmpty {
                 // A `done` means the model actually finished → a complete answer, not an
                 // interruption, even if the transport dropped right after.
                 finalizeAgenticAnswer(
-                    text: doneAnswer.isEmpty ? fallbackText : (done.answer ?? fallbackText),
+                    text: doneAnswer.isEmpty ? fallbackText : doneAnswer,
                     followUps: done.followUps.isEmpty ? nil : done.followUps,
                     streamId: streamId
                 )
@@ -1029,7 +1056,7 @@ public final class ChatViewModel: ObservableObject {
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
-                message: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                message: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                 retry: { [weak self] in await self?.sendVoiceQuestion(audioURL: audioURL, base64Audio: base64Audio) }
             )
             return
@@ -1111,7 +1138,7 @@ public final class ChatViewModel: ObservableObject {
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
-                message: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                message: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                 retry: { [weak self] in await self?.sendImageQuestion(question: question, imageData: imageData, imageURL: imageURL) }
             )
             return

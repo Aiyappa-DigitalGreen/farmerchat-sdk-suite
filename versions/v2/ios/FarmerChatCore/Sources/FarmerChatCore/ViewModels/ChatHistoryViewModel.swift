@@ -108,7 +108,7 @@ public final class ChatHistoryViewModel: ObservableObject {
 
     private func load(page: Int, silent: Bool) async {
         guard let userId = env.session.userId else {
-            historyErrorMessage = env.labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+            historyErrorMessage = env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
             return
         }
         isFetching = true

@@ -1,5 +1,9 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInOut
@@ -77,6 +81,13 @@ fun FeedHeader(
     }
 }
 
+/**
+ * End-of-feed sign-off — 1:1 port of the app's `components/FeedFooter.kt` (fc-compose-agentic):
+ * a 40sp waving-hand emoji (dark skin tone) above the "Have a great day, come back tomorrow"
+ * label. When the footer first scrolls into view the text fades in over 900ms and the hand waves
+ * three times (+16° / -12°, pivot at its base) before settling. The SDK previously drew the
+ * FarmerChat logo mark over a green glow here, which the app does not have.
+ */
 @Composable
 fun FeedFooter(
     text: String = label(
@@ -86,39 +97,57 @@ fun FeedFooter(
     modifier: Modifier = Modifier
 ) {
     val content = LocalContentColors.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val screenHeightPx = with(density) {
+        androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp.toPx()
+    }
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        Glow(
-            type = GlowType.Green,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp)
-                .align(Alignment.BottomCenter)
-                .scale(1f, -1f)
-                .alpha(0.8f)
-        )
+    var visible by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val textAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 900),
+        label = "footerTextFade"
+    )
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 44.dp, bottom = 56.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.fc_logo_mark),
-                contentDescription = null,
-                tint = content.borderActive,
-                modifier = Modifier.size(34.dp)
-            )
-
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleMedium,
-                color = content.foregroundPrimary,
-                textAlign = TextAlign.Center
-            )
+    val waveRotation = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(visible) {
+        if (!visible) return@LaunchedEffect
+        kotlinx.coroutines.delay(200)
+        val ease = androidx.compose.animation.core.FastOutSlowInEasing
+        repeat(3) {
+            waveRotation.animateTo(16f, androidx.compose.animation.core.tween(160, easing = ease))
+            waveRotation.animateTo(-12f, androidx.compose.animation.core.tween(180, easing = ease))
         }
+        waveRotation.animateTo(0f, androidx.compose.animation.core.tween(160, easing = ease))
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                visible = bounds.height > 0f && bounds.top < screenHeightPx && bounds.bottom > 0f
+            }
+            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "\uD83D\uDC4B\uD83C\uDFFE",
+            fontSize = 40.sp,
+            modifier = Modifier.graphicsLayer {
+                alpha = textAlpha
+                rotationZ = waveRotation.value
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+            }
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = content.foregroundPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.graphicsLayer { alpha = textAlpha }
+        )
     }
 }
 

@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.widgets
 
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import android.content.Context
 import android.util.AttributeSet
 import android.view.Gravity
@@ -34,14 +35,14 @@ internal class ToastView @JvmOverloads constructor(
     }
     private val circle = FrameLayout(context)
     private val icon = ImageView(context).apply {
-        setColorFilter(ContextCompat.getColor(context, R.color.fc_white))
+        setColorFilter(FcTokens.color(context, R.color.fc_white))
     }
     private val spinner = ProgressBar(context).apply {
-        indeterminateTintList = ContextCompat.getColorStateList(context, R.color.fc_white)
+        indeterminateTintList = FcTokens.colorStateList(context, R.color.fc_white)
         visibility = GONE
     }
     private val label = TextView(context).apply {
-        setTextColor(ContextCompat.getColor(context, R.color.fc_foreground_primary))
+        setTextColor(FcTokens.color(context, R.color.fc_foreground_primary))
         textSize = 15f
     }
 
@@ -76,7 +77,7 @@ internal class ToastView @JvmOverloads constructor(
             context,
             if (type == Type.ERROR) R.drawable.fc_bg_circle_error else R.drawable.fc_bg_circle_green500
         )
-        circle.backgroundTintList = ContextCompat.getColorStateList(context, circleColor)
+        circle.backgroundTintList = FcTokens.colorStateList(context, circleColor)
         spinner.visibility = if (type == Type.LOADING) VISIBLE else GONE
         icon.visibility = if (type == Type.LOADING) GONE else VISIBLE
         icon.setImageResource(

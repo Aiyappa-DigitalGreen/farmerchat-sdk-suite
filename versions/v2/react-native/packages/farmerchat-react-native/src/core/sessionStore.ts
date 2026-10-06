@@ -61,6 +61,13 @@ export const StorageKeys = {
   CACHED_HOME_FEED_RESPONSE: 'CACHED_HOME_FEED_RESPONSE',
 
   // --- permissions ---
+  /**
+   * Location permission deny count — the app's `PreferenceKeys.PERMISSION_DENY_COUNT`
+   * (fc-compose-agentic `core/preference/PreferenceKeys.kt:49`, read/written by
+   * `LocationPromptPrefs`); docs/02 "permissions deny/attempt counts" group. Value follows this
+   * store's constant-name convention, like the camera/mic counts below.
+   */
+  PERMISSION_DENY_COUNT: 'PERMISSION_DENY_COUNT',
   CAMERA_PERMISSION_DENY_COUNT: 'CAMERA_PERMISSION_DENY_COUNT',
   MIC_PERMISSION_DENY_COUNT: 'MIC_PERMISSION_DENY_COUNT',
   CAMERA_PERMISSION_ATTEMPT_COUNT: 'CAMERA_PERMISSION_ATTEMPT_COUNT',

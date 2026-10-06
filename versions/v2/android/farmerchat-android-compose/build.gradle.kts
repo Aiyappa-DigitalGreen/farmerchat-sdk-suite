@@ -46,7 +46,18 @@ android {
     }
 }
 
+// `ComposeAppParityTest` reads the composable sources off the filesystem, which Gradle does not
+// track as a test input. Without this the task reports UP-TO-DATE after a source-only change and
+// the guard silently does not run.
+tasks.withType<Test>().configureEach {
+    inputs.dir(layout.projectDirectory.dir("src/main/java"))
+        .withPropertyName("parityTestSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
+    testImplementation(libs.junit)
+
     api(project(":farmerchat-core"))
 
     implementation(libs.androidx.core.ktx)

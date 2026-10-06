@@ -13,7 +13,10 @@ export type AppearanceMode = 'day' | 'night' | 'auto';
 /** Exact per-environment base URLs (docs/02-api-reference.md). */
 export const BASE_URLS: Record<FarmerChatEnvironment, string> = {
   dev: 'https://farmerchat.farmstack.co/mobile-app-dev/',
-  stage: 'https://farmerchat.farmstack.co/mobile-app-stage/',
+  // STAGE base URL switched to the agentic demo backend (requested 2026-09-08); applies to
+  // debug and release alike. Previous host kept commented for a one-line revert.
+  //   stage: 'https://farmerchat.farmstack.co/mobile-app-stage/',
+  stage: 'https://demo.agent.farmer.chat/',
   demo: 'https://farmerchat.farmstack.co/mobile-app-demo/',
   prod: 'https://v2.api.farmer.chat/',
   eks: 'https://api.farmerchat.in/',
@@ -274,6 +277,19 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   showSettings?: boolean;
   showHistory?: boolean;
   showDrawer?: boolean;
+  /**
+   * Mirrors the app's `show_name_screen` RemoteConfig flag and Android's
+   * `FarmerChatConfig.showNameScreen`. When false the Enter-Name step is skipped and the
+   * profile is marked done. Added 2026-09-16 — see docs/04 "Config-parity audit".
+   */
+  showNameScreen?: boolean;
+  /**
+   * Telemetry master switch, default **false** — matches android's
+   * `FarmerChatConfig.enableAnalytics`. Until 2026-09-16 this platform emitted every event to a
+   * host's `onEvent` unconditionally while android dropped them, so the same host code saw
+   * different behaviour per platform (docs/04 "Config-parity audit").
+   */
+  enableAnalytics?: boolean;
   enableSsfr?: boolean;
 
   // --- C5 host string overrides + forced locale ---
@@ -317,6 +333,8 @@ export interface ResolvedConfig {
   showSettings: boolean;
   showHistory: boolean;
   showDrawer: boolean;
+  showNameScreen: boolean;
+  enableAnalytics: boolean;
   enableSsfr: boolean;
   userBubbleColor?: string;
   userBubbleTextColor?: string;
@@ -369,6 +387,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     showSettings: config.showSettings ?? true,
     showHistory: config.showHistory ?? true,
     showDrawer: config.showDrawer ?? true,
+    showNameScreen: config.showNameScreen ?? true,
+    enableAnalytics: config.enableAnalytics ?? false,
     enableSsfr: config.enableSsfr ?? true,
     userBubbleColor: config.userBubbleColor,
     userBubbleTextColor: config.userBubbleTextColor,

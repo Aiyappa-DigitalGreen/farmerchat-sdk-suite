@@ -89,7 +89,7 @@ fun LogoSpinner(
         ) {
             LogoWithSpinner(55.dp, 32.dp, 3.dp, logoColor)
             if (displayLabel != null) {
-                SpinnerLabelText(displayLabel, isCycling, textColor)
+                SpinnerLabelText(displayLabel, isCycling, textColor, shimmer = false)
             }
         }
 
@@ -100,7 +100,11 @@ fun LogoSpinner(
         ) {
             LogoWithSpinner(40.dp, 23.dp, 2.5.dp, logoColor)
             if (displayLabel != null) {
-                SpinnerLabelText(displayLabel, isCycling, textColor)
+                // App parity: the HORIZONTAL spinner shimmers its label, the vertical one does
+                // not. The app splits these into two components (`LogoSpinner.kt` uses a plain
+                // `Text`; `LogoSpinnerHorizontal.kt:219` uses `ShimmerText`); the SDK folded them
+                // into one `type` and, until now, lost the shimmer with them.
+                SpinnerLabelText(displayLabel, isCycling, textColor, shimmer = true)
             }
         }
     }
@@ -128,8 +132,33 @@ private fun LogoWithSpinner(
     }
 }
 
+/**
+ * The spinner's label.
+ *
+ * [shimmer] selects between the app's two treatments — `LogoSpinner.kt`'s plain `Text` for the
+ * full-screen loader and `LogoSpinnerHorizontal.kt`'s `ShimmerText` for the in-thread stream
+ * status. Both use `labelMedium`: the shimmer is the only difference, NOT the weight.
+ */
 @Composable
-private fun SpinnerLabelText(text: String, isCycling: Boolean, color: Color) {
+private fun SpinnerLabelText(
+    text: String,
+    isCycling: Boolean,
+    color: Color,
+    shimmer: Boolean
+) {
+    @Composable
+    fun render(value: String) {
+        if (shimmer) {
+            ShimmerText(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                baseColor = color
+            )
+        } else {
+            Text(text = value, style = MaterialTheme.typography.labelMedium, color = color)
+        }
+    }
+
     if (isCycling) {
         AnimatedContent(
             targetState = text,
@@ -138,11 +167,9 @@ private fun SpinnerLabelText(text: String, isCycling: Boolean, color: Color) {
                     fadeOut(animationSpec = tween(400, easing = EaseInOut))
             },
             label = "LabelFade"
-        ) { l ->
-            Text(text = l, style = MaterialTheme.typography.labelMedium, color = color)
-        }
+        ) { l -> render(l) }
     } else {
-        Text(text = text, style = MaterialTheme.typography.labelMedium, color = color)
+        render(text)
     }
 }
 

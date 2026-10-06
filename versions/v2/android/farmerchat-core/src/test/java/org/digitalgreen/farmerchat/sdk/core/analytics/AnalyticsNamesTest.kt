@@ -268,7 +268,10 @@ class AnalyticsNamesTest {
     private fun recorder(): Pair<FarmerChatAnalytics, MutableList<AnalyticsEvent>> {
         val events = mutableListOf<AnalyticsEvent>()
         val analytics = FarmerChatAnalytics(
-            configOnEvent = { name, props -> events.add(AnalyticsEvent(name, props)) }
+            configOnEvent = { name, props -> events.add(AnalyticsEvent(name, props)) },
+            // enableAnalytics defaults to false in 2.0.0; these tests assert PAYLOAD shape, so
+            // they opt the dispatch back on.
+            enabled = true
         )
         return analytics to events
     }

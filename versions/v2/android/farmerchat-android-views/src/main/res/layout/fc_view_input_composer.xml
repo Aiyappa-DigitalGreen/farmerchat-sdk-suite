@@ -24,7 +24,25 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical">
+
+        <!-- App ScrollToBottomButton (chat, while typing with content below): a 36dp
+             surfaceSecondary circle, soft 24dp shadow, 18dp arrow in foregroundPrimary, centred
+             directly above the sheet. Shown by ChatFragment via setScrollDownAvailable. -->
+        <ImageView
+            android:id="@+id/fcComposerScrollDown"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/fc_bg_circle_surface_secondary"
+            android:contentDescription="@null"
+            android:elevation="24dp"
+            android:padding="9dp"
+            android:src="@drawable/fc_icon_arrow_down"
+            android:visibility="gone"
+            app:tint="@color/fc_foreground_primary" />
 
         <!-- Floating sheet: 10dp horizontal margins, 24dp radius, brand surface. -->
         <LinearLayout
@@ -55,7 +73,7 @@
                     android:contentDescription="@null"
                     android:scaleType="fitCenter"
                     android:src="@drawable/fc_icon_camera"
-                    app:tint="@color/fc_green500" />
+                    app:tint="@color/fc_brand_icon" />
 
                 <LinearLayout
                     android:id="@+id/fcComposerField"
@@ -76,6 +94,7 @@
                         android:id="@+id/fcComposerThumbBox"
                         android:layout_width="64dp"
                         android:layout_height="64dp"
+                        android:layout_marginTop="10dp"
                         android:layout_marginBottom="10dp"
                         android:visibility="gone">
 
@@ -83,7 +102,7 @@
                             android:id="@+id/fcComposerThumb"
                             android:layout_width="64dp"
                             android:layout_height="64dp"
-                            android:background="@drawable/fc_bg_card_md"
+                            android:background="@drawable/fc_clip_r8"
                             android:contentDescription="@null"
                             android:scaleType="centerCrop" />
 
@@ -150,7 +169,8 @@
                             android:paddingTop="0dp"
                             android:paddingBottom="0dp"
                             android:textColor="@color/fc_foreground_primary"
-                            android:textSize="17sp" />
+                            android:textSize="17sp"
+                            android:textCursorDrawable="@drawable/fc_cursor" />
                     </FrameLayout>
                 </LinearLayout>
 
@@ -163,7 +183,7 @@
                     android:contentDescription="@null"
                     android:scaleType="fitCenter"
                     android:src="@drawable/fc_icon_mic"
-                    app:tint="@color/fc_green500" />
+                    app:tint="@color/fc_brand_icon" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

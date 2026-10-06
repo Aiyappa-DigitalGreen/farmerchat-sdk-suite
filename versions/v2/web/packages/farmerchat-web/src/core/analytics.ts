@@ -126,6 +126,15 @@ export class Analytics {
     listener?: FarmerChatEventListener,
     /** C4 — semantic host callbacks (docs/07 Part C). */
     private callbacks: FarmerChatCallbacks = {},
+    /**
+     * Telemetry master switch — `FarmerChatConfig.enableAnalytics`, default FALSE.
+     *
+     * Everything upstream is unchanged when it is false: events are still constructed with their
+     * real names and properties, at the real call sites, in the real order. They are dropped
+     * HERE, at the single dispatch point, so turning telemetry on later cannot change any other
+     * behaviour. Mirrors android `core/analytics/Analytics.kt`.
+     */
+    private enabled: boolean = false,
   ) {
     this.listener = listener;
   }
@@ -143,6 +152,7 @@ export class Analytics {
   }
 
   track(name: string, props: Record<string, unknown> = {}): void {
+    if (!this.enabled) return;
     try {
       this.listener?.(name, props);
     } catch {

@@ -35,7 +35,20 @@ sealed interface Destination {
         val isWeatherAdviceCTA: Boolean = false,
         val isSSFR: Boolean = false,
         val ssfrCrop: String? = null,
-        val channel: String? = null
+        val channel: String? = null,
+        /**
+         * Home content card tapped in AGENTIC mode: the card's artwork, shown as a display-only
+         * banner on the user's bubble. Deliberately NOT [imageUri] — that field routes the query
+         * through image analysis (#28), and this path sends the question as plain text.
+         * App: `Destination.Chat.contentCardImageUrl`.
+         */
+        val contentCardImageUrl: String? = null,
+        /**
+         * Home content card tapped in AGENTIC mode: `"image_card"` / `"text_card"`, sent as
+         * `triggered_input_type` (API) and `click_type` (analytics).
+         * App: `Destination.Chat.contentCardTriggerType`.
+         */
+        val contentCardTriggerType: String? = null
     ) : Destination
 
     @Serializable

@@ -25,7 +25,7 @@ export function LegalContentScreen(props: {
   const webView = getWebViewModule();
 
   // `faq_terms` toggles the title to "FAQ" (docs/01 §3.17)
-  const title = props.url.includes('faq_terms') ? label('legal_faq', 'FAQ') : props.title;
+  const title = props.url.includes('faq_terms') ? label('fc_v2_app_label_faq', 'FAQ') : props.title;
 
   useEffect(() => {
     const lower = `${props.url} ${props.title}`.toLowerCase();
@@ -49,7 +49,7 @@ export function LegalContentScreen(props: {
           />
           {isLoading ? (
             <View style={[styles.loading, { backgroundColor: theme.background }]}>
-              <LogoSpinner message={label('legal_loading', 'Loading…')} />
+              <LogoSpinner message={label('fc_v2_app_label_loading', 'Loading…')} />
             </View>
           ) : null}
         </View>

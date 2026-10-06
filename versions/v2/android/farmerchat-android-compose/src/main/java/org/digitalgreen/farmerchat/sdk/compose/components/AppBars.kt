@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcStatusBarsTop
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
@@ -9,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -71,9 +73,16 @@ fun DefaultAppBar(
     glowAlpha: Float = 1.0f,
     containerColor: Color? = null,
     leftIcon: ImageVector? = null,
+    /**
+     * Corner radius for the [leftIcon] button. Defaults to [Radius.MD] (rounded square); pass
+     * [Radius.Rounded] for the round back/close button that matches Home's hamburger.
+     */
+    leftRadius: Dp = Radius.MD,
     onLeftClick: () -> Unit = {},
     rightIcon: ImageVector? = null,
     rightLabel: String? = null,
+    /** Corner radius for the right action button. [Radius.MD] by default; [Radius.Rounded] for a pill. */
+    rightRadius: Dp = Radius.MD,
     onRightClick: () -> Unit = {},
     /**
      * Lets a caller grey out the right action while its work is in flight — the app's
@@ -84,7 +93,7 @@ fun DefaultAppBar(
     val brand = LocalBrandColors.current
     val bg = containerColor ?: brand.surfacePrimary
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topInset = fcStatusBarsTop()
     val barHeight = 64.dp + topInset
     Box(
         modifier = modifier
@@ -117,7 +126,7 @@ fun DefaultAppBar(
                     icon = leftIcon,
                     background = brand.surfaceSecondary,
                     iconColor = brand.foregroundPrimary,
-                    radius = Radius.MD
+                    radius = leftRadius
                 )
             } else {
                 Box(modifier = Modifier.size(42.dp))
@@ -139,7 +148,7 @@ fun DefaultAppBar(
                     background = brand.surfaceSecondary,
                     iconColor = brand.foregroundPrimary,
                     labelColor = brand.foregroundPrimary,
-                    radius = Radius.MD,
+                    radius = rightRadius,
                     enabled = rightEnabled
                 )
             } else {
@@ -172,8 +181,10 @@ fun HomeAppBar(
 ) {
     val brand = LocalBrandColors.current
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val barHeight = 64.dp + topInset
+    val topInset = fcStatusBarsTop()
+    // 52dp (was 64dp) trims the empty space below the vertically-centered menu/weather buttons so
+    // the logo below the app bar isn't left with a large gap under the bar.
+    val barHeight = 52.dp + topInset
 
     Box(
         modifier = modifier
@@ -206,7 +217,7 @@ fun HomeAppBar(
                 icon = Icons.Filled.Menu,
                 background = brand.surfaceSecondary,
                 iconColor = brand.foregroundPrimary,
-                radius = Radius.MD,
+                radius = Radius.Rounded,
                 onClick = openDrawer,
                 modifier = menuButtonModifier.padding(start = navPaddingStart)
             )
@@ -218,7 +229,7 @@ fun HomeAppBar(
                     state = weatherState,
                     condition = weatherCondition,
                     text = weatherMessage,
-                    radius = Radius.LG,
+                    radius = Radius.Rounded,
                     weatherIconUrl = weatherIconUrl
                 )
             }
@@ -231,13 +242,25 @@ fun LogoAppBar(
     modifier: Modifier = Modifier,
     showLogo: Boolean = true,
     leftIcon: ImageVector? = null,
+    /**
+     * Corner radius of the left action button. Defaults to Radius.MD; the chat bar passes
+     * [Radius.Rounded] for its back arrow, matching the app's `leftbutton` drawable (a 42dp
+     * Green800 circle with a white back arrow) that it draws instead of an ActionButton.
+     */
+    leftRadius: Dp = Radius.MD,
     onLeftClick: () -> Unit = {},
     rightIcon: ImageVector? = null,
     rightLabel: String? = null,
-    onRightClick: () -> Unit = {}
+    onRightClick: () -> Unit = {},
+    /**
+     * Trailing slot for MULTIPLE right-hand actions, used by the chat bar in `CHAT_ONLY` to carry
+     * Past Advice + Language side by side (the views flavour's `fcAppBarActions` row). Takes
+     * precedence over [rightIcon]/[rightLabel], which stay for the single-action callers.
+     */
+    actions: (@Composable RowScope.() -> Unit)? = null
 ) {
     val brand = LocalBrandColors.current
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topInset = fcStatusBarsTop()
     val barHeight = 64.dp + topInset
 
     Box(
@@ -269,7 +292,7 @@ fun LogoAppBar(
                     icon = leftIcon,
                     background = brand.surfaceSecondary,
                     iconColor = brand.foregroundPrimary,
-                    radius = Radius.MD
+                    radius = leftRadius
                 )
             } else {
                 Box(modifier = Modifier.size(42.dp))
@@ -299,8 +322,14 @@ fun LogoAppBar(
                 }
             }
 
-            if (rightIcon != null || rightLabel != null) {
-                ActionButton(
+            when {
+                actions != null -> Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions
+                )
+
+                rightIcon != null || rightLabel != null -> ActionButton(
                     onClick = onRightClick,
                     icon = rightIcon,
                     label = rightLabel,
@@ -309,8 +338,8 @@ fun LogoAppBar(
                     labelColor = brand.foregroundPrimary,
                     radius = Radius.MD
                 )
-            } else {
-                Box(modifier = Modifier.size(42.dp))
+
+                else -> Box(modifier = Modifier.size(42.dp))
             }
         }
     }

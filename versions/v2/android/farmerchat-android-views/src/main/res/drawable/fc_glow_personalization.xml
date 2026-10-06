@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PersonalizationTag glow: radial borderActive 0% -> 28% -> transparent, 60px radius. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="60"
+        android:startColor="@color/fc_accent_0"
+        android:centerColor="@color/fc_accent_28"
+        android:endColor="@color/fc_accent_0" />
+</shape>

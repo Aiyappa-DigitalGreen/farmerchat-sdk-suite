@@ -14,7 +14,7 @@ class AnalyticsUserSurfaceTest {
     @Test
     fun `identifyUser reaches the config callback`() {
         val seen = mutableListOf<String>()
-        val analytics = FarmerChatAnalytics(configOnUserIdentified = { seen += it })
+        val analytics = FarmerChatAnalytics(configOnUserIdentified = { seen += it }, enabled = true)
         analytics.identifyUser("user-42")
         assertEquals(listOf("user-42"), seen)
     }
@@ -23,7 +23,7 @@ class AnalyticsUserSurfaceTest {
     @Test
     fun `identifyUser drops blank ids and trims`() {
         val seen = mutableListOf<String>()
-        val analytics = FarmerChatAnalytics(configOnUserIdentified = { seen += it })
+        val analytics = FarmerChatAnalytics(configOnUserIdentified = { seen += it }, enabled = true)
         analytics.identifyUser("")
         analytics.identifyUser("   ")
         analytics.identifyUser("  user-7 ")
@@ -33,7 +33,7 @@ class AnalyticsUserSurfaceTest {
     @Test
     fun `setUserAttribute reaches the config callback`() {
         val seen = mutableListOf<Pair<String, String>>()
-        val analytics = FarmerChatAnalytics(configOnUserAttribute = { k, v -> seen += k to v })
+        val analytics = FarmerChatAnalytics(configOnUserAttribute = { k, v -> seen += k to v }, enabled = true)
         analytics.setUserAttribute(UserAttributeKeys.CARRIER_NAME, "Safaricom")
         analytics.setUserAttribute(UserAttributeKeys.OS, "android")
         assertEquals(
@@ -45,7 +45,7 @@ class AnalyticsUserSurfaceTest {
     @Test
     fun `setUserAttribute drops blank keys and values`() {
         val seen = mutableListOf<Pair<String, String>>()
-        val analytics = FarmerChatAnalytics(configOnUserAttribute = { k, v -> seen += k to v })
+        val analytics = FarmerChatAnalytics(configOnUserAttribute = { k, v -> seen += k to v }, enabled = true)
         analytics.setUserAttribute("", "x")
         analytics.setUserAttribute(UserAttributeKeys.BRAND, "")
         assertTrue(seen.isEmpty())
@@ -56,7 +56,8 @@ class AnalyticsUserSurfaceTest {
     fun `a throwing host callback is swallowed`() {
         val analytics = FarmerChatAnalytics(
             configOnUserIdentified = { throw RuntimeException("host blew up") },
-            configOnUserAttribute = { _, _ -> throw RuntimeException("host blew up") }
+            configOnUserAttribute = { _, _ -> throw RuntimeException("host blew up") },
+            enabled = true
         )
         analytics.identifyUser("user-42")
         analytics.setUserAttribute(UserAttributeKeys.MODEL, "Pixel 7")
@@ -65,7 +66,7 @@ class AnalyticsUserSurfaceTest {
     /** No host sink configured is the default; both calls must be no-ops, not NPEs. */
     @Test
     fun `no configured sink is a no-op`() {
-        val analytics = FarmerChatAnalytics()
+        val analytics = FarmerChatAnalytics(enabled = true)
         analytics.identifyUser("user-42")
         analytics.setUserAttribute(UserAttributeKeys.DEVICE_TYPE, "emulator")
     }

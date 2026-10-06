@@ -45,6 +45,9 @@ import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.HelpSupportResponse
 import org.digitalgreen.farmerchat.sdk.core.navigation.handleError
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
+import androidx.compose.ui.text.font.FontWeight
+import org.digitalgreen.farmerchat.sdk.compose.theme.caption
+import org.digitalgreen.farmerchat.sdk.FarmerChatVersion
 
 /**
  * Help & Support (doc 01 §3.12). FAQ list (skeleton while loading), More
@@ -98,8 +101,11 @@ fun HelpScreen(
             .background(colors.surfacePrimary)
     ) {
         DefaultAppBar(
-            title = label(Labels.HELP, "Help"),
+            // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+            showGlow = false,
+title = label(Labels.HELP, "Help"),
             leftIcon = Icons.Filled.Menu,
+            leftRadius = Radius.Rounded,
             onLeftClick = openDrawer
         )
 
@@ -107,12 +113,20 @@ fun HelpScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                // App parity (HelpScreen.kt:152): 20dp sides / 32dp ends, and 24dp between the
+                // three SECTIONS. Each section then groups its own title + card at 10dp. A flat
+                // 16dp everywhere put the first title 16dp high and every title 6dp off its card.
+                .padding(horizontal = 20.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
             Text(
                 text = label(Labels.HOW_TO_USE_FARMERCHAT, "How to use FarmerChat"),
-                style = MaterialTheme.typography.titleSmall,
+                // App parity (HelpScreen.kt:165): labelLarge, not titleSmall.
+                style = MaterialTheme.typography.labelLarge,
                 color = colors.foregroundPrimary
             )
 
@@ -164,16 +178,27 @@ fun HelpScreen(
                 }
             }
 
+          }
+
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
             Text(
                 text = label(Labels.MORE, "More"),
-                style = MaterialTheme.typography.titleSmall,
+                // App parity (HelpScreen.kt:236): labelLarge, not titleSmall.
+                style = MaterialTheme.typography.labelLarge,
                 color = colors.foregroundPrimary
             )
 
             ListCard {
                 val legal = response?.data?.legal
-                val termsTitle = legal?.termsOfUse?.title ?: label(Labels.TERMS_OF_USE, "Terms of use")
-                val privacyTitle = legal?.privacyPolicy?.title ?: label(Labels.PRIVACY_POLICY, "Privacy policy")
+                // App parity (HelpScreen.kt:242/261): the row text is the SERVED LABEL, always.
+                // Preferring the #legal payload's own `title` rendered these two rows in English
+                // ("Terms of Use" / "Privacy Policy") on a Kannada device, because that endpoint
+                // returns untranslated titles — the app never reads them for display.
+                val termsTitle = label(Labels.TERMS_OF_USE, "Terms of use")
+                val privacyTitle = label(Labels.PRIVACY_POLICY, "Privacy policy")
 
                 ListItem(
                     textLeft = termsTitle,
@@ -202,22 +227,29 @@ fun HelpScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+          }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                // App parity (HelpScreen.kt:285): 4dp, not 2dp.
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = label(Labels.FARMERCHAT_V200, "FarmerChat v2.0.0"),
-                    style = MaterialTheme.typography.labelSmall,
+                    // App parity (HelpScreen.kt:286): a plain LITERAL, never a served label —
+                    // `label(FARMERCHAT_V200, …)` rendered this line in Kannada script on a
+                    // Kannada device while the app always shows the Latin product name. The
+                    // number differs legitimately: this is the SDK's version, not the app's.
+                    text = "FarmerChat v.${FarmerChatVersion.VERSION}",
+                    // App parity (HelpScreen.kt:288): the app's `caption`, ported in Type.kt.
+                    style = caption,
                     color = colors.foregroundSecondary,
                     textAlign = TextAlign.Center
                 )
                 Text(
                     text = label(Labels.DIGITAL_GREEN, "© Digital Green"),
-                    style = MaterialTheme.typography.labelSmall,
+                    // App parity (HelpScreen.kt:288): the app's `caption`, ported in Type.kt.
+                    style = caption,
                     color = colors.foregroundSecondary,
                     textAlign = TextAlign.Center
                 )

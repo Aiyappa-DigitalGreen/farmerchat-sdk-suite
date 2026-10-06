@@ -137,3 +137,64 @@
   .phone { width:100%; height:74vh; }
   .fc-fab { bottom:88px; }
 }
+
+/* ── Agentic (2.0.0) surfaces ────────────────────────────────────────────────
+   The agentic preview needs two animations Tailwind cannot express cleanly:
+   the stream-status shimmer sweep and the tip carousel's countdown fill.
+   Both mirror the SDK: ShimmerText sweeps a gradient across the glyphs on a
+   1200ms loop, and the active page indicator fills over TIP_DURATION_MS. */
+
+/* SDK `ShimmerText` — base colour with a highlight band travelling across the
+   text. background-clip:text is the web equivalent of the Android shader on
+   the paint; the band is 1.2x the text width, as in ShimmerTextView. */
+.fc-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--fc-shimmer-base) 0%,
+    var(--fc-shimmer-base) 35%,
+    var(--fc-accent) 50%,
+    var(--fc-shimmer-base) 65%,
+    var(--fc-shimmer-base) 100%
+  );
+  background-size: 220% 100%;
+  /* repeat-x, NOT no-repeat: with background-clip:text any glyph the gradient
+     band does not cover is painted with nothing and renders fully TRANSPARENT —
+     letters simply vanish as the band travels. Both end stops are the base
+     colour, so tiling is seamless and every glyph always has paint. This is the
+     CSS equivalent of the Android shader's Shader.TileMode.CLAMP. */
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: fc-shimmer-sweep 1.2s linear infinite;
+}
+@keyframes fc-shimmer-sweep {
+  from { background-position: 120% 0; }
+  to   { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fc-shimmer { animation: none; color: var(--fc-shimmer-base); background-image: none; }
+}
+
+/* Tip carousel: the active dot is a 24x8 track whose fill runs the countdown
+   to the next tip. Re-keyed per tip in React so the animation restarts. */
+.fc-tip-fill {
+  height: 100%;
+  background: var(--fc-accent);
+  border-radius: 999px;
+  animation: fc-tip-countdown 8s linear forwards;
+}
+@keyframes fc-tip-countdown {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fc-tip-fill { animation: none; width: 100%; }
+}
+
+/* The 24dp fade from transparent into the reading surface that sits above the
+   carousel, so an answer scrolling underneath dissolves rather than being cut. */
+.fc-tip-fade {
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--fc-reading));
+}

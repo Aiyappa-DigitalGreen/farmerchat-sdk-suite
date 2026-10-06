@@ -34,7 +34,7 @@ internal class AgenticChipView @JvmOverloads constructor(
 
     private val badgeBox = FrameLayout(context)
     private val badgeNumber = TextView(context).apply {
-        textSize = 13f // labelSmall
+        textSize = 15f // App ChipNumberBadge: labelMedium (was 13sp labelSmall)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         gravity = Gravity.CENTER
     }
@@ -101,7 +101,8 @@ internal class AgenticChipView @JvmOverloads constructor(
         val selectedAccent = if (isEscalate) fail else accent
 
         val surfaceColor = when {
-            selected -> if (isEscalate) FcTokens.withAlpha(fail, 0.12f) else FcTokens.surfaceActive(context)
+            // App escalateSurface: fail @ 8%.
+            selected -> if (isEscalate) FcTokens.withAlpha(fail, 0.08f) else FcTokens.surfaceActive(context)
             !enabled -> surfaceTertiary
             isEscalate -> fail
             type == Type.AGENTIC -> FcTokens.surfaceActive(context)
@@ -137,10 +138,13 @@ internal class AgenticChipView @JvmOverloads constructor(
 
         labelView.text = text
         labelView.setTextColor(labelColor)
+        // App Chip.kt: labelMedium (w600), Bold once picked. Unselected rendered at 400 here.
         labelView.typeface = if (selected) {
             Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        } else if (android.os.Build.VERSION.SDK_INT >= 28) {
+            Typeface.create(Typeface.SANS_SERIF, 600, false)
         } else {
-            Typeface.DEFAULT
+            Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
 
         chevron.isVisible = clickable
@@ -159,12 +163,17 @@ internal class AgenticChipView @JvmOverloads constructor(
                 // disabled chip surface — so it vanished into the chip in BOTH themes. Muted
                 // secondary foreground instead, as the app does (97832e9a).
                 !enabled -> foregroundSecondary
-                isEscalate -> FcTokens.withAlpha(onBrand, 0.22f)
+                // App Chip.kt:177,184: a solid onBrand circle with the numeral in fail.
+                isEscalate -> onBrand
                 else -> accent
             }
             // Echo the chip surface on the muted disabled badge so the numeral stays legible in
             // both themes; fc_foreground_tertiary here was the same #3F3F46 as the circle.
-            val badgeFg = if (!enabled) surfaceTertiary else onBrand
+            val badgeFg = when {
+                !enabled -> surfaceTertiary
+                isEscalate -> fail
+                else -> onBrand
+            }
             badgeBox.background = FcTokens.roundedRect(context, BADGE_RADIUS, badgeFill)
             badgeNumber.text = number.toString()
             badgeNumber.setTextColor(badgeFg)

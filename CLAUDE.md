@@ -57,7 +57,7 @@ Any behavior change or bug fix must either (a) be applied to android, ios, react
 | Area | Minimum check |
 |---|---|
 | android/ | `./gradlew :farmerchat-core:compileDebugKotlin` (or full assemble if env allows) |
-| ios/ | `swift build` in FarmerChatCore (SourceKit editor errors like "No such module 'PackageDescription'" are IDE-indexing noise; trust `swift build`) |
+| ios/ | `swift build` + `swift test` in FarmerChatCore, **AND** `xcodebuild -scheme <pkg> -destination 'generic/platform=iOS Simulator' build` for FarmerChatSwiftUI and FarmerChatUIKit — `swift build` targets macOS and those two packages are iOS-only, so it does NOT compile them (it fails on `UIKeyboardType`, `.phonePad`, `UnevenRoundedRectangle`; that is the host platform, not your change). SourceKit editor errors like "No such module 'PackageDescription'" are IDE-indexing noise |
 | react-native/ | `npx tsc --noEmit` in the package |
 | web/ | `npx tsc --noEmit` + `vite build` |
 

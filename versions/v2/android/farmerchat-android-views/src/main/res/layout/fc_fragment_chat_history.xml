@@ -42,14 +42,14 @@
             android:padding="24dp"
             android:visibility="gone">
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcHistoryErrorText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textColor="@color/fc_foreground_primary"
-                android:textSize="15sp"
-                tools:text="Couldn't load more chats" />
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="15"
+                app:fcTextAlign="center" />
 
             <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                 android:id="@+id/fcHistoryRetry"

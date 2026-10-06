@@ -119,6 +119,62 @@ Also worth noting for whoever audits next: stage served 276 keys when the first 
 No client change is needed once they land; `LabelManager` resolves `${key}_${lang}` →
 `${key}_en` → the English fallback, so the strings switch over automatically.
 
+### Two MORE keys, added by the app on 2026-09-08 and NOT yet probed
+
+App `2a5cf2b8` / `ae37b28e` added two label keys to the auth screen. They are **unverified, not
+known-missing** — they are separate from the ten counted above because no probe has been run
+against them at all: this tree has no API key, so there was no way to curl `get_labels` while
+porting them.
+
+| Key | English fallback in use | Where it shows |
+|---|---|---|
+| `fc_v2_app_label_agreement_card_info_text` | "Surveys or research may be conducted by Digital Green or trusted partners working with us." | italic attribution line in the auth agreement card |
+| `fc_v2_app_label_auth_consent_suffix` | "for more information, including how to withdraw your consent." | tail of the privacy-consent sentence under the send-code buttons |
+
+**Action for whoever has a key:** probe stage for both in en/hi/sw and either move them into the
+"served" column of `docs/04` (which currently claims *five* agreement-card labels verified, and
+must not be read as covering these two) or add them to the request above. Both are displayed to
+every farmer who reaches the signup screen, so they matter.
+
+A third key is affected the other way round: `fc_v2_app_label_agreement_point_surveys` is **still
+served but no longer rendered** — the app folded that bullet into `..._agreement_point_updates`
+and kept the constant. The SDK keeps the constant too rather than dropping a served key, and both
+android v2 flavours have stopped rendering it.
+
+---
+
+## The Home location backfill is ported with a DIFFERENT reason than the app's (2026-09-08)
+
+App `b72ea4da` backfills the location pill's place name from the user profile's geography on Home
+entry. The mechanism is ported (android core, ios, react-native; web partially — `docs/04`), but
+**the app's stated rationale does not apply to the SDK and the code comments say so.**
+
+The app is repairing its own upgrade: its V1 stored `FARMER_APP_LATITUDE/LONGITUDE`, which survive
+an update, but never wrote `APPROX_LOCATION_NAME`, a V2-only key — so a farmer who had already
+shared their location saw a name-less "— Change" pill after updating. The SDK has **never had that
+gap**: `APPROX_LOCATION_NAME` has existed for as long as the pill has, and there is no SDK V1→V2
+pref migration of this kind at all.
+
+What *is* true for the SDK, and what the ported comments claim instead: geography can exist
+server-side while this install's prefs are empty — a reinstall, a fresh host app, or any
+already-onboarded farmer reaching Home without re-running the GPS flow. Those farmers see the
+"Set location" invite even though the place is known, and the profile response already carries it.
+
+Two deliberate reductions, both recorded at the call sites:
+
+- **The SDK has one approx-name key, not two.** The app also seeds a never-overwritten
+  `IP_APPROX_LOCATION_NAME`; the SDK has no such key by design, so that half is dropped rather
+  than inventing a key (§2).
+- **The `IS_PROFILE_LOADED` reset-ordering move is not ported.** The app shifted
+  `IS_PROFILE_LOADED = false` from the top of its profile-success block to the bottom. That flag
+  is an app global (`AppConstants`) gating `HomeScreen`'s fetch; android SDK core has no
+  equivalent, so there was nothing to reorder and no guard was invented to give it a home.
+
+**Question for the app team:** is the profile's `geography_level3` the intended source for the
+pill's *district*, or is `address.district` preferred when both are present? The app reads
+`geography_level3` first and the SDK follows it literally, but the two fields are not documented as
+equivalent.
+
 ---
 
 ## ~~Q: what should produce a `LocationMessage` chat bubble?~~ — ANSWERED, CLOSED (2026-09-02)
@@ -323,3 +379,384 @@ forward", so this trades one stranding risk for another on unobserved data.
 
 A capture of any non-capability alignment surface would settle both, and is the single most useful
 next capture to take.
+
+## The app declares a SIM-permission launcher and never invokes it (2026-09-04)
+
+**What the app does.** `AuthScreen.kt` builds a `RequestMultiplePermissions` launcher for
+`READ_PHONE_STATE` + `READ_PHONE_NUMBERS` (line 377), and defines the failure copy for it
+(`fc_v2_app_label_permissions_are_required_to_auto_detect_sim_number.`). `permissionsLauncher` is
+then **never called** — a repo-wide grep finds exactly one occurrence, the declaration.
+
+The consequence in the shipped app: `SimPhoneNumberProvider.canReadPhoneNumber()` is false on any
+fresh install, so the SIM auto-detect at `AuthScreen.kt:266` never runs and the "Choose SIM
+number" picker is unreachable. The feature is present in code and dormant in practice.
+
+**What the SDK does.** It requests the permissions, so the feature actually works — but **only
+when the host has declared them**. `SimPhoneNumberProvider.isDeclaredByHost()` checks the merged
+manifest first, because Android denies a request for an undeclared permission instantly and
+without a dialog, which would just show the farmer a failure toast for a feature their host never
+enabled. A host that does not declare them sees no prompt and no behaviour change at all.
+
+The SDK also declares **neither permission itself**. A library manifest merges into every host,
+and these are sensitive enough to affect a store listing; a host that never shows the Auth screen
+should not inherit them. Opting in is two lines in the host manifest — `sample-views` and
+`sample-compose` do it, RationSmart deliberately does not (it runs `CHAT_ONLY` and never reaches
+the Auth screen).
+
+**Questions for the app team:**
+1. Is the un-invoked launcher an oversight, or was the SIM pre-fill deliberately parked?
+2. If deliberate — is it parked for a privacy/store reason the SDK should respect by leaving the
+   request out too?
+
+Until answered, the SDK's behaviour is: ask, but only where the host opted in.
+
+## Splitting a SIM number without libphonenumber (2026-09-04)
+
+The app splits a SIM line number into (dial code, local number) with
+`com.google.i18n.phonenumbers.PhoneNumberUtil`. The SDK does not take that dependency: it is
+~1 MB of metadata in every host for one optional pre-fill, and the SDK already holds the
+authoritative dial codes — endpoint #5 returns every supported country with its
+`phone_country_code`, and that list is loaded on the Auth screen before the split runs.
+
+`core/util/PhoneNumberSplitter` matches **longest dial code first**, which is the case a naive
+split gets wrong (`+1` and `+1876` both prefix a Jamaican number). It refuses rather than guesses
+when nothing matches, so an unrecognised number leaves the user's country selection alone.
+10 unit tests, including the overlapping-prefix case.
+
+Known difference from libphonenumber: it does not validate national number *length or shape* per
+country, so it will happily split a malformed number. `isPhoneValid` still runs afterwards, so a
+bad number is rejected at send time exactly as before — but if the app team wants strict parsing
+at pre-fill time, that is the gap.
+
+## SIM pre-fill runs only when no country is resolved (2026-09-04)
+
+Not an open question so much as a trap worth recording, because the SDK hit it and the app's
+one-line guard is what prevents it.
+
+The app reads the SIM **only** `if (savedIso.isBlank())` (`AuthScreen.kt:261`). Porting the SIM
+read without that guard produced a race on a real device: the SIM pre-filled country and number,
+and ~10 ms later the deferred GPS `applyIso` called `selectCountry`, which clears `phoneLocal` —
+so the number appeared and vanished. Traced on an API 36 emulator; the guard removes the
+collision entirely because `applyIso` no-ops on a blank ISO.
+
+`AuthViewModel.shouldAutoDetectFromSim()` is that guard.
+
+## The bundled Geolocation key is not, and cannot be, a secret (2026-09-04)
+
+`ApiConstants.DEFAULT_GEO_API_KEY` now ships a Google Geolocation key so an integrator gets a
+working location fallback without obtaining one, matching the existing `DEFAULT_GUEST_USER_API_KEY`
+precedent. **It is embedded in the AAR and is therefore extractable by anyone who has the
+artifact** — `unzip` + `strings` on the dex is enough. `internal` visibility, ProGuard and native
+storage only raise the effort; none of them make a client-side key private. This was stated to the
+requester, who chose to embed it as-is for now.
+
+What can and cannot be done on the Google Cloud side, verified against the call the SDK actually
+makes (`GoogleGeoApi.geolocate` — a plain Retrofit `POST …/geolocate?key=`):
+
+| Restriction | Usable here? |
+|---|---|
+| **API restriction** → Geolocation API only | ✅ **Do this.** Caps an extracted key to one API instead of the whole project. |
+| Application restriction → "Android apps" | ❌ Relies on `X-Android-Package` + `X-Android-Cert` headers, which this call does **not** send. Enabling it breaks geolocation for every host. Making it work needs those headers *and* registering each integrator's package + signing SHA-1 — at which point those integrators can use the key for their own calls anyway. |
+| IP restriction | ❌ Callers are phones on mobile networks. |
+
+**The durable fix, and the only one that satisfies "no one else can use it": proxy it.** Add a
+`geolocate` endpoint on the FarmerChat backend, which already fronts every other call and already
+authenticates the SDK via the guest token. The SDK calls that instead of Google, the key lives
+server-side, and `DEFAULT_GEO_API_KEY` is deleted. Until then the key is billable against the
+project by anyone holding the AAR.
+
+**Open questions:**
+1. Is the backend team willing to expose a `geolocate` proxy? That removes the exposure entirely.
+2. In the meantime, has the key been restricted to the Geolocation API in Google Cloud, and is
+   billing capped/alerted on that project?
+
+## Two requested divergences from the app — chat composer aura and bold chips (2026-09-04)
+
+Both were asked for directly during device testing. Neither is a port defect: the SDK matched the
+app before the change, so they are recorded here rather than silently applied.
+
+### 1. The composer aura now runs on the CHAT screen
+
+The app's `InputComposer.showAura` KDoc is explicit:
+
+> Home-only: the aura is an attention cue for first contact, so the chat screen passes false to
+> keep the composer calm amid live content.
+
+The SDK now passes `true` on chat as well, so the placeholder field carries the flowing gradient
+on both screens. Still idle-only (`showAura && !isFocused`), so it stops when the field is
+focused.
+
+**For the app team:** is the Home-only rule a deliberate product decision we should keep, or an
+artefact? If deliberate, the SDK is now louder than the app on the busiest screen and we should
+either revert or make it a host flag. If the app is expected to follow, this is the SDK leading and
+the app should catch up.
+
+### 2. Alignment chip labels are bold in every state
+
+The app bolds only the **selected** chip and leaves the rest at `labelMedium`'s weight 600
+(`components/chips/Chip.kt:127`). The SDK now uses `FontWeight.Bold` unconditionally.
+
+**For the app team:** the app's weight change is what signals "this is the one you picked". With
+every chip bold, selection now reads only from the check badge and the surface tint. Is that
+acceptable, or should selection regain a weight difference (e.g. bold everywhere, extra-bold when
+selected)?
+
+A genuine parity defect found alongside this — the numbered badge was `labelSmall`/`SemiBold` where
+the app uses `labelMedium` — was fixed as parity, not as a divergence.
+
+## Resume-after-process-death: which screens should come back? (2026-09-04)
+
+Toggling a runtime permission in system Settings makes Android kill the app, so the SDK now
+persists the farmer's last post-onboarding screen (`RESUME_SCREEN`) and returns them to it instead
+of re-running `routeFromSplash()`. See `docs/04-parity-matrix.md`.
+
+The app does not do this — it re-decides from splash like the SDK used to — so this is the SDK
+behaving better than the reference, deliberately, because the SDK lives inside a host where losing
+the farmer's place is more costly.
+
+**Open questions for the app team:**
+
+- Chat resumes only when `NEW_CONVERSATION_ID` can reopen the thread. A thread that never got an
+  id falls through to the normal decision. Is silently landing on Home the right fallback, or
+  should the SDK reopen chat empty with the question re-prefilled?
+- Should this apply to a **cold start after a long absence** too, or only to a recreation? Today it
+  is strictly recreation-only (`savedInstanceState != null`), so a farmer who force-quits still
+  gets the normal splash decision. That felt right but it is a product call.
+- An explicit `openChat`/`openScreen` pending target still wins over the resume. Confirm that is
+  the desired precedence.
+
+---
+
+## Six iOS text elements with no Android counterpart to cite (2026-09-09)
+
+The iOS type-scale pass (docs/04 §"iOS pass against the native app") migrated 141 text call sites
+across the SwiftUI and UIKit flavours, each one mapped to a specific Android slot. Six could not
+be, and root CLAUDE.md §2 says implement the conservative reading and record rather than guess —
+so these keep their current size and remain the only text in the iOS SDK with no script-correct
+leading.
+
+**Elements that exist on iOS but were not found in the Android sources:**
+
+| Element | Current | Note |
+|---|---|---|
+| Drawer wordmark (`DrawerView.swift:32`, `DrawerLocationError.swift:140`) | 20/bold | Android's drawer header is a logo mark; the reference iOS app measured its wordmark at 16 pt (`PARITY.md:341`), which is neither `titleSmall` (16/bold) nor `titleLarge` |
+| Weather temperature (`HomeComponents.swift:67`) | 16/semibold | `FCWeatherButton` — no Android compose equivalent located |
+| Feed footer, "You're all caught up" (`HomeComponents.swift:105`) | 14 | ditto |
+
+**Questions for the app team:**
+
+- Is the drawer wordmark meant to be a type slot at all, or a fixed-size brand lockup that should
+  *not* scale with `typeScale`? If the latter, it belongs with the icon glyphs, which deliberately
+  stay off the scale.
+- Do the weather chip and feed footer exist in the current app? They may be SDK-only affordances,
+  in which case `labelLarge` and `bodySmall` are the natural slots and we would like that confirmed
+  rather than assumed.
+
+**Also open, and larger:** the remaining multi-line `UILabel`s in `FarmerChatUIKit` have the right
+size and weight but still natural leading, because `UILabel` exposes line height only through
+attributed text — so it must be applied at each text assignment (`fcSetText`), not once at setup.
+It is applied to the bodies that matter most (both chat bubbles, location address,
+alignment-surface message, feed card title/statement, full-screen message). Finishing the rest is
+mechanical but touches every `configure()` in the flavour. Worth deciding whether `FarmerChatUIKit`
+should instead ship an `FCLabel` subclass that re-applies the paragraph style on `text` assignment,
+which would close this permanently instead of per call site.
+
+## iOS / react-native / web do not use the app's label keys OR its copy (2026-09-16)
+
+**Found while porting a one-word fallback string. Measured, not fixed — the remediation is
+~350 call sites across three platforms and needs a per-key mapping decision.**
+
+Android (compose + views) resolves every string through `Labels.<CONST>`, whose values are the
+canonical `fc_v2_app_label_*` keys copied from the app (`Labels.kt:300` matches the app's
+`Labels.kt:314`). The other three platforms largely do not.
+
+### Measured against the 261 canonical keys in `android/farmerchat-core/.../labels/Labels.kt`
+
+| Platform | call sites | distinct keys | resolve if simply prefixed | **invented — no server counterpart** |
+|---|---|---|---|---|
+| ios (`fcLabel`) | 166 | 130 | 26 | **104 (80%)** |
+| web (`label(`) | 214 | 170 | 6 | **164 (96%)** |
+| react-native, raw-string sites | 101 | 89 | 0 | **89 (100%)** |
+| react-native, `Labels.X` sites | 85 | — | n/a | 0 — these are correct |
+| android compose / views | all | — | n/a | 0 — correct |
+
+Two distinct defects are stacked here, and they have different consequences:
+
+1. **Unprefixed keys.** No layer normalises them. On iOS the path was traced end to end:
+   `FarmerChatAPI.getLabels` (`FarmerChatAPI.swift:56`) returns the server map verbatim; both
+   callers (`OnboardingViewModel.swift:300`, `SettingsViewModel.swift:137`) pass it straight to
+   `LabelManager.update(labels:)` (`LabelManager.swift:41`), which stores it verbatim; and
+   `label(_ baseKey:)` (`LabelManager.swift:72`) looks up `"\(baseKey)_\(lang)"`. So a bare key
+   never matches `fc_v2_app_label_*_en`. **These platforms are effectively English-only regardless
+   of the farmer's selected language.**
+
+2. **Invented copy, which is worse.** Where the key has no canonical counterpart the hardcoded
+   English fallback is often not the app's string at all — so the wrong words render even in
+   English. The Home feed footer is the clearest case:
+
+   | | icon | text |
+   |---|---|---|
+   | app (`FeedFooter.kt`) | `👋🏾` at 40sp, fade-in + 3× wave | "Have a great day,\ncome back tomorrow" |
+   | compose / views / react-native | logo mark | "Have a great day,\ncome back tomorrow" ✅ |
+   | ios (`FCFeedFooter`) | logo mark, 28 | **"You're all caught up for today"** (key `feed_footer`) |
+   | web | none | **"That's all for today. Ask me anything!"** (key `home_feed_footer`) |
+
+   Neither iOS's nor web's string exists anywhere in the app. Both violate root CLAUDE.md §2
+   ("user-visible text = the app's English strings") and the no-invented-keys rule.
+
+### Why this was not caught earlier
+
+`docs/04:1749` and `:1754` record that the react-native and iOS fidelity passes (2026-07-20) were
+verified **against the Compose SDK module**, not against the app. That makes compose the de-facto
+reference for those platforms, so anywhere compose itself diverges from the app the drift
+propagates silently — and anywhere a platform invented a string, there was no app-side check to
+catch it. See [[check-the-app-means-screen-fidelity]].
+
+### Remediation is a mapping exercise, not a find-and-replace
+
+Spot-checking the iOS keys shows three different cases, so a blanket prefix would fix only the
+first:
+
+- **Just needs the prefix** — `all_languages`, `try_again` exist canonically.
+- **Needs a mapping** — `ask_follow_up` → `fc_v2_app_label_ask_a_followup_questions`.
+- **No canonical counterpart at all** — `api_error_title`, `feed_footer`, `account_benefits_title`.
+  Either the app renders that surface with a hardcoded (non-label) string, or the surface is
+  SDK-only. Each needs a decision: map to the nearest real key, hardcode to the app's exact English
+  and stop pretending it is server-driven, or request a new key from the backend.
+
+
+### iOS remediated, 2026-09-16 — buckets A and B are closed
+
+The measurement above understated iOS: it counted only `fcLabel` (SwiftUI, 168 sites) and missed
+`fcuiLabel` (UIKit, 114) and 51 direct `labels.label(` calls. **The real total was 333 sites.**
+
+A generated `FarmerChatCore/Sources/FarmerChatCore/Labels/Labels.swift` (`FCLabels`, 263 constants,
+1:1 with Android `Labels.kt`) now exists, and **225 of the 333 sites were migrated to it**:
+
+- **97 sites** already used a canonical key, or needed only the `fc_v2_app_label_` prefix.
+- **128 sites** were matched to a canonical key by their English copy, then verified. Two
+  ambiguous location keys resolved against Android's `LocationPromptHost`, which uses
+  `SHARE_LOCATION` for both the interstitial title and its CTA (`SHARE_LOCATION_TITLE` belongs to
+  the GPS_PROMPT chip only).
+- **12 fallbacks were corrected to the app's exact English** in the same edit, per §2 — including
+  `"Save your questions and answers"` → `"Save your past questions"` and `"Log out"` → `"Logout"`.
+  These change what renders today. Where a key has several spellings in the app
+  (`getting_your_location` has three) and iOS already used one of them, iOS is left alone.
+- One correction mirrors copy that reads as an app bug: `choose_a_followup_option_below` is
+  `"Choose an option from the below"` in the app. That is deliberate — §2 says the app's English
+  wins — so do not "fix" the grammar here; fix it in the app and let it flow through.
+
+Only **13 of the 333 sites resolved against the server before this pass**, not the ~97 that bucket
+A's size suggests: 84 of bucket A's sites were bare keys that merely happened to have a canonical
+counterpart once prefixed.
+
+Verified by re-running the classifier after the rewrite: bucket A = 0, bucket B = 0, bucket C
+unchanged at 108. `swift build` + 88 Core tests pass; `xcodebuild` succeeds for both
+FarmerChatSwiftUI and FarmerChatUIKit.
+
+**Breaking change for iOS hosts**, documented in `ios/README.md`: `FarmerChatConfig.stringOverrides`
+is keyed on whatever key the SDK asks for, so overrides written against the old bare keys stop
+applying. No shim is offered — the old keys never resolved against the server anyway.
+
+### Bucket C — 108 sites, 66 keys, still open (iOS)
+
+These have **no counterpart among the 263 canonical keys**, and spot-checks confirm the app has no
+equivalent: there are no `type_placeholder`, `load_earlier`, or per-HTTP-status error labels in the
+app at all. This is SDK-invented UI copy for surfaces the app either renders differently or does
+not have. They still pass string literals and still render their fallback.
+
+Each needs one of: map to the nearest real key, hardcode as an SDK-owned English string and stop
+pretending it is server-driven, or request a new backend key. **Roughly half are error/permission
+copy** (`error_*`, `*_permission_*`, `no_internet_message`), which is the cluster most likely to
+deserve real backend keys, since a farmer hitting them is the farmer least able to read English.
+
+| key | current fallback |
+|---|---|
+| `account_success_subtitle` | "Your questions and answers are now saved to your account" |
+| `api_error_message` | "We're having trouble right now. Please try again." |
+| `auth_legal` | "By continuing you agree to our Terms and Privacy policy" |
+| `camera_permission_message` | "Allow camera access in Settings to ask questions with photos." |
+| `camera_permission_title` | "Camera access needed" |
+| `chat_answer_failed` | "We couldn't answer that right now. Please try again." |
+| `chat_history_empty` | "Your chats will appear here" |
+| `chat_history_failed` | "We couldn't load this conversation." |
+| `country_detect_failed` | "We couldn't detect your country. Please pick it manually." |
+| `downloaded` | "Saved to Photos" |
+| `enter_name_subtitle` | "We'll greet you by your name" |
+| `error_bad_request` | "Something went wrong with that request. Please try again." |
+| `error_forbidden` | "You don't have permission to do that." |
+| `error_not_found` | "We couldn't find what you were looking for." |
+| `error_server` | "Our servers are having trouble. Please try again shortly." |
+| `error_timeout` | "The request timed out. Please try again." |
+| `error_too_many_requests` | "Too many attempts. Please wait a moment and try again." |
+| `error_unauthorized` | "Your session has expired. Please try again." |
+| `feed_footer` | "You're all caught up for today" |
+| `greeting` | "fallback" |
+| `help_empty` | "No help topics yet." |
+| `help_load_failed` | "Couldn't load help topics." |
+| `home_feed_error` | "We couldn't load today's advice." |
+| `home_greeting` | "Hello!" |
+| `invalid_otp` | "Please enter the 4-digit code." |
+| `invalid_phone` | "Please enter a valid phone number." |
+| `load_earlier` | "Load earlier messages" |
+| `location_failed_message` | "We couldn't find your location. Please try again." |
+| `location_gps_unavailable_message` | "Turn on Location Services to share your farm's location." |
+| `location_gps_unavailable_title` | "Location is turned off" |
+| `location_recovery_message` | "Location access is turned off. Turn it on in Settings to get local advice." |
+| `location_subtitle` | "Get weather alerts and advice specific to your farm's location" |
+| `logout_confirm` | "Are you sure you want to log out?" |
+| `message_failed` | "Not sent" |
+| `mic_permission_denied` | "Microphone access is needed to speak your question." |
+| `mic_permission_message` | "Allow microphone access in Settings to ask questions with your voice." |
+| `mic_permission_title` | "Microphone access needed" |
+| `name_too_long` | "Name is too long." |
+| `name_too_short` | "Please enter at least 3 characters." |
+| `no_internet_message` | "You appear to be offline. Check your connection and try again." |
+| `open_settings` | "Open Settings" |
+| `otp_incorrect` | "That code doesn't look right. Please try again." |
+| `otp_resend_in` | "Resend code in {time}" |
+| `otp_send_failed` | "Could not send the code. Please try again." |
+| `otp_subtitle` | "Sent to {phone}" |
+| `otp_title` | "Enter the 4-digit code" |
+| `phone_placeholder` | "Phone number" |
+| `photo_gallery` | "Choose from gallery" |
+| `photo_source_title` | "Add a photo" |
+| `photo_take` | "Take a photo" |
+| `profile_saved` | "Saved!" |
+| `select_country` | "Select country" |
+| `send_code_sms` | "Get code by SMS" |
+| `send_code_whatsapp` | "Get code on WhatsApp" |
+| `settings_no_name` | "Add your name" |
+| `ssfr_question` | "Fertilizer advice for {crop}" |
+| `ssfr_title` | "Get fertilizer advice for your crop" |
+| `transcribing` | "Understanding your question…" |
+| `transcription_failed` | "We couldn't hear that. Please try again." |
+| `tts_failed` | "Audio is not available right now." |
+| `type_placeholder` | "Ask anything about your farm" |
+| `voice_clip` | "Voice message" |
+| `voice_listening` | "Listening…" |
+| `voice_preparing` | "Getting ready…" |
+| `voice_start_failed` | "Could not start recording." |
+| `weather_error` | "Weather unavailable" |
+
+### Questions for the team
+
+1. Confirm the direction: every platform resolves the canonical `fc_v2_app_label_*` keys, matching
+   Android — or is there a reason iOS/web were written with their own vocabulary?
+2. For the third bucket (no canonical counterpart), is requesting new backend keys acceptable, or
+   should those surfaces hardcode the app's English?
+3. Host overrides are currently keyed on whatever bare key the call site passes. Any fix has to
+   migrate those too or they silently stop applying.
+4. Is there any device/browser evidence that a non-English language has **ever** rendered
+   correctly on iOS, react-native or web? If so this analysis is wrong somewhere and that should
+   be found first. Android is unaffected either way.
+
+
+## Location deny-count pref key naming across platforms (2026-10-06)
+
+The app's `PreferenceKeys.PERMISSION_DENY_COUNT` (value `deny_count`) drives the "denied twice →
+Recovery" rule. Android stores it as `fc_sdk_deny_count` (matches the app value). The 2026-10-06
+ports added it on the other platforms in each package's own convention: web `fc_sdk_deny_count`,
+iOS `fc_sdk_PERMISSION_DENY_COUNT`, react-native `PERMISSION_DENY_COUNT`. Conservative reading
+implemented (same semantics, per-package naming). Open: align iOS/RN to the app's `deny_count`
+value? Only matters if a host ever migrates prefs between platforms — none does today.

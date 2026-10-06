@@ -32,6 +32,7 @@ object CountryImageAssets {
 
     const val LOOKING_AT_CAMERA = "farmer_looking_at_camera"
     const val LOOKING_AT_PHONE = "farmer_looking_at_phone"
+    const val LOOKING_AT_PHONE_SQUARE = "farmer_looking_at_phone_square"
     const val LOOKING_AT_SKY = "farmer_looking_at_sky"
 
     private val SUPPORTED_COUNTRIES = setOf("ke", "et", "ng", "in")

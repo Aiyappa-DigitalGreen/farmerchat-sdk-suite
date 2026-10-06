@@ -29,7 +29,9 @@ internal class AccountSuccessFragment : BaseFragment(0) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         (view as FullScreenMessageView).bind(
-            title = label(Labels.ALL_SET, "All set"),
+            // App parity (AccountSuccessScreen.kt:57): the app-bar title is SIGN_UP, not ALL_SET —
+            // ALL_SET left this screen titled "All set" above a "You're all set!" headline.
+            title = label(Labels.SIGN_UP, "Sign up"),
             mainMessage = label(Labels.YOURE_ALL_SET, "You're all set!"),
             subtitle = label(
                 Labels.PREVIOUS_QUESTIONS_MENU,
@@ -37,6 +39,8 @@ internal class AccountSuccessFragment : BaseFragment(0) {
             ),
             primaryCtaLabel = label(Labels.CONTINUE, "Continue"),
             onPrimaryCta = { goHome() },
+            // App parity (AccountSuccessScreen.kt:60): bodyLarge, not the bodyMedium default.
+            subtitleSizeSp = 19f,
             illustrationAsset = FarmerIllustrations.LOOKING_AT_SKY,
             leftIconRes = null,
             onLeftClick = null

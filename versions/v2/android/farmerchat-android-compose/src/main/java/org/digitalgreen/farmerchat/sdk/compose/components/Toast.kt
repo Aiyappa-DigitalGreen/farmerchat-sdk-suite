@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcImeBottomPx
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
@@ -56,7 +57,8 @@ fun Toast(
     val contentColors = LocalContentColors.current
     val density = LocalDensity.current
 
-    val imeBottom = WindowInsets.ime.getBottom(density)
+    // Trimmed to the SDK root (util/FcInsets.kt): padding only, not a visibility check.
+    val imeBottom = fcImeBottomPx()
     val keyboardPadding = with(density) { imeBottom.toDp() }
 
     LaunchedEffect(visible, state) {

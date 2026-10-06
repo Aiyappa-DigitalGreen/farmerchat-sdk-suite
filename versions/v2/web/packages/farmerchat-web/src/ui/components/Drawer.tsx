@@ -73,17 +73,17 @@ export function Drawer(props: {
             <LogoGlyph />
           </div>
           <div style={{ fontWeight: 800, fontSize: 17, marginTop: 6 }}>
-            {props.userName || label('drawer_title', 'FarmerChat')}
+            {props.userName || label('fc_v2_app_label_farmerchat', 'FarmerChat')}
           </div>
           <div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2 }}>{props.currentLanguage}</div>
         </div>
         <div className="fcsdk-scroll">
           {/* Order matches the app (components/drawer/DrawerContent.kt) and the Android SDK:
               Home -> Language -> Settings -> Help, with recent chats BELOW the divider. */}
-          {navItem('home', '🏠', label('drawer_home', 'Home'))}
-          {navItem('settings/language', '🌐', label('drawer_language', 'Language'))}
-          {showSettings ? navItem('settings', '⚙️', label('drawer_settings', 'Settings')) : null}
-          {navItem('help', '❓', label('drawer_help', 'Help'))}
+          {navItem('home', '🏠', label('fc_v2_app_label_home', 'Home'))}
+          {navItem('settings/language', '🌐', label('fc_v2_app_label_language', 'Language'))}
+          {showSettings ? navItem('settings', '⚙️', label('fc_v2_app_label_settings', 'Settings')) : null}
+          {navItem('help', '❓', label('fc_v2_app_label_help', 'Help'))}
           {canShowHistory ? navItem('chatHistory', Icon.chat, label('drawer_recent_chats', 'Recent Chats')) : null}
 
           {canShowHistory ? <div className="fcsdk-drawer-section">{label('drawer_previous_questions', 'Previous questions')}</div> : null}
@@ -105,7 +105,7 @@ export function Drawer(props: {
               {props.previousQuestions.length > 0 ? (
                 <div style={{ padding: '2px 10px' }}>
                   <TextButton
-                    label={label('drawer_see_all', 'See all')}
+                    label={label('fc_v2_app_label_see_all', 'See all')}
                     onClick={() => {
                       services.analytics.track(Events.CHAT_HISTORY_CLICK_EVENT, { source: 'drawer' });
                       props.onSeeAllClick();
@@ -126,7 +126,7 @@ export function Drawer(props: {
                 props.onSignUpClick();
               }}
             >
-              {label('drawer_sign_up', 'Sign up')}
+              {label('fc_v2_app_label_sign_up', 'Sign up')}
             </button>
           </div>
         ) : null}

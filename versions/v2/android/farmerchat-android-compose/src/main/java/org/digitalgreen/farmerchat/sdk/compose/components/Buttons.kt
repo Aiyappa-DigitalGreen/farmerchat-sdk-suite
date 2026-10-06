@@ -1,6 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
@@ -191,7 +193,7 @@ fun SecondaryButton(
         modifier = modifier,
         onClick = onClick,
         enabled = isEnabled,
-        shape = SmoothShapes.rounded(Radius.MD),
+        shape = SmoothShapes.rounded(Radius.Rounded),
         color = backgroundColor,
         contentColor = effectiveContentColor
     ) {
@@ -252,7 +254,9 @@ fun ActionButton(
     labelPosition: ActionButtonLabelPosition = ActionButtonLabelPosition.Right,
     labelColor: Color? = null,
     textStyle: TextStyle = MaterialTheme.typography.labelMedium,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    borderBrush: Brush? = null,
+    borderWidth: Dp = 3.dp
 ) {
     val view = LocalView.current
     val colors = LocalContentColors.current
@@ -287,6 +291,7 @@ fun ActionButton(
         color = resolvedBackground,
         contentColor = resolvedIconColor,
         shape = shape,
+        border = borderBrush?.let { BorderStroke(borderWidth, it) },
         modifier = modifier.then(sizeModifier)
     ) {
         Row(
@@ -334,8 +339,8 @@ fun WeatherButton(
     condition: WeatherCondition = WeatherCondition.SunClouds,
     text: String = "35°",
     weatherIconUrl: String? = null,
-    height: Dp = 42.dp,
-    radius: Dp = Radius.MD,
+    height: Dp = 44.dp,
+    radius: Dp = Radius.Rounded,
 ) {
     val brandColors = LocalBrandColors.current
     val shape = SmoothShapes.rounded(radius)

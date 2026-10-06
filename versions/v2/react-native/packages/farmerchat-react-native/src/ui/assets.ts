@@ -42,6 +42,12 @@ import glowGreen from '../assets/fc_glow_green.png';
 import weatherSunClouds from '../assets/fc_weather_sunclouds.png';
 import weatherSun from '../assets/fc_weather_sun.png';
 import weatherRain from '../assets/fc_weather_rain.png';
+// Country farmer illustration for the location Recovery sheet, copied from the Android core's
+// `assets/{ke,et,ng,in}/farmer_looking_at_phone_square.webp` (itself copied from the app).
+import farmerPhoneSquareKe from '../assets/ke/farmer_looking_at_phone_square.webp';
+import farmerPhoneSquareEt from '../assets/et/farmer_looking_at_phone_square.webp';
+import farmerPhoneSquareNg from '../assets/ng/farmer_looking_at_phone_square.webp';
+import farmerPhoneSquareIn from '../assets/in/farmer_looking_at_phone_square.webp';
 
 export const Icons = {
   camera: iconCamera,
@@ -89,3 +95,27 @@ export const Assets = {
   weatherSun,
   weatherRain,
 } as const;
+
+/**
+ * Country-scoped farmer illustrations — port of the Android SDK's `CountryImageAssets`
+ * (`ke` / `et` / `ng` / `in`, falling back to `ke` for any other or blank country code).
+ *
+ * Only `farmer_looking_at_phone_square` (the location Recovery sheet) is bundled in this package;
+ * the other `farmer_looking_at_*` illustrations are still rendered as glyphs by
+ * `FullScreenMessage`.
+ */
+const FARMER_LOOKING_AT_PHONE_SQUARE: Record<string, number> = {
+  ke: farmerPhoneSquareKe,
+  et: farmerPhoneSquareEt,
+  ng: farmerPhoneSquareNg,
+  in: farmerPhoneSquareIn,
+};
+
+const FALLBACK_FARMER_COUNTRY = 'ke';
+
+export function farmerLookingAtPhoneSquare(countryCode: string | null | undefined): number {
+  const code = (countryCode ?? '').trim().toLowerCase();
+  return (
+    FARMER_LOOKING_AT_PHONE_SQUARE[code] ?? FARMER_LOOKING_AT_PHONE_SQUARE[FALLBACK_FARMER_COUNTRY]
+  );
+}

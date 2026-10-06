@@ -7,12 +7,18 @@
     android:layout_height="64dp"
     android:background="@color/fc_green700">
 
+    <!-- Hidden by DEFAULT. The app draws this sunbeam glow on HOME only; its Settings bar
+         passes `showGlow = false` (app SettingsScreen.kt:121) and measures flat #008236, as does
+         the compose flavour. Views showed it on every screen, which made the app bar the single
+         largest source of pixel difference on Settings — 37,180 differing pixels, 32% of the
+         screen's total. HomeFragment turns it back on. -->
     <ImageView
         android:id="@+id/fcAppBarGlow"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitXY"
         android:importantForAccessibility="no"
+        android:visibility="gone"
         android:src="@drawable/fc_glow_yellow" />
 
     <ImageButton
@@ -27,19 +33,18 @@
         android:src="@drawable/fc_ic_menu"
         app:tint="@color/fc_white" />
 
-    <TextView
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
         android:id="@+id/fcAppBarTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:layout_marginStart="64dp"
         android:layout_marginEnd="64dp"
-        android:textColor="@color/fc_white"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end"
-        tools:text="Settings" />
+        app:fcTextColor="@color/fc_white"
+        app:fcMaxLines="1"
+        app:fcTextSizeSp="18"
+        app:fcTextWeight="700"
+        app:fcEllipsize="true" />
 
     <ImageView
         android:id="@+id/fcAppBarLogo"
@@ -51,7 +56,7 @@
         android:visibility="gone"
         app:tint="@color/fc_white" />
 
-    <TextView
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
         android:id="@+id/fcAppBarRightLabel"
         android:layout_width="wrap_content"
         android:layout_height="42dp"
@@ -61,11 +66,11 @@
         android:gravity="center"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:textColor="@color/fc_white"
-        android:textSize="15sp"
-        android:textStyle="bold"
+        app:fcTextColor="@color/fc_white"
         android:visibility="gone"
-        tools:text="Skip" />
+        app:fcTextSizeSp="15"
+        app:fcTextWeight="700"
+        app:fcTextAlign="center" />
 
     <!-- Weather pill (Home only) -->
     <!--
@@ -111,7 +116,7 @@
     <LinearLayout
         android:id="@+id/fcAppBarWeather"
         android:layout_width="wrap_content"
-        android:layout_height="42dp"
+        android:layout_height="44dp"
         android:layout_gravity="end|center_vertical"
         android:layout_marginEnd="16dp"
         android:background="@drawable/fc_bg_weather_pill"
@@ -128,15 +133,14 @@
             android:importantForAccessibility="no"
             android:src="@drawable/fc_weather_sunclouds" />
 
-        <TextView
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
             android:id="@+id/fcAppBarWeatherTemp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:textColor="@color/fc_white"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            tools:text="24°" />
+            app:fcTextColor="@color/fc_white"
+            app:fcTextSizeSp="15"
+            app:fcTextWeight="700" />
 
         <ImageView
             android:layout_width="22dp"

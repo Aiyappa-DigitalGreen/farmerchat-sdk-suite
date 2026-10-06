@@ -44,11 +44,11 @@ final class FCUIAuthViewController: UIViewController {
             image: UIImage(systemName: "xmark"),
             primaryAction: UIAction { [weak self] _ in self?.navigationController?.popViewController(animated: true) }
         )
-        title = fcuiLabel("auth_title", "Sign up with phone number")
+        title = fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number")
 
         whatsappButton.setTitle(fcuiLabel("send_code_whatsapp", "Get code on WhatsApp"), for: .normal)
         smsButton.setTitle(fcuiLabel("send_code_sms", "Get code by SMS"), for: .normal)
-        verifyButton.setTitle(fcuiLabel("verify", "Verify"), for: .normal)
+        verifyButton.setTitle(fcuiLabel(FCLabels.verify, "Verify"), for: .normal)
 
         buildPhoneStep()
         buildOtpStep()
@@ -61,7 +61,7 @@ final class FCUIAuthViewController: UIViewController {
 
     private func buildPhoneStep() {
         countryButton.setTitle("+91", for: .normal)
-        countryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .medium)
+        countryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
         countryButton.setTitleColor(FCUITheme.foregroundPrimary, for: .normal)
         countryButton.backgroundColor = FCUITheme.surfaceSecondary
         countryButton.layer.cornerRadius = 14
@@ -74,7 +74,7 @@ final class FCUIAuthViewController: UIViewController {
         phoneField.textContentType = .telephoneNumber
         phoneField.borderStyle = .roundedRect
         phoneField.backgroundColor = FCUITheme.surfaceSecondary
-        phoneField.font = .systemFont(ofSize: 17)
+        phoneField.font = FCUITypography.current.bodyMedium.font
         phoneField.addAction(UIAction { [weak self] _ in
             self?.viewModel.setPhoneLocal(self?.phoneField.text ?? "")
             self?.refreshButtons()
@@ -105,7 +105,7 @@ final class FCUIAuthViewController: UIViewController {
     }
 
     private func buildOtpStep() {
-        otpTitle.font = .systemFont(ofSize: 16)
+        otpTitle.font = FCUITypography.current.bodyMedium.font
         otpTitle.textColor = FCUITheme.foregroundSecondary
         otpTitle.numberOfLines = 0
 
@@ -123,15 +123,15 @@ final class FCUIAuthViewController: UIViewController {
             self?.verifyButton.isEnabled = self?.viewModel.state.otp.count == AuthViewModel.otpLength
         }, for: .editingChanged)
 
-        timerLabel.font = .systemFont(ofSize: 14)
+        timerLabel.font = FCUITypography.current.bodySmall.font
         timerLabel.textColor = FCUITheme.foregroundSecondary
         timerLabel.textAlignment = .center
 
-        resendButton.setTitle(fcuiLabel("otp_resend", "Resend code"), for: .normal)
+        resendButton.setTitle(fcuiLabel(FCLabels.resendCode, "Resend code"), for: .normal)
         resendButton.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
         resendButton.addAction(UIAction { [weak self] _ in self?.viewModel.resendOtp() }, for: .touchUpInside)
 
-        startOverButton.setTitle(fcuiLabel("otp_start_over", "Start over"), for: .normal)
+        startOverButton.setTitle(fcuiLabel(FCLabels.startOver, "Start over"), for: .normal)
         startOverButton.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
         startOverButton.addAction(UIAction { [weak self] _ in self?.viewModel.startOver() }, for: .touchUpInside)
 
@@ -168,7 +168,7 @@ final class FCUIAuthViewController: UIViewController {
         phoneStack.isHidden = state.step != .phoneEntry
         otpStack.isHidden = state.step != .otpEntry
         title = state.step == .phoneEntry
-            ? fcuiLabel("auth_title", "Sign up with phone number")
+            ? fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number")
             : fcuiLabel("otp_title", "Enter the 4-digit code")
 
         // Phone step widgets.
@@ -315,11 +315,11 @@ final class FCUIAccountBenefitsViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         let message = FCUIFullScreenMessageView(
-            title: fcuiLabel("account_benefits_title", "Sign up"),
-            subtitle: fcuiLabel("account_benefits_subtitle", "Save your questions and answers"),
+            title: fcuiLabel(FCLabels.signUp, "Sign up"),
+            subtitle: fcuiLabel(FCLabels.saveYourQuestionsAnswers, "Save your past questions"),
             symbolName: "person.crop.square.badge.camera",
-            primaryTitle: fcuiLabel("account_benefits_cta", "Sign up with phone number"),
-            secondaryTitle: fcuiLabel("skip", "Skip")
+            primaryTitle: fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number"),
+            secondaryTitle: fcuiLabel(FCLabels.skip, "Skip")
         )
         message.frame = view.bounds
         message.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -336,10 +336,10 @@ final class FCUIAccountSuccessViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         let message = FCUIFullScreenMessageView(
-            title: fcuiLabel("account_success_title", "You're all set!"),
+            title: fcuiLabel(FCLabels.youreAllSet, "You're all set!"),
             subtitle: fcuiLabel("account_success_subtitle", "Your questions and answers are now saved to your account"),
             symbolName: "sun.max",
-            primaryTitle: fcuiLabel("continue", "Continue"),
+            primaryTitle: fcuiLabel(FCLabels.continue, "Continue"),
             secondaryTitle: nil
         )
         message.frame = view.bounds

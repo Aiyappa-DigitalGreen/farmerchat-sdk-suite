@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1px hairline between rows inside a list card. App parity: the Help FAQ card draws a divider
+     between each row; views drew none, so the rows ran together. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <size android:height="1dp" />
+    <solid android:color="@color/fc_divider" />
+</shape>

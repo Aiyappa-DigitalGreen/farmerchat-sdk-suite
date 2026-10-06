@@ -49,7 +49,25 @@ sealed class ChatAction {
         /** "wheat" or "maize", sent as ssfr_crop in the text-prompt API. */
         val ssfrCrop: String? = null,
         /** From deep link ?channel=: sent as triggered_input_type + click_type. */
-        val channel: String? = null
+        val channel: String? = null,
+        /**
+         * Home content-card tap in AGENTIC mode: `"image_card"` or `"text_card"`.
+         *
+         * App parity (`ChatViewModel.kt:214`): with agentic chat on, a content-card tap skips the
+         * pre-generated-answer API (#26) and sends the card's question as a normal text query —
+         * but it must still tell the backend and analytics where the query came from. This one
+         * value feeds BOTH `triggered_input_type` (API) and `click_type` (analytics), which is how
+         * the agentic card path stays indistinguishable from the non-agentic one downstream.
+         */
+        val contentCardTriggerType: String? = null,
+        /**
+         * DISPLAY-ONLY image for the user's own bubble — the content card's artwork.
+         *
+         * Emphatically NOT an image query: the URL is remote (https) and the question travels as
+         * text. Routing it through `SendQuestionWithImage` would send it to image analysis (#28),
+         * which is exactly what the app's agentic card path avoids.
+         */
+        val userMessageImageUri: Uri? = null
     ) : ChatAction()
 
     /**

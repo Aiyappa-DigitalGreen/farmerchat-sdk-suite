@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.core.usecase
 
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.digitalgreen.farmerchat.sdk.core.base.ApiResult
@@ -96,12 +97,29 @@ class FetchGeoLocationUseCase(
             )
             return@flow
         }
+        // A hard ceiling on the WHOLE lookup. A DNS resolution stuck in the platform resolver
+        // (getaddrinfo) cannot be interrupted by any OkHttp timeout, and the CHAT_ONLY splash and
+        // onboarding both wait on this call — seen holding the splash for minutes on a device
+        // whose resolver hung. Cancelling the coroutine abandons the blocked call; callers then
+        // fall back to the device-locale location exactly as for any geolocate failure.
         emit(
-            executeApiCall(
+            withTimeoutOrNull(GEOLOCATE_CEILING_MS) {
+                executeApiCall(
+                    apiName = "geolocate",
+                    priority = ApiPriority.PRIORITY_1_ONBOARDING_FALLBACK
+                ) { repo.geolocate(key, body) }
+            } ?: ApiResult.Error(
+                code = null,
+                message = "Geolocate timed out",
                 apiName = "geolocate",
-                priority = ApiPriority.PRIORITY_1_ONBOARDING_FALLBACK
-            ) { repo.geolocate(key, body) }
+                isTimeout = true
+            )
         )
+    }
+
+    private companion object {
+        /** P1 is 5 s with 1 retry (+ backoff): 12 s covers both attempts. */
+        const val GEOLOCATE_CEILING_MS = 12_000L
     }
 }
 
@@ -138,6 +156,7 @@ class GetSupportedLanguagesUseCase(
                 apiName = "get_supported_languages",
                 priority = ApiPriority.PRIORITY_2_NO_FALLBACK
             ) { repo.getSupportedLanguages(countryCode, state) }
+                .let { r -> if (r is ApiResult.Success) ApiResult.Success(r.data.map { it.normalized() }) else r }
         )
     }
 

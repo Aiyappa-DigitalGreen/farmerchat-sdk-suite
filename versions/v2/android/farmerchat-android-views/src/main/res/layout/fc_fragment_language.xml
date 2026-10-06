@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -12,12 +12,19 @@
         android:orientation="vertical"
         android:fitsSystemWindows="true">
 
+        <!-- Horizontal 4dp on top of the row item's own 20dp margins = the app's 24dp
+             (LanguageScreen.kt:170). Top inset is 8dp, NOT compose's 32dp: the parent consumes
+             the status-bar inset via fitsSystemWindows, so the list already starts below it.
+             Measured — the app's first row sits 21px (8dp) below where views had it unpadded. -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/fcLanguageList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="8dp"
             android:paddingBottom="16dp" />
 
         <LinearLayout
@@ -26,47 +33,50 @@
             android:background="@drawable/fc_bg_rounded_top"
             android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="12dp">
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="28dp"
+            android:paddingBottom="16dp">
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcLanguageTagline"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="15sp"
-                tools:text="Practical advice for your crops and animals" />
+                app:fcTextColor="@color/fc_foreground_primary"
+                app:fcTextSizeSp="22"
+                app:fcTextWeight="700"
+                app:fcTextAlign="center" />
 
             <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                 android:id="@+id/fcLanguageStartButton"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:layout_marginTop="12dp" />
+                android:layout_marginTop="20dp" />
 
+            <!-- App parity (LanguageScreen.kt 47bc8524): ONE flowing, justified paragraph.
+                 This used to be two TextViews - an intro line plus a "Terms of use / Privacy
+                 policy" links line - which hard-broke the paragraph and left a short centred
+                 stub between them. The links are now inline ClickableSpans inside this single
+                 view, capped at the app's 260dp measure. justificationMode needs API 26, which
+                 is this module's minSdk. -->
+            <!-- Stays a TextView: this line carries CLICKABLE SPANS (Terms / Privacy) and
+                 needs `LinkMovementMethod`, which Compose text does not provide through
+                 this wrapper. The rasterisation difference is accepted here. -->
             <TextView
                 android:id="@+id/fcLanguageLegal"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="20dp"
+                android:maxWidth="260dp"
+                android:gravity="start"
+                android:justificationMode="inter_word"
                 android:textColor="@color/fc_foreground_secondary"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="By continuing you agree to our" />
-
-            <TextView
-                android:id="@+id/fcLanguageLegalLinks"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:gravity="center"
-                android:textColor="@color/fc_foreground_primary"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="Terms of use · Privacy policy" />
+                android:lineHeight="18sp" />
+            <!-- `caption` = 13/18 w400 (theme/Type.kt). This was bold, which widened every word
+                 and wrapped the paragraph to four lines against the app's three. -->
         </LinearLayout>
     </LinearLayout>
 

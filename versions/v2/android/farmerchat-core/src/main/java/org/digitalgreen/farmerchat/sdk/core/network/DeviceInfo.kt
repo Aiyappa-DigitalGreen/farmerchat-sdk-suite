@@ -11,10 +11,18 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Locale
 import java.util.UUID
+import org.digitalgreen.farmerchat.sdk.core.BuildConfig
 
-/** SDK version reported in the Device-Info header. */
-internal const val SDK_VERSION_NAME = "1.0.0"
-internal const val SDK_VERSION_CODE = 1
+/**
+ * SDK version reported in the Device-Info header.
+ *
+ * Read from BuildConfig, which the module generates from `project.version`. It was hardcoded
+ * "1.0.0" while the root build published **2.0.0**, so every request from a 2.0.0 SDK announced
+ * itself to the backend as 1.0.0 — silently, since nothing validates it client-side.
+ */
+internal val SDK_VERSION_NAME: String = BuildConfig.SDK_VERSION_NAME
+internal val SDK_VERSION_CODE: Int =
+    SDK_VERSION_NAME.substringBefore('.').toIntOrNull() ?: 1
 
 /**
  * Provides a stable device id. Prefers ANDROID_ID; falls back to a random UUID

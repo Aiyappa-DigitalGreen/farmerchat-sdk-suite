@@ -22,18 +22,18 @@ export function AccountBenefitsScreen(props: {
 
   return (
     <FullScreenMessage
-      title={label('account_benefits_title', 'Sign up')}
+      title={label('fc_v2_app_label_sign_up', 'Sign up')}
       subtitle={label(
         'account_benefits_subtitle',
         'Save your questions and answers',
       )}
       illustration="LOOKING_AT_CAMERA"
-      primaryLabel={label('account_benefits_cta', 'Sign up with phone number')}
+      primaryLabel={label('fc_v2_app_label_sign_up_phone_number', 'Sign up with phone number')}
       onPrimary={() => {
         sdk.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_PROCEED, {});
         props.onSignUp();
       }}
-      secondaryLabel={label('account_benefits_skip', 'Skip')}
+      secondaryLabel={label('fc_v2_app_label_skip', 'Skip')}
       onSecondary={() => {
         sdk.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP, {});
         props.onSkip();
@@ -70,7 +70,7 @@ export function AccountSuccessScreen(props: {
         'Your questions and answers are now saved to your account',
       )}
       illustration="LOOKING_AT_SKY"
-      primaryLabel={label('account_success_continue', 'Continue')}
+      primaryLabel={label('fc_v2_app_label_continue', 'Continue')}
       onPrimary={() => {
         sdk.analytics.track(AnalyticsEvents.SIGNUP_CONTINUE_CLICKED, {});
         props.onContinue();

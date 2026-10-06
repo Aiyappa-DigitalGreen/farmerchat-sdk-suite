@@ -13,7 +13,11 @@ sealed interface PendingTarget {
         val source: String,
         val channel: String? = null,
         val preGeneratedAnswer: String? = null,
-        val followUpQuestions: List<String>? = null
+        val followUpQuestions: List<String>? = null,
+        /** Host-supplied photo (content/file URI) sent with [question] on arrival. */
+        val imageUri: String? = null,
+        /** Host-supplied voice recording (content/file URI) transcribed + asked on arrival. */
+        val audioUri: String? = null
     ) : PendingTarget
     data class Gps(val action: String) : PendingTarget
     data object Home : PendingTarget
@@ -28,6 +32,8 @@ object FarmerChatScreens {
     const val HISTORY = "chathistory"
     const val SETTINGS = "settings"
     const val HELP = "help"
+    /** The in-chat language chooser (the chat toolbar's globe). */
+    const val LANGUAGE = "language"
 }
 
 /** Route targets produced by [RouteDecider.routeFromSplash]. */
@@ -65,6 +71,12 @@ class RouteDecider(
     }
 
     fun peekPendingTarget(): PendingTarget? = pendingTarget
+
+    /**
+     * Takes the pending target without running the onboarding gates of [routeFromSplash].
+     * CHAT_ONLY has no language/name/home screens, so it consumes a deep-link target directly.
+     */
+    fun consumePendingTarget(): PendingTarget? = pendingTarget.also { pendingTarget = null }
 
     fun isLanguageSelected(): Boolean =
         prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)

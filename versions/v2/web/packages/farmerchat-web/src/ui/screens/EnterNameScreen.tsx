@@ -75,28 +75,28 @@ export function EnterNameScreen(props: { onDone: () => void }) {
         <div style={{ fontSize: 40, marginBottom: 8 }} aria-hidden>
           <LogoGlyph />
         </div>
-        <h2 style={{ margin: '4px 0 2px', fontSize: 22 }}>{label('name_title', 'What should we call you?')}</h2>
+        <h2 style={{ margin: '4px 0 2px', fontSize: 22 }}>{label('fc_v2_app_label_what_should_we_call_you', 'What should we call you?')}</h2>
         <p style={{ margin: '0 0 16px', color: 'var(--fc-text-muted)' }}>
           {label('name_subtitle', 'We will use this to personalize your advice')}
         </p>
         <TextInput
           value={name}
           onChange={(v) => setName(normalizeNameInput(v))}
-          placeholder={label('name_placeholder', 'Your name')}
+          placeholder={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
           autoFocus
           maxLength={MAX_NAME}
           onEnter={() => void save()}
-          ariaLabel={label('name_placeholder', 'Your name')}
+          ariaLabel={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
         />
       </div>
       <div className="fcsdk-bottombar">
         <PrimaryButton
-          label={label('name_save_button', 'Save name')}
+          label={label('fc_v2_app_label_save_name', 'Save name')}
           onClick={() => void save()}
           disabled={name.trim().length < 1}
           state={isSaving ? 'loading' : 'chevron'}
         />
-        {name.trim().length === 0 ? <SecondaryButton label={label('name_skip_button', 'Skip for now')} onClick={skip} /> : null}
+        {name.trim().length === 0 ? <SecondaryButton label={label('fc_v2_app_label_skip_for_now', 'Skip for now')} onClick={skip} /> : null}
       </div>
       <Toast message={toast.message} />
     </div>

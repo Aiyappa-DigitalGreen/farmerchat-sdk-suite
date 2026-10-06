@@ -7,10 +7,67 @@ Source: `data/remote/ApiServices.kt`, `core/network/`, `core/auth/`, `domain/`. 
 | Env | Base URL |
 |---|---|
 | dev | `https://farmerchat.farmstack.co/mobile-app-dev/` |
-| stage | `https://farmerchat.farmstack.co/mobile-app-stage/` |
+| stage | **v1:** `https://farmerchat.farmstack.co/mobile-app-stage/` · **v2:** `https://demo.agent.farmer.chat/` |
 | demo | `https://farmerchat.farmstack.co/mobile-app-demo/` |
 | prod | `https://v2.api.farmer.chat/` |
 | eks | `https://api.farmerchat.in/` |
+
+**STAGE now differs between versions as of 2026-09-08.** The new URL was **requested**; scoping it
+to 2.0.0 only was a **decision made while applying it**, on the grounds that `versions/README.md`
+pins 1.0.0's source of truth to `fc-compose` (which has not moved), 1.0.0 is frozen apart from bug
+fixes, and the hostname names the agentic backend. Mirroring it into v1 is a one-line change per
+platform if that was the intent. The 2.0.0 tree points `stage` at
+`https://demo.agent.farmer.chat/`; the frozen 1.0.0 tree keeps the farmstack host. Two things about
+it worth knowing:
+
+- It applies to **debug and release alike**. The SDK has one base URL per environment, not per
+  build type, so there is no separate stage-debug value to set.
+- The old value is kept **commented immediately above the new one** in all four v2 config files
+  (`FarmerChatConfig.kt`, `FarmerChatConfig.swift`, and both `config.ts`), so reverting is a
+  one-line edit per platform rather than an archaeology exercise.
+
+Note the new host has **no base path**, where every farmstack URL has one
+(`/mobile-app-stage/`). Two consequences, both handled and both checked against the join code
+rather than assumed:
+
+- **The trailing slash is required, and on android it is mandatory.** `FarmerChatGraph.retrofit()`
+  passes the value straight to `Retrofit.Builder().baseUrl(…)`, which **throws** on a base URL that
+  does not end in `/`. The other three joins are string concatenation or RFC 3986 relative
+  resolution and would silently produce `…farmer.chatapi/user/…` (react-native
+  `httpClient.ts`: `config.baseUrl + spec.path…`; web `http.ts`: `deps.baseUrl + opts.path`; iOS
+  `APIClient.swift`: `URL(string: endpoint.path, relativeTo: baseURL)`, where a base without a
+  trailing slash replaces its last path component instead of appending).
+- `ApiPriority.normalizeApiName` strips env base-path prefixes before looking up a priority. For a
+  root-path host its `removePrefix("/mobile-app-stage/")` is simply a no-op and the trailing
+  `removePrefix("/")` does the work, so P1/P2/P3 mapping is unaffected. The stage prefix stays
+  listed for the commented-out farmstack host.
+
+### Probe of the new host (2026-09-08, no API key available)
+
+```
+GET  https://demo.agent.farmer.chat/                          → 401
+POST https://demo.agent.farmer.chat/api/user/initialize_user/ → 401
+GET  https://demo.agent.farmer.chat/api/user/get_labels/?…    → 401
+GET  https://demo.agent.farmer.chat/definitely/not/a/real/path/ → 401   ← note
+```
+
+Body on every one of them, from `nginx/1.28.3 (Ubuntu)` with an `x-request-id`:
+
+```json
+{"error":"unauthorized","message":"Invalid or missing API key"}
+```
+
+**What this does and does not establish.** It establishes that the host resolves, terminates TLS,
+and is fronted by the FarmerChat API's own auth layer — that is the SDK's expected
+`API-Key`-missing shape, not a generic nginx page. It does **not** establish that the endpoints are
+mounted at the root, because the gateway answers 401 *before* routing: a deliberately bogus path
+returns 401 too, where farmstack returns 404 for the same probe. So the "no base path" assumption
+is consistent with everything observable from outside but is **not confirmed**.
+
+**Action for whoever holds a stage API key:** re-run the two real calls above with
+`API-Key: <key>`. A 200 (or a 400 with a field error) confirms the mounting; a 404 means the API
+lives under a path prefix and the base URL needs it appended. The same key would also settle the
+two unprobed label keys in `docs/05`.
 
 Google Geolocation: `https://www.googleapis.com/geolocation/v1/geolocate?key=<GEO_API_KEY>` (POST `GeoRequestBody(considerIp=true)` → `GeoResponse(location{lat,lng}, accuracy)`).
 
@@ -99,7 +156,7 @@ Introduced by app v4.1.2 (`fc-compose-agentic`): `ApiConstants.POLICY_ACCEPTANCE
 | 21 | POST | `api/user/verify_otp/` | Verify OTP (login) | — | `VerifyOtpRequest(otp, phone, phone_country_code, guest_onboarding, user_id)` → `VerifyOtpResponse(access_token, refresh_token, existing_user, preferred_language{asr/tts config}, …)` |
 | 22 | GET | `api/chat/conversation_list/` | Chat history list | `user_id`, `page` | → `ConversationListResponse` (custom deserializer: bare-array or paginated object) |
 | 23 | POST | `api/user/logout/` | Logout | — | → `LogoutResponse(message?)` |
-| 24 | GET | `api/faqs` | Help/FAQ | `lang`, `limit=5`, `theme?`, `country?` | → `HelpSupportResponse{data{faqs[], legal, mode}}` |
+| 24 | GET | `api/faqs/` | Help/FAQ | `lang`, `limit=5`, `theme?`, `country?` | → `HelpSupportResponse{data{faqs[], legal, mode}}` |
 | 25 | PATCH | `api/images/v2/viewed/` | Mark card viewed | — | `ImageViewedRequest(statement_id, user_id, status="viewed")` → resp |
 | 26 | POST | `api/images/v2/statement/` | Card pre-gen answer | — | `ImageStatementRequest(statement_id, triggered_input_type)` → `ImageStatementResponse(short_answer, follow_up_questions, message_id, conversation_id)` |
 | 27 | POST | `api/chat/get_answer_for_text_query/` | **Main AI answer** | — | `TextPromptRequest` → `TextPromptResponse` |
@@ -211,6 +268,26 @@ in the JSON. Tracked in docs/05.
 ## Server-driven labels (i18n)
 `LabelManager.getLabel(baseKey, englishFallback, params?)`: labels from endpoint #3 stored as JSON map; resolves `${baseKey}_${langCode}` → `${baseKey}_en` → fallback → raw key; `{name}`/`{{name}}` template substitution. All SDK UI strings must go through this.
 
+**One label family is discovered by convention rather than enumerated** — the answer-generation
+tips. Endpoint #3's payload may contain any number of pairs
+
+```
+fc_v2_app_label_tips_<name>_title_<lang>
+fc_v2_app_label_tips_<name>_statement_<lang>
+```
+
+and every pair whose title AND statement both resolve becomes a tip card in the wait-for-answer
+carousel, name-sorted. The backend can therefore add, translate or retire a tip with no client
+release. A client must NOT hardcode the tip list; it reads the map (android:
+`LabelManager.labelMap()` + `AnswerGenerationTips.discover`). Three built-in English tips are the
+fallback for a payload with no discoverable pair.
+
+Two traps here, both real in the app's own source:
+- `fc_v2_app_label_tips_list_cannot_be_empty` is tips-prefixed but is **not** a tip — the
+  `_title_`/`_statement_` pairing is what qualifies a key, not the prefix.
+- `fc_v2_app_label_ask_specific_crops` and `fc_v2_app_label_tips_ask_specific_crops` both exist.
+  The carousel uses the **`tips_`** one; the other is declared and never referenced.
+
 ## Voice pipeline (all server-side AI)
 - Record: OGG/OPUS 48 kHz (AAC fallback on old devices) → base64 → `transcribe_audio` → text → `get_answer_for_text_query`.
 - Listen (TTS): `synthesise_audio` → audio URL → platform media player.
@@ -223,7 +300,9 @@ in the JSON. Tracked in docs/05.
 - `PRIORITY_1` timeout is 5 s in code (doc comment says 2 s) — SDKs use 5 s.
 - `getChatHistory` comment says P2 but code uses P3 — SDKs use P3.
 - Plantix priority URL-map mismatch (`api/chat/get_plantix/` vs real `api/chat/image_analysis/`) — SDKs map priority correctly to `image_analysis`.
-- Dead constants (`auth/login`, `chat/send`, …) not carried over.
+- Dead constants (`auth/login`, `chat/send`, …) not carried over. Also dead, and NOT in the
+  list above: `GET_ALL_COUNTRY_LIST = "api/user/countries/"` — declared in the app's
+  `ApiConstants.kt` and referenced nowhere. The live country list is **#5** `api/geography/get_all_countries/`. Do not add `api/user/countries/` to any platform.
 - `TextPromptResponse.follow_up_questions` is always null; real follow-ups come from endpoint #29.
 
 ## #27a agentic stream — REAL WIRE CONTRACT, captured live 2026-09-03

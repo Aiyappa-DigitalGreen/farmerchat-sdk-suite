@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.screens
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,10 +17,12 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
@@ -49,6 +52,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
@@ -71,6 +75,12 @@ import org.digitalgreen.farmerchat.sdk.compose.components.SearchInput
 import org.digitalgreen.farmerchat.sdk.compose.components.SecondaryButton
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInput
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import org.digitalgreen.farmerchat.sdk.core.device.SimPhoneNumberProvider
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
 import org.digitalgreen.farmerchat.sdk.compose.components.rememberToastState
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
@@ -87,6 +97,8 @@ import org.digitalgreen.farmerchat.sdk.core.model.CountryItem
 import org.digitalgreen.farmerchat.sdk.core.ui.auth.AuthStep
 import org.digitalgreen.farmerchat.sdk.core.ui.auth.AuthToastType
 import org.digitalgreen.farmerchat.sdk.core.ui.auth.AuthViewModel
+import org.digitalgreen.farmerchat.sdk.compose.components.IconPosition
+import org.digitalgreen.farmerchat.sdk.compose.R
 
 /**
  * Phone + OTP auth (doc 01 §3.4). PhoneEntry (country picker, WhatsApp/SMS
@@ -109,6 +121,75 @@ fun AuthScreen(
     var showCountryPicker by remember { mutableStateOf(false) }
     var resendSecondsLeft by remember { mutableIntStateOf(AuthViewModel.RESEND_TIMEOUT_SECONDS) }
     var successHandled by remember { mutableStateOf(false) }
+
+    // ------------------------------------------------------------------ SIM number pre-fill
+    //
+    // App parity (AuthScreen.kt:266): when the permissions are ALREADY granted, the Auth screen
+    // reads the device's SIM numbers — one SIM pre-fills the fields, several offer a picker — so
+    // the farmer does not have to type a number their phone already knows.
+    //
+    // The SDK declares neither permission (see SimPhoneNumberProvider): a host opts in by
+    // declaring them, and everything below degrades to "no SIMs" otherwise.
+    var simNumbers by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showSimPicker by rememberSaveable { mutableStateOf(false) }
+    var simAutoDetectDone by rememberSaveable { mutableStateOf(false) }
+
+    val simPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) {
+            val sims = SimPhoneNumberProvider.getSimLineNumbers(context)
+            when {
+                sims.size > 1 -> { simNumbers = sims; showSimPicker = true }
+                sims.size == 1 -> vm.applySimNumber(sims.first())
+                else -> toast.show(
+                    label(
+                        Labels.PERMISSIONS_ARE_REQUIRED_TO_AUTO_DETECT_SIM_NUMBER,
+                        "Permissions are required to auto-detect SIM number."
+                    ),
+                    ToastState.Error
+                )
+            }
+        } else {
+            toast.show(
+                label(
+                    Labels.PERMISSIONS_ARE_REQUIRED_TO_AUTO_DETECT_SIM_NUMBER,
+                    "Permissions are required to auto-detect SIM number."
+                ),
+                ToastState.Error
+            )
+        }
+    }
+
+    // Runs once the country list is in: the split needs its dial codes.
+    LaunchedEffect(state.countries.isNotEmpty()) {
+        if (simAutoDetectDone || state.countries.isEmpty()) return@LaunchedEffect
+        if (state.phoneLocal.isNotBlank()) return@LaunchedEffect
+        // App parity: only when no country ISO is resolved yet — otherwise the deferred GPS
+        // `applyIso` calls selectCountry afterwards and clears the SIM's number.
+        if (!vm.shouldAutoDetectFromSim()) {
+            simAutoDetectDone = true
+            return@LaunchedEffect
+        }
+        if (!SimPhoneNumberProvider.canReadPhoneNumber(context)) {
+            // Not granted yet. The APP declares a permission launcher for exactly this and then
+            // never invokes it, so its own SIM pre-fill is unreachable on a fresh install — the
+            // dangling `PERMISSIONS_ARE_REQUIRED_TO_AUTO_DETECT_SIM_NUMBER` label shows the
+            // intent. The SDK asks, but ONLY when the host declared the permissions; a host that
+            // did not opt in never sees a prompt. Deliberate divergence — docs/05.
+            if (SimPhoneNumberProvider.isDeclaredByHost(context)) {
+                simAutoDetectDone = true
+                simPermissionLauncher.launch(SimPhoneNumberProvider.requiredPermissions)
+            }
+            return@LaunchedEffect
+        }
+        simAutoDetectDone = true
+        val sims = SimPhoneNumberProvider.getSimLineNumbers(context)
+        when {
+            sims.size > 1 -> { simNumbers = sims; showSimPicker = true }
+            sims.size == 1 -> vm.applySimNumber(sims.first())
+        }
+    }
 
     LaunchedEffect(Unit) {
         graph.analytics.trackScreenView(AnalyticsScreens.AUTH)
@@ -234,11 +315,14 @@ fun AuthScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             DefaultAppBar(
-                title = when (state.step) {
+                // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+                showGlow = false,
+title = when (state.step) {
                     AuthStep.PhoneEntry -> label(Labels.SIGN_UP, "Sign up")
                     AuthStep.OtpEntry -> label(Labels.VERIFY, "Verify")
                 },
                 leftIcon = Icons.Filled.Close,
+                leftRadius = Radius.Rounded,
                 onLeftClick = onClose
             )
 
@@ -246,8 +330,19 @@ fun AuthScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .imePadding()
-                    .padding(horizontal = 20.dp, vertical = 24.dp)
+                    // App b72ea4da/7e968df3 made the phone-entry column scrollable and added
+                    // navigationBarsPadding(); the SDK already scrolled here (one level up, so
+                    // the OTP step scrolls too — adding the app's inner scroll would nest two
+                    // scrollables), but it had no navigation-bar inset, so the last button sat
+                    // under the gesture bar on a tall device with the keyboard down.
+                    // union(), not imePadding().navigationBarsPadding(): the IME inset already
+                    // includes the navigation bar, and chaining the two modifiers SUMS them —
+                    // that would push the content up by the bar height a second time whenever the
+                    // keyboard is open. union() takes the larger of the two.
+                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                    // App parity (AuthScreen.kt:440): 32dp top, 24dp bottom — not 24/24.
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 32.dp, bottom = 24.dp)
             ) {
                 when (state.step) {
                     AuthStep.PhoneEntry -> PhoneEntryContent(
@@ -270,6 +365,17 @@ fun AuthScreen(
             }
         }
 
+        if (showSimPicker && simNumbers.isNotEmpty()) {
+            SimNumberPickerDialog(
+                numbers = simNumbers,
+                onPick = { number ->
+                    showSimPicker = false
+                    vm.applySimNumber(number)
+                },
+                onDismiss = { showSimPicker = false }
+            )
+        }
+
         Toast(
             message = toast.message,
             state = toast.state,
@@ -289,12 +395,49 @@ private fun PhoneEntryContent(
     val colors = LocalContentColors.current
     var phone by remember(state.phoneLocal) { mutableStateOf(state.phoneLocal) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(
-            text = label(Labels.ENTER_YOUR_PHONE_NUMBER, "Enter your phone number"),
-            style = MaterialTheme.typography.displaySmall,
-            color = colors.foregroundPrimary
-        )
+    val isSendingOtp = state.sendOtpState is UiState.Loading
+
+    // App parity (AuthScreen.kt:802-818): heading, Spacer(8), subtitle, Spacer(24), phone row.
+    // The outer gap is 24dp, not 16 — a 16dp arrangement pulled everything below the subtitle up
+    // by 8dp.
+    // App parity (AuthScreen.kt:802-928): the gaps down this column are NOT uniform —
+    // heading 8 subtitle 24 phone-row 20 card 12 buttons 8 consent. A single spacedBy(24)
+    // pushed the card 4dp, the buttons 16dp and the consent text 32dp below the app's.
+    Column {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = if (isSendingOtp) {
+                    label(Labels.ENTER_PHONE_NUMBER, "Enter phone number")
+                } else {
+                    label(Labels.ENTER_YOUR_PHONE_NUMBER, "Enter your phone number")
+                },
+                // App parity (AuthScreen.kt:801-804): titleLarge, CENTRED, and the copy swaps
+                // to the short form while the code is being sent. The SDK had displaySmall (a
+                // full type step larger), no textAlign, and no sending variant.
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.foregroundPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // App parity (AuthScreen.kt:809-814). This subtitle was MISSING from the SDK
+            // entirely — both of its labels were declared in `Labels.kt` and rendered by
+            // nothing, so the farmer never saw the line explaining what the phone number is
+            // for. It is the sign-up screen's only explanation of the OTP.
+            Text(
+                text = if (isSendingOtp) {
+                    label(Labels.SEND_OTP_SIGNIN_SHORT, "And we will send you a one time code")
+                } else {
+                    label(Labels.SEND_OTP_SIGNIN, "We'll send a one-time code to sign you in")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.foregroundSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         if (state.countries.isEmpty()) {
             Box(
@@ -325,7 +468,10 @@ private fun PhoneEntryContent(
                         phone = it.filter { c -> c.isDigit() }
                         vm.setPhoneLocal(phone)
                     },
-                    placeholder = label(Labels.ENTER_PHONE_NUMBER, "Enter phone number"),
+                    // App parity (AuthScreen.kt:861): a literal digit mask, not a label — the
+                    // served ENTER_PHONE_NUMBER string is the HEADING's text, and using it here
+                    // put a full Kannada sentence in the field.
+                    placeholder = "00000 00000",
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = KeyboardType.Phone,
                         imeAction = ImeAction.Done
@@ -337,57 +483,64 @@ private fun PhoneEntryContent(
                     hint = state.phoneError,
                     showHint = state.phoneError != null,
                     showLabel = false,
-                    autofocus = true,
+                    // App parity: the app auto-focuses only its OTP input (OtpInput.kt:43), never
+                    // the phone field. Focusing here opened the keyboard on entry and covered the
+                    // agreement card and both send-code buttons.
+                    autofocus = false,
                     modifier = Modifier.weight(1f)
                 )
             }
 
             // App parity (ui/auth/AuthScreen.kt PhoneEntryContent): the agreement card sits
             // between the phone row and the send-code buttons.
+            Spacer(modifier = Modifier.height(20.dp))
             AgreementCard()
+            Spacer(modifier = Modifier.height(12.dp))
 
             val isSending = state.sendOtpState is UiState.Loading
+            // App parity (AuthScreen.kt:888 `canSend = !isSending && isPhoneValid`): both channel
+            // buttons stay disabled (dimmed) until the number is valid. `state` is read above, so
+            // a phone edit recomposes this and re-evaluates the check.
+            val canSend = !isSending && vm.isPhoneValid()
 
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // App parity (AuthScreen.kt:899-922): BOTH channels are filled PrimaryButtons at
+            // 48dp with a LEADING channel icon and no chevron, spaced 8dp. The SDK had a 56dp
+            // chevron button for WhatsApp and a white SecondaryButton for SMS, so the pair read
+            // as a primary/secondary choice rather than two equal channels.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.availableChannels.whatsappEnabled) {
                     PrimaryButton(
                         label = if (isSending && state.selectedChannel == "whatsapp")
                             label(Labels.SENDING_CODE, "Sending code...")
                         else label(Labels.SEND_VIA_WHATSAPP, "Send via WhatsApp"),
                         state = if (isSending && state.selectedChannel == "whatsapp")
-                            PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
-                        enabled = !isSending,
+                            PrimaryButtonState.Loading else PrimaryButtonState.Default,
+                        enabled = canSend,
                         onClick = { vm.sendOtp("whatsapp") },
                         modifier = Modifier.fillMaxWidth(),
-                        height = 56
+                        height = 48,
+                        iconRes = R.drawable.fc_icon_whatsapp,
+                        iconPosition = IconPosition.Leading
                     )
                 }
                 if (state.availableChannels.smsEnabled) {
-                    if (state.availableChannels.whatsappEnabled) {
-                        SecondaryButton(
-                            label = if (isSending && state.selectedChannel == "sms")
-                                label(Labels.SENDING_CODE, "Sending code...")
-                            else label(Labels.SEND_VIA_SMS, "Send via SMS"),
-                            isLoading = isSending && state.selectedChannel == "sms",
-                            enabled = !isSending,
-                            onClick = { vm.sendOtp("sms") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        PrimaryButton(
-                            label = if (isSending && state.selectedChannel == "sms")
-                                label(Labels.SENDING_CODE, "Sending code...")
-                            else label(Labels.SEND_ONE_TIME_CODE, "Send one-time code"),
-                            state = if (isSending && state.selectedChannel == "sms")
-                                PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
-                            enabled = !isSending,
-                            onClick = { vm.sendOtp("sms") },
-                            modifier = Modifier.fillMaxWidth(),
-                            height = 56
-                        )
-                    }
+                    PrimaryButton(
+                        label = if (isSending && state.selectedChannel == "sms")
+                            label(Labels.SENDING_CODE, "Sending code...")
+                        else label(Labels.SEND_VIA_SMS, "Send via SMS"),
+                        state = if (isSending && state.selectedChannel == "sms")
+                            PrimaryButtonState.Loading else PrimaryButtonState.Default,
+                        enabled = canSend,
+                        onClick = { vm.sendOtp("sms") },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 48,
+                        iconRes = R.drawable.fc_icon_sms,
+                        iconPosition = IconPosition.Leading
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // App parity: consent copy with a clickable Privacy Policy link, immediately below
             // the send-code buttons.
@@ -442,23 +595,40 @@ private fun AgreementCard() {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // App 2a5cf2b8 collapsed three bullets into two — the surveys line folded into the
+        // updates bullet — and moved the Digital Green / partners attribution into the italic
+        // info line below. AGREEMENT_POINT_SURVEYS is still declared in Labels.kt (the app kept
+        // it too) but is deliberately no longer rendered.
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             AgreementBulletPoint(
                 label(
                     Labels.AGREEMENT_POINT_VERIFICATION_CODE,
-                    "A verification code by SMS, phone, or WhatsApp"
+                    "A verification code by SMS or WhatsApp"
                 )
-            )
-            AgreementBulletPoint(
-                label(Labels.AGREEMENT_POINT_UPDATES, "FarmerChat updates and farming information")
             )
             AgreementBulletPoint(
                 label(
-                    Labels.AGREEMENT_POINT_SURVEYS,
-                    "Occasional surveys or research by Digital Green or trusted partners"
+                    Labels.AGREEMENT_POINT_UPDATES,
+                    "FarmerChat updates, farming information, and occasional surveys or " +
+                        "research by SMS, phone, or WhatsApp"
                 )
             )
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = label(
+                Labels.AGREEMENT_CARD_INFO_TEXT,
+                "Surveys or research may be conducted by Digital Green or trusted partners " +
+                    "working with us."
+            ),
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            fontStyle = FontStyle.Italic,
+            // The app hardcodes Color(0xFF000000); the token keeps it legible in dark mode.
+            color = colors.foregroundPrimary
+        )
     }
 }
 
@@ -499,8 +669,16 @@ private fun AuthConsentText(onOpenPrivacyPolicy: () -> Unit) {
         "By continuing, you agree to these communications.\nSee our "
     )
     val privacyLabel = label(Labels.PRIVACY_POLICY, "Privacy Policy")
+    // App ae37b28e: the trailing "." became a full sentence carried by its own label, and the
+    // link span picked up the body colour so it stays legible in dark mode (the app switched off
+    // its hardcoded 0xA3000000 to the secondary foreground — the token this screen already used).
+    val suffix = label(
+        Labels.AUTH_CONSENT_SUFFIX,
+        "for more information, including how to withdraw your consent."
+    )
+    val consentColor = colors.foregroundSecondary
 
-    val annotated = remember(prefix, privacyLabel) {
+    val annotated = remember(prefix, privacyLabel, suffix, consentColor) {
         buildAnnotatedString {
             append(prefix)
             withLink(
@@ -509,11 +687,17 @@ private fun AuthConsentText(onOpenPrivacyPolicy: () -> Unit) {
                     linkInteractionListener = { currentOnOpenPrivacyPolicy() }
                 )
             ) {
-                withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
+                withStyle(
+                    SpanStyle(
+                        color = consentColor,
+                        textDecoration = TextDecoration.Underline
+                    )
+                ) {
                     append(privacyLabel)
                 }
             }
-            append(".")
+            append(" ")
+            append(suffix)
         }
     }
 
@@ -522,7 +706,7 @@ private fun AuthConsentText(onOpenPrivacyPolicy: () -> Unit) {
         style = TextStyle(
             fontWeight = FontWeight.Normal,
             fontSize = 15.sp,
-            color = colors.foregroundSecondary,
+            color = consentColor,
             textAlign = TextAlign.Center
         ),
         modifier = Modifier.fillMaxWidth()
@@ -542,8 +726,12 @@ private fun OtpEntryContent(
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             text = label(Labels.ENTER_CODE_WE_SENT, "Enter the code we sent"),
-            style = MaterialTheme.typography.displaySmall,
-            color = colors.foregroundPrimary
+            // App parity (AuthScreen.kt:1040-1042): titleLarge and CENTRED, same as the phone
+            // step's heading above.
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.foregroundPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
 
         Text(
@@ -616,7 +804,7 @@ private fun CountryPickerScreen(
     val colors = LocalContentColors.current
     var query by remember { mutableStateOf("") }
     var pendingSelection by remember { mutableStateOf(selectedCountry) }
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = fcNavigationBarsBottom()
 
     val filtered = remember(query, countries) {
         if (query.isBlank()) countries
@@ -633,8 +821,11 @@ private fun CountryPickerScreen(
             .background(colors.surfacePrimary)
     ) {
         DefaultAppBar(
-            title = label(Labels.SELECT_COUNTRY_CODE, "Select country code"),
+            // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+            showGlow = false,
+title = label(Labels.SELECT_COUNTRY_CODE, "Select country code"),
             leftIcon = Icons.AutoMirrored.Filled.ArrowBack,
+            leftRadius = Radius.Rounded,
             onLeftClick = onClose
         )
 
@@ -694,3 +885,44 @@ private fun Modifier.clickableNoIndication(onClick: () -> Unit): Modifier =
             onClick = onClick
         )
     }
+
+/**
+ * SIM chooser shown when the device reports more than one SIM number.
+ * App parity: `AuthScreen.kt:561` — a plain AlertDialog listing the numbers, with a Close action.
+ */
+@Composable
+private fun SimNumberPickerDialog(
+    numbers: List<String>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalContentColors.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = label(Labels.CHOOSE_SIM_NUMBER, "Choose SIM number"),
+                color = colors.foregroundPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                numbers.forEach { number ->
+                    Text(
+                        text = number,
+                        color = colors.foregroundPrimary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(number) }
+                            .padding(vertical = 8.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(label(Labels.CLOSE, "Close"))
+            }
+        }
+    )
+}

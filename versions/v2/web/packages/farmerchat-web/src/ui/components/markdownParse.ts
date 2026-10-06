@@ -187,12 +187,27 @@ export function parseAlignments(separatorRow: string, columnCount: number): Tabl
 }
 
 /**
- * 1–2 column tables fill the available width with weighted cells; 3+ column tables keep a fixed
- * per-column min width and overflow horizontally, so the reader can pan.
- * (Kotlin `isScrollable = columnCount >= 3`.)
+ * Any multi-column (2+) table renders as one stacked card per data row, so it reads
+ * top-to-bottom and never pans sideways inside a vertically scrolling thread. Only a lone
+ * single-column table falls back to the weighted grid — app parity, Kotlin `columnCount >= 2`
+ * (MarkdownText.kt @ 10a87f9c..04b38e8f, which lowered the threshold from 3).
  */
-export function isTableScrollable(columnCount: number): boolean {
-  return columnCount >= 3;
+export function isWideTable(columnCount: number): boolean {
+  return columnCount >= 2;
+}
+
+/**
+ * A "card" is a 3-column table whose header row holds the card title in the first cell and
+ * nothing in the other two — e.g. `| Saturday, 19 Sep | | |`. This is the sole test that
+ * separates a card from an ordinary grid (a grid has text in at least one trailing header cell).
+ * Kotlin: `MarkdownBlock.Table.isCard()`.
+ */
+export function isCardTable(headers: readonly string[]): boolean {
+  return (
+    headers.length === 3 &&
+    headers[0]!.trim().length > 0 &&
+    headers.slice(1).every((h) => h.trim().length === 0)
+  );
 }
 
 // ---------------------------------------------------------------------------

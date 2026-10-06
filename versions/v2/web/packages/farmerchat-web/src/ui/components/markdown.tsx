@@ -24,7 +24,8 @@ import {
   InlineNode,
   MarkdownBlock,
   blockTopSpacing,
-  isTableScrollable,
+  isCardTable,
+  isWideTable,
   parseInline,
   parseMarkdownBlocks,
 } from './markdownParse';
@@ -60,13 +61,86 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
 function MarkdownTable(props: { block: Extract<MarkdownBlock, { type: 'table' }>; keyPrefix: string }) {
   const { headers, alignments, rows } = props.block;
   if (headers.length === 0) return null;
-  const scrollable = isTableScrollable(headers.length);
+
+  // App parity (MarkdownText.kt @ 10a87f9c..04b38e8f): the answer format now sends "cards" —
+  // a 3-column table whose header carries the title in cell 0 and leaves the other two empty,
+  // each body row a label / value / meaning triple. Detected strictly by isCardTable.
+  if (isCardTable(headers)) {
+    const title = (headers[0] ?? '').trim();
+    return (
+      <div className="fcsdk-md-answercard">
+        {title ? (
+          <p className="fcsdk-md-answercard-title">
+            {inline(title, `${props.keyPrefix}-act`)}
+          </p>
+        ) : null}
+        {rows.map((row, rowIdx) => {
+          const cellLabel = (row[0] ?? '').trim();
+          const value = (row[1] ?? '').trim();
+          // The meaning is the whole point of the format — the line a farmer who cannot read the
+          // figure relies on — so it stays readable and is dropped only when the cell is empty.
+          const meaning = (row[2] ?? '').trim();
+          return (
+            <div className="fcsdk-md-answercard-reading" key={rowIdx}>
+              {cellLabel ? (
+                <p className="fcsdk-md-answercard-label">
+                  {inline(cellLabel, `${props.keyPrefix}-acl${rowIdx}`)}
+                </p>
+              ) : null}
+              <p className="fcsdk-md-answercard-value">
+                {inline(value, `${props.keyPrefix}-acv${rowIdx}`)}
+              </p>
+              {meaning ? (
+                <p className="fcsdk-md-answercard-meaning">
+                  {inline(meaning, `${props.keyPrefix}-acm${rowIdx}`)}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Any other multi-column (2+) table stacks into one card per data row — cell 0 as the title,
+  // the remaining columns as label/value pairs — so it reads top-to-bottom with no panning.
+  if (isWideTable(headers.length)) {
+    return (
+      <div className="fcsdk-md-rowcards">
+        {rows.map((row, rowIdx) => {
+          const title = (row[0] ?? '').trim();
+          return (
+            <div className="fcsdk-md-rowcard" key={rowIdx}>
+              {title ? (
+                <p className="fcsdk-md-rowcard-title">
+                  {inline(title, `${props.keyPrefix}-rt${rowIdx}`)}
+                </p>
+              ) : null}
+              <dl className="fcsdk-md-rowcard-pairs">
+                {headers.slice(1).map((header, offset) => {
+                  const colIdx = offset + 1;
+                  return (
+                    <div className="fcsdk-md-rowcard-pair" key={colIdx}>
+                      {/* Label above value, each full width: a side-by-side split wrapped long
+                          labels and values inside a narrow half-column. */}
+                      <dt>{inline(header.trim(), `${props.keyPrefix}-rl${rowIdx}-${colIdx}`)}</dt>
+                      <dd>
+                        {inline((row[colIdx] ?? '').trim(), `${props.keyPrefix}-rv${rowIdx}-${colIdx}`)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
-    // The scroll container is the wrapper, never the page: wide tables must not make the whole
-    // thread scroll sideways.
-    <div className={'fcsdk-md-tablewrap' + (scrollable ? ' fcsdk-md-tablewrap--scroll' : '')}>
-      <table className={'fcsdk-md-table' + (scrollable ? ' fcsdk-md-table--wide' : '')}>
+    <div className="fcsdk-md-tablewrap">
+      <table className="fcsdk-md-table">
         <thead>
           <tr>
             {headers.map((cell, idx) => (
@@ -88,8 +162,6 @@ function MarkdownTable(props: { block: Extract<MarkdownBlock, { type: 'table' }>
           ))}
         </tbody>
       </table>
-      {/* Right-edge scroll hint, only when the table can actually overflow. */}
-      {scrollable ? <span className="fcsdk-md-tablefade" aria-hidden /> : null}
     </div>
   );
 }

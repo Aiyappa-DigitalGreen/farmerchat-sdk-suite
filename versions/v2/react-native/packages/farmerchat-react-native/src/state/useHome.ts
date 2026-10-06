@@ -15,6 +15,7 @@ import type {
   ImageStatementResponse,
   ImageViewedResponse,
   NewConversationResponse,
+  UserProfile,
   WeatherResponse,
 } from '../core/types';
 import { renderableSections } from '../core/types';
@@ -288,6 +289,40 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
     [patch, sdk],
   );
 
+  /**
+   * Fills the geography keys from the profile when they are empty (app parity:
+   * `HomeViewModel.fetchUserProfile`, fc-compose-agentic b72ea4da).
+   *
+   * `USER_DISTRICT` / `USER_STATE` / `USER_COUNTRY_NAME` are normally written by the GPS flow
+   * from #16. A farmer whose geography exists SERVER-side but not in this install's store — a
+   * reinstall, a fresh host app, any already-onboarded user reaching Home without re-running the
+   * GPS flow — leaves them blank, and `HomeLocationPill` reads exactly this chain
+   * (`USER_DISTRICT → USER_STATE → USER_COUNTRY_NAME`) for its place name, so the pill shows the
+   * "share location" invite even though the place is known. The profile carries it, so fill from
+   * there.
+   *
+   * Fill-WHEN-BLANK, never overwrite: a live GPS fix is more precise than the profile's coarse
+   * geography, and this runs on every Home entry.
+   *
+   * Android collapses this to its single `APPROX_LOCATION_NAME` key; RN keeps the app's three
+   * separate keys, so each is filled from its own field rather than from a precedence chain.
+   */
+  const backfillGeographyKeys = useCallback(
+    (profile: UserProfile | null | undefined) => {
+      if (!profile) return;
+      const fillIfBlank = (value: string | null | undefined, key: string) => {
+        if (!value || value.trim().length === 0) return;
+        const existing = sdk.store.getString(key);
+        if (existing && existing.trim().length > 0) return;
+        sdk.store.set(key, value);
+      };
+      fillIfBlank(profile.geography_level3, StorageKeys.USER_DISTRICT);
+      fillIfBlank(profile.geography_level2_name, StorageKeys.USER_STATE);
+      fillIfBlank(profile.country_name, StorageKeys.USER_COUNTRY_NAME);
+    },
+    [sdk],
+  );
+
   const fetchUserProfile = useCallback(
     async (userId: string) => {
       const result = await sdk.api.viewUserProfile(userId);
@@ -297,9 +332,10 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
         const last = result.data.userProfile?.last_name ?? '';
         const full = `${first} ${last}`.trim();
         if (full) sdk.store.set(StorageKeys.USER_NAME, full);
+        backfillGeographyKeys(result.data.userProfile);
       }
     },
-    [sdk],
+    [backfillGeographyKeys, sdk],
   );
 
   /**

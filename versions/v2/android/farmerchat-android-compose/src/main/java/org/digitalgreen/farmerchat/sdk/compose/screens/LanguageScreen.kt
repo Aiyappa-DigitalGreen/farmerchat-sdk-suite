@@ -1,5 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.compose.screens
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
+import org.digitalgreen.farmerchat.sdk.compose.util.fcStatusBarsTop
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,9 +20,11 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,6 +38,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -63,6 +73,7 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.settings.LanguageDisplayOrder
 import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingAction
 import org.digitalgreen.farmerchat.sdk.core.ui.onboarding.OnboardingSharedViewModel
+import org.digitalgreen.farmerchat.sdk.compose.theme.caption
 
 /**
  * Language selection onboarding (doc 01 §3.2). Drives OnboardingSharedViewModel:
@@ -145,8 +156,8 @@ fun LanguageScreen(
     ) {
         when (languageState) {
             is UiState.Success -> {
-                val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-                val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val topInset = fcStatusBarsTop()
+                val bottomInset = fcNavigationBarsBottom()
 
                 Column(modifier = Modifier.fillMaxSize()) {
                     Column(
@@ -154,27 +165,45 @@ fun LanguageScreen(
                             .weight(1f)
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 20.dp)
-                            .padding(top = topInset + 24.dp, bottom = 16.dp),
+                            // App parity (LanguageScreen.kt:365-367): 24 dp horizontal, 32 dp top,
+                            // 24 dp bottom. The app gets its top inset from a Scaffold; this
+                            // screen draws edge-to-edge, so `topInset` is added rather than
+                            // replacing the app's 32 dp.
+                            .padding(horizontal = 24.dp)
+                            .padding(top = topInset + 32.dp, bottom = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.fc_logo_mark),
                             contentDescription = "FarmerChat",
-                            colorFilter = ColorFilter.tint(colors.foregroundPrimary),
-                            modifier = Modifier.size(44.dp)
+                            // App parity (LanguageScreen.kt:373): the mark is tinted with
+                            // borderActive — the brand GREEN — not foregroundPrimary. The
+                            // drawable itself is solid #000000 in both trees, so the tint is the
+                            // only thing that colours it: with foregroundPrimary the SDK drew a
+                            // BLACK flower where the app draws a green one. Verified side by side
+                            // on a dev build, 2026-09-08.
+                            colorFilter = ColorFilter.tint(colors.borderActive),
+                            // App parity: 32 dp, not 44 dp.
+                            modifier = Modifier.size(32.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        // App parity (LanguageScreen.kt:378): 14 dp, not 20 dp.
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
                             text = label(Labels.CHOOSE_YOUR_LANGUAGE, "Choose your language"),
-                            style = MaterialTheme.typography.displaySmall,
+                            // App parity (LanguageScreen.kt:382): titleLarge, not displaySmall —
+                            // displaySmall is a whole type step larger, which is why the SDK's
+                            // heading crowded the rows beneath it.
+                            style = MaterialTheme.typography.titleLarge,
                             color = colors.foregroundPrimary,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        // App parity (LanguageScreen.kt:388): 8dp, not 6. Measured on-device —
+                        // the 2dp shortfall carried down the whole column, putting the subtitle
+                        // and all three language rows 5px above the app's.
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = label(Labels.YOU_CHANGE_LATER, "You can change this later"),
@@ -213,29 +242,6 @@ fun LanguageScreen(
                                 )
                             }
 
-                            if (!showAllLanguages && state.expandedLanguages.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(top = 10.dp)
-                                        .background(
-                                            colors.surfaceSecondary,
-                                            SmoothShapes.rounded(Radius.Rounded)
-                                        )
-                                        .clickable(
-                                            indication = null,
-                                            interactionSource = remember { MutableInteractionSource() }
-                                        ) { showAllLanguages = true }
-                                        .padding(horizontal = 18.dp, vertical = 10.dp)
-                                        .align(Alignment.CenterHorizontally)
-                                ) {
-                                    Text(
-                                        text = label(Labels.ALL_LANGUAGES, "All languages"),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = colors.foregroundPrimary
-                                    )
-                                }
-                            }
-
                             if (showAllLanguages) {
                                 state.expandedLanguages.forEach { language ->
                                     RadioButton(
@@ -252,6 +258,37 @@ fun LanguageScreen(
                                 }
                             }
                         }
+
+                        // App parity (LanguageScreen.kt:460-476): a FILLED PRIMARY chip —
+                        // `buttonPrimarySurface` on `buttonPrimaryForeground`, i.e. white text on
+                        // dark green, with 20dp horizontal / 10dp vertical padding and labelLarge.
+                        //
+                        // It is a SIBLING of the language list, not a child of it. Nested inside
+                        // that Column it also collected the list's `spacedBy(6.dp)` on top of its
+                        // own 16dp and rendered 11px below the app's.
+                        //
+                        // And it is a Material3 `Surface(onClick = …)`, not a `Box` + `clickable`:
+                        // Surface applies `minimumInteractiveComponentSize()`, which pads the 44.6dp
+                        // chip out to a 48dp touch target and so adds ~1.7dp above and below the
+                        // visible pill. With a bare Box the chip measured 5px high of the app's even
+                        // with the Spacer correct. Matching the construction also gives the chip the
+                        // app's ripple and a real 48dp target.
+                        if (!showAllLanguages && state.expandedLanguages.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Surface(
+                                onClick = { showAllLanguages = true },
+                                shape = SmoothShapes.rounded(Radius.Rounded),
+                                color = colors.buttonPrimarySurface,
+                                contentColor = colors.buttonPrimaryForeground
+                            ) {
+                                Text(
+                                    text = label(Labels.ALL_LANGUAGES, "All languages"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                                )
+                            }
+                        }
                     }
 
                     // Bottom bar: tagline + Start button + legal links
@@ -259,22 +296,34 @@ fun LanguageScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(
+                                // App parity, measured on-device against fc-compose-agentic
+                                // (LanguageScreen.kt:225-248) — every number here was wrong:
+                                //   radius   XL(20dp)            -> XXL(24dp)
+                                //   padding  20/20/16/12         -> 24/24/28/16
+                                //   spacing  spacedBy(12.dp)     -> spacedBy(20.dp)
+                                // Rendered side by side the SDK's bottom panel was 34dp shorter
+                                // than the app's and its content 4dp wider, so the tagline broke
+                                // on a different word.
                                 Containers.roundedTop(
-                                    radius = Radius.XL,
+                                    radius = Radius.XXL,
                                     background = colors.surfaceSecondary
                                 )
                             )
-                            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp + bottomInset),
+                            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 16.dp + bottomInset),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
                         Text(
                             text = label(
                                 Labels.FARMERCHAT_TAGLINE,
-                                "FarmerChat: Practical advice\nfor your crops & livestock"
+                                "FarmerChat: Practical advice for your crops & livestock"
                             ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.foregroundSecondary,
+                            // App parity (LanguageScreen.kt:250-252): the tagline is titleLarge on
+                            // foregroundPrimary — a bold dark headline above the CTA. The SDK had
+                            // it as bodySmall on foregroundSecondary, i.e. small grey caption
+                            // text, which read as a footnote instead of the panel's heading.
+                            style = MaterialTheme.typography.titleLarge,
+                            color = colors.foregroundPrimary,
                             textAlign = TextAlign.Center
                         )
 
@@ -341,52 +390,66 @@ private fun LegalLinksRow(
     val colors = LocalContentColors.current
     val termsTitle = label(Labels.TERMS_OF_USE, "Terms of use")
     val privacyTitle = label(Labels.PRIVACY_POLICY, "Privacy policy")
+    val alsoSee = label(Labels.ALSO_SEE, "also see").trim()
+    val legalIntro = label(
+        Labels.BY_CONTINUING_YOU_AGREE_TO_OUR,
+        // App b72ea4da widened this fallback to name the AI up front.
+        "FarmerChat uses AI. By continuing, you agree to our"
+    )
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text = label(Labels.BY_CONTINUING_YOU_AGREE_TO_OUR, "By continuing, you agree to our"),
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.foregroundSecondary,
-            textAlign = TextAlign.Center
+    // App parity (LanguageScreen.kt 47bc8524): ONE flowing paragraph, justified end-to-end.
+    // The intro and the two links used to be separate composables (a Text plus a Row), which
+    // hard-broke the paragraph and left a short centred stub line between them. The links are
+    // inline spans now, joined by the served `also_see` connector instead of a bare "·", and
+    // the trailing "." sits outside the link span so it is neither underlined nor clickable.
+    // App parity (LanguageScreen.kt:339-344): the links take foregroundSECONDARY, i.e. the same
+    // grey as the sentence around them — they read as underlined words in a paragraph, not as a
+    // darker call to action. The SDK had them on foregroundPrimary, which the rendered pair made
+    // obvious.
+    val linkStyles = TextLinkStyles(
+        style = SpanStyle(
+            textDecoration = TextDecoration.Underline,
+            color = colors.foregroundSecondary
         )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = termsTitle,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    textDecoration = TextDecoration.Underline
-                ),
-                color = colors.foregroundPrimary,
-                modifier = Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
+    )
+    val legalText = buildAnnotatedString {
+        append(legalIntro)
+        append(" ")
+        withLink(
+            LinkAnnotation.Clickable(
+                tag = "terms",
+                styles = linkStyles,
+                linkInteractionListener = {
                     termsOfUseUrl?.let { onOpenLegal(it, termsTitle) }
                 }
             )
-            Text(
-                text = "·",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.foregroundSecondary
-            )
-            Text(
-                text = privacyTitle,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    textDecoration = TextDecoration.Underline
-                ),
-                color = colors.foregroundPrimary,
-                modifier = Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
+        ) { append(termsTitle) }
+        append(" ")
+        // The connector is served (`fc_v2_app_label_also_see` = "also see" on DEV). If a tenant
+        // serves it empty the two links simply run together with a single space, exactly as the
+        // app degrades — no separator is re-introduced.
+        if (alsoSee.isNotEmpty()) {
+            append(alsoSee)
+            append(" ")
+        }
+        withLink(
+            LinkAnnotation.Clickable(
+                tag = "privacy",
+                styles = linkStyles,
+                linkInteractionListener = {
                     privacyPolicyUrl?.let { onOpenLegal(it, privacyTitle) }
                 }
             )
-        }
+        ) { append(privacyTitle) }
+        append(".")
     }
+
+    Text(
+        text = legalText,
+        // App parity: the app's `caption` is 13/18 at weight 400; the SDK's `labelSmall` is
+        // 13/18 at weight 600, so this paragraph rendered semibold where the app's is regular.
+        style = caption.copy(textAlign = TextAlign.Justify),
+        color = colors.foregroundSecondary,
+        modifier = Modifier.widthIn(max = 260.dp)
+    )
 }

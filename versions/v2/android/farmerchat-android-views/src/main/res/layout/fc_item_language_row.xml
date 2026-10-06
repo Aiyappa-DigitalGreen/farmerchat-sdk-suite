@@ -32,6 +32,7 @@
         android:ellipsize="end"
         android:textColor="@color/fc_foreground_primary"
         android:textSize="17sp"
+        android:includeFontPadding="false"
         tools:text="English" />
 
     <ProgressBar

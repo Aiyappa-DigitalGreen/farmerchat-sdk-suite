@@ -44,7 +44,7 @@ export function createServices(config: FarmerChatConfig): SdkServices {
     tokenProvider: resolved.tokenProvider,
   });
   const api = new FarmerChatApi(http, resolved.guestApiKey, resolved.geoApiKey);
-  const analytics = new Analytics(resolved.onEvent, resolved.callbacks);
+  const analytics = new Analytics(resolved.onEvent, resolved.callbacks, resolved.enableAnalytics);
   const session = new SessionManager(store, api, analytics, resolved.authMode);
 
   // Preselect language from config: skips the language screen when provided.

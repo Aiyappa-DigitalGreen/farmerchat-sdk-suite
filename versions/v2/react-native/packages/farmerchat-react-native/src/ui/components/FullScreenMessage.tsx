@@ -8,7 +8,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context';
 import { spacing, typography } from '../theme';
-import { PrimaryButton } from './Buttons';
+import { ActionButton, PrimaryButton, type PrimaryButtonState } from './Buttons';
+import { DefaultAppBar } from './Chrome';
 
 export type Illustration =
   | 'LOOKING_AT_CAMERA'
@@ -38,6 +39,19 @@ export function FullScreenMessage(props: {
   onClose?: () => void;
   /** Debounce the primary CTA (Error screen uses this). */
   enablePrimaryDebounce?: boolean;
+  /**
+   * Optional Compose-`FullScreenMessage` app bar (location screens): when set, the bar renders
+   * this title with an optional back chip ([onBack]) and right label chip ([rightLabel] /
+   * [onRight]) instead of the plain glow bar + [onClose]. Omitted → unchanged layout.
+   */
+  appBarTitle?: string | null;
+  onBack?: () => void;
+  rightLabel?: string | null;
+  onRight?: () => void;
+  /** Explicit primary button state (e.g. `Chevron`); overrides [primaryLoading] when set. */
+  primaryState?: PrimaryButtonState;
+  /** False renders the primary CTA disabled (inert interstitial). Default true. */
+  primaryEnabled?: boolean;
 }): React.ReactElement {
   const theme = useTheme();
   const lastPress = useRef(0);
@@ -56,6 +70,23 @@ export function FullScreenMessage(props: {
       style={[styles.container, { backgroundColor: theme.surfaceFullScreen }]}
       edges={['top', 'bottom']}
     >
+      {props.appBarTitle !== undefined ? (
+        <DefaultAppBar
+          title={props.appBarTitle}
+          navIcon={props.onBack ? 'back' : 'none'}
+          onNavPress={props.onBack}
+          rightContent={
+            props.rightLabel && props.onRight ? (
+              <ActionButton
+                onPress={props.onRight}
+                label={props.rightLabel}
+                background={theme.brand.surfaceSecondary}
+                labelColor={theme.brand.foregroundPrimary}
+              />
+            ) : undefined
+          }
+        />
+      ) : (
       <View style={styles.appBar}>
         {/* yellow glow accent behind the bar */}
         <View style={[styles.glow, { backgroundColor: theme.accentYellow }]} />
@@ -65,6 +96,7 @@ export function FullScreenMessage(props: {
           </Pressable>
         ) : null}
       </View>
+      )}
 
       <View style={styles.body}>
         <Text style={styles.illustration}>{illustrationGlyph(props.illustration)}</Text>
@@ -88,7 +120,8 @@ export function FullScreenMessage(props: {
           label={props.primaryLabel}
           onPress={handlePrimary}
           forceLight
-          state={props.primaryLoading ? 'Loading' : 'Default'}
+          enabled={props.primaryEnabled}
+          state={props.primaryState ?? (props.primaryLoading ? 'Loading' : 'Default')}
         />
         {props.secondaryLabel && props.onSecondary ? (
           <Pressable

@@ -140,7 +140,7 @@ export function ChatScreen(props: {
             originScreenName: p.source ?? 'home',
           });
         } catch {
-          showToast(label('chat_error_generic', 'Something went wrong. Please try again.'), 'error');
+          showToast(label('fc_v2_app_label_something_went_wrong_please_try_again', 'Something went wrong. Please try again.'), 'error');
         }
       } else if (p.preGeneratedAnswer !== undefined && p.preGeneratedAnswer !== null) {
         onAction({
@@ -161,7 +161,7 @@ export function ChatScreen(props: {
             imageBase64: base64,
           });
         } catch {
-          showToast(label('chat_error_generic', 'Something went wrong. Please try again.'), 'error');
+          showToast(label('fc_v2_app_label_something_went_wrong_please_try_again', 'Something went wrong. Please try again.'), 'error');
         }
       } else if (p.question) {
         onAction({
@@ -428,9 +428,10 @@ export function ChatScreen(props: {
         // Permission dialog / GPS fetch / recovery are owned by LocationPromptHost; the outcome
         // arrives on the listener above. Only start when no other location flow is running
         // (mirrors Home's guard).
-        if (props.locationPrompt.state.kind === 'Idle') {
+        if (props.locationPrompt.isIdle()) {
           pendingLocationSourceId.current = messageId;
-          props.locationPrompt.triggerFromLocalContext();
+          // fromAgenticChip: the GPS analytics funnel is attributed to Chat (app parity).
+          props.locationPrompt.triggerFromLocalContext(true);
         }
         return;
       case AlignmentChipRoutes.CAMERA:
@@ -610,7 +611,7 @@ export function ChatScreen(props: {
             {uiState.message}
           </Text>
           <PrimaryButton
-            label={label('chat_retry', 'Try again')}
+            label={label('fc_v2_app_label_try_again', 'Try again')}
             onPress={() => onAction({ type: 'RetryLastRequest' })}
             style={{ minWidth: 180 }}
           />
@@ -737,7 +738,7 @@ export function ChatScreen(props: {
           <TextInputOverlay
             visible={textInputVisible}
             placeholder={label('chat_text_hint', 'Ask a follow-up question…')}
-            sendLabel={label('home_text_send', 'Send')}
+            sendLabel={label('fc_v2_app_label_send', 'Send')}
             onSend={sendFollowUpText}
             onClose={() => setTextInputVisible(false)}
           />
@@ -977,7 +978,7 @@ function AiBubble(props: {
         <FadeIn style={styles.aiActions}>
           {message.isPreGenerated && props.onReadFullAdvice ? (
             <PrimaryButton
-              label={label('chat_read_full_advice', 'Read full advice')}
+              label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
               onPress={props.onReadFullAdvice}
               style={{ alignSelf: 'flex-start' }}
             />
@@ -1000,7 +1001,7 @@ function AiBubble(props: {
             {props.isTtsEnabled && message.hideTtsSpeaker !== true ? (
               <ActionChip
                 icon={props.isPlayingTts ? 'pause' : 'speaker'}
-                text={label('chat_listen', 'Listen')}
+                text={label('fc_v2_app_label_listen', 'Listen')}
                 isLoading={props.isLoadingTts}
                 onPress={props.onListen}
               />
@@ -1046,23 +1047,36 @@ function ActionChip(props: {
 }
 
 /** Fade + slight rise, used for the reveal-gated action row and follow-ups. */
+/**
+ * Reveal animation for the answer actions and the related-questions block.
+ *
+ * `rise` (the default) is the answer-actions treatment: a 350ms fade that also lifts the block
+ * 8px into place. The related-questions block opts out of the lift — app parity
+ * (`ChatResponseActions.kt` 0456f364) is a 300ms fade and explicitly "fade only (no size
+ * animation) so surrounding content doesn't shift", and that block sits directly under the
+ * answer a farmer is still reading.
+ */
 function FadeIn(props: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  durationMs?: number;
+  rise?: boolean;
 }): React.ReactElement {
   const anim = useRef(new Animated.Value(0)).current;
+  const duration = props.durationMs ?? 350;
+  const rise = props.rise ?? true;
   useEffect(() => {
-    Animated.timing(anim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
-  }, [anim]);
+    Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }).start();
+  }, [anim, duration]);
   return (
     <Animated.View
       style={[
         props.style,
         {
           opacity: anim,
-          transform: [
-            { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-          ],
+          transform: rise
+            ? [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }]
+            : [],
         },
       ]}
     >
@@ -1105,14 +1119,14 @@ function ThreadFooter(props: {
             {props.errorMessage}
           </Text>
           <PrimaryButton
-            label={label('chat_retry', 'Try again')}
+            label={label('fc_v2_app_label_try_again', 'Try again')}
             onPress={props.onRetry}
             style={{ alignSelf: 'center', minWidth: 160 }}
           />
         </View>
       ) : null}
       {hasFollowUps ? (
-        <FadeIn style={styles.followUpSection}>
+        <FadeIn style={styles.followUpSection} durationMs={300} rise={false}>
           <View style={styles.followUpTitleRow}>
             <View
               style={[styles.followUpDot, { backgroundColor: theme.brand.foregroundSecondary }]}
@@ -1122,7 +1136,7 @@ function ThreadFooter(props: {
             >
               {props.clarificationRequired
                 ? label('chat_clarification_suggestions', 'Choose a follow-up option below')
-                : label('chat_related_questions', 'Related questions')}
+                : label('fc_v2_app_label_related_questions', 'You can also ask')}
             </Text>
           </View>
           {(props.suggestedQuestions ?? []).map((q, index) => (

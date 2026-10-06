@@ -150,6 +150,12 @@ public struct UserProfile: Codable, Sendable {
     public var lastName: String?
     public var gender: String?
     public var geographyLevel2: String?
+    // Present in the app's `FarmerProfile` (#9) and in android's `ProfileUser`, but omitted from
+    // this port until now. They are the readable place names the location pill needs — the bare
+    // `geographyLevel2` is an id — so `HomeViewModel.fetchUserProfile` could not backfill without
+    // them. Field names are the wire's, unchanged.
+    public var geographyLevel2Name: String?
+    public var countryName: String?
     public var geographyLevel3: String?
     public var geographyLevel4: String?
     public var geographyLevel5: String?
@@ -179,6 +185,8 @@ public struct UserProfile: Codable, Sendable {
         case lastName = "last_name"
         case gender
         case geographyLevel2 = "geography_level2"
+        case geographyLevel2Name = "geography_level2_name"
+        case countryName = "country_name"
         case geographyLevel3 = "geography_level3"
         case geographyLevel4 = "geography_level4"
         case geographyLevel5 = "geography_level5"

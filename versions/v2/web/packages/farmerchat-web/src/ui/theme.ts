@@ -38,6 +38,12 @@ const css = `
   --fc-chip: #e3f0ec;
   --fc-chip-text: #146152;
   --fc-appbar: #146152;
+  /* Accent gradient stops for the Share chip's sweep border (app ColorPrimitives.kt @ bda80659).
+     Cyan and yellow are fixed design primitives; the green stop follows the host brand, exactly
+     as resolveBrandColors does on Android. */
+  --fc-accent-gradient-cyan: #22D3EE;
+  --fc-accent-gradient-yellow: #FFF947;
+  --fc-accent-gradient-green: #00C950;
   --fc-appbar-text: #ffffff;
   --fc-overlay: rgba(12, 28, 23, 0.55);
   --fc-skeleton: #e4eae7;
@@ -138,6 +144,16 @@ const css = `
   font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px;
 }
 .fcsdk-root[data-fc-theme="night"] .fcsdk-btn-text { color: var(--fc-chip-text); }
+
+/* Filled primary pill — the web port of the app's "All languages" chip
+   (Surface(color = buttonPrimarySurface, shape = Radius.Rounded), labelLarge, 20px padding).
+   Web rendered that chip as a transparent fcsdk-btn-text link at 14px, so it read as a
+   tertiary action where the app draws a solid green button. */
+.fcsdk-btn-pill-primary {
+  border: none; background: var(--fc-brand-strong, #08361B); color: #ffffff;
+  font-size: 17px; font-weight: 600; padding: 10px 20px; border-radius: 999px;
+  cursor: pointer;
+}
 
 /* --- forms ---------------------------------------------------------------- */
 .fcsdk-input {
@@ -327,6 +343,25 @@ const css = `
   background: var(--fc-surface); color: var(--fc-text-muted); border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 600; }
 .fcsdk-action-chip:hover { color: var(--fc-brand); border-color: var(--fc-brand-bright); }
 .fcsdk-root[data-fc-theme="night"] .fcsdk-action-chip:hover { color: var(--fc-chip-text); }
+/* The AGENTIC Share chip carries the accent sweep border (app ChatResponseActions.kt @ bda80659,
+   Compose brand.accentSweepBorder). CSS conic-gradient IS the same brush; Compose's sweep starts
+   at 3 o'clock while conic-gradient starts at 12, which is why the Kotlin stops are rotated +90
+   and these degrees are not. The legacy Share chip stays plain, as in the app.
+   border-image cannot follow a border-radius, so the gradient is painted as a background layer
+   and the chip's own surface is masked over the middle with two backgrounds and border-box/
+   padding-box clipping — the standard gradient-border technique. */
+.fcsdk-action-chip--accent {
+  border: 3px solid transparent; border-radius: 999px;
+  background:
+    linear-gradient(var(--fc-surface), var(--fc-surface)) padding-box,
+    conic-gradient(from 0deg at 50% 50%,
+      var(--fc-accent-gradient-green) 0deg,
+      var(--fc-accent-gradient-cyan) 90deg,
+      var(--fc-accent-gradient-green) 180deg,
+      var(--fc-accent-gradient-yellow) 270deg,
+      var(--fc-accent-gradient-green) 360deg) border-box;
+}
+.fcsdk-action-chip--accent:hover { border-color: transparent; }
 .fcsdk-clarification { font-size: 13px; color: var(--fc-text-muted); font-style: italic; margin-top: 8px; }
 
 /* --- agentic streaming (2.0.0) -------------------------------------------------------------- */
@@ -398,9 +433,13 @@ const css = `
 
 /* Reveal-gated fade-in for the action row + follow-ups; motion-safe only. */
 @keyframes fcsdk-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Related-questions variant. App parity (ChatResponseActions.kt 0456f364): 300ms, and fade ONLY
+   — no translate — so the answer the farmer is still reading doesn't shift while it settles. */
+@keyframes fcsdk-fade-in-only { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fcsdk-dot-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: no-preference) {
   .fcsdk-fade-in { animation: fcsdk-fade-in 0.32s ease both; }
+  .fcsdk-fade-in-only { animation: fcsdk-fade-in-only 0.3s ease both; }
   .fcsdk-thinking-dot { animation: fcsdk-dot-pulse 1s ease-in-out infinite; }
   .fcsdk-thinking-dot:nth-child(2) { animation-delay: 0.18s; }
   .fcsdk-thinking-dot:nth-child(3) { animation-delay: 0.36s; }
@@ -486,41 +525,90 @@ const css = `
 .fcsdk-md blockquote { margin: 0; padding: 4px 12px; border-left: 3px solid var(--fc-brand-bright); color: var(--fc-text-muted); }
 /* Divider: a 3px fully-rounded rule (Compose height(3.dp) + RoundedCornerShape(50)). */
 .fcsdk-md-divider { height: 3px; border-radius: 50px; background: var(--fc-border); }
-/* Tables. The WRAPPER scrolls, never the page. 1-2 column tables fill the width; 3+ columns keep
-   a 160px per-column minimum and pan, with a right-edge fade hinting there is more. */
+/* Tables. 1-2 columns render as a weighted grid that fills the answer width. */
 .fcsdk-md-tablewrap { position: relative; max-width: 100%; }
-.fcsdk-md-tablewrap--scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .fcsdk-md-table { border-collapse: collapse; width: 100%;
   border: 1px solid var(--fc-border); border-radius: 8px; overflow: hidden; }
-.fcsdk-md-table--wide { width: auto; min-width: 100%; }
-.fcsdk-md-table--wide th, .fcsdk-md-table--wide td { min-width: 160px; }
 .fcsdk-md-table th, .fcsdk-md-table td { padding: 10px 12px; vertical-align: top; }
 .fcsdk-md-table th { background: var(--fc-surface); font-size: 12.5px; font-weight: 700; }
 .fcsdk-md-table td { font-size: 13.5px; }
 /* Body rows alternate, as in the Kotlin (surfaceSecondary / surfaceReadingSecondary). */
 .fcsdk-md-table tbody tr:nth-child(odd) { background: var(--fc-bg); }
 .fcsdk-md-table tbody tr:nth-child(even) { background: var(--fc-surface); }
-.fcsdk-md-tablefade { position: absolute; top: 0; right: 0; bottom: 0; width: 48px; pointer-events: none;
-  background: linear-gradient(to right, rgba(0,0,0,0), var(--fc-surface-reading, var(--fc-bg))); }
+/* 3+ columns: one card per data row (app parity, MarkdownText.kt 1b0553d2). Cell 0 is the card
+   title; every other column is a label/value pair, the label stacked ABOVE the value and each
+   full width, so neither wraps inside a narrow half-column. Nothing here scrolls sideways. */
+.fcsdk-md-rowcards { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
+.fcsdk-md-rowcard { background: var(--fc-surface); border-radius: 16px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; }
+.fcsdk-md-rowcard-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--fc-text);
+  padding-bottom: 10px; border-bottom: 1px solid var(--fc-border); }
+.fcsdk-md-rowcard-pairs { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.fcsdk-md-rowcard-pair { display: flex; flex-direction: column; gap: 2px; }
+.fcsdk-md-rowcard-pair dt { min-width: 0; overflow-wrap: anywhere;
+  font-size: 13.5px; color: var(--fc-text-muted); }
+.fcsdk-md-rowcard-pair dd { min-width: 0; overflow-wrap: anywhere; margin: 0;
+  font-size: 13.5px; font-weight: 700; color: var(--fc-text); }
+
+/* Answer card: a 3-column table whose header row is a title plus two empty cells, and whose body rows are
+   label / value / meaning triples (Kotlin MarkdownAnswerCard). Same filled surface as a row
+   card; a divider sits under the title and between readings, and the card edge closes the last. */
+.fcsdk-md-answercard { background: var(--fc-surface); border-radius: 16px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
+.fcsdk-md-answercard-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--fc-text);
+  padding-bottom: 12px; border-bottom: 1px solid var(--fc-border); }
+.fcsdk-md-answercard-reading { display: flex; flex-direction: column; gap: 2px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--fc-border); }
+.fcsdk-md-answercard-reading:last-child { padding-bottom: 0; border-bottom: none; }
+.fcsdk-md-answercard-label { margin: 0; font-size: 13.5px; color: var(--fc-text-muted);
+  overflow-wrap: anywhere; }
+.fcsdk-md-answercard-value { margin: 0; font-size: 15px; font-weight: 700; color: var(--fc-text);
+  overflow-wrap: anywhere; }
+.fcsdk-md-answercard-meaning { margin: 2px 0 0; font-size: 15px; color: var(--fc-text-muted);
+  overflow-wrap: anywhere; }
 
 /* --- agentic Home + Terms-of-Use dialog (2.0.0) ---------------------------------------------------
    App parity (HomeScreen.kt:534): in agentic mode the surface is the grey READING surface and the
    green lives only in a gradient band behind the header and first card, so the app bar is
    transparent and the band shows through it. */
 .fcsdk-home--agentic { background: var(--fc-surface-reading); }
-.fcsdk-home--agentic .fcsdk-appbar { background: transparent; color: var(--fc-appbar-text); }
+/* App parity (HomeAppBar @ 2cd71328): Home trims its bar so the logo below it is not left
+   with a large gap under the vertically-centered menu/weather buttons. Scoped to agentic
+   Home — every other screen keeps the shared 54px bar, as the app keeps 64 elsewhere. */
+.fcsdk-home--agentic .fcsdk-appbar { background: transparent; color: var(--fc-appbar-text);
+  min-height: 52px; }
 /* Band + glow sit behind; the app bar and scroller are lifted above them. */
 .fcsdk-home-band { position: absolute; left: 0; right: 0; top: 0; height: 36.6%; z-index: 0;
-  pointer-events: none; transition: opacity 120ms linear;
+  pointer-events: none;
   background: linear-gradient(to bottom, var(--fc-brand) 0%, var(--fc-brand) 58.8%,
     rgba(0, 0, 0, 0) 100%); }
 .fcsdk-home-band-glow { position: absolute; left: 50%; top: 0; transform: translateX(-50%);
   width: 100%; height: 148px; pointer-events: none;
   background: radial-gradient(ellipse at top center, rgba(255, 249, 71, 0.30), rgba(255, 249, 71, 0) 70%); }
 .fcsdk-home--agentic .fcsdk-appbar, .fcsdk-home--agentic .fcsdk-scroll { position: relative; z-index: 1; }
-/* Centred top section: 42px logo mark, leaf-flanked section title, location pill, greeting. */
-.fcsdk-home-agentic-head { display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 2px 16px 16px; text-align: center; color: var(--fc-appbar-text); }
+/* FIXED centred top section: 42px logo mark, leaf-flanked section title, location pill. Sits
+   above the scroller (so cards pass beneath it) on a transparent ground, so the band shows
+   through. App parity, HomeScreen.kt 70adc5fd. */
+/* The feed and its fixed header share a positioned container, so the header's absolute origin
+   is the top of the FEED, not the top of the screen. Without it the header would resolve to the
+   flex container's content-box origin and cover the app bar. */
+.fcsdk-home-feedwrap { position: relative; flex: 1; min-height: 0;
+  display: flex; flex-direction: column; }
+.fcsdk-home-feedwrap > .fcsdk-scroll { flex: 1; min-height: 0; }
+.fcsdk-home-agentic-head { position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 0 16px 16px; text-align: center; color: var(--fc-appbar-text); }
+/* The feed's top strip masks out behind the fixed header, so cards dissolve INTO the band as
+   they scroll up rather than covering it. The --fcsdk-headmask-end var is the measured header
+   height; the ramp sits in its last fifth, where cards emerge below the header. */
+.fcsdk-scroll--headmask {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0,
+    transparent calc(var(--fcsdk-headmask-end, 0px) * 0.8), #000 var(--fcsdk-headmask-end, 0px));
+  mask-image: linear-gradient(to bottom, transparent 0,
+    transparent calc(var(--fcsdk-headmask-end, 0px) * 0.8), #000 var(--fcsdk-headmask-end, 0px));
+}
+/* The greeting stays in the scroller (feed content), directly under the fixed header. */
+.fcsdk-home-agentic-greeting { padding: 0 16px 12px; text-align: center; }
 .fcsdk-home-logomark { font-size: 34px; line-height: 42px; height: 42px; }
 .fcsdk-home-sectionhead { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; }
 .fcsdk-home-leaf { opacity: 0.75; font-size: 14px; }
@@ -584,7 +672,7 @@ const css = `
   transition: background 220ms ease, min-height 250ms ease; }
 .fcsdk-composer-field--active { background: var(--fc-bg); }
 .fcsdk-composer-thumbs, .fcsdk-composer-fieldrow { position: relative; z-index: 2; }
-.fcsdk-composer-thumbs { display: flex; gap: 5px; padding: 8px 0 10px; }
+.fcsdk-composer-thumbs { display: flex; gap: 5px; padding: 10px 0; }
 .fcsdk-composer-thumb { position: relative; flex: 0 0 auto; border-radius: 10px; overflow: hidden; }
 .fcsdk-composer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fcsdk-composer-thumb button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px;
@@ -638,11 +726,50 @@ const css = `
 .fcsdk-error-inline { color: var(--fc-danger); font-size: 13px; }
 .fcsdk-bottombar { border-top: 1px solid var(--fc-border); background: var(--fc-surface);
   border-radius: 18px 18px 0 0; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 10px; }
-.fcsdk-legal-links { font-size: 12.5px; color: var(--fc-text-muted); text-align: center; }
-.fcsdk-legal-links button { border: none; background: none; color: var(--fc-brand-bright); font-size: 12.5px; text-decoration: underline; padding: 0 2px; }
+/* App parity (LanguageScreen.kt 47bc8524): one flowing paragraph, justified end-to-end and
+   capped at the app's 260dp measure. The inline buttons sit in the text flow, so they wrap
+   with it instead of forming their own centred line. */
+.fcsdk-legal-links { font-size: 12.5px; color: var(--fc-text-muted); text-align: justify;
+  max-width: 260px; margin: 0 auto; }
+.fcsdk-legal-links button { border: none; background: none; color: var(--fc-brand-bright); font-size: 12.5px; text-decoration: underline; padding: 0; font-family: inherit; line-height: inherit; cursor: pointer; }
 .fcsdk-countrysel { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 10px 14px;
   border: 1.5px solid var(--fc-border); border-radius: var(--fc-radius-input); background: var(--fc-card); color: var(--fc-text); font-size: 16px; }
 .fcsdk-timer { text-align: center; font-size: 14px; color: var(--fc-text-muted); }
+
+/* --- location prompt (docs/01 section 3.15) ---------------------------------------------------- */
+.fcsdk-location-layer { padding: 0; align-items: stretch; justify-content: stretch; }
+.fcsdk-location-layer > .fcsdk-fullmsg { width: 100%; height: 100%; }
+.fcsdk-fullmsg-bartitle { flex: 1; text-align: center; font-size: 17px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcsdk-fullmsg-barspacer { width: 40px; height: 40px; flex-shrink: 0; }
+.fcsdk-fullmsg-barright { border: none; background: transparent; color: inherit; font-size: 15px; font-weight: 600;
+  padding: 8px 10px; min-width: 40px; }
+.fcsdk-fullmsg-illustration--node { font-size: inherit; filter: none; width: 100%; display: flex; justify-content: center; }
+/* Interstitial illustration: Fit, max width 322, with the illustration gradient overlay. */
+.fcsdk-location-illustration { position: relative; width: 100%; max-width: 322px; aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center; font-size: 120px; line-height: 1; }
+.fcsdk-location-illustration::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 40%;
+  background: linear-gradient(to bottom, rgba(0,0,0,0), var(--fc-brand)); pointer-events: none; }
+/* Recovery sheet: no drag handle, 24 top corners, light surfacePrimary, 20/16 padding, 12 spacing. */
+.fcsdk-location-sheet-scrim { z-index: 51; }
+.fcsdk-location-sheet { z-index: 52; background: #ECECEE; color: #000; border-radius: 24px 24px 0 0;
+  padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; max-height: 100%; overflow-y: auto; }
+.fcsdk-location-sheet-image { position: relative; width: 100%; height: 382px; max-height: 50vh; flex-shrink: 0;
+  border-radius: 24px; overflow: hidden; background: linear-gradient(180deg, #cfe3d6 0%, #9cc7a9 100%);
+  display: flex; align-items: center; justify-content: center; font-size: 140px; line-height: 1; }
+.fcsdk-location-sheet-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px;
+  border: none; border-radius: 14px; background: #fff; color: #000; font-size: 18px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; }
+.fcsdk-location-sheet-spacer { height: 4px; flex-shrink: 0; }
+.fcsdk-location-sheet-title { text-align: center; font-size: 22px; line-height: 28px; font-weight: 600; color: #000; }
+.fcsdk-location-sheet-body { text-align: center; font-size: 14px; line-height: 20px; color: #000; }
+.fcsdk-location-sheet-cta { padding-bottom: 8px; }
+.fcsdk-location-sheet-cta .fcsdk-btn-primary { min-height: 56px; }
+/* Settings "My Farm" helper caption. */
+.fcsdk-settings-location-helper { padding: 6px 20px 0; font-size: 12.5px; color: var(--fc-text-muted); }
+.fcsdk-settings-location-helper em { font-style: normal; color: var(--fc-brand); }
+.fcsdk-li-trailing-text { color: var(--fc-text-muted); font-size: 14px; display: inline-flex; align-items: center; gap: 6px;
+  max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 `;
 
 /** Injects the stylesheet once per document. */
@@ -750,6 +877,9 @@ function colorVars(colors: FarmerChatThemeColors, softAlpha: number): Record<str
     // Accents: chevrons, active radio dot, spinner top, focus, links.
     vars['--fc-brand-bright'] = brandAccent;
     vars['--fc-chip-text'] = brandAccent;
+    // The Share chip's sweep keeps its green stop on the host accent, so the border stays
+    // coherent with a host brand. Cyan and yellow are fixed design primitives, as in the app.
+    vars['--fc-accent-gradient-green'] = brandAccent;
   }
   if (onBrand) {
     vars['--fc-appbar-text'] = onBrand;

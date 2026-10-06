@@ -27,6 +27,8 @@ import org.digitalgreen.farmerchat.sdk.views.databinding.FcJourneyHostBinding
 import org.digitalgreen.farmerchat.sdk.views.internal.drawer.DrawerQuestionAdapter
 import org.digitalgreen.farmerchat.sdk.views.internal.location.LocationPromptHost
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
+import androidx.core.content.ContextCompat
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
 
 /**
  * Shared wiring of the full journey host (used by both FarmerChatActivity and
@@ -111,6 +113,18 @@ internal class JourneyController(
 
     private fun setupDrawer() {
         val d = binding.fcDrawer
+        // App DrawerContent: the wordmark sits 56dp below the SCREEN top. The root is
+        // fitsSystemWindows, so subtract the status-bar inset it gets padded by.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(d.root) { v, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            v.setPadding(0, bars.top, 0, bars.bottom)
+            val density = v.resources.displayMetrics.density
+            (d.fcDrawerWordmark.layoutParams as android.view.ViewGroup.MarginLayoutParams).let { lp ->
+                lp.topMargin = maxOf(0, (56 * density).toInt() - bars.top)
+                d.fcDrawerWordmark.layoutParams = lp
+            }
+            insets
+        }
         d.fcDrawerRecentList.layoutManager = LinearLayoutManager(activity)
         d.fcDrawerRecentList.adapter = drawerAdapter
 
@@ -160,11 +174,22 @@ internal class JourneyController(
             }
         }
         d.fcDrawerHistoryRetry.setOnClickListener { chatHistoryVm.refresh() }
+        // Compose parity (Drawer.kt:431, `CompositionLocalProvider(LocalContentColors provides
+        // DarkContentColors)`): a PrimaryButton on the drawer's BRAND surface takes
+        // DarkContentColors.buttonPrimarySurface = Green700, not the light-surface
+        // fc_button_primary_surface (#08361B) the default drawable uses — which on this dark
+        // green panel rendered as bare white text with no pill at all. The app's drawer CTA
+        // measures #008236.
+        d.fcDrawerSignUpButton.background =
+            ContextCompat.getDrawable(d.root.context, R.drawable.fc_bg_primary_button_on_brand)
+        // Compose parity (Drawer.kt:474): the drawer CTA carries a chevron.
+        d.fcDrawerSignUpButton.state = PrimaryButtonView.State.CHEVRON
         d.fcDrawerSignUpButton.setOnClickListener { handleSignUpClick() }
 
         binding.fcDrawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: android.view.View) {
                 refreshDrawerTexts()
+                highlightCurrentRow()
                 // Compose parity (Drawer.kt): the silent refresh fires only for
                 // authenticated users. Guests never trigger a history fetch.
                 if (graph.sessionManager.isAuthenticated.value) {
@@ -203,6 +228,30 @@ internal class JourneyController(
         }
 
         refreshDrawerTexts()
+    }
+
+    /**
+     * Compose parity (`Drawer.kt:514`): the row for the CURRENT destination is filled with
+     * `surfaceTertiary` clipped to Radius.MD; every other row keeps the panel colour.
+     *
+     * Views had no selected state at all — all four rows rendered identically, so the drawer
+     * never told you which screen you were on. Read from the NavController at open time rather
+     * than tracked separately, so it cannot drift from where the user actually is.
+     */
+    private fun highlightCurrentRow() {
+        val d = binding.fcDrawer
+        val current = navController.currentDestination?.id
+        val rows = listOf(
+            d.fcDrawerHomeRow to R.id.fc_dest_home,
+            d.fcDrawerSettingsRow to R.id.fc_dest_settings,
+            d.fcDrawerLanguageRow to R.id.fc_dest_settings_language,
+            d.fcDrawerHelpRow to R.id.fc_dest_help
+        )
+        for ((row, destination) in rows) {
+            row.setBackgroundResource(
+                if (destination == current) R.drawable.fc_bg_drawer_row_selected else 0
+            )
+        }
     }
 
     private fun refreshDrawerTexts() {

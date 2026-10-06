@@ -33,11 +33,11 @@ final class FCUILanguageViewController: UIViewController, UITableViewDataSource,
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfacePrimary
-        title = fcuiLabel("choose_language_title", "Choose your language")
+        title = fcuiLabel(FCLabels.chooseYourLanguage, "Choose your language")
         saveButton.setTitle(
             mode == .onboarding
-                ? fcuiLabel("start_using", "Start using FarmerChat")
-                : fcuiLabel("save_language", "Save language"),
+                ? fcuiLabel(FCLabels.startUsingFarmerchat, "Start using FarmerChat")
+                : fcuiLabel(FCLabels.saveLanguage, "Save language"),
             for: .normal
         )
 
@@ -162,7 +162,7 @@ final class FCUILanguageViewController: UIViewController, UITableViewDataSource,
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         cell.backgroundColor = FCUITheme.surfaceSecondary
         if indexPath.row >= languages.count {
-            cell.textLabel?.text = fcuiLabel("all_languages", "All languages")
+            cell.textLabel?.text = fcuiLabel(FCLabels.allLanguages, "All languages")
             cell.textLabel?.textColor = FCUITheme.brandSurfacePrimary
             cell.accessoryType = .disclosureIndicator
             return cell
@@ -225,23 +225,23 @@ final class FCUINameViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfacePrimary
         navigationController?.setNavigationBarHidden(mode == .onboarding, animated: false)
-        saveButton.setTitle(fcuiLabel("save_name", "Save name"), for: .normal)
+        saveButton.setTitle(fcuiLabel(FCLabels.saveName, "Save name"), for: .normal)
 
         titleLabel.text = mode == .onboarding
-            ? fcuiLabel("enter_name_title", "What should we call you?")
-            : fcuiLabel("settings_name_title", "Name")
-        titleLabel.font = .systemFont(ofSize: 28, weight: .bold)
+            ? fcuiLabel(FCLabels.whatShouldWeCallYou, "What should we call you?")
+            : fcuiLabel(FCLabels.name, "Name")
+        titleLabel.font = FCUITypography.current.titleLarge.font
         titleLabel.textColor = FCUITheme.foregroundPrimary
         titleLabel.numberOfLines = 0
 
-        textField.placeholder = fcuiLabel("enter_name_placeholder", "Your name")
+        textField.placeholder = fcuiLabel(FCLabels.yourName, "Your name")
         textField.borderStyle = .roundedRect
         textField.backgroundColor = FCUITheme.surfaceSecondary
-        textField.font = .systemFont(ofSize: 17)
+        textField.font = FCUITypography.current.bodyMedium.font
         textField.text = NameInputNormalizer.sanitizeStored(FarmerChat.shared.prefs.string(.userName))
         textField.addAction(UIAction { [weak self] _ in self?.textChanged() }, for: .editingChanged)
 
-        skipButton.setTitle(fcuiLabel("skip_for_now", "Skip for now"), for: .normal)
+        skipButton.setTitle(fcuiLabel(FCLabels.skipForNow, "Skip for now"), for: .normal)
         skipButton.setTitleColor(FCUITheme.foregroundSecondary, for: .normal)
         skipButton.isHidden = mode == .settings
 
@@ -328,7 +328,7 @@ extension UIViewController {
     func showToast(_ message: String) {
         let label = UIPaddedLabel()
         label.text = message
-        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.font = FCUITypography.current.bodySmall.font
         label.textColor = FCUITheme.foregroundPrimary
         label.backgroundColor = FCUITheme.surfaceSecondary
         label.textAlignment = .center

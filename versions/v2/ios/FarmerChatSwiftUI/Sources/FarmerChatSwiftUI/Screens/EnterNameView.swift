@@ -15,23 +15,25 @@ struct EnterNameView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            FCLogoMark(size: 44, tint: theme.content.foregroundPrimary)
+            // App parity (EnterNameScreen.kt:116-119): 32 pt, tinted borderActive (brand GREEN).
+            FCLogoMark(size: 32, tint: theme.content.borderActive)
                 .padding(.top, 40)
 
-            Text(fcLabel("enter_name_title", "What should we call you?"))
-                .font(.system(size: 24, weight: .bold))
+            Text(fcLabel(FCLabels.whatShouldWeCallYou, "What should we call you?"))
+                // App parity: titleLarge = 22/700, not 24.
+                .fcTextStyle(theme.typography.titleLarge)
                 .foregroundColor(theme.content.foregroundPrimary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 20)
 
-            Text(fcLabel("enter_name_subtitle", "We'll greet you by your name"))
-                .font(.system(size: 17))
+            Text(fcLabel(FCLabels.weGreetYouName, "We'll greet you by your name"))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 6)
 
             FCTextField(
-                placeholder: fcLabel("enter_name_placeholder", "Your name or nickname"),
+                placeholder: fcLabel(FCLabels.yourNameOrNickname, "Your name or nickname"),
                 text: Binding(
                     get: { name },
                     set: { name = NameInputNormalizer.normalize($0) }
@@ -44,8 +46,8 @@ struct EnterNameView: View {
 
             FCPrimaryButton(
                 title: viewModel.state.updateUserNameState.isLoading
-                    ? fcLabel("saving", "Saving")
-                    : fcLabel("save_name", "Save name"),
+                    ? fcLabel(FCLabels.saving, "Saving")
+                    : fcLabel(FCLabels.saveName, "Save name"),
                 state: viewModel.state.updateUserNameState.isLoading
                     ? .loading
                     : (name.trimmingCharacters(in: .whitespaces).isEmpty ? .normal : .chevron),
@@ -55,7 +57,7 @@ struct EnterNameView: View {
             )
 
             if name.isEmpty {
-                FCSecondaryButton(title: fcLabel("skip_for_now", "Skip for now"), height: 56) {
+                FCSecondaryButton(title: fcLabel(FCLabels.skipForNow, "Skip for now"), height: 56) {
                     viewModel.skipName()
                     router.routeFromSplash()
                 }
@@ -114,7 +116,7 @@ struct EnterNameView: View {
             return
         }
         guard let userId = FarmerChat.shared.session.userId else {
-            toast.show(.error, fcLabel("error_generic", "Something went wrong. Please try again."))
+            toast.show(.error, fcLabel(FCLabels.somethingWentWrongPleaseTryAgain, "Something went wrong. Please try again."))
             return
         }
         viewModel.onAction(

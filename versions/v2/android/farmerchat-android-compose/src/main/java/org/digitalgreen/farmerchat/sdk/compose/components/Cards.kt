@@ -77,6 +77,9 @@ import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import kotlinx.coroutines.delay
 import java.net.URL
 import java.net.URLEncoder
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 
 private fun encodeImageUrl(url: String): String {
     return try {
@@ -233,7 +236,7 @@ fun ContentCard(
                 label = label(Labels.START_CHAT, "Start chat"),
                 state = if (isButtonLoading) PrimaryButtonState.Loading else PrimaryButtonState.Chevron,
                 modifier = Modifier.fillMaxWidth(),
-                radius = Radius.MD,
+                radius = Radius.Rounded,
                 onClick = onClick,
                 height = 42,
             )
@@ -680,11 +683,17 @@ fun MultiSelectCard(
                                     color = contentColors.foregroundPrimary
                                 )
 
-                                Column(
+                                // App parity (MultiSelectCard.kt:234): a LazyVerticalGrid with one fixed column, not a
+                                // plain Column. The grid stretches every cell to the full column width (a Column wraps to
+                                // its widest child, which rendered the options as narrow chips) and it SCROLLS inside the
+                                // 240dp cap instead of clipping when a card carries more crops than fit.
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(1),
                                     verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     modifier = Modifier.heightIn(max = 240.dp)
                                 ) {
-                                    options.forEachIndexed { index, optionLabel ->
+                                    itemsIndexed(options) { index, optionLabel ->
                                         val currentOptionId = optionIds?.getOrNull(index)
                                         val isNoneOfTheAboveById = currentOptionId?.let { id ->
                                             id.equals("profile_crop_all_none_of_the_above", ignoreCase = true) ||

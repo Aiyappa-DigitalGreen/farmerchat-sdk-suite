@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimaryButton sitting ON a brand-coloured surface (the drawer's sign-up card).
+     `fc_bg_primary_button` fills with fc_button_primary_surface (#08361B), which is the correct
+     colour on the light reading surface but is invisible on the drawer's dark green. Compose
+     handles this by swapping in DarkContentColors, whose buttonPrimarySurface is Green700
+     (theme/Color.kt:192) — the same #008236 measured on the app's drawer CTA. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_green700" />
+    <corners android:radius="999dp" />
+</shape>

@@ -24,8 +24,8 @@ export function ErrorScreen(props: {
   }, [props.fromScreen, props.isNetworkError, sdk]);
 
   const title = props.isNetworkError
-    ? label('error_no_internet_title', 'No internet connection')
-    : label('error_api_title', 'Something went wrong');
+    ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
+    : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
   const subtitle = props.isNetworkError
     ? label(
         'error_no_internet_subtitle',
@@ -41,7 +41,7 @@ export function ErrorScreen(props: {
       title={title}
       subtitle={subtitle}
       illustration="LOOKING_AT_SKY"
-      primaryLabel={label('error_try_again', 'Try again')}
+      primaryLabel={label('fc_v2_app_label_try_again', 'Try again')}
       onPrimary={props.onTryAgain}
       enablePrimaryDebounce
     />

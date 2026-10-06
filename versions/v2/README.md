@@ -3,10 +3,65 @@
 A complete, self-contained SDK: `android/`, `ios/`, `react-native/`, `web/` in this folder are
 buildable and publishable independently of v1.
 
-Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at **`0c8c740f`**
-(branch `features/dev_v2.3`, merged from `origin/dev/v2.4`; was `c0524dd6` / app v4.1.2,
-versionCode 107 — 21 commits newer as of 2026-09-03), which descends from the v1 source of truth
+Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at **`919e5b2f`**
+(re-baselined 2026-09-21 from `1b0553d2`; the 13-commit `1b0553d2..919e5b2f` delta — composer
+photo-strip padding, app-bar corner radii, two Home scroll fixes, the 52dp Home bar and its round
+weather pill, fully-opaque peeking tip cards, the Share button's accent sweep border, and markdown
+answer cards — is ported and its per-platform gaps are recorded in `docs/04-parity-matrix.md`.)
+Before that **`1b0553d2`** (re-baselined 2026-09-17 from `193dbd64`; the `cbfdcff8..1b0553d2`
+delta — tip card height, related-questions fade, the language-screen legal paragraph, the Home
+fixed header, and row-card markdown tables).
+**All of it landed in `versions/v2/` only; the root `android/ ios/ react-native/ web/` trees are
+the 1.0.0 line.** Previously **`193dbd64`**
+(branch `features/dev_v2.3`, merged from `origin/dev/v2.4`; was `0c8c740f` — 17 commits newer as
+of 2026-09-08, app still v4.1.3 / versionCode 108), which descends from the v1 source of truth
 `fc-compose` @ `9f5e4ca` (v4.0.3). Same repo lineage, so v2 is a delta.
+
+### The `0c8c740f → 193dbd64` delta (re-baselined 2026-09-08)
+
+Eight app files, +143/−33 — all UI polish and copy, no new endpoint and no new wire field. What
+landed where:
+
+| App change | Commit | SDK |
+|---|---|---|
+| 2 new label keys (`agreement_card_info_text`, `auth_consent_suffix`) | `2a5cf2b8` `ae37b28e` | ✅ android v2 core `Labels.kt`. **NOT probed against #3** — no API key in this tree; listed as an ask in `docs/05` |
+| Agreement card: 3 bullets → 2 + italic attribution line | `2a5cf2b8` | ✅ both android v2 flavours. ⛔ ios / react-native / web (the whole card was already a recorded gap) |
+| Consent copy: trailing `"."` → `AUTH_CONSENT_SUFFIX` sentence; link span takes the body colour | `ae37b28e` | ✅ both android v2 flavours. The theme-aware body colour and the label-resolved legal title were **already** correct in the SDK — the app caught up to us there |
+| Auth phone column scrolls + `navigationBarsPadding()` | `7e968df3` `b72ea4da` | ✅ compose: the SDK already scrolled (one level up, so OTP scrolls too); the missing half was the nav-bar inset, added as `WindowInsets.ime.union(navigationBars)` so it cannot double-count with `imePadding()`. Views already scrolls via `ScrollView` |
+| Chat composer shows the idle aura (`showAura = true`) | `2a5cf2b8` | ✅ compose **already did this** — it was a requested divergence and the app has now converged on it (though compose's aura drew an empty path until the 2026-10-06 `addOutline` fix). ✅ views now draws it too (`ComposerAuraDrawable`) |
+| Chat reserve: viewport-derived height, and held for a FINISHED short answer (`!isLoading`) | `9023b57f` `89f9ed17` | ✅ both android v2 flavours, **plus the matching auto-scroll anchor change the SDK needs and the app does not** — see below. ⛔ ios / react-native / web (no reserve there) |
+| Scroll-down indicator suppressed inside the reserve | `9023b57f` | ⛔ the SDK has no scroll-down indicator in compose at all — recorded in `docs/04`, not invented here |
+| Failed-last-message reserve | `9023b57f` | ⛔ the SDK renders its error card outside the message list, so the app's collapse cannot occur — recorded in `docs/04` |
+| Home: backfill the location pill's place name from the user profile | `b72ea4da` | ✅ android core (both flavours) + ios + react-native; 🟡 web (no Home-entry profile fetch — see `docs/04`). Ported with a **rewritten rationale**: the app is repairing its own V1→V2 upgrade, a premise that is false for the SDK |
+| Language screen legal intro now names the AI | `b72ea4da` | ✅ android v2 both flavours, react-native, web, ios |
+
+**The reserve change needed a companion fix on the SDK that the app did not need.** The app
+deliberately disables auto-scroll during streaming and only scrolls when a new follow-up question
+is submitted. The SDK instead re-scrolls whenever `state.messages.size` **or `state.isLoading`**
+changes — and core clears `isLoading` exactly when a stream settles. So the moment a finished
+answer started holding a viewport of reserve, the SDK's own auto-scroll would have parked the
+viewport at the top of that reserve and pushed the question off-screen: the very jump commit
+`28be342` ("reserve and auto-scroll were fighting") had just fixed, moved to the settle
+transition. Both flavours now anchor the row above **whichever** row holds the reserve.
+
+The rule itself lives in **core** — `farmerchat-core/.../ui/chat/ChatReserve.kt`, exposing
+`AiResponse.holdsChatReserve(isLastResponse, isLoading)` and `ChatState.chatScrollAnchorIndex()`.
+It started as three copies of one boolean held in step by comment, which is the drift
+`android/CLAUDE.md` explicitly forbids; all four call sites now read the core functions and only
+the reserve *height* is per-flavour (compose from `LazyListLayoutInfo.viewportSize`, views from the
+`RecyclerView`'s measured height). `ChatReserveTest` (13 tests) pins the predicate and the anchor,
+including that they agree across the whole `isLoading` × `isStreaming` grid — a disagreement
+between them is precisely what the blank-thread bug was.
+
+Note also that `isLoading` does **not** mean the same thing in the SDK as in the app: core sets it
+`true` for the whole duration of a stream and keeps it true for a blocking alignment surface on
+purpose. So `isStreaming` and the alignment clause stay load-bearing in the SDK predicate where
+the app's `!isLoading` alone would have been enough.
+
+**Found while checking, not part of the app delta:** views dropped the reserve entirely for an
+exclusive alignment surface (`minimumHeight = 0`), where both compose and the app keep it — so a
+surface arriving after a streamed answer collapsed the thread upward. Fixed; recorded in
+`docs/04`.
 
 The chat/alignment part of the `c0524dd6 → 0c8c740f` delta is folded in: **43ba5de4** "no follow up
 in case of chips" (an additive alignment surface suppresses the follow-up list) and the chat-history
@@ -113,7 +168,7 @@ Because the wire cannot be exercised, tests are the only guard:
 
 | Platform | Tests |
 |---|---|
-| android | **43** unit tests — parser 14, sanitizer 9, `AlignmentKind` 5, alignment pick 3, capability chip 7, location outcome 5 |
+| android | **43** unit tests — parser 14, sanitizer 9, `AlignmentKind` 5, alignment pick 3, capability chip 7, location outcome 5. Plus **18** for the 2026-09-08 re-baseline: `ChatReserveTest` 13, `ApproxPlaceNameTest` 5. (`:farmerchat-core:testDebugUnitTest` is **198** tests in total.) |
 | ios | **79** (`swift test`), including no-timeout session assertions, capability chip 12, location outcome 7 |
 | web | **174** assertions (agentic 73, stream 12, alignment-pick 11, capability-chip 36, markdown 42), including a JSON object split one byte per chunk |
 | react-native | 86 assertions, run out-of-tree — the package has no test runner (46 agentic/alignment + 40 capability-chip / location-outcome) |
@@ -166,6 +221,131 @@ timeout on a request that has none would be a lie.
 - **The app's two Remote Config flags collapse to one.** The app has `getComposerUiEnabled()` and
   `getAgenticChatEnabled()`; the SDK exposes a single host switch, `enableAgenticChat`, read once
   because SDK config is immutable after `initialize()`.
+
+## Telemetry is OFF by default in 2.0.0
+
+`FarmerChatConfig.enableAnalytics` defaults to **false**. While it is false, every analytics event,
+user identity and user attribute is still built exactly as before — same names, same properties,
+same call sites, same order — and then dropped at the single dispatch point in
+`FarmerChatAnalytics` instead of reaching `onEvent`, `FarmerChatAnalyticsListener`,
+`onUserIdentified` or `onUserAttribute`. Nothing else about the SDK changes: no skipped work, no
+different branch, nothing a farmer or the backend can observe.
+
+```kotlin
+FarmerChatConfig.builder(env)
+    .enableAnalytics(true)   // opt in when you are ready to receive telemetry
+```
+
+**The C4 semantic hooks are NOT gated by this** — `onChatOpened`, `onMessageSent`,
+`onAnswerReceived`, `onScreenView`, `onError` are product callbacks a host wires for behaviour,
+not telemetry to a vendor, so silencing them would be a functional regression. `AnalyticsGateTest`
+pins both halves of that contract.
+
+⚠️ **This is a behaviour change for hosts that were already receiving events.** It is deliberate:
+an integration can now be wired end-to-end and reviewed before any data is emitted. Flip the flag
+to restore delivery. Both sample apps set it to `true` so the verification harness still sees
+events.
+
+## SIM number pre-fill is host-opt-in
+
+The Auth screen can read the device's SIM numbers to pre-fill the phone field — one SIM fills it,
+several open a chooser. The SDK declares **neither** `READ_PHONE_STATE` nor `READ_PHONE_NUMBERS`:
+a library manifest merges into every host, and a host that never shows the Auth screen should not
+inherit sensitive permissions it then has to justify on its store listing.
+
+A host opts in with two lines:
+
+```xml
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+<uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+```
+
+Without them the SDK is completely silent — it checks the merged manifest before prompting, so a
+host that did not opt in never sees a permission dialog. See `docs/05-open-questions.md` for the
+two deliberate divergences from the app here (the app declares a permission launcher it never
+invokes, and the SDK splits numbers against endpoint #5's dial codes rather than taking a
+libphonenumber dependency).
+
+## Host toolchain floor (Android)
+
+**A host consuming `farmerchat-android-compose:2.0.0` needs AGP 8.13.0 or newer.**
+
+This is not a preference. The SDK is compiled with Kotlin 2.3.21 / AGP 8.13.0. On a host dexing
+with **AGP 8.9.3** the app crashes on first launch of the chat screen:
+
+```
+java.lang.VerifyError: Verifier rejected class
+  org.digitalgreen.farmerchat.sdk.compose.components.InputComposerKt:
+  void InputComposer-SVl97cE(...): [0x5AC] register v302 has type
+  Reference: androidx.compose.runtime.Composer but expected Boolean
+    at ...compose.screens.ChatScreenKt.ChatScreen(ChatScreen.kt:841)
+```
+
+`InputComposer` takes 23 parameters, all defaulted, so the Compose compiler emits three `$changed`
+masks plus a `$default` mask. The older D8 mis-verifies the resulting method; D8 from AGP 8.13.0
+dexes the identical class file correctly. Reproduced and then cleared on RationSmart
+(`feed-formulation-frontend`, minSdk 24) — debug **and** release, on an API 36 emulator, 2026-09-04.
+
+Two consequences for hosts:
+
+- **Below minSdk 26**, `tools:overrideLibrary` must name the compose package too, not just views:
+  `org.digitalgreen.farmerchat.sdk.views, org.digitalgreen.farmerchat.sdk.compose,
+  org.digitalgreen.farmerchat.sdk.core`. Missing the middle entry fails manifest merging.
+- **`farmerchat-android-views` alone does not hit this** — it has no `InputComposer` Composable —
+  so a host pinned to an older AGP can stay on the views artifact, at the cost of the fidelity gaps
+  listed in `docs/04-parity-matrix.md`.
+
+The durable fix on the SDK side is to shrink `InputComposer`'s parameter list (group the callbacks
+and the appearance overrides into `@Immutable` holders) so no host toolchain can mis-dex it. Until
+that lands, the AGP floor above is the requirement. Tracked in `docs/04-parity-matrix.md`.
+
+**Both UI artifacts can be installed side by side.** `FarmerChat.resolveActivityClass()` tries the
+compose activity first and falls back to views, so a host that adds
+`farmerchat-android-compose` next to `farmerchat-android-views` gets the Compose screens from
+`launch()`/`openChat()` while keeping the View-based `FarmerChatFab` (compose ships only a
+`@Composable` FAB). That is how RationSmart is wired.
+
+## Answer-generation tips are server-driven
+
+While an answer is generating, the chat screen shows a rotating tip carousel (android v2, both
+flavours). **The tip set is not in the SDK** — it is discovered from the `get_labels` payload, so
+your backend can add, translate or retire tips without an SDK release. Any pair of labels
+
+```
+fc_v2_app_label_tips_<name>_title_<lang>
+fc_v2_app_label_tips_<name>_statement_<lang>
+```
+
+becomes a card, ordered by `<name>`. Both halves must resolve (in the farmer's language or in
+English) or the tip is skipped. With no discoverable pair the SDK falls back to three built-in
+English tips.
+
+Host string overrides (`stringOverrides`) still apply to the three built-ins, so a host can
+reword them without touching the backend. The carousel is hidden the moment a streamed answer
+produces its first text chunk, so it never competes with the answer.
+
+Not yet on ios / react-native / web — see `docs/04-parity-matrix.md`.
+
+## STAGE points at the agentic demo backend (2026-09-08)
+
+`FarmerChatEnvironment.STAGE` resolves to **`https://demo.agent.farmer.chat/`** in this tree, on
+all four platforms. v1 keeps the farmstack host, so stage is the one environment where the two
+versions differ.
+
+```kotlin
+FarmerChatConfig.builder(FarmerChatEnvironment.STAGE)   // → https://demo.agent.farmer.chat/
+```
+
+- **Debug and release both use it.** The SDK has one base URL per environment, not per build type,
+  so there is no separate stage-debug value to set and nothing for a host to override.
+- **Reverting is one line per platform.** The previous farmstack URL is kept commented directly
+  above the new one in `FarmerChatConfig.kt`, `FarmerChatConfig.swift` and both `config.ts` —
+  uncomment it and delete the line below.
+
+Unlike every farmstack URL, this host has no base path. The trailing slash is therefore load-bearing
+(paths are joined as `baseUrl + "api/…"`), and `ApiPriority.normalizeApiName` is unaffected — its
+`/mobile-app-stage/` strip becomes a no-op and the trailing `/` strip does the work. See `docs/02`
+§Base URLs.
 
 ## Building and publishing
 

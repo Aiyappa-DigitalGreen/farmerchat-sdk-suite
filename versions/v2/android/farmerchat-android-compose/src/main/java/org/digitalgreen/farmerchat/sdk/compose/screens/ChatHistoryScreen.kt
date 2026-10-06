@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsProps
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.ui.history.ChatHistoryViewModel
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 
 /**
  * ChatHistory (doc 01 §3.9). Grouped conversation list with pagination near
@@ -50,6 +52,13 @@ import org.digitalgreen.farmerchat.sdk.core.ui.history.ChatHistoryViewModel
 fun ChatHistoryScreen(
     vm: ChatHistoryViewModel,
     openDrawer: () -> Unit,
+    /**
+     * Plain back navigation, used INSTEAD of [openDrawer] when the drawer is off. With
+     * `showDrawer(false)` (CHAT_ONLY) `openDrawer` is a no-op, so the app bar's only control was
+     * a dead button and the farmer was stranded here. Parity with the views flavour's
+     * `ChatHistoryFragment`, which swaps the same icon for a back arrow.
+     */
+    onBack: () -> Unit = {},
     onOpenChatFromHistory: (conversationId: String) -> Unit,
     onNavigateToError: (isNetworkError: Boolean) -> Unit
 ) {
@@ -95,10 +104,14 @@ fun ChatHistoryScreen(
             .fillMaxSize()
             .background(colors.surfacePrimary)
     ) {
+        val drawerOn = graph.config.showDrawer
         DefaultAppBar(
-            title = label(Labels.RECENT_CHATS, "Recent Chats"),
-            leftIcon = Icons.Filled.Menu,
-            onLeftClick = openDrawer
+            // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+            showGlow = false,
+title = label(Labels.RECENT_CHATS, "Recent Chats"),
+            leftIcon = if (drawerOn) Icons.Filled.Menu else Icons.AutoMirrored.Filled.ArrowBack,
+            leftRadius = Radius.Rounded,
+            onLeftClick = if (drawerOn) openDrawer else onBack
         )
 
         val items = state.items
@@ -142,7 +155,10 @@ fun ChatHistoryScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
+                // App parity (ChatHistoryScreen.kt:160): the list is 20dp horizontal / 8dp
+                // vertical, not a flat 16dp. Same flat-padding mistake already corrected on
+                // Help, Settings and LanguageChooser.
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 grouped.forEach { (grouping, groupItems) ->
@@ -150,9 +166,12 @@ fun ChatHistoryScreen(
                         item(key = "header_$grouping") {
                             Text(
                                 text = grouping,
-                                style = MaterialTheme.typography.titleSmall,
+                                // App parity (ChatHistoryScreen.kt:166): the date-group heading
+                                // is labelLarge, not titleSmall.
+                                style = MaterialTheme.typography.labelLarge,
                                 color = colors.foregroundSecondary,
-                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                // App parity (ChatHistoryScreen.kt:170): 12dp above, 8dp below.
+                                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
                             )
                         }
                     }
@@ -194,7 +213,9 @@ fun ChatHistoryScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
+                                // App parity (ChatHistoryScreen.kt:213): the paginating spinner
+                                // sits in 24dp of vertical space, not 12.
+                                .padding(vertical = 24.dp),
                             horizontalArrangement = Arrangement.Center
                         ) {
                             LogoSpinner(
@@ -217,7 +238,8 @@ fun ChatHistoryScreen(
                         ) {
                             Text(
                                 text = label(Labels.COULDNT_LOAD_MORE_CHATS, "Couldn't load more chats"),
-                                style = MaterialTheme.typography.bodySmall,
+                                // App parity (ChatHistoryScreen.kt:127): bodyMedium, not bodySmall.
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = colors.foregroundSecondary
                             )
                             PrimaryButton(

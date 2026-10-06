@@ -93,7 +93,7 @@ export function ChatHistoryScreen(props: {
               {label('chat_history_signup_body', "We'll save your chats so you can continue anytime.")}
             </div>
             <div className="fcsdk-pad">
-              <SecondaryButton label={label('chat_history_sign_up', 'Sign up')} onClick={props.onSignUpClick} />
+              <SecondaryButton label={label('fc_v2_app_label_sign_up', 'Sign up')} onClick={props.onSignUpClick} />
             </div>
           </div>
         ) : history.isLoading && history.items.length === 0 ? (
@@ -125,7 +125,7 @@ export function ChatHistoryScreen(props: {
                 </ListCard>
               </div>
             ))}
-            {history.isLoadingMore ? <LogoSpinner message={label('chat_history_loading_more', 'Loading more…')} /> : null}
+            {history.isLoadingMore ? <LogoSpinner message={label('fc_v2_app_label_loading_more', 'Loading more…')} /> : null}
             {history.errorMessage && history.items.length > 0 ? (
               <div className="fcsdk-pad">
                 <PrimaryButton label={label('chat_history_retry', 'Retry')} onClick={() => void historyActions.loadNextPage()} />

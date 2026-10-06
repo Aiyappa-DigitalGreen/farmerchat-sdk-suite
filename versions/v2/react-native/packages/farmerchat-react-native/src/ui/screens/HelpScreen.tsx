@@ -44,7 +44,7 @@ export function HelpScreen(props: {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
-        title={label('help_title', 'Help')}
+        title={label('fc_v2_app_label_help', 'Help')}
         navIcon="menu"
         onNavPress={props.onOpenDrawer}
       />
@@ -75,35 +75,35 @@ export function HelpScreen(props: {
                   sdk.analytics.track(AnalyticsEvents.FAQ_CLICKED, {
                     question: faq.question ?? faq.title ?? '',
                   });
-                  props.onOpenUrl(faqUrl, label('legal_faq', 'FAQ'));
+                  props.onOpenUrl(faqUrl, label('fc_v2_app_label_faq', 'FAQ'));
                 }}
               />
             ))
           )}
         </ListCard>
 
-        <ListCard title={label('help_more_section', 'More')}>
+        <ListCard title={label('fc_v2_app_label_more', 'More')}>
           <ListItem
             icon="card"
-            label={label('legal_terms', 'Terms of use')}
+            label={label('fc_v2_app_label_terms_of_use', 'Terms of use')}
             onPress={() => {
               // App parity: nested terms-of-use object with its own webview-url.
               const url =
                 legal?.['terms-of-use']?.['webview-url'] ??
                 legal?.['terms-of-use']?.webview_url ??
                 'https://digitalgreen.org/terms-of-use/';
-              props.onOpenUrl(url, label('legal_terms', 'Terms of use'));
+              props.onOpenUrl(url, label('fc_v2_app_label_terms_of_use', 'Terms of use'));
             }}
           />
           <ListItem
             icon="info"
-            label={label('legal_privacy', 'Privacy policy')}
+            label={label('fc_v2_app_label_privacy_policy', 'Privacy policy')}
             onPress={() => {
               const url =
                 legal?.['privacy-policy']?.['webview-url'] ??
                 legal?.['privacy-policy']?.webview_url ??
                 'https://digitalgreen.org/privacy-policy/';
-              props.onOpenUrl(url, label('legal_privacy', 'Privacy policy'));
+              props.onOpenUrl(url, label('fc_v2_app_label_privacy_policy', 'Privacy policy'));
             }}
           />
         </ListCard>

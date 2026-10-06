@@ -3,6 +3,7 @@ package org.digitalgreen.farmerchat.sdk.compose.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +17,9 @@ import org.digitalgreen.farmerchat.sdk.compose.util.rememberCountryFarmerPainter
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.unit.dp
 
 /**
  * AccountBenefits interstitial — "Sign up" / "Save your questions and answers"
@@ -48,18 +52,23 @@ fun AccountBenefitsScreen(
             graph.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_PROCEED)
             onSignUp()
         },
-        leftIcon = Icons.Filled.Close,
+        // App parity (AppNavGraph.kt:812): the app's AccountBenefits left action is ArrowBack,
+        // not Close — and its onLeftClick is popBackStack(), which is exactly what onSkip does
+        // here, so only the glyph differed.
+        leftIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        leftRadius = Radius.Rounded,
         onLeftClick = {
             graph.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP)
             onSkip()
         },
         rightLabel = label(Labels.SKIP, "Skip"),
+        rightRadius = Radius.Rounded,
         onRightClick = {
             graph.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP)
             onSkip()
         },
         illustrationContent = {
-            FarmerIllustration(painter = painter)
+            FarmerIllustration(painter = painter, maxWidth = 322.dp)
         },
         primaryButtonState = PrimaryButtonState.Chevron
     )
@@ -88,19 +97,25 @@ fun AccountSuccessScreen(
     }
 
     FullScreenMessage(
-        title = label(Labels.ALL_SET, "All set"),
+        // App parity (AccountSuccessScreen.kt:57): the app bar title is SIGN_UP, not ALL_SET —
+        // ALL_SET is a different label and left the success screen titled "All set" above a
+        // "You're all set!" headline, saying the same thing twice.
+        title = label(Labels.SIGN_UP, "Sign up"),
         mainMessage = label(Labels.YOURE_ALL_SET, "You're all set!"),
         subtitle = label(
             Labels.PREVIOUS_QUESTIONS_MENU,
             "Find your previous questions in the menu and continue anytime."
         ),
+        // App parity (AccountSuccessScreen.kt:60): this screen overrides the subtitle to
+        // bodyLarge. Omitting it fell back to FullScreenMessage's bodyMedium default.
+        subtitleTextStyle = MaterialTheme.typography.bodyLarge,
         primaryCtaLabel = label(Labels.CONTINUE, "Continue"),
         onPrimaryCta = {
             graph.analytics.track(AnalyticsEvents.SIGNUP_CONTINUE_CLICKED)
             onContinue()
         },
         illustrationContent = {
-            FarmerIllustration(painter = painter)
+            FarmerIllustration(painter = painter, maxWidth = 322.dp)
         }
     )
 }

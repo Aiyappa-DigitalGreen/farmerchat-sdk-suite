@@ -8,7 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
@@ -25,6 +28,7 @@ import org.digitalgreen.farmerchat.sdk.compose.components.LogoSpinnerType
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 
 /**
  * Legal / FAQ WebView dialog content (doc 01 §3.17 — PolicyWebViewScreen port).
@@ -48,11 +52,17 @@ fun LegalContentScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // The dialog window is edge-to-edge (see the `decorFitsSystemWindows = false` in
+            // FarmerChatRoot), so this Column owns the whole screen: it paints the reading
+            // surface behind the navigation bar too, and consumes the bottom inset so the
+            // WebView's last line is not hidden under the nav bar.
             .background(colors.surfaceReadingPrimary)
+            .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
         DefaultAppBar(
             title = displayTitle,
             leftIcon = Icons.Filled.Close,
+            leftRadius = Radius.Rounded,
             onLeftClick = onClose,
             showGlow = false
         )

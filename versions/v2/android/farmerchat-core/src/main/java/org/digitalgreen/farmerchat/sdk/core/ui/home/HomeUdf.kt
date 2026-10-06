@@ -10,6 +10,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.ImageStatementResponse
 import org.digitalgreen.farmerchat.sdk.core.model.ImageViewedResponse
 import org.digitalgreen.farmerchat.sdk.core.model.NewConversationResponse
 import org.digitalgreen.farmerchat.sdk.core.model.PolicyAcceptanceStatusResponse
+import org.digitalgreen.farmerchat.sdk.core.model.ProfileUser
 import org.digitalgreen.farmerchat.sdk.core.model.WeatherResponse
 
 /** 1:1 port of the app's HomeAction. */
@@ -107,7 +108,19 @@ data class HomeState(
      */
     val policyAcceptanceState: UiState<PolicyAcceptanceStatusResponse> = UiState.Idle,
     /** 2.0.0: in-flight/terminal state of the paired #7 `accept_terms` call. */
-    val acceptTermsState: UiState<AcceptPPandTCResponse> = UiState.Idle
+    val acceptTermsState: UiState<AcceptPPandTCResponse> = UiState.Idle,
+
+    /**
+     * Approximate (non-GPS) place name derived from the user profile's geography on Home entry.
+     *
+     * App parity: `HomeState.approxLocationName` (b72ea4da). It exists purely as a REACTIVE
+     * signal for the Home/Settings location pill. [fetchUserProfile] backfills
+     * `APPROX_LOCATION_NAME` asynchronously, and the pill reads that pref non-reactively (a plain
+     * `prefs.getString` on each recomposition), so without a state field the pill would keep
+     * showing "Set location" until the next resume. Published whenever the profile carries a
+     * place name; consumed only on the no-permission pill path.
+     */
+    val approxLocationName: String? = null
 )
 
 /**
@@ -135,3 +148,27 @@ fun HomeState.requiresTermsAcceptance(): Boolean {
  */
 fun HomeState.latestTermsOfServiceUrl(): String? =
     (policyAcceptanceState as? UiState.Success)?.data?.latest_policy_version?.terms_of_service_url
+
+/**
+ * The readable place name to show in the location pill when no GPS fix is stored, derived from the
+ * profile's geography (endpoint #9).
+ *
+ * Precedence is the app's, in order (`HomeViewModel.fetchUserProfile`, fc-compose-agentic
+ * `b72ea4da`): most specific first, so a farmer sees their district rather than their country when
+ * both are known.
+ *
+ * ```
+ * geography_level3  →  geography_level2_name  →  country_name  →  null
+ * ```
+ *
+ * Blank is treated as absent at every step, not just null: the API returns `""` for unset
+ * geography as often as it omits the key, and falling through on `""` is what stops the pill
+ * rendering an empty name and looking broken.
+ *
+ * Pure and separate from the prefs write so the precedence is unit-testable — see
+ * `ApproxPlaceNameTest`.
+ */
+fun ProfileUser.approxPlaceName(): String? =
+    geography_level3?.takeIf { it.isNotBlank() }
+        ?: geography_level2_name?.takeIf { it.isNotBlank() }
+        ?: country_name?.takeIf { it.isNotBlank() }

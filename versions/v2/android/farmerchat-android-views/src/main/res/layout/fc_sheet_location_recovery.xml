@@ -1,50 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  "We need your location" Recovery sheet — app ui/location/LocationPromptHost.kt (Recovery):
+  no drag handle, 24dp top corners on the LIGHT surfacePrimary, 20/16dp padding, 12dp spacing;
+  a 382dp country farmer image (looking-at-phone, square) clipped to 24dp with a 44dp white close
+  chip at its top-end; then centred titleLarge SemiBold + bodyMedium copy and one 56dp
+  chevron CTA ("Turn on in settings"). There is no secondary button.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/fc_bg_rounded_top"
+    android:background="@drawable/fc_bg_location_recovery_sheet"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:paddingStart="20dp"
+    android:paddingTop="16dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="16dp">
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="382dp">
 
-        <TextView
-            android:id="@+id/fcRecoveryTitle"
+        <ImageView
+            android:id="@+id/fcRecoveryImage"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="36dp"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            tools:text="We need your location" />
+            android:layout_height="match_parent"
+            android:background="@drawable/fc_clip_r24"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
 
         <ImageButton
             android:id="@+id/fcRecoveryClose"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:layout_gravity="end|top"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@null"
+            android:layout_margin="12dp"
+            android:background="@drawable/fc_bg_close_chip_white"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/fc_ic_close"
-            app:tint="@color/fc_foreground_secondary" />
+            app:tint="#000000" />
     </FrameLayout>
+
+    <TextView
+        android:id="@+id/fcRecoveryTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:gravity="center"
+        android:lineSpacingExtra="6sp"
+        android:textColor="#000000"
+        android:textSize="22sp"
+        android:fontFamily="sans-serif-medium"
+        tools:text="We need your location" />
 
     <TextView
         android:id="@+id/fcRecoverySubtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="@color/fc_foreground_secondary"
-        android:textSize="15sp"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:lineSpacingExtra="8sp"
+        android:textColor="#000000"
+        android:textSize="17sp"
         tools:text="Sharing your location helps FarmerChat tailor advice to your farm." />
 
     <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
         android:id="@+id/fcRecoveryButton"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp" />
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp" />
 </LinearLayout>

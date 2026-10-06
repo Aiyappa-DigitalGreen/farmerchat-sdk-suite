@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- App AppDrawer.kt: ModalDrawerSheet(widthIn(max = 300.dp)) around DrawerContent's
+     .width(320.dp). Compose COERCES the child to the parent's max, so the whole drawer —
+     panel and content — is 300dp (measured: sign-up button right edge 972px = 288dp = 300 - 12).
+     The frame is kept only as the fitsSystemWindows / background host. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="300dp"
     android:layout_height="match_parent"
-    android:background="@color/fc_surface_secondary"
-    android:orientation="vertical"
+    android:background="@color/fc_brand_surface_secondary"
     android:fitsSystemWindows="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
     <ScrollView
         android:layout_width="match_parent"
@@ -18,41 +26,97 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingTop="24dp"
             android:paddingBottom="16dp">
 
+            <!-- Compose parity (Drawer.kt:236-244): the drawer header is the WORDMARK at
+                 16dp tall, inset 24dp, not the 44dp logo MARK this used to show. -->
+            <!-- App: padding(start 24, top 56, bottom 20) measured from the SCREEN top — the
+                 drawer sheet draws under the status bar. JourneyController subtracts the
+                 status-bar inset this root is padded by, so the mark lands at 56dp on every
+                 device (a fixed 7dp was only right for one status-bar height). -->
             <ImageView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="20dp"
+                android:id="@+id/fcDrawerWordmark"
+                android:layout_width="wrap_content"
+                android:layout_height="16dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="7dp"
+                android:layout_marginBottom="20dp"
+                android:adjustViewBounds="true"
+                android:scaleType="fitStart"
                 android:importantForAccessibility="no"
-                android:src="@drawable/fc_logo_mark"
+                android:src="@drawable/fc_logo_wordmark"
                 android:contentDescription="@null"
-                app:tint="@color/fc_green700" />
+                app:tint="@color/fc_brand_foreground_primary" />
 
-            <TextView
+            <!-- Compose parity (Drawer.kt:247): the nav block is inset 12dp so a selected
+                 row's rounded fill does not run to the panel edge. -->
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerHomeRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_home"
-                tools:text="Home" />
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center_vertical"
+                android:background="?attr/selectableItemBackground"
+                app:fcTextColor="@color/fc_brand_foreground_primary"
+                app:fcTextSizeSp="15"
+                app:fcTextWeight="600"
+                app:fcDrawableStart="@drawable/fc_icon_home"
+                app:fcDrawableSizeDp="24"
+                app:fcDrawablePaddingDp="12" />
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerLanguageRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_language"
-                tools:text="Language: English" />
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center_vertical"
+                android:background="?attr/selectableItemBackground"
+                app:fcTextColor="@color/fc_brand_foreground_primary"
+                app:fcTextSizeSp="15"
+                app:fcTextWeight="600"
+                app:fcDrawableStart="@drawable/fc_icon_language"
+                app:fcDrawableSizeDp="24"
+                app:fcDrawablePaddingDp="12" />
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerSettingsRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_settings"
-                tools:text="Settings" />
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center_vertical"
+                android:background="?attr/selectableItemBackground"
+                app:fcTextColor="@color/fc_brand_foreground_primary"
+                app:fcTextSizeSp="15"
+                app:fcTextWeight="600"
+                app:fcDrawableStart="@drawable/fc_icon_settings"
+                app:fcDrawableSizeDp="24"
+                app:fcDrawablePaddingDp="12" />
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerHelpRow"
-                style="@style/FcDrawerRow"
-                android:drawableStart="@drawable/fc_icon_help"
-                tools:text="Help &amp; Support" />
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:gravity="center_vertical"
+                android:background="?attr/selectableItemBackground"
+                app:fcTextColor="@color/fc_brand_foreground_primary"
+                app:fcTextSizeSp="15"
+                app:fcTextWeight="600"
+                app:fcDrawableStart="@drawable/fc_icon_help"
+                app:fcDrawableSizeDp="24"
+                app:fcDrawablePaddingDp="12" />
 
             <!-- Divider sits AFTER the nav block and BEFORE recent chats, matching the app
                  (components/drawer/DrawerContent.kt) and the SDK's own Compose drawer. -->
@@ -61,9 +125,9 @@
                 android:layout_height="1dp"
                 android:layout_marginTop="12dp"
                 android:layout_marginBottom="12dp"
-                android:background="@color/fc_divider" />
+                android:background="@color/fc_brand_divider" />
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerRecentTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -71,9 +135,8 @@
                 android:paddingEnd="20dp"
                 android:paddingTop="20dp"
                 android:paddingBottom="8dp"
-                android:textSize="13sp"
-                android:textColor="@color/fc_foreground_secondary"
-                tools:text="Recent chats" />
+                app:fcTextColor="@color/fc_brand_foreground_secondary"
+                app:fcTextSizeSp="13" />
 
             <ProgressBar
                 android:id="@+id/fcDrawerHistoryLoading"
@@ -92,43 +155,39 @@
                 android:paddingEnd="20dp"
                 android:visibility="gone">
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcDrawerHistoryErrorTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/fc_foreground_primary"
-                    android:textSize="14sp"
-                    tools:text="Failed to load chats" />
+                    app:fcTextColor="@color/fc_brand_foreground_primary"
+                    app:fcTextSizeSp="14" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcDrawerHistoryErrorSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/fc_foreground_secondary"
-                    android:textSize="12sp"
-                    tools:text="Check your connection and try again" />
+                    app:fcTextColor="@color/fc_brand_foreground_secondary"
+                    app:fcTextSizeSp="12" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcDrawerHistoryRetry"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
-                    android:textColor="@color/fc_green700"
-                    android:textStyle="bold"
-                    tools:text="Try again" />
+                    app:fcTextColor="@color/fc_brand_foreground_secondary"
+                    app:fcTextWeight="700" />
             </LinearLayout>
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerNoChats"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingStart="20dp"
                 android:paddingEnd="20dp"
-                android:textColor="@color/fc_foreground_secondary"
-                android:textSize="14sp"
+                app:fcTextColor="@color/fc_brand_foreground_secondary"
                 android:visibility="gone"
-                tools:text="No chats yet." />
+                app:fcTextSizeSp="14" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/fcDrawerRecentList"
@@ -137,45 +196,58 @@
                 android:nestedScrollingEnabled="false"
                 android:overScrollMode="never" />
 
-            <TextView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                 android:id="@+id/fcDrawerSeeAll"
                 style="@style/FcDrawerRow"
-                android:textColor="@color/fc_green700"
-                tools:text="See all" />
+                app:fcTextColor="@color/fc_brand_foreground_secondary" />
 
         </LinearLayout>
     </ScrollView>
 
+    <!-- Compose parity (Drawer.kt:453-466): a surfaceTertiary card inset 12dp, clipped to
+         Radius.LG, padded 10/18/10/10, contents CENTRED, title→subtitle 12dp and
+         subtitle→button 16dp. This was previously an unbacked, left-aligned 20dp block. -->
     <LinearLayout
         android:id="@+id/fcDrawerSignUpSection"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/fc_bg_drawer_signup_card"
+        android:paddingStart="10dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="10dp"
+        android:gravity="center_horizontal"
         android:visibility="gone">
 
-        <TextView
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
             android:id="@+id/fcDrawerSignUpTitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            tools:text="Save your past questions" />
+            app:fcTextColor="@color/fc_brand_foreground_secondary"
+            app:fcTextSizeSp="18"
+            app:fcLineHeightSp="24"
+            app:fcTextWeight="700"
+            app:fcTextAlign="center" />
 
-        <TextView
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
             android:id="@+id/fcDrawerSignUpSubtitle"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/fc_foreground_secondary"
-            android:textSize="13sp"
-            tools:text="Keep your answers and come back anytime" />
+            android:layout_marginTop="12dp"
+            app:fcTextColor="@color/fc_brand_foreground_primary"
+            app:fcTextSizeSp="17"
+            app:fcLineHeightSp="25"
+            app:fcTextAlign="center" />
 
         <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
             android:id="@+id/fcDrawerSignUpButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="16dp" />
     </LinearLayout>
 </LinearLayout>
+</FrameLayout>

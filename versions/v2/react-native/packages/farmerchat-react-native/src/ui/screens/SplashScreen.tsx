@@ -70,7 +70,7 @@ export function SplashScreen(props: {
         toast={
           showToast
             ? {
-                message: label('splash_loading', 'FarmerChat is starting…'),
+                message: label('fc_v2_app_label_farmerchat_starting', 'FarmerChat is starting…'),
                 kind: 'loading',
               }
             : null

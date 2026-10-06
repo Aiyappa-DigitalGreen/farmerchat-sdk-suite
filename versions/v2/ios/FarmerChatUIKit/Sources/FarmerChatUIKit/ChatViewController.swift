@@ -261,7 +261,7 @@ final class FCUIChatViewController: UIViewController {
             var content = cell.defaultContentConfiguration()
             content.text = FarmerChat.shared.labels.label("load_earlier", fallback: "Load earlier messages")
             content.textProperties.alignment = .center
-            content.textProperties.font = .systemFont(ofSize: 14, weight: .semibold)
+            content.textProperties.font = FCUITypography.current.labelMedium.font
             content.textProperties.color = self?.view.tintColor ?? .tintColor
             cell.contentConfiguration = content
         }
@@ -300,7 +300,7 @@ final class FCUIChatViewController: UIViewController {
             inputBar.addArrangedSubview(circleButton(icon: "mic.fill") { [weak self] in self?.speakTapped() })
         }
 
-        askButton.setTitle(fcuiLabel("ask_follow_up", "Ask a follow-up question"), for: .normal)
+        askButton.setTitle(fcuiLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"), for: .normal)
         askButton.setTitleColor(FCUITheme.formPlaceholder, for: .normal)
         askButton.contentHorizontalAlignment = .leading
         askButton.backgroundColor = FCUITheme.surfaceReadingSecondary
@@ -625,19 +625,19 @@ final class FCUIChatViewController: UIViewController {
 
     private func typeTapped() {
         let alert = UIAlertController(
-            title: fcuiLabel("ask_follow_up", "Ask a follow-up question"),
+            title: fcuiLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"),
             message: nil,
             preferredStyle: .alert
         )
         alert.addTextField()
-        alert.addAction(UIAlertAction(title: fcuiLabel("send", "Send"), style: .default) { [weak self, weak alert] _ in
+        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.send, "Send"), style: .default) { [weak self, weak alert] _ in
             guard let question = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !question.isEmpty else { return }
             self?.viewModel.onAction(.sendFollowUpQuestion(
                 question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil
             ))
         })
-        alert.addAction(UIAlertAction(title: fcuiLabel("cancel", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.cancel, "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 

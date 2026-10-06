@@ -22,15 +22,30 @@ class FarmerChatAnalytics(
     /** User IDENTITY sink — see [org.digitalgreen.farmerchat.sdk.FarmerChatConfig.onUserIdentified]. */
     private val configOnUserIdentified: ((String) -> Unit)? = null,
     /** User ATTRIBUTE sink — see [org.digitalgreen.farmerchat.sdk.FarmerChatConfig.onUserAttribute]. */
-    private val configOnUserAttribute: ((String, String) -> Unit)? = null
+    private val configOnUserAttribute: ((String, String) -> Unit)? = null,
+    /**
+     * Telemetry master switch — [org.digitalgreen.farmerchat.sdk.FarmerChatConfig.enableAnalytics],
+     * default FALSE.
+     *
+     * Everything upstream of this class is unchanged when it is false: events are still
+     * constructed with their real names and properties, at the real call sites, in the real
+     * order. They are dropped HERE, at the single dispatch point, so turning telemetry on later
+     * cannot change any other behaviour.
+     */
+    private val enabled: Boolean = false
 ) {
 
     @Volatile
     var listener: FarmerChatAnalyticsListener? = null
 
     fun track(event: AnalyticsEvent) {
-        runCatching { listener?.onEvent(event.name, event.properties) }
-        runCatching { configOnEvent?.invoke(event.name, event.properties) }
+        if (enabled) {
+            runCatching { listener?.onEvent(event.name, event.properties) }
+            runCatching { configOnEvent?.invoke(event.name, event.properties) }
+        }
+        // Semantic hooks are NOT telemetry — they are product callbacks the host wired for
+        // behaviour (onChatOpened / onMessageSent / onAnswerReceived / onScreenView / onError).
+        // Gating them would be a functional regression, so they fire either way.
         runCatching { dispatchHooks(event) }
     }
 
@@ -45,6 +60,7 @@ class FarmerChatAnalytics(
     fun identifyUser(userId: String) {
         val id = userId.trim()
         if (id.isEmpty()) return
+        if (!enabled) return
         runCatching { configOnUserIdentified?.invoke(id) }
     }
 
@@ -55,6 +71,7 @@ class FarmerChatAnalytics(
      */
     fun setUserAttribute(key: String, value: String) {
         if (key.isBlank() || value.isBlank()) return
+        if (!enabled) return
         runCatching { configOnUserAttribute?.invoke(key, value) }
     }
 

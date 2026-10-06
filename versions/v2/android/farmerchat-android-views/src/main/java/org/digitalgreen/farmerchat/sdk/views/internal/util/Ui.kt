@@ -21,6 +21,7 @@ internal object FarmerIllustrations {
     const val LOOKING_AT_CAMERA = "farmer_looking_at_camera.webp"
     const val LOOKING_AT_PHONE = "farmer_looking_at_phone.webp"
     const val LOOKING_AT_SKY = "farmer_looking_at_sky.webp"
+    const val LOOKING_AT_PHONE_SQUARE = "farmer_looking_at_phone_square.webp"
 
     private val supportedCountries = setOf("ke", "et", "in", "ng")
 

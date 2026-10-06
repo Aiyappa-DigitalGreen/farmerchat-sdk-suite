@@ -89,14 +89,17 @@ class FarmerChatGraph internal constructor(
     val deviceIdProvider: DeviceIdProvider = DeviceIdProvider(appContext, prefs)
 
     init {
-        // Env-scoped cache invalidation: a conversation id is only valid on the
-        // backend that created it. If the effective base URL changed since the
-        // last init, drop the stored conversation id — otherwise the answer
-        // endpoint 500s on a stale/foreign id with no self-recovery.
+        // Env-scoped session invalidation: a session is only valid on the backend that created
+        // it. If the effective base URL changed since the last init, drop the WHOLE stored
+        // session (tokens, user id, conversation id, labels) — keeping only appearance and the
+        // install's device id. Dropping just the conversation id left the old backend's token
+        // and user id in place: every call 401'd, refresh 401'd, and the guest fallback
+        // (send_tokens with the foreign user_id) 400'd, so the SDK could never recover. Seen
+        // when a host moved the SDK from its own backend to FarmerChat's.
         val currentBase = config.resolvedBaseUrl
         val lastBase = prefs.getString(SdkPreferences.Keys.LAST_BASE_URL, "")
         if (lastBase.isNotBlank() && lastBase != currentBase) {
-            prefs.remove(SdkPreferences.Keys.NEW_CONVERSATION_ID)
+            prefs.clearAll(preserveAppearance = true)
         }
         prefs.putString(SdkPreferences.Keys.LAST_BASE_URL, currentBase)
     }
@@ -109,7 +112,8 @@ class FarmerChatGraph internal constructor(
         configOnEvent = config.onEvent,
         hooks = config.hooks,
         configOnUserIdentified = config.onUserIdentified,
-        configOnUserAttribute = config.onUserAttribute
+        configOnUserAttribute = config.onUserAttribute,
+        enabled = config.enableAnalytics
     )
     val errorNavigationManager: ErrorNavigationManager = ErrorNavigationManager()
 
@@ -146,6 +150,9 @@ class FarmerChatGraph internal constructor(
      * clone. Contains the tail of the chain (AuthHeader → Logging + authenticator)
      * but NOT the priority/timeout interceptors — mirrors the app's baseFarmerOkHttp.
      */
+    private val endpointOverrideInterceptor =
+        org.digitalgreen.farmerchat.sdk.core.network.EndpointOverrideInterceptor(config.endpointOverrides)
+
     private val baseMainClient: OkHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
         .addInterceptor(authHeaderInterceptor)
@@ -161,6 +168,7 @@ class FarmerChatGraph internal constructor(
         .retryOnConnectionFailure(true)
         .addInterceptor(PriorityRequestIdInterceptor())
         .addInterceptor(ApiPriorityHeaderInterceptor())
+        .addInterceptor(endpointOverrideInterceptor)
         .addInterceptor(TimeoutTypeInterceptor { baseMainClient })
         .addInterceptor(authHeaderInterceptor)
         .addInterceptor(loggingInterceptor)
@@ -196,6 +204,7 @@ class FarmerChatGraph internal constructor(
         .retryOnConnectionFailure(true)
         .addInterceptor(PriorityRequestIdInterceptor())
         .addInterceptor(ApiPriorityHeaderInterceptor())
+        .addInterceptor(endpointOverrideInterceptor)
         .addInterceptor(TimeoutTypeInterceptor { baseAuthClient })
         .addInterceptor(loggingInterceptor)
         .build()
@@ -245,7 +254,14 @@ class FarmerChatGraph internal constructor(
 
     // ------------------------------------------------------------------ use cases
 
-    val fetchGeoLocationUseCase = FetchGeoLocationUseCase(geoRepository) { config.geoApiKey }
+    // Mirrors the guestApiKey fallback above: a host that supplies nothing still gets a working
+    // location fallback. Blank is treated as absent — a host passing "" (e.g. an unset Gradle
+    // property piped straight through, which is exactly how RationSmart wires FC_GEO_API_KEY)
+    // means "I have no key", not "use an empty one".
+    private val geoApiKey: String =
+        config.geoApiKey?.takeIf { it.isNotBlank() } ?: ApiConstants.DEFAULT_GEO_API_KEY
+
+    val fetchGeoLocationUseCase = FetchGeoLocationUseCase(geoRepository) { geoApiKey }
     val initializeGuestUserUseCase = InitializeGuestUserUseCase(guestAuthRepository) { guestApiKey }
     val getSupportedLanguagesUseCase = GetSupportedLanguagesUseCase(languageRepository)
     val getLanguageLabelsUseCase = GetLanguageLabelsUseCase(languageRepository)
@@ -287,7 +303,14 @@ class FarmerChatGraph internal constructor(
     val locationPromptManager = LocationPromptManager(
         prefs = prefs,
         updateUserLocationUseCase = updateUserLocationUseCase,
-        analytics = analytics
+        analytics = analytics,
+        // App parity: the decision tree checks FINE only ("Approximate" counts as a deny).
+        hasFineLocationPermission = {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                appContext, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        },
+        isOnline = { org.digitalgreen.farmerchat.sdk.core.network.NetworkUtils.isOnline(appContext) }
     )
 
     init {
@@ -312,8 +335,12 @@ class FarmerChatGraph internal constructor(
                 prefs.putBoolean(SdkPreferences.Keys.OTP_VERIFIED, true)
             }
         }
-        // Appearance from config (host may still change it in Settings).
-        if (prefs.getString(SdkPreferences.Keys.APPEARANCE_MODE, "").isBlank()) {
+        // Appearance from config (the user may still change it in Settings). With Settings
+        // hidden nobody can, so the host's value wins every launch — a mode saved by an older
+        // install (e.g. "auto" on a dark device) must not outlive the host's `appearance(DAY)`.
+        if (!config.showSettings ||
+            prefs.getString(SdkPreferences.Keys.APPEARANCE_MODE, "").isBlank()
+        ) {
             prefs.putString(SdkPreferences.Keys.APPEARANCE_MODE, config.appearance.name.lowercase())
         }
         // Wire error labels through LabelManager.
@@ -386,8 +413,16 @@ class FarmerChatGraph internal constructor(
      * Best-effort and idempotent: no-ops once labels exist, and any failure leaves the English
      * fallbacks in place, which is the pre-existing behaviour.
      */
+    /**
+     * Set when the language list 404s this process. A backend without the endpoint (a host's own
+     * server) would otherwise pay its P2 retries + backoff on every chat open, for a result that
+     * is always the English fallback. Cleared by process death only.
+     */
+    @Volatile
+    private var labelBootstrapUnavailable = false
+
     private suspend fun ensureLabelsLoaded() {
-        if (labelManager.areLabelsLoaded()) return
+        if (labelManager.areLabelsLoaded() || labelBootstrapUnavailable) return
 
         val code = prefs.getString(SdkPreferences.Keys.SELECTED_LANGUAGE_CODE, "")
             .ifBlank { config.locale ?: config.languageCode ?: "en" }
@@ -404,7 +439,11 @@ class FarmerChatGraph internal constructor(
                 .ifBlank { config.defaultStateCode }
 
             val groups = getSupportedLanguagesUseCase.getSupportedLanguages(country, state).first()
-            if (groups !is ApiResult.Success) return@runCatching
+            if (groups !is ApiResult.Success) {
+                // 404 = this backend has no such endpoint; offline/5xx may succeed next open.
+                if ((groups as? ApiResult.Error)?.code == 404) labelBootstrapUnavailable = true
+                return@runCatching
+            }
             val all = groups.data.flatMap { it.priorityView + it.expandedView }
             val match = all.firstOrNull { it.code.equals(code, ignoreCase = true) }
                 ?: all.firstOrNull { it.code.equals("en", ignoreCase = true) }
@@ -426,6 +465,20 @@ class FarmerChatGraph internal constructor(
                     SetPreferredLanguageRequest(user_id = userId, language_id = match.id.toString())
                 ).first()
             }
+        }
+    }
+
+    /**
+     * A CHAT_ONLY journey opening fresh is the app's "Home entry", and the app starts a NEW
+     * conversation on every Home entry (fc-compose-agentic HomeScreen.kt:855). Without this the
+     * SDK reused the one stored conversation id forever: every question from every visit landed
+     * in a single conversation and Past Advice showed one item. Opening a specific history
+     * thread ([PendingTarget.Chat]) keeps its own id. Call once per fresh journey start, before
+     * [ensureChatOnlySession] (which then creates the new conversation).
+     */
+    fun beginChatOnlyJourney() {
+        if (routeDecider.peekPendingTarget() !is org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget.Chat) {
+            prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "")
         }
     }
 

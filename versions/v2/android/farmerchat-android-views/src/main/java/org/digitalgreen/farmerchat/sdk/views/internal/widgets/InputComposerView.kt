@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.widgets
 
+import org.digitalgreen.farmerchat.sdk.views.internal.util.FcInsets
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.content.Context
@@ -22,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import coil.load
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.views.R
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcViewInputComposerBinding
 import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor
@@ -36,7 +38,7 @@ import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
  *
  * Every geometry constant below is lifted verbatim from InputComposer.kt so both flavours
  * measure the same. The pieces deliberately NOT ported are recorded in docs/04:
- *  - the idle gradient "aura" flowing around the field (Home-only, decorative);
+ *  - (the idle gradient "aura" is now ported — [ComposerAuraDrawable], opt-in via [showAura]);
  *  - the full-screen scrim / tap-to-dismiss branch, which never runs because both Compose call
  *    sites pass `isAnchored = true`;
  *  - the scroll-to-bottom pill, which Views already renders from ChatFragment.
@@ -103,6 +105,19 @@ internal class InputComposerView @JvmOverloads constructor(
     var onPhotoClick: () -> Unit = {}
     var onVoiceClick: () -> Unit = {}
     var onFocusChange: (Boolean) -> Unit = {}
+    /** App ScrollToBottomButton tap (chat): bring the latest question back into view. */
+    var onScrollDown: () -> Unit = {}
+    private var scrollDownAvailable = false
+
+    /** App: the pill shows while the field is focused AND the thread has content below. */
+    fun setScrollDownAvailable(available: Boolean) {
+        scrollDownAvailable = available
+        applyScrollDownPill()
+    }
+
+    private fun applyScrollDownPill() {
+        binding.fcComposerScrollDown.isVisible = scrollDownAvailable && isFocused
+    }
     var onRemovePhoto: (Int) -> Unit = {}
 
     /** Called whenever the at-rest bar height changes, so the host can reserve list padding. */
@@ -111,6 +126,36 @@ internal class InputComposerView @JvmOverloads constructor(
     // ------------------------------------------------------------------ configuration
 
     /** Compose `compact`: shrinks the row and paddings, but only while the field is focused. */
+    /**
+     * App `InputComposer(showAura = …)`: the idle rainbow aura around the field, drawn only
+     * while the field is NOT focused.
+     */
+    var showAura: Boolean = false
+        set(value) {
+            field = value
+            updateAura()
+        }
+
+    private val aura by lazy {
+        val d = context.resources.displayMetrics.density
+        ComposerAuraDrawable(borderWidthPx = 2.4f * d, cornerRadiusPx = 16f * d, colors = FcRecolor.active(context))
+    }
+
+    private fun updateAura() {
+        val on = showAura && !isFocused && isAttachedToWindow
+        if (on) {
+            if (binding.fcComposerField.foreground !== aura) binding.fcComposerField.foreground = aura
+            aura.start()
+        } else if (binding.fcComposerField.foreground === aura) {
+            aura.stop()
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        updateAura()
+    }
+
     var compact: Boolean = false
         set(value) {
             field = value
@@ -182,14 +227,22 @@ internal class InputComposerView @JvmOverloads constructor(
 
         // Compose lets a tap anywhere on the field column request focus.
         binding.fcComposerField.setOnClickListener { requestInputFocus() }
+        binding.fcComposerScrollDown.setOnClickListener { onScrollDown() }
+        // App shadow: spot Black @ 8%, ambient Black @ 5% (API 28+ colours the shadow).
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            binding.fcComposerScrollDown.outlineSpotShadowColor = 0x14000000
+            binding.fcComposerScrollDown.outlineAmbientShadowColor = 0x0D000000
+        }
 
         binding.fcComposerInput.setOnFocusChangeListener { _, focused ->
             if (isFocused == focused) return@setOnFocusChangeListener
             isFocused = focused
+            applyScrollDownPill()
             applySizes(animate = true)
             applyFieldColors(animate = true)
             applyPlaceholderRotation()
             applyInsetSeating()
+            updateAura()
             onFocusChange(focused)
         }
 
@@ -201,6 +254,15 @@ internal class InputComposerView @JvmOverloads constructor(
                 applyFieldColors(animate = true)
             }
         })
+
+        // App/compose parity (KeyboardOptions(capitalization = Sentences, imeAction = Done)): the
+        // XML `textMultiLine` flag made the IME show a newline key and ignore `actionDone`. Keep
+        // the view multi-line for wrapping (layout inputType) but tell the IME it is single-line
+        // text so it shows the ✓ Done key like the app.
+        binding.fcComposerInput.setRawInputType(
+            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        binding.fcComposerInput.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
 
         // Compose: keyboard "Done" only dismisses; it never sends.
         binding.fcComposerInput.setOnEditorActionListener { _, _, _ ->
@@ -220,6 +282,7 @@ internal class InputComposerView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        aura.stop()
         handler.removeCallbacks(rotateRunnable)
         sizeAnimator?.cancel()
         fieldColorAnimator?.cancel()
@@ -281,7 +344,12 @@ internal class InputComposerView @JvmOverloads constructor(
         photoUris = uris
         val first = uris.firstOrNull()
         binding.fcComposerThumbBox.isVisible = first != null
-        if (first != null) binding.fcComposerThumb.load(first)
+        if (first != null) {
+            // App PhotoThumbnail.kt: clipped to Radius.SM (8dp), crossfaded in. The background
+            // only painted rounded corners behind a square photo.
+            binding.fcComposerThumb.clipToOutline = true
+            binding.fcComposerThumb.load(first) { crossfade(true) }
+        }
         applyContentState()
         applyFieldColors(animate = true)
     }
@@ -332,8 +400,14 @@ internal class InputComposerView @JvmOverloads constructor(
      */
     private fun applyContentState() {
         val content = hasContent()
-        binding.fcComposerCamera.isVisible =
+        // Host feature flags. `enableImages` / `enableVoice` are public FarmerChatConfig switches
+        // that were declared on Android and honoured by NOTHING until 2026-09-16, while
+        // ios / react-native / web all gated on them — see docs/04 "Config-parity audit".
+        // With voice off the action button has no mic state, so it only exists to send.
+        val cfg = FarmerChat.requireGraph().config
+        binding.fcComposerCamera.isVisible = cfg.enableImages &&
             photoUris.isEmpty() && binding.fcComposerInput.text.isNullOrBlank()
+        binding.fcComposerAction.isVisible = content || cfg.enableVoice
         binding.fcComposerAction.setImageResource(
             if (content) R.drawable.fc_icon_send else R.drawable.fc_icon_mic
         )
@@ -523,13 +597,20 @@ internal class InputComposerView @JvmOverloads constructor(
      */
     private fun applyImeInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-            val source = ViewCompat.getRootWindowInsets(view) ?: insets
-            imeBottom = source.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            navBottom = source.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            // Trimmed to this view's bounds: an embedding host may already keep it clear of them.
+            imeBottom = FcInsets.overlapping(view, WindowInsetsCompat.Type.ime()).bottom
+            navBottom = FcInsets.overlapping(view, WindowInsetsCompat.Type.navigationBars()).bottom
             // Compose `LaunchedEffect(isKeyboardVisible)`: a keyboard dismissed by the back
             // gesture must also drop focus, or the compact size and the active placeholder
             // color stay stuck in the typing state.
-            if (imeBottom == 0 && isFocused) clearFocusAndHideKeyboard()
+            //
+            // VISIBILITY comes from the raw window insets, never the trimmed [imeBottom]: a host
+            // that lifts its content by the keyboard itself (a `fitsSystemWindows` root pads by
+            // the IME too) trims it to 0 while the keyboard is up, and this then closed the
+            // keyboard the moment the field was tapped.
+            val keyboardVisible = ViewCompat.getRootWindowInsets(view)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) ?: (imeBottom > 0)
+            if (!keyboardVisible && isFocused) clearFocusAndHideKeyboard()
             applyInsetSeating()
             insets
         }

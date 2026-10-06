@@ -1,30 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- App `RadioButton(countryCode = …, flagUrl = …)`: fixed 48dp, 16dp sides / 12dp vertical,
+     20dp indicator, 14dp gap, bodyMedium label (1 line, ellipsis), 14dp gap, 30x20dp flag with
+     2dp corners. Rows are 6dp apart (LazyColumn spacedBy). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/fcCountryRowRoot"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
+    android:layout_height="48dp"
+    android:layout_marginBottom="6dp"
+    android:background="@drawable/fc_bg_radio_row"
     android:gravity="center_vertical"
-    android:background="?attr/selectableItemBackground"
-    android:paddingStart="20dp"
-    android:paddingEnd="20dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp">
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
 
-    <RadioButton
+    <ImageView
         android:id="@+id/fcCountryRadio"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:clickable="false"
-        android:focusable="false" />
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/fc_radio_dot_unselected_on_primary" />
 
     <TextView
         android:id="@+id/fcCountryName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="14dp"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
         android:textColor="@color/fc_foreground_primary"
-        android:textSize="15sp"
+        android:textSize="17sp"
         tools:text="India (+91)" />
+
+    <ImageView
+        android:id="@+id/fcCountryFlag"
+        android:layout_width="30dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="14dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
+
+    <TextView
+        android:id="@+id/fcCountryFlagEmoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:textSize="17sp"
+        android:visibility="gone" />
 </LinearLayout>

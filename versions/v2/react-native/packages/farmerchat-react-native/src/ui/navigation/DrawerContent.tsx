@@ -97,22 +97,22 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
 
         {/* Order matches the app (components/drawer/DrawerContent.kt) and the Android SDK:
             Home -> Language -> Settings -> Help. */}
-        <NavItem icon="home" text={label('drawer_home', 'Home')} route="home" activeMatch="Home" />
+        <NavItem icon="home" text={label('fc_v2_app_label_home', 'Home')} route="home" activeMatch="Home" />
         <NavItem
           icon="language"
-          text={label('drawer_language', 'Language')}
+          text={label('fc_v2_app_label_language', 'Language')}
           route="settings/language"
           activeMatch="SettingsLanguage"
         />
         {showSettings ? (
           <NavItem
             icon="settings"
-            text={label('drawer_settings', 'Settings')}
+            text={label('fc_v2_app_label_settings', 'Settings')}
             route="settings"
             activeMatch="Settings"
           />
         ) : null}
-        <NavItem icon="help" text={label('drawer_help', 'Help')} route="help" activeMatch="Help" />
+        <NavItem icon="help" text={label('fc_v2_app_label_help', 'Help')} route="help" activeMatch="Help" />
 
         {props.isAuthenticated && showHistory ? (
           <>
@@ -132,7 +132,7 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
               onPress={props.onRetryHistory}
               style={[typography.bodySmall, { color: theme.brandPrimary, fontWeight: '600' }]}
             >
-              {label('drawer_retry', 'Try again')}
+              {label('fc_v2_app_label_try_again', 'Try again')}
             </Text>
           </View>
         ) : props.previousQuestions.length === 0 ? (
@@ -172,7 +172,7 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
               },
             ]}
           >
-            {label('drawer_see_all', 'See all')} ›
+            {label('fc_v2_app_label_see_all', 'See all')} ›
           </Text>
         ) : null}
           </>
@@ -187,7 +187,7 @@ export function AppDrawerContent(props: AppDrawerProps): React.ReactElement {
             style={[styles.signUp, { backgroundColor: theme.brandPrimary }]}
           >
             <Text style={[typography.button, { color: theme.textOnBrand }]}>
-              {label('drawer_signup', 'Sign up')}
+              {label('fc_v2_app_label_sign_up', 'Sign up')}
             </Text>
           </Pressable>
         ) : null}

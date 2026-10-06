@@ -24,6 +24,12 @@ internal class FcResolvedColors(
     @ColorInt val onBrand: Int,
     @ColorInt val error: Int,
     @ColorInt val surfaceActive: Int,
+    // Neutral host overrides — null keeps the SDK token. Matched by the layout's colour
+    // RESOURCE id (not value): #FFFFFF is both a surface and the text on brand buttons.
+    @ColorInt val background: Int? = null,
+    @ColorInt val cardSurface: Int? = null,
+    @ColorInt val readingSurface: Int? = null,
+    @ColorInt val onBackground: Int? = null,
 ) {
     /** default-brand-color-int → themed-color-int (opaque colors). */
     val remap: Map<Int, Int> = buildMap {
@@ -34,6 +40,16 @@ internal class FcResolvedColors(
         put(DEF_GREEN500, accent)
         put(DEF_RED500, error)
         put(DEF_SURFACE_ACTIVE, surfaceActive)
+        // Translucent brand variants (glows, dividers, selected rows): an exact-int match on the
+        // opaque token can't reach them, so each keeps its alpha over the host colour.
+        put(DEF_ACCENT_28, withAlpha(accent, 0x47))
+        put(DEF_ACCENT_0, withAlpha(accent, 0x00))
+        put(DEF_BRAND_DIVIDER, withAlpha(brandPrimary, 0x33))
+        put(DEF_SURFACE_ACTIVE_DOUBLE, blendOverWhite(accent, 1f - (1f - 0x29 / 255f).let { it * it }))
+        // FarmerChat's own accent stops (share-card sweep border, agentic aura): under a host
+        // theme they become tints of the host accent / primary instead of cyan and yellow.
+        put(DEF_CYAN400, blendOverWhite(accent, 0.55f))
+        put(DEF_YELLOW300, blendOverWhite(brandPrimary, 0.35f))
     }
 
     /** Remap [color] if it matches a known default brand color; else return it unchanged. */
@@ -51,6 +67,22 @@ internal class FcResolvedColors(
         const val DEF_RED500 = 0xFFE5533D.toInt()
         const val DEF_SURFACE_ACTIVE = 0x2900C950
         const val DEF_BUTTON_PRIMARY_SURFACE = DEF_GREEN800
+        const val DEF_ACCENT_28 = 0x4700C950
+        const val DEF_ACCENT_0 = 0x0000C950
+        const val DEF_BRAND_DIVIDER = 0x33008236
+        const val DEF_SURFACE_ACTIVE_DOUBLE = 0xFFA6E1C0.toInt()
+        const val DEF_CYAN400 = 0xFF22D3EE.toInt()
+        const val DEF_YELLOW300 = 0xFFFFF947.toInt()
+
+        @ColorInt
+        private fun withAlpha(@ColorInt c: Int, alpha: Int): Int = (alpha shl 24) or (c and 0x00FFFFFF)
+
+        /** [c] at [fraction] opacity composited over white, as an opaque colour. */
+        @ColorInt
+        private fun blendOverWhite(@ColorInt c: Int, fraction: Float): Int {
+            fun ch(shift: Int) = (255 + (((c shr shift) and 0xFF) - 255) * fraction).toInt().coerceIn(0, 255)
+            return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
     }
 }
 
@@ -86,11 +118,20 @@ internal object FcViewTheme {
         }
         val surfaceActive = withAlpha(accent, 0x29)
 
-        // If nothing brand-related was actually supplied, treat as no-op.
+        // Neutrals: a light value only overrides the light token (dark keeps the SDK's dark
+        // surfaces unless a *Night value is given) — the FarmerChatTheme contract.
+        fun neutral(@ColorInt light: Int?, @ColorInt night: Int?): Int? = if (dark) night else light
+        val background = neutral(theme.background, theme.backgroundNight)
+        val cardSurface = neutral(theme.cardSurface, theme.cardSurfaceNight)
+        val readingSurface = neutral(theme.readingSurface, theme.readingSurfaceNight)
+        val onBackground = neutral(theme.onBackground, theme.onBackgroundNight)
+
+        // If nothing was actually supplied, treat as no-op.
         if (primary == FcResolvedColors.DEF_GREEN700 &&
             primaryDark == FcResolvedColors.DEF_GREEN800 &&
             accent == FcResolvedColors.DEF_GREEN500 &&
-            error == FcResolvedColors.DEF_RED500
+            error == FcResolvedColors.DEF_RED500 &&
+            listOf(background, cardSurface, readingSurface, onBackground).all { it == null }
         ) return null
 
         return FcResolvedColors(
@@ -101,6 +142,10 @@ internal object FcViewTheme {
             onBrand = onBrand,
             error = error,
             surfaceActive = surfaceActive,
+            background = background,
+            cardSurface = cardSurface,
+            readingSurface = readingSurface,
+            onBackground = onBackground,
         )
     }
 

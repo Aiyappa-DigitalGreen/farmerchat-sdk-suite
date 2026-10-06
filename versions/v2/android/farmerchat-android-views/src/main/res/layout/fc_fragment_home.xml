@@ -6,15 +6,53 @@
     android:layout_height="match_parent"
     android:background="@color/fc_green700">
 
+    <!-- Agentic Home backdrop (composer mode only): brand band + sunbeams + glow, BEHIND the
+         transparent feed. App HomeScreen.kt `if (isComposerUi)` band. -->
+    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.AgenticHomeBackdropView
+        android:id="@+id/fcHomeBackdrop"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:fitsSystemWindows="true">
 
+    <!-- Header block. In composer mode HomeFragment turns it into the app's FIXED overlay: the
+         feed slides up underneath it (negative bottom margin + translationZ) and reserves its
+         height as top padding, exactly like the app's item-0 Spacer(headerContentPx). -->
+    <LinearLayout
+        android:id="@+id/fcHomeHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
         <include
             android:id="@+id/fcHomeAppBar"
             layout="@layout/fc_view_appbar" />
+
+        <!-- Agentic header logo mark. Compose parity (HomeScreen.kt:1136): a 42dp centred mark
+             above the title, 12dp clear of it. Shown only in composer mode — HomeFragment
+             toggles it, because the legacy Home has no logo in this position. -->
+        <ImageView
+            android:id="@+id/fcHomeHeaderLogo"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="center_horizontal"
+            android:importantForAccessibility="no"
+            android:src="@drawable/fc_logo_mark"
+            android:visibility="gone"
+            app:tint="@color/fc_white" />
+
+        <!-- Agentic title: app SectionHeader (leaf-flanked), 12dp under the logo. -->
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.SectionHeaderView
+            android:id="@+id/fcHomeSectionHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone" />
 
         <!-- Greeting -->
         <TextView
@@ -24,12 +62,22 @@
             android:gravity="center"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
-            android:paddingTop="20dp"
-            android:paddingBottom="20dp"
+            android:paddingTop="12dp"
             android:textColor="@color/fc_white"
-            android:textSize="24sp"
+            android:textSize="18sp"
             android:textStyle="bold"
             tools:text="Tap a button to ask a question" />
+
+        <!-- Compose parity (HomeScreen.kt:1152): the location pill closes the agentic header,
+             12dp under the title. Composer mode only — HomeFragment gates it. -->
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LocationPillView
+            android:id="@+id/fcHomeLocationPill"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone" />
 
         <!-- Pinned Photo / Speak / Type row -->
         <LinearLayout
@@ -87,13 +135,15 @@
             </LinearLayout>
         </LinearLayout>
 
+    </LinearLayout>
+
         <!-- Feed -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <androidx.recyclerview.widget.RecyclerView
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FadeTopRecyclerView
                 android:id="@+id/fcHomeFeed"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

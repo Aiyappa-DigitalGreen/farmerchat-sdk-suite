@@ -103,7 +103,7 @@ public final class SettingsViewModel: ObservableObject {
                 }
             case .error(let error):
                 state.languageState = .error(
-                    message: error.message ?? env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                    message: error.message ?? env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                     code: error.code,
                     isNetworkError: error.isNetworkError
                 )
@@ -168,7 +168,7 @@ public final class SettingsViewModel: ObservableObject {
                 state.languageSubmitSuccess = true
             case .error(let error):
                 state.submitErrorMessage = error.message
-                    ?? env.labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+                    ?? env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
             }
         }
     }

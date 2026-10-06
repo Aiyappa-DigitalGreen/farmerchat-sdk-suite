@@ -113,7 +113,8 @@ public final class FarmerChat: @unchecked Sendable {
                 box.handler?(name, props)
             },
             onScreenView: config.onScreenView,
-            onChatOpened: config.onChatOpened
+            onChatOpened: config.onChatOpened,
+            enabled: config.enableAnalytics
         )
 
         let refresher = TokenRefresher(

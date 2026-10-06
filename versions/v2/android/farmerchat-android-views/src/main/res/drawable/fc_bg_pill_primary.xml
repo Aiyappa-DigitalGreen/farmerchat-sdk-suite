@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Filled primary pill — the Views port of the app's `Surface(color = buttonPrimarySurface,
+  shape = SmoothShapes.rounded(Radius.Rounded))`. Used by the "All languages" expander on the
+  language screens, which the app draws as a FILLED dark-green chip; Views had it on
+  `fc_bg_pill_white`. Mirrors `fc_bg_pill_white` exactly apart from the fill.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_button_primary_surface"/>
+    <corners android:radius="999dp"/>
+</shape>

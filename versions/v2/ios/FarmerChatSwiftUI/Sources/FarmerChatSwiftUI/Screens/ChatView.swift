@@ -36,6 +36,8 @@ struct ChatView: View {
     /// The message that was at the top before a "load earlier" fetch — pinned
     /// back to the top after the older page is prepended to preserve position.
     @State private var pendingScrollAnchorId: String?
+    /// How far the thread extends below the fold, in points. Drives the scroll indicator.
+    @State private var hiddenBelow: CGFloat = 0
 
     // Client-side answer-reveal bookkeeping (view-only; see FCAiAnswerText).
     // Ids whose reveal has finished. Fresh answers animate once; history +
@@ -64,7 +66,7 @@ struct ChatView: View {
             if showTextInput {
                 FCTextInputOverlay(
                     text: $typedText,
-                    placeholder: fcLabel("type_placeholder", "Ask anything about your farm"),
+                    placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
                     onSend: { question in
                         showTextInput = false
                         typedText = ""
@@ -178,7 +180,7 @@ struct ChatView: View {
             if !viewModel.state.isLoading {
                 FCLogoMark(size: 28, tint: theme.brand.surfacePrimary)
                 Text("FarmerChat")
-                    .font(.system(size: 18, weight: .bold))
+                    .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
             }
             Spacer()
@@ -211,7 +213,7 @@ struct ChatView: View {
                         playback: playback
                     )
                 }
-                FCThinkingIndicator(label: fcLabel("getting_your_answer", "Getting your answer…"))
+                FCThinkingIndicator(label: fcLabel(FCLabels.gettingYourAnswer, "Getting your answer…"))
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -225,8 +227,9 @@ struct ChatView: View {
 
     private var thread: some View {
         ScrollViewReader { proxy in
+            GeometryReader { viewport in
             ScrollView {
-                LazyVStack(spacing: 14) {
+                VStack(spacing: 14) {
                     // History pagination: load-more affordance at top.
                     if viewModel.state.historyNextPage != nil {
                         Button {
@@ -236,7 +239,7 @@ struct ChatView: View {
                                 ProgressView()
                             } else {
                                 Text(fcLabel("load_earlier", "Load earlier messages"))
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .fcTextStyle(theme.typography.labelMedium)
                                     .foregroundColor(theme.brand.surfacePrimary)
                             }
                         }
@@ -261,19 +264,59 @@ struct ChatView: View {
                        lastAnswerRevealed {
                         FCFollowUpChips(
                             title: viewModel.state.clarificationRequired
-                                ? fcLabel("choose_a_followup_option_below", "Choose a follow-up option below")
-                                : fcLabel("related_questions", "Related questions"),
+                                ? fcLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
+                                : fcLabel(FCLabels.relatedQuestions, "You can also ask"),
                             questions: suggestions,
                             onTap: { question in
                                 viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil))
                             }
                         )
                         .padding(.top, 4)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        // App parity (ChatResponseActions.kt 0456f364): a 300ms fade, and fade
+                        // ONLY. The block used to also slide up from the bottom edge, which moves
+                        // the thread under it while it settles; the app is explicit that no
+                        // size/position animation may run here. `.animation` on the transition
+                        // overrides the container's 0.35s easeOut for this insertion alone, so the
+                        // answer-actions row above keeps its own timing.
+                        .transition(.opacity.animation(.easeOut(duration: 0.3)))
                     }
+
+                    // Trailing marker: its distance past the viewport's bottom edge IS the
+                    // `hiddenBelow` compose computes from `layoutInfo`.
+                    Color.clear
+                        .frame(height: 1)
+                        .background(
+                            GeometryReader { marker in
+                                Color.clear.preference(
+                                    key: FCHiddenBelowKey.self,
+                                    value: marker.frame(in: .named(Self.threadSpace)).minY
+                                        - viewport.size.height
+                                )
+                            }
+                        )
                 }
                 .padding(16)
                 .animation(.easeOut(duration: 0.35), value: lastAnswerRevealed)
+            }
+            .coordinateSpace(name: Self.threadSpace)
+            .onPreferenceChange(FCHiddenBelowKey.self) { hiddenBelow = $0 }
+            .overlay(alignment: .bottom) {
+                // App parity (ChatScreen.kt:1325-1355): only when there is REAL content
+                // below, and at least two lines' worth of it — android's threshold is
+                // 48dp = 2 × 24dp. Compose additionally suppresses the indicator when the
+                // last answer fits inside its reserved viewport, because everything under
+                // the text is then empty reserved space; iOS has no chat reserve yet (see
+                // docs/04), so that clause has nothing to guard against here.
+                if let lastAi = lastAiMessageId,
+                   !viewModel.state.isLoading,
+                   hiddenBelow >= 48 {
+                    FCScrollIndicator(triggerKey: lastAi) {
+                        if let last = viewModel.state.messages.last {
+                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                        }
+                    }
+                    .padding(.bottom, 12)
+                }
             }
             .onChange(of: viewModel.state.messages.count) { _ in
                 if let anchor = pendingScrollAnchorId {
@@ -310,6 +353,20 @@ struct ChatView: View {
                 }
             }
         }
+            }
+    }
+
+    /// Name for the thread's coordinate space, so the trailing marker can report its
+    /// position relative to the scroll content rather than the screen.
+    private static let threadSpace = "fcChatThread"
+
+    /// The newest AI answer's id — the scroll indicator's `triggerKey`, so its timeline
+    /// restarts once per answer exactly as android's `remember(triggerKey)` does.
+    private var lastAiMessageId: String? {
+        for message in viewModel.state.messages.reversed() {
+            if case .aiResponse(let ai) = message { return ai.id }
+        }
+        return nil
     }
 
     // MARK: - Reveal helpers
@@ -509,15 +566,15 @@ struct ChatView: View {
                 .font(.system(size: 44))
                 .foregroundColor(theme.content.foregroundSecondary)
             Text(message)
-                .font(.system(size: 16))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Button {
                 viewModel.onAction(.retryLastRequest)
             } label: {
-                Text(fcLabel("try_again", "Try again"))
-                    .font(.system(size: 16, weight: .semibold))
+                Text(fcLabel(FCLabels.tryAgain, "Try again"))
+                    .fcTextStyle(theme.typography.bodyMedium)
                     .foregroundColor(theme.content.buttonPrimaryForeground)
                     .padding(.horizontal, 28)
                     .frame(height: 46)
@@ -532,14 +589,14 @@ struct ChatView: View {
     private func inlineError(_ message: String) -> some View {
         VStack(spacing: 10) {
             Text(message)
-                .font(.system(size: 14))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(FCPrimitive.red500)
                 .multilineTextAlignment(.center)
             Button {
                 viewModel.onAction(.retryLastRequest)
             } label: {
-                Text(fcLabel("try_again", "Try again"))
-                    .font(.system(size: 14, weight: .semibold))
+                Text(fcLabel(FCLabels.tryAgain, "Try again"))
+                    .fcTextStyle(theme.typography.bodyMedium)
                     .foregroundColor(theme.brand.surfacePrimary)
             }
             .buttonStyle(.plain)
@@ -562,8 +619,8 @@ struct ChatView: View {
                 showTextInput = true
             } label: {
                 HStack {
-                    Text(fcLabel("ask_follow_up", "Ask a follow-up question"))
-                        .font(.system(size: 15))
+                    Text(fcLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"))
+                        .fcTextStyle(theme.typography.bodyLarge)
                         .foregroundColor(theme.content.formPlaceholder)
                     Spacer()
                 }
@@ -671,8 +728,8 @@ struct ChatView: View {
 
     private func share(_ ai: ChatMessage.AiResponse) {
         FarmerChat.shared.analytics.track(AnalyticsEvents.shareResponseClicked)
-        guard let image = FCShareCardRenderer.render(question: lastQuestion(before: ai), answer: ai.text) else {
-            toast.show(.error, fcLabel("error_generic", "Something went wrong. Please try again."))
+        guard let image = FCShareCardRenderer.render(question: lastQuestion(before: ai), answer: ai.text, theme: theme) else {
+            toast.show(.error, fcLabel(FCLabels.somethingWentWrongPleaseTryAgain, "Something went wrong. Please try again."))
             return
         }
         shareImage = image
@@ -680,8 +737,8 @@ struct ChatView: View {
 
     private func download(_ ai: ChatMessage.AiResponse) {
         FarmerChat.shared.analytics.track(AnalyticsEvents.downloadResponseClicked)
-        guard let image = FCShareCardRenderer.render(question: lastQuestion(before: ai), answer: ai.text) else {
-            toast.show(.error, fcLabel("error_generic", "Something went wrong. Please try again."))
+        guard let image = FCShareCardRenderer.render(question: lastQuestion(before: ai), answer: ai.text, theme: theme) else {
+            toast.show(.error, fcLabel(FCLabels.somethingWentWrongPleaseTryAgain, "Something went wrong. Please try again."))
             return
         }
         UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)

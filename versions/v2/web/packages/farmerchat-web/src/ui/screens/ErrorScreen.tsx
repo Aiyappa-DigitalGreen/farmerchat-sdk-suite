@@ -21,8 +21,8 @@ export function ErrorScreen(props: { isNetworkError: boolean; fromScreen: string
   }, []);
 
   const title = props.isNetworkError
-    ? label('error_no_internet_title', 'No internet connection')
-    : label('error_api_title', 'Something went wrong');
+    ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
+    : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
   const subtitle = props.isNetworkError
     ? label('error_no_internet_subtitle', 'Please check your network and try again.')
     : label('error_api_subtitle', 'We had trouble reaching FarmerChat. Please try again.');
@@ -32,7 +32,7 @@ export function ErrorScreen(props: { isNetworkError: boolean; fromScreen: string
       title={title}
       subtitle={subtitle}
       illustration={Icon.sky}
-      primaryLabel={label('error_try_again', 'Try again')}
+      primaryLabel={label('fc_v2_app_label_try_again', 'Try again')}
       onPrimary={() => {
         // enablePrimaryDebounce parity (docs/01 §3.14).
         const now = Date.now();

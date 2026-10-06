@@ -9,6 +9,10 @@
     <color name="fc_sun300">#F9FF47</color>
     <color name="fc_green500_16">#2900C950</color>
 
+    <!-- Accent gradient stops (Share button conic/sweep border) -->
+    <color name="fc_cyan400">#22D3EE</color>
+    <color name="fc_yellow300">#FFF947</color>
+
     <!-- Zinc neutral ramp -->
     <color name="fc_zinc50">#FAFAFA</color>
     <color name="fc_zinc100">#F4F4F5</color>
@@ -31,6 +35,10 @@
     <color name="fc_surface_secondary">#FFFFFF</color>
     <color name="fc_surface_tertiary">#E4E4E7</color>
     <color name="fc_surface_active">#2900C950</color>
+    <!-- `fc_surface_active` composited over itself, which is what compose's RadioButton and the
+         app both render for a SELECTED row (Form.kt:271 + :277 apply the translucent token
+         twice). Measured identical on the app and on compose. -->
+    <color name="fc_surface_active_double">#A6E1C0</color>
     <color name="fc_surface_reading">#FFFFFF</color>
     <color name="fc_surface_reading_secondary">#ECECEE</color>
     <color name="fc_surface_reading_tertiary">#FFFFFF</color>
@@ -44,13 +52,32 @@
     <color name="fc_skeleton">#E4E4E7</color>
     <color name="fc_input_background">#FFFFFF</color>
     <color name="fc_button_primary_surface">#08361B</color>
+    <!-- App `buttonPrimaryForeground`. Was missing, so filled-primary chips had no token to
+         reference for their text colour. -->
+    <color name="fc_button_primary_foreground">#FFFFFF</color>
 
     <!-- Brand semantic (same in both modes) -->
     <color name="fc_brand_surface">#008236</color>
     <color name="fc_brand_surface_secondary">#08361B</color>
     <color name="fc_brand_button_surface">#08361B</color>
     <color name="fc_brand_deep">#032E15</color>
+    <!-- Brand-palette FOREGROUNDS. These exist because the drawer (and any other surface painted
+         with a fc_brand_* background) needs text colours from the BRAND palette, not the neutral
+         one. The two palettes share member names — `surfaceSecondary` is #FFFFFF in the neutral
+         palette and #08361B in the brand palette — and the drawer was built against the neutral
+         set, which is why it rendered as a white panel where the app's is dark green.
+         Values mirror compose `BrandSemanticColors` (theme/Color.kt). -->
+    <color name="fc_brand_foreground_primary">#FFFFFF</color>
+    <color name="fc_brand_foreground_secondary">#00C950</color>
+    <!-- surfacePrimary (#008236) at 20% alpha — the drawer divider in compose Drawer.kt:291 -->
+    <color name="fc_brand_divider">#33008236</color>
     <color name="fc_accent">#00C950</color>
+    <!-- fc_accent at 28% / 0% — the PersonalizationTag glow stops. Override with fc_accent. -->
+    <color name="fc_accent_28">#4700C950</color>
+    <color name="fc_accent_0">#0000C950</color>
+    <!-- An accent icon drawn ON the brand surface (composer camera / mic). Defaults to the accent;
+         a host whose accent matches its brand surface overrides it (e.g. white). -->
+    <color name="fc_brand_icon">@color/fc_green500</color>
     <color name="fc_error">#E5533D</color>
     <color name="fc_on_brand">#FFFFFF</color>
 

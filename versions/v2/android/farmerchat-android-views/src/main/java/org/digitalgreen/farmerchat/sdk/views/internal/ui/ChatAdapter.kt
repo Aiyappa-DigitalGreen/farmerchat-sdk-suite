@@ -1,5 +1,8 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.ui
 
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.ListenPill
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.AlignmentSurfaceView
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.AgenticChipView
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -16,6 +19,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.holdsChatReserve
 import org.digitalgreen.farmerchat.sdk.views.R
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatAiBinding
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatErrorBinding
@@ -24,6 +28,8 @@ import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatLocationBindi
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcItemChatUserBinding
 import org.digitalgreen.farmerchat.sdk.views.internal.util.Markdown
 import org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.SweepBorderDrawable
 
 /** Chat thread rows. */
 internal sealed interface ChatRow {
@@ -53,6 +59,10 @@ internal sealed interface ChatRow {
         val isTtsEnabled: Boolean,
         val isAudioLoading: Boolean,
         val isAudioPlaying: Boolean,
+        /** Synthesised audio is loaded (Listen shows the paused state when not playing). */
+        val hasAudioUrl: Boolean = false,
+        /** A location fetch started from this GPS prompt is in flight ("Getting your location…"). */
+        val locationFetching: Boolean = false,
         /**
          * `ChatState.isLoading` — an alignment surface locks its chips while another answer is in
          * flight (2.0.0 parity with the Compose `AlignmentSurface(isLoading = …)`).
@@ -115,6 +125,12 @@ internal class ChatAdapter(
          */
         const val PAUSE_HINT_DELAY_MS = 4000L
 
+        /**
+         * Related-questions fade duration. App parity: `fadeIn(tween(durationMillis = 300))`
+         * in `ChatResponseActions.kt` (0456f364).
+         */
+        const val FOLLOW_UP_FADE_MS = 300L
+
         /** Marker payload for a token-level stream update — see [submit]. */
         val PAYLOAD_STREAM_TICK = Any()
     }
@@ -168,6 +184,19 @@ internal class ChatAdapter(
         if (!before.message.isStreaming || !after.message.isStreaming) return null
         return changed
     }
+
+    // -------------------------------------------------- related-questions fade (2.0.0)
+
+    /**
+     * Message ids whose related-questions block has already faded in.
+     *
+     * App parity (`ChatResponseActions.kt` 0456f364) fades the block once, on first composition,
+     * via `remember { MutableTransitionState(false) }`. A RecyclerView has no equivalent:
+     * `onBindViewHolder` runs again on every recycle, so an unguarded `animate()` would re-fade
+     * the same block each time the farmer scrolled it back into view. This ledger makes the
+     * animation fire exactly once per answer, which is what "on first composition" means here.
+     */
+    private val fadedFollowUps = mutableSetOf<String>()
 
     // ------------------------------------------------------------------ stall hint (2.0.0)
 
@@ -261,12 +290,21 @@ internal class ChatAdapter(
                 // App parity (ChatLoadingContent.kt -> LogoSpinnerHorizontal): the in-thread
                 // answer loader is a compact horizontal spinner + label, not the tall
                 // full-screen stack.
-                (holder as LoadingHolder).binding.fcChatLoadingSpinner.apply {
+                val loading = holder as LoadingHolder
+                loading.binding.fcChatLoadingSpinner.apply {
                     horizontal = true
                     text = callbacks.labelFor(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
                 }
+                // App ChatThreadContent.kt:623: the placeholder fills the viewport
+                // (fillParentMaxHeight), which is what lets the just-sent question pin to the top.
+                loading.binding.root.minimumHeight = reserveHeightPx(loading.binding.root)
             }
-            is ChatRow.InlineError -> bindError(holder as ErrorHolder, row)
+            is ChatRow.InlineError -> {
+                bindError(holder as ErrorHolder, row)
+                // App ChatThreadContent.kt:338-347 (failReserveModifier): a failed question keeps
+                // a viewport of space under it, so it stays pinned with the retry below.
+                holder.itemView.minimumHeight = reserveHeightPx(holder.itemView)
+            }
         }
     }
 
@@ -298,13 +336,37 @@ internal class ChatAdapter(
 
     private fun bindUser(holder: UserHolder, message: ChatMessage.UserMessage) {
         val b = holder.binding
-        val wideBanner = message.userBubbleImageWideBanner && message.imageUri != null
-        b.fcUserBanner.isVisible = wideBanner
-        if (wideBanner) b.fcUserBanner.load(message.imageUri)
+        val density = b.root.resources.displayMetrics.density
+        val hasImage = message.imageUri != null
+        // App UserChatBubble.kt: a photo with no caption and no voice is shown bare, no bubble.
+        val imageOnly = hasImage && message.text.isBlank() && message.audioUri == null
+        b.fcUserImageOnly.isVisible = imageOnly
+        b.fcUserBubble.isVisible = !imageOnly
+        if (imageOnly) {
+            b.fcUserImageOnly.clipToOutline = true
+            b.fcUserImageOnly.load(message.imageUri) { crossfade(true) }
+        }
 
-        val thumb = !wideBanner && message.imageUri != null
+        // Wide banner: inside the bubble, which then takes its full 290dp so the 16:9 photo
+        // spans it (app: bubble widthIn(max = 290), image fillMaxWidth).
+        val wideBanner = !imageOnly && message.userBubbleImageWideBanner && hasImage
+        b.fcUserBanner.isVisible = wideBanner
+        b.fcUserBubble.layoutParams = b.fcUserBubble.layoutParams.apply {
+            width = if (wideBanner) (290 * density).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        if (wideBanner) {
+            val inner = ((290 - 2 * 16) * density).toInt()
+            b.fcUserBanner.layoutParams = b.fcUserBanner.layoutParams.apply { height = inner * 9 / 16 }
+            b.fcUserBanner.clipToOutline = true
+            b.fcUserBanner.load(message.imageUri) { crossfade(true) }
+        }
+
+        val thumb = !imageOnly && !wideBanner && hasImage
         b.fcUserThumb.isVisible = thumb
-        if (thumb) b.fcUserThumb.load(message.imageUri)
+        if (thumb) {
+            b.fcUserThumb.clipToOutline = true
+            b.fcUserThumb.load(message.imageUri) { crossfade(true) }
+        }
 
         val hasVoice = message.audioUri != null
         b.fcUserVoice.isVisible = hasVoice
@@ -343,6 +405,32 @@ internal class ChatAdapter(
         }
     }
 
+    /**
+     * Height reserved below the pinned question for the last response, in px.
+     *
+     * App parity (fc-compose-agentic ChatThreadContent.kt, commit 9023b57f) and Compose parity
+     * (`ChatScreen.kt` `reserveHeightDp`): measure the LIST's viewport, not the display. The
+     * display height ignores the app bar, the composer and the system bars, so it over-reserves
+     * by exactly that much and leaves a band of scrollable empty space under a finished answer.
+     * Falls back to the display height on the first bind, before the RecyclerView is measured.
+     */
+    private fun reserveHeightPx(itemRoot: android.view.View): Int {
+        val viewport = (itemRoot.parent as? android.view.View)?.height ?: 0
+        return if (viewport > 0) viewport else itemRoot.resources.displayMetrics.heightPixels
+    }
+
+    /**
+     * Whether this row is the one holding the reserve.
+     *
+     * The rule itself lives in core (`ui/chat/ChatReserve.kt`) so this flavour and Compose cannot
+     * drift on it; `ChatFragment`'s scroll anchor calls this too, so all three read one predicate.
+     */
+    internal fun holdsReserve(row: ChatRow.Ai): Boolean =
+        row.message.holdsChatReserve(
+            isLastResponse = row.isLast,
+            isLoading = row.isStateLoading
+        )
+
     private fun bindAi(holder: AiHolder, row: ChatRow.Ai) {
         val b = holder.binding
         val message = row.message
@@ -353,7 +441,13 @@ internal class ChatAdapter(
         val exclusiveAlignment = alignmentKind != null && !alignmentKind.isAdditive
 
         if (exclusiveAlignment) {
-            b.root.minimumHeight = 0
+            // Compose wraps the exclusive surface in the SAME `streamReserve` as an answer, and
+            // so does the app (its `streamReserveModifier` Column encloses the alignment branch).
+            // Views used to zero the reserve here, so the instant an exclusive surface replaced a
+            // streamed answer the reserved screen-height vanished and the whole thread collapsed
+            // upward — the streamed text and the chips that follow it read as two separate jumps
+            // instead of one continuous flow. Recorded in docs/04.
+            b.root.minimumHeight = if (holdsReserve(row)) reserveHeightPx(b.root) else 0
             b.fcAiAlignmentExclusive.isVisible = true
             b.fcAiAlignmentExclusive.bind(
                 kind = alignmentKind,
@@ -364,6 +458,16 @@ internal class ChatAdapter(
                 isLatest = row.isLast,
                 additive = false,
                 blocking = message.alignmentBlocking,
+                listen = AlignmentSurfaceView.ListenState(
+                    enabled = row.isTtsEnabled,
+                    loading = row.isAudioLoading,
+                    playing = row.isAudioPlaying,
+                    hasAudioUrl = row.hasAudioUrl,
+                    onClick = { callbacks.onListen(message) }
+                ),
+                fetchingProgressLabel = if (row.locationFetching) {
+                    callbacks.labelFor(Labels.GETTING_YOUR_LOCATION, "Getting your location…")
+                } else null,
                 labelFor = callbacks::labelFor,
                 onChipClick = { chip -> callbacks.onAlignmentChipClick(message.id, alignmentKind, chip) },
                 onTypeInstead = { callbacks.onTypeInstead() }
@@ -375,29 +479,29 @@ internal class ChatAdapter(
             b.fcAiStreamError.isVisible = false
             b.fcAiReadFull.isVisible = false
             b.fcAiReadFull.setOnClickListener(null)
+            b.fcAiWarning.isVisible = false
             b.fcAiActions.isVisible = false
             b.fcAiFollowUpLabel.isVisible = false
             b.fcAiFollowUps.isVisible = false
             b.fcAiFollowUps.removeAllViews()
+            resetFollowUpFade(b.fcAiFollowUpLabel, b.fcAiFollowUps)
             if (row.isLast) clearStall()
             return
         }
         b.fcAiAlignmentExclusive.isVisible = false
 
-        // 2.0.0 agentic streaming: while a stream is live the answer grows in place, so reserve a
-        // screen's height to pin the question at the top instead of letting the list clamp it
-        // downward as text arrives. Also held for the interrupted state so the error card sits
-        // near the top.
-        b.root.minimumHeight = if (row.isLast && (message.isStreaming || message.isInterrupted)) {
-            b.root.resources.displayMetrics.heightPixels
-        } else {
-            0
-        }
+        // The last response reserves at least a viewport of height below the pinned question, so
+        // the question stays at the top and the answer grows into the space beneath it instead of
+        // the list clamping and dragging the question back toward the centre. See [holdsReserve]
+        // for which rows hold it and [reserveHeightPx] for why it is the list's height, not the
+        // display's.
+        b.root.minimumHeight = if (holdsReserve(row)) reserveHeightPx(b.root) else 0
 
         // A streaming answer is NOT animated: the text already arrives a token at a time, so it
         // simply grows in place (the Views flavour has no typewriter reveal to suppress).
         b.fcAiText.isVisible = message.text.isNotEmpty()
-        b.fcAiText.text = Markdown.render(message.text)
+        b.fcAiText.text =
+            Markdown.render(message.text, b.root.resources.displayMetrics.density)
 
         // Chat UI customization (null = XML/theme default).
         val cfg = FarmerChat.requireGraph().config
@@ -468,45 +572,146 @@ internal class ChatAdapter(
         b.fcAiReadFull.text = callbacks.labelFor(Labels.READ_FULL_ADVICE, "Read full advice")
         b.fcAiReadFull.setOnClickListener { callbacks.onReadFullAdvice(row.message.text) }
 
+        // App parity (ChatResponseActions.kt:85 + ChatThreadContent.kt:515): an AGENTIC answer
+        // gets the compact row — accuracy note above, then Share then Listen, and NO Save. The
+        // legacy (#27) answer keeps Share/Save/Listen. Same predicate the Compose flavour uses.
+        val agenticActions = row.message.isAgentic && !row.message.isPreGenerated
+
+        b.fcAiWarning.isVisible = row.showActions && agenticActions
+        if (b.fcAiWarning.isVisible) {
+            b.fcAiWarningText.text = callbacks.labelFor(
+                Labels.AI_MAY_BE_WRONG_PLEASE_DOUBLE_CHECK,
+                "AI may be wrong. Please double-check."
+            )
+        }
+
         b.fcAiActions.isVisible = row.showActions
         if (row.showActions) {
             b.fcActionShare.text = callbacks.labelFor(Labels.SHARE_DOWNLOAD, "Share")
             b.fcActionShare.setOnClickListener { callbacks.onShare(row.message) }
+            // App parity (ChatResponseActions.kt @ bda80659): only the AGENTIC Share pill carries
+            // the accent sweep border; the legacy row at ChatResponseActions.kt:159 stays plain.
+            // Reset on the legacy path too — onBindViewHolder re-runs on recycle.
+            val shareCtx = b.fcActionShare.context
+            if (agenticActions) {
+                b.fcActionShare.background = SweepBorderDrawable(
+                    fillColor = FcTokens.color(shareCtx, R.color.fc_surface_reading_secondary),
+                    green = FcTokens.accent(shareCtx),
+                    cyan = FcTokens.color(shareCtx, R.color.fc_cyan400),
+                    yellow = FcTokens.color(shareCtx, R.color.fc_yellow300),
+                    strokeWidthPx = 3f * shareCtx.resources.displayMetrics.density,
+                    cornerRadiusPx = 100f * shareCtx.resources.displayMetrics.density,
+                )
+            } else {
+                b.fcActionShare.setBackgroundResource(R.drawable.fc_bg_chat_action)
+            }
+            // Save is absent from the agentic row in the app; showing it here was the visible
+            // "three buttons instead of two" difference against the app's chat screen.
+            b.fcActionDownload.isVisible = !agenticActions
             b.fcActionDownload.text = callbacks.labelFor(Labels.SAVE, "Save")
             b.fcActionDownload.setOnClickListener { callbacks.onDownload(row.message) }
             b.fcActionListen.isVisible = row.isTtsEnabled
-            b.fcActionListenLoading.isVisible = row.isAudioLoading
-            b.fcActionListen.text = callbacks.labelFor(Labels.LISTEN, "Listen")
-            b.fcActionListen.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                if (row.isAudioPlaying) R.drawable.fc_ic_pause else R.drawable.fc_ic_play,
-                0, 0, 0
+            ListenPill.bind(
+                pill = b.fcActionListen,
+                spinner = b.fcActionListenLoading,
+                loading = row.isAudioLoading,
+                playing = row.isAudioPlaying,
+                hasAudioUrl = row.hasAudioUrl,
+                enabled = row.isTtsEnabled,
+                labelFor = callbacks::labelFor,
+                onClick = { callbacks.onListen(row.message) }
             )
-            b.fcActionListen.setOnClickListener { callbacks.onListen(row.message) }
+            // App ActionButton.kt: 23dp icons (the drawables are 24dp intrinsically).
+            b.fcActionShare.setCompoundDrawablesRelative(ListenPill.icon(b.fcActionShare, R.drawable.fc_icon_share), null, null, null)
+            b.fcActionDownload.setCompoundDrawablesRelative(ListenPill.icon(b.fcActionDownload, R.drawable.fc_icon_save), null, null, null)
         }
 
-        val hasFollowUps = row.isLast && row.followUps.isNotEmpty()
+        // App ChatThreadContent.kt:587: an additive nudge WITH chips below the answer replaces the
+        // related questions (its chips are the way forward).
+        val additiveWithChips = row.message.alignmentKind?.isAdditive == true &&
+            !row.message.alignmentChips.isNullOrEmpty()
+        val hasFollowUps = row.isLast && row.followUps.isNotEmpty() && !additiveWithChips
         b.fcAiFollowUpLabel.isVisible = hasFollowUps
         b.fcAiFollowUps.isVisible = hasFollowUps
         b.fcAiFollowUps.removeAllViews()
+        resetFollowUpFade(b.fcAiFollowUpLabel, b.fcAiFollowUps)
         if (hasFollowUps) {
             b.fcAiFollowUpLabel.text = if (row.clarificationRequired) {
                 callbacks.labelFor(
                     Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW, "Choose an option from the below"
                 )
             } else {
-                callbacks.labelFor(Labels.RELATED_QUESTIONS, "Related questions")
+                callbacks.labelFor(Labels.RELATED_QUESTIONS, "You can also ask")
             }
             val inflater = LayoutInflater.from(b.root.context)
+            val density = b.root.resources.displayMetrics.density
             row.followUps.forEachIndexed { index, question ->
-                val suggested = org.digitalgreen.farmerchat.sdk.views.databinding
-                    .FcItemSuggestedQuestionBinding.inflate(inflater, b.fcAiFollowUps, false)
-                suggested.fcSuggestedText.text = question
-                suggested.fcSuggestedAsk.text = callbacks.labelFor(Labels.ASK, "Ask")
-                suggested.root.setOnClickListener {
-                    callbacks.onFollowUpClick(question, row.followUpIds.getOrNull(index))
+                val onPick = { callbacks.onFollowUpClick(question, row.followUpIds.getOrNull(index)) }
+                if (agenticActions) {
+                    // App ChatResponseActions.kt:228-265: numbered chips (Suggested; Agentic when
+                    // clarification is required), 8dp apart — no "Ask" pill.
+                    val chip = AgenticChipView(b.root.context)
+                    chip.bind(
+                        text = question,
+                        number = index + 1,
+                        type = if (row.clarificationRequired) AgenticChipView.Type.AGENTIC
+                        else AgenticChipView.Type.SUGGESTED,
+                        enabled = true,
+                        selected = false,
+                        onClick = onPick
+                    )
+                    chip.layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { if (index > 0) topMargin = (8 * density).toInt() }
+                    b.fcAiFollowUps.addView(chip)
+                } else {
+                    val suggested = org.digitalgreen.farmerchat.sdk.views.databinding
+                        .FcItemSuggestedQuestionBinding.inflate(inflater, b.fcAiFollowUps, false)
+                    suggested.fcSuggestedText.text = question
+                    suggested.fcSuggestedAsk.text = callbacks.labelFor(Labels.ASK, "Ask")
+                    suggested.root.setOnClickListener { onPick() }
+                    b.fcAiFollowUps.addView(suggested.root)
                 }
-                b.fcAiFollowUps.addView(suggested.root)
             }
+            // Agentic header: titleMedium 18sp bold, foregroundPrimary; 10dp to the list.
+            if (agenticActions) {
+                b.fcAiFollowUpLabel.textSize = 18f
+                b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_primary))
+                (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (16 * density).toInt()
+                (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
+                    topMargin = (10 * density).toInt()
+                    bottomMargin = (40 * density).toInt() // app: 28dp + 12dp spacers after the list
+                }
+            } else {
+                b.fcAiFollowUpLabel.textSize = 15f
+                b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_secondary))
+                (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (20 * density).toInt()
+                (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
+                    topMargin = (4 * density).toInt()
+                    bottomMargin = 0
+                }
+            }
+            // App parity (ChatResponseActions.kt 0456f364): ease the whole related-questions
+            // block in over 300ms the first time it appears, instead of snapping in. Alpha only —
+            // no translation or height animation — so the content around it does not shift.
+            if (fadedFollowUps.add(row.message.id)) {
+                for (view in arrayOf(b.fcAiFollowUpLabel, b.fcAiFollowUps)) {
+                    view.alpha = 0f
+                    view.animate()
+                        .alpha(1f)
+                        .setDuration(FOLLOW_UP_FADE_MS)
+                        .start()
+                }
+            }
+        }
+    }
+
+    /** Stop any in-flight related-questions fade and restore full opacity. */
+    private fun resetFollowUpFade(vararg views: android.view.View) {
+        for (view in views) {
+            view.animate().cancel()
+            view.alpha = 1f
         }
     }
 

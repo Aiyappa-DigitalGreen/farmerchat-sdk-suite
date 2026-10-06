@@ -8,29 +8,13 @@
     android:orientation="vertical"
     android:fitsSystemWindows="true">
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp">
-
-        <ImageButton
-            android:id="@+id/fcAuthClose"
-            style="@style/FcAppBarIcon"
-            android:layout_gravity="start|center_vertical"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@null"
-            android:src="@drawable/fc_ic_close"
-            app:tint="@color/fc_foreground_primary" />
-
-        <TextView
-            android:id="@+id/fcAuthTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textColor="@color/fc_foreground_primary"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            tools:text="Sign up" />
-    </FrameLayout>
+    <!-- Auth hand-rolled its own 56dp app bar with dark-on-white colours, so it was the only
+         screen in the flavour whose bar was NOT the brand green one every other screen shows
+         (compose uses the shared `DefaultAppBar` here too — AuthScreen.kt:316). Swapped to the
+         shared include; the close glyph and title are set in AuthFragment. -->
+    <include
+        android:id="@+id/fcAuthAppBar"
+        layout="@layout/fc_view_appbar" />
 
     <ViewFlipper
         android:id="@+id/fcAuthFlipper"
@@ -38,7 +22,8 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- Step 1: phone entry -->
+        <!-- Step 1: phone entry. App parity: AuthScreen.kt Column(horizontal 20dp, top 32dp,
+             bottom 24dp) + PhoneEntryContent / AgreementCard / AuthConsentText. -->
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -48,25 +33,34 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="32dp"
+                android:paddingBottom="24dp">
 
-                <TextView
+                <!-- titleLarge 22/28 w700 -->
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcPhoneTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/fc_foreground_primary"
-                    android:textSize="24sp"
-                    android:textStyle="bold"
-                    tools:text="Enter your phone number" />
+                    android:gravity="center"
+                    app:fcTextColor="@color/fc_foreground_primary"
+                    app:fcTextSizeSp="22"
+                    app:fcLineHeightSp="28"
+                    app:fcTextWeight="700"
+                    app:fcTextAlign="center" />
 
-                <TextView
+                <!-- bodyMedium 17/25 -->
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcPhoneSubtitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/fc_foreground_secondary"
-                    android:textSize="15sp"
-                    tools:text="We'll send a one-time code to sign you in" />
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    app:fcTextColor="@color/fc_foreground_secondary"
+                    app:fcTextSizeSp="17"
+                    app:fcLineHeightSp="25"
+                    app:fcTextAlign="center" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -74,77 +68,80 @@
                     android:layout_marginTop="24dp"
                     android:orientation="horizontal">
 
+                    <!-- CountryCodeSelector: 56dp, min 90dp, surfaceSecondary + 0.5dp
+                         borderDefault, 10dp sides, 6dp gaps, 20dp flag, bodyMedium code.
+                         No dropdown glyph in the app. -->
                     <LinearLayout
                         android:id="@+id/fcCountrySelector"
                         android:layout_width="wrap_content"
                         android:layout_height="56dp"
-                        android:background="@drawable/fc_bg_input_field"
+                        android:minWidth="90dp"
+                        android:background="@drawable/fc_bg_country_selector"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="8dp">
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp">
 
                         <ImageView
                             android:id="@+id/fcCountryFlag"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/fc_flag_india" />
-
-                        <TextView
-                            android:id="@+id/fcCountryCode"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:textColor="@color/fc_foreground_primary"
-                            android:textSize="16sp"
-                            tools:text="+91" />
-
-                        <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:importantForAccessibility="no"
-                            android:src="@drawable/fc_icon_arrow_down"
-                            app:tint="@color/fc_foreground_secondary" />
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/fc_flag_india" />
+
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                            android:id="@+id/fcCountryCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            app:fcMaxLines="1"
+                            app:fcTextColor="@color/fc_foreground_primary"
+                            app:fcTextSizeSp="17"
+                            app:fcLineHeightSp="25" />
 
                         <ProgressBar
                             android:id="@+id/fcCountryLoading"
                             android:layout_width="18dp"
                             android:layout_height="18dp"
-                            android:layout_marginStart="4dp"
+                            android:layout_marginStart="6dp"
+                            android:indeterminateTint="@color/fc_border_active"
                             android:visibility="gone" />
                     </LinearLayout>
 
+                    <!-- TextInput: OutlinedTextField (56dp), bodyLarge 19sp, placeholder in
+                         foregroundSecondary, 1dp borderDefault / borderActive when focused. -->
                     <EditText
                         android:id="@+id/fcPhoneInput"
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/fc_bg_input_field"
+                        android:background="@drawable/fc_bg_text_input"
+                        android:imeOptions="actionDone"
+                        android:importantForAutofill="no"
                         android:inputType="phone"
                         android:maxLines="1"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:textColor="@color/fc_foreground_primary"
-                        android:textColorHint="@color/fc_foreground_tertiary"
-                        android:textSize="16sp"
-                        android:importantForAutofill="no"
-                        tools:hint="Enter phone number" />
+                        android:textColorHint="@color/fc_foreground_secondary"
+                        android:textSize="19sp"
+                        tools:hint="00000 00000" />
                 </LinearLayout>
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcPhoneError"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:textColor="@color/fc_error"
-                    android:textSize="13sp"
+                    app:fcTextColor="@color/fc_error"
                     android:visibility="gone"
-                    tools:text="Please enter a valid number..." />
+                    app:fcTextSizeSp="13" />
 
-                <!-- Agreement info card (app 9966b905, AuthScreen.kt AgreementCard):
-                     sits between the phone row and the send-code buttons. -->
+                <!-- AgreementCard: Neutral200, Radius.LG, 18dp x 12dp. Texts have a bare
+                     fontSize, so they inherit LocalTextStyle (bodyLarge, 27sp line height);
+                     colours are hard black in the app. -->
                 <LinearLayout
                     android:id="@+id/fcAgreementCard"
                     android:layout_width="match_parent"
@@ -157,56 +154,97 @@
                     android:paddingEnd="18dp"
                     android:paddingBottom="12dp">
 
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcAgreementTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        tools:text="What you are agreeing to:" />
+                        app:fcTextColor="@color/fc_black"
+                        app:fcTextSizeSp="18"
+                        app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true"
+                        app:fcTextWeight="700" />
 
-                    <TextView
-                        android:id="@+id/fcAgreementPoint1"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="15sp"
-                        tools:text="\u2022  A verification code by SMS, phone, or WhatsApp" />
+                        android:orientation="horizontal">
 
-                    <TextView
-                        android:id="@+id/fcAgreementPoint2"
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                            android:layout_width="16dp"
+                            android:layout_height="wrap_content"
+                            app:fcText="•"
+                            app:fcTextColor="@color/fc_black"
+                            app:fcTextSizeSp="15"
+                            app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true" />
+
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                            android:id="@+id/fcAgreementPoint1"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:fcTextColor="@color/fc_black"
+                            app:fcTextSizeSp="15"
+                            app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="15sp"
-                        tools:text="\u2022  FarmerChat updates and farming information" />
+                        android:orientation="horizontal">
 
-                    <TextView
-                        android:id="@+id/fcAgreementPoint3"
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                            android:layout_width="16dp"
+                            android:layout_height="wrap_content"
+                            app:fcText="•"
+                            app:fcTextColor="@color/fc_black"
+                            app:fcTextSizeSp="15"
+                            app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true" />
+
+                        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                            android:id="@+id/fcAgreementPoint2"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:fcTextColor="@color/fc_black"
+                            app:fcTextSizeSp="15"
+                            app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true" />
+                    </LinearLayout>
+
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+                        android:id="@+id/fcAgreementInfo"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="15sp"
-                        tools:text="\u2022  Occasional surveys or research by Digital Green or trusted partners" />
+                        android:layout_marginTop="8dp"
+                        app:fcTextColor="@color/fc_black"
+                        app:fcTextSizeSp="14"
+                        app:fcLineHeightSp="27"
+                        app:fcLineHeightUntrimmed="true"
+                        app:fcTextItalic="true"
+                        app:fcTextWeight="700" />
                 </LinearLayout>
 
+                <!-- Send buttons: 48dp, 8dp apart, 12dp below the card; enabled only when
+                     the number is valid (app `canSend`). -->
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                     android:id="@+id/fcWhatsappButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="48dp"
                     android:layout_marginTop="12dp" />
 
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                     android:id="@+id/fcSmsButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp" />
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp" />
 
-                <!-- Consent copy with a clickable Privacy Policy span (app AuthConsentText). -->
+                <!-- AuthConsentText: BasicText 15sp w400, centred, foregroundSecondary.
+                     Stays a TextView for the clickable Privacy Policy span. -->
                 <TextView
                     android:id="@+id/fcAuthConsent"
                     android:layout_width="match_parent"
@@ -215,17 +253,18 @@
                     android:gravity="center"
                     android:textColor="@color/fc_foreground_secondary"
                     android:textSize="15sp"
-                    tools:text="By continuing, you agree to these communications.\nSee our Privacy Policy." />
+                    android:textAlignment="center" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcAuthLegal"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:gravity="center"
-                    android:textColor="@color/fc_foreground_secondary"
-                    android:textSize="12sp"
-                    tools:text="By Continuing to Verification, you're accepting our Terms of Use. Please also see our Privacy Policy." />
+                    android:visibility="gone"
+                    app:fcTextColor="@color/fc_foreground_secondary"
+                    app:fcTextSizeSp="12"
+                    app:fcTextAlign="center" />
             </LinearLayout>
         </ScrollView>
 
@@ -241,23 +280,25 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcOtpTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/fc_foreground_primary"
-                    android:textSize="24sp"
-                    android:textStyle="bold"
-                    tools:text="Enter the code we sent" />
+                    android:gravity="center"
+                    app:fcTextColor="@color/fc_foreground_primary"
+                    app:fcTextSizeSp="22"
+                    app:fcTextWeight="700"
+                    app:fcTextAlign="center" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcOtpSubtitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/fc_foreground_secondary"
-                    android:textSize="15sp"
-                    tools:text="Check your messages for the code" />
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    app:fcTextColor="@color/fc_foreground_secondary"
+                    app:fcTextSizeSp="17"
+                    app:fcTextAlign="center" />
 
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.OtpView
                     android:id="@+id/fcOtpView"
@@ -265,15 +306,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcOtpError"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:textColor="@color/fc_error"
-                    android:textSize="13sp"
+                    app:fcTextColor="@color/fc_error"
                     android:visibility="gone"
-                    tools:text="Please enter a valid OTP" />
+                    app:fcTextSizeSp="13" />
 
                 <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
                     android:id="@+id/fcVerifyButton"
@@ -281,7 +321,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp" />
 
-                <TextView
+                <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                     android:id="@+id/fcOtpTimer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -290,9 +330,9 @@
                     android:drawablePadding="8dp"
                     android:drawableTint="@color/fc_foreground_secondary"
                     android:gravity="center_vertical"
-                    android:textColor="@color/fc_foreground_secondary"
-                    android:textSize="14sp"
-                    tools:text="180 seconds" />
+                    app:fcTextColor="@color/fc_foreground_secondary"
+                    app:fcTextSizeSp="14"
+                    app:fcTextAlign="center" />
 
                 <LinearLayout
                     android:id="@+id/fcOtpResendRow"
@@ -302,28 +342,28 @@
                     android:orientation="vertical"
                     android:visibility="gone">
 
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcResendButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/fc_bg_secondary_button"
                         android:gravity="center"
                         android:padding="14dp"
-                        android:textColor="@color/fc_foreground_primary"
-                        android:textSize="16sp"
-                        tools:text="Resend code" />
+                        app:fcTextColor="@color/fc_foreground_primary"
+                        app:fcTextSizeSp="16"
+                        app:fcTextAlign="center" />
 
-                    <TextView
+                    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
                         android:id="@+id/fcStartOverButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:gravity="center"
                         android:padding="14dp"
-                        android:textColor="@color/fc_green700"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        tools:text="Start over" />
+                        app:fcTextColor="@color/fc_green700"
+                        app:fcTextSizeSp="16"
+                        app:fcTextWeight="700"
+                        app:fcTextAlign="center" />
                 </LinearLayout>
             </LinearLayout>
         </ScrollView>

@@ -20,15 +20,15 @@ export function AccountBenefitsScreen(props: { onSignUp: () => void; onSkip: () 
 
   return (
     <FullScreenMessage
-      title={label('account_benefits_title', 'Sign up')}
+      title={label('fc_v2_app_label_sign_up', 'Sign up')}
       subtitle={label('account_benefits_subtitle', 'Save your questions and answers')}
       illustration={Icon.farmer}
-      primaryLabel={label('account_benefits_cta', 'Sign up with phone number')}
+      primaryLabel={label('fc_v2_app_label_sign_up_phone_number', 'Sign up with phone number')}
       onPrimary={() => {
         services.analytics.track(Events.ACCOUNT_BENEFIT_SCREEN_PROCEED, {});
         props.onSignUp();
       }}
-      secondaryLabel={label('account_benefits_skip', 'Skip')}
+      secondaryLabel={label('fc_v2_app_label_skip', 'Skip')}
       onSecondary={() => {
         services.analytics.track(Events.ACCOUNT_BENEFIT_SCREEN_SKIP, {});
         props.onSkip();
@@ -52,7 +52,7 @@ export function AccountSuccessScreen(props: { onContinue: () => void }) {
       title={label('account_success_title', "You're all set!")}
       subtitle={label('account_success_subtitle', 'Your questions and answers are now saved to your account.')}
       illustration={Icon.sky}
-      primaryLabel={label('account_success_continue', 'Continue')}
+      primaryLabel={label('fc_v2_app_label_continue', 'Continue')}
       onPrimary={() => {
         services.analytics.track(Events.SIGNUP_CONTINUE_CLICKED, {});
         props.onContinue();

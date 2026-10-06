@@ -20,6 +20,15 @@ private fun langStyle(
     fontWeight = fontWeight
 )
 
+/**
+ * The app's `caption` (Type.kt) — 13sp/18sp at weight 400.
+ *
+ * Deliberately NOT a [Typography] slot: Material3 has no matching role, and the nearest
+ * candidates both miss. `labelSmall` is the right metrics at weight 600 and has 16 readers
+ * in this package that rely on the heavier weight; `bodySmall` is 15/22, which wraps a
+ * caption onto a second line. Every per-script [Typography] above defines `labelSmall` at
+ * the same 13/18, so a flat value is metrically correct in all scripts too.
+ */
 val caption = langStyle(13.sp, 18.sp, FontWeight(400))
 
 val Typography = Typography(

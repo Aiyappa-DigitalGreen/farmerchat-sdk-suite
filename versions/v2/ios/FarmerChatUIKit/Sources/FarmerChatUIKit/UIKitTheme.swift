@@ -140,7 +140,7 @@ public final class FCUIPrimaryButton: UIButton {
     public init(title: String) {
         super.init(frame: .zero)
         setTitle(title, for: .normal)
-        titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        titleLabel?.font = FCUITypography.current.titleMedium.font
         setTitleColor(.white, for: .normal)
         backgroundColor = FCUITheme.buttonPrimarySurface
         layer.cornerRadius = 16
@@ -187,20 +187,20 @@ public final class FCUIFullScreenMessageView: UIView {
         iconView.contentMode = .scaleAspectFit
         iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 84, weight: .light)
 
-        titleLabel.text = title
-        titleLabel.font = .systemFont(ofSize: 30, weight: .bold)
+        // Colour and alignment first: `fcSetText` goes through `attributedText` to apply the
+        // line height, and attributed runs ignore a later `textColor` assignment.
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
+        titleLabel.fcSetText(title, style: FCUITypography.current.displaySmall)
 
-        subtitleLabel.text = subtitle
-        subtitleLabel.font = .systemFont(ofSize: 17)
         subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
+        subtitleLabel.fcSetText(subtitle, style: FCUITypography.current.bodyMedium)
 
         primaryButton.setTitle(primaryTitle, for: .normal)
-        primaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        primaryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
         primaryButton.setTitleColor(FCUITheme.green800, for: .normal)
         primaryButton.backgroundColor = .white
         primaryButton.layer.cornerRadius = 16
@@ -208,7 +208,7 @@ public final class FCUIFullScreenMessageView: UIView {
         primaryButton.heightAnchor.constraint(equalToConstant: 54).isActive = true
 
         secondaryButton.setTitle(secondaryTitle, for: .normal)
-        secondaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .medium)
+        secondaryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
         secondaryButton.setTitleColor(.white, for: .normal)
         secondaryButton.isHidden = secondaryTitle == nil
 

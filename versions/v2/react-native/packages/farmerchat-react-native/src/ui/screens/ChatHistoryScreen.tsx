@@ -136,12 +136,12 @@ export function ChatHistoryScreen(props: {
                   {state.errorMessage}
                 </Text>
                 <PrimaryButton
-                  label={label('history_retry', 'Try again')}
+                  label={label('fc_v2_app_label_try_again', 'Try again')}
                   onPress={() => history.loadNextPage()}
                 />
               </View>
             ) : state.canLoadMore ? (
-              <LogoSpinner message={label('history_loading_more', 'Loading more…')} />
+              <LogoSpinner message={label('fc_v2_app_label_loading_more', 'Loading more…')} />
             ) : null
           }
           contentContainerStyle={{ paddingBottom: spacing.xxl }}

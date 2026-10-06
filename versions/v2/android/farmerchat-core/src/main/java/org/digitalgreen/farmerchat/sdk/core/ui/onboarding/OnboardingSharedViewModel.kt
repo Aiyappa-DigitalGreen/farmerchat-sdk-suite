@@ -278,10 +278,41 @@ class OnboardingSharedViewModel(
                                     expandedLanguages = expanded
                                 )
                             }
-                            // Preselect persisted or config-provided language when present.
+
+                            // App parity (OnboardingSharedViewModel.kt:597-609). The app resolves
+                            // a selection IMMEDIATELY on fetch success and falls back to the FIRST
+                            // language when it has none:
+                            //
+                            //   val selectedLanguage = allLanguages.firstOrNull { it.id == selectedLanguageId }
+                            //       ?: allLanguages.firstOrNull()
+                            //   selectedLanguageId = selectedLanguageId ?: selectedLanguage?.id
+                            //   activeLanguage?.let { applySelectedLanguageLocally(it) }
+                            //   selectedLanguageId?.let { fetchLanguageLabelsForId(it) }
+                            //
+                            // The SDK preselected ONLY a persisted/config language, so on a FRESH
+                            // install nothing was selected — and that one omission was visible
+                            // across the whole screen (verified side by side against the app on a
+                            // dev build, 2026-09-08):
+                            //   · no radio filled and no highlighted row, where the app shows the
+                            //     first language already chosen;
+                            //   · "Start using FarmerChat" stuck in its Default (grey-text) state,
+                            //     because the flavours gate it on `selectedLanguageId != null`;
+                            //   · the ENTIRE screen stayed in English — the app fetches labels for
+                            //     the auto-selected language here, so a farmer whose region
+                            //     resolves to Kannada sees Kannada on first paint, while the SDK
+                            //     showed English until they tapped a row.
+                            //
+                            // Routed through [selectLanguage] rather than a bare state write so the
+                            // auto-selection is IDENTICAL to a tap: labels fetched, and language
+                            // id/code/display-name plus the ASR, TTS and streaming_required flags
+                            // persisted. A plain `copy(selectedLanguageId = …)` would have fixed the
+                            // radio and left the language unapplied, which is the worse bug.
                             val savedId = prefs.getInt(SdkPreferences.Keys.SELECTED_LANGUAGE_ID, -1)
-                            if (savedId > 0 && allLanguages.any { it.id == savedId }) {
-                                _state.update { it.copy(selectedLanguageId = savedId) }
+                            val resolvedId = _state.value.selectedLanguageId
+                                ?: savedId.takeIf { id -> allLanguages.any { it.id == id } }
+                                ?: allLanguages.firstOrNull()?.id
+                            if (resolvedId != null) {
+                                selectLanguage(resolvedId)
                             }
                         }
                         is ApiResult.Error -> {

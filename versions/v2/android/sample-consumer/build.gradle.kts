@@ -45,7 +45,7 @@ dependencies {
     // `./gradlew :sample-consumer:assembleDebug`.
     // farmerchat-core is pulled in transitively via the compose POM dependency.
     // ------------------------------------------------------------------------
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0")
+    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

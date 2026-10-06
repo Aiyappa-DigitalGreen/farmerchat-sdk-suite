@@ -91,7 +91,7 @@ export function CountryPickerModal(props: {
         )}
         <View style={[styles.footer, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
           <PrimaryButton
-            label={label('country_save', 'Save')}
+            label={label('fc_v2_app_label_save', 'Save')}
             enabled={selected !== null}
             onPress={() => {
               if (!selected) return;

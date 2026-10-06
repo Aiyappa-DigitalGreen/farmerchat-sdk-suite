@@ -20,7 +20,7 @@ final class FCUIChatHistoryViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = fcuiLabel("chat_history_title", "Recent Chats")
+        title = fcuiLabel(FCLabels.recentChats, "Recent chats")
         navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         tableView.backgroundView = spinner
@@ -62,21 +62,21 @@ final class FCUIChatHistoryViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         guard indexPath.row < rows.count else {
-            cell.textLabel?.text = fcuiLabel("try_again", "Try again")
+            cell.textLabel?.text = fcuiLabel(FCLabels.tryAgain, "Try again")
             cell.textLabel?.textColor = FCUITheme.brandSurfacePrimary
             cell.imageView?.image = UIImage(systemName: "arrow.clockwise")
             return cell
         }
         switch rows[indexPath.row] {
         case .header(let title):
-            cell.textLabel?.text = title.uppercased()
-            cell.textLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+            cell.textLabel?.text = title
+            cell.textLabel?.font = FCUITypography.current.labelLarge.font
             cell.textLabel?.textColor = FCUITheme.foregroundSecondary
             cell.imageView?.image = nil
             cell.selectionStyle = .none
         case .item(let item):
             cell.textLabel?.text = item.title
-            cell.textLabel?.font = .systemFont(ofSize: 16)
+            cell.textLabel?.font = FCUITypography.current.bodyMedium.font
             cell.textLabel?.textColor = FCUITheme.foregroundPrimary
             cell.textLabel?.numberOfLines = 2
             cell.imageView?.image = UIImage(systemName: iconName(item.messageType))
@@ -131,7 +131,7 @@ final class FCUISettingsViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = fcuiLabel("settings_title", "Settings")
+        title = fcuiLabel(FCLabels.settings, "Settings")
         navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         FarmerChat.shared.analytics.screenViewed(ScreenNames.settings)
@@ -151,8 +151,8 @@ final class FCUISettingsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch section {
-        case 0: return fcuiLabel("settings_appearance", "Appearance")
-        case 1: return fcuiLabel("settings_account", "Account details")
+        case 0: return fcuiLabel(FCLabels.appearance, "Appearance")
+        case 1: return fcuiLabel(FCLabels.accountDetails, "Account details")
         default: return nil
         }
     }
@@ -167,9 +167,9 @@ final class FCUISettingsViewController: UITableViewController {
         switch indexPath.section {
         case 0:
             let modes: [(FarmerChatAppearance, String, String)] = [
-                (.day, fcuiLabel("appearance_day", "Day"), "sun.max.fill"),
-                (.night, fcuiLabel("appearance_night", "Night"), "moon.fill"),
-                (.auto, fcuiLabel("appearance_auto", "Auto"), "circle.lefthalf.filled")
+                (.day, fcuiLabel(FCLabels.day, "Day"), "sun.max.fill"),
+                (.night, fcuiLabel(FCLabels.night, "Night"), "moon.fill"),
+                (.auto, fcuiLabel(FCLabels.auto, "Auto"), "circle.lefthalf.filled")
             ]
             let (mode, label, icon) = modes[indexPath.row]
             cell.textLabel?.text = label
@@ -177,7 +177,7 @@ final class FCUISettingsViewController: UITableViewController {
             cell.imageView?.tintColor = FCUITheme.foregroundSecondary
             cell.accessoryType = settingsVM.appearanceMode == mode ? .checkmark : .none
         case 1:
-            cell.textLabel?.text = fcuiLabel("settings_your_name", "Your name")
+            cell.textLabel?.text = fcuiLabel(FCLabels.yourName, "Your name")
             let name = settingsVM.userName
             cell.detailTextLabel?.text = name
             cell.imageView?.image = UIImage(systemName: "person.fill")
@@ -186,8 +186,8 @@ final class FCUISettingsViewController: UITableViewController {
         default:
             let isAuthenticated = FarmerChat.shared.isAuthenticated
             cell.textLabel?.text = isAuthenticated
-                ? fcuiLabel("logout", "Log out")
-                : fcuiLabel("sign_up", "Sign up")
+                ? fcuiLabel(FCLabels.logout, "Logout")
+                : fcuiLabel(FCLabels.signUp, "Sign up")
             cell.textLabel?.textColor = isAuthenticated ? FCUITheme.red500 : FCUITheme.brandSurfacePrimary
             cell.imageView?.image = UIImage(systemName: isAuthenticated ? "rectangle.portrait.and.arrow.right" : "person.crop.circle.badge.plus")
             cell.imageView?.tintColor = cell.textLabel?.textColor
@@ -216,17 +216,17 @@ final class FCUISettingsViewController: UITableViewController {
 
     private func logout() {
         let confirm = UIAlertController(
-            title: fcuiLabel("logout", "Log out"),
+            title: fcuiLabel(FCLabels.logout, "Logout"),
             message: fcuiLabel("logout_confirm", "Are you sure you want to log out?"),
             preferredStyle: .alert
         )
-        confirm.addAction(UIAlertAction(title: fcuiLabel("logout", "Log out"), style: .destructive) { [weak self] _ in
+        confirm.addAction(UIAlertAction(title: fcuiLabel(FCLabels.logout, "Logout"), style: .destructive) { [weak self] _ in
             Task { @MainActor in
                 await FarmerChat.shared.logout()
                 (self?.navigationController as? FarmerChatViewController)?.restartFromSplash()
             }
         })
-        confirm.addAction(UIAlertAction(title: fcuiLabel("cancel", "Cancel"), style: .cancel))
+        confirm.addAction(UIAlertAction(title: fcuiLabel(FCLabels.cancel, "Cancel"), style: .cancel))
         present(confirm, animated: true)
     }
 
@@ -267,7 +267,7 @@ final class FCUIHelpViewController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = fcuiLabel("help_title", "Help")
+        title = fcuiLabel(FCLabels.help, "Help")
         navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
 
@@ -284,8 +284,8 @@ final class FCUIHelpViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         section == 0
-            ? fcuiLabel("help_faq_title", "How to use FarmerChat")
-            : fcuiLabel("help_more", "More")
+            ? fcuiLabel(FCLabels.howToUseFarmerchat, "How to use FarmerChat")
+            : fcuiLabel(FCLabels.more, "More")
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
@@ -303,7 +303,7 @@ final class FCUIHelpViewController: UITableViewController {
         if indexPath.section == 0 {
             if viewModel.faqs.isEmpty {
                 cell.textLabel?.text = viewModel.helpState.isLoading
-                    ? fcuiLabel("loading", "Loading…")
+                    ? fcuiLabel(FCLabels.loading, "Loading...")
                     : fcuiLabel("help_empty", "No help topics yet.")
                 cell.textLabel?.textColor = FCUITheme.foregroundSecondary
                 cell.accessoryType = .none
@@ -316,8 +316,8 @@ final class FCUIHelpViewController: UITableViewController {
         } else {
             let isTerms = indexPath.row == 0
             cell.textLabel?.text = isTerms
-                ? fcuiLabel("terms_of_use", "Terms of use")
-                : fcuiLabel("privacy_policy", "Privacy policy")
+                ? fcuiLabel(FCLabels.termsOfUse, "Terms of use")
+                : fcuiLabel(FCLabels.privacyPolicy, "Privacy policy")
             cell.imageView?.image = UIImage(systemName: isTerms ? "doc.text" : "lock.shield")
             cell.imageView?.tintColor = FCUITheme.foregroundSecondary
             cell.accessoryType = .disclosureIndicator

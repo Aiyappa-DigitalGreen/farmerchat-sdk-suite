@@ -368,6 +368,38 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
     ],
   );
 
+  /**
+   * Auto-select the first language when nothing is chosen (app parity:
+   * `OnboardingSharedViewModel.kt:597-609`).
+   *
+   * The app resolves a selection the moment `get_languages` succeeds — persisted first, else
+   * `allLanguages.first()` — then applies it and fetches ITS labels. RN preselected nothing, so a
+   * fresh install showed no radio selected, a disabled "Get started", and the whole screen in
+   * English even when the farmer's region resolved to another language. Verified as a real
+   * regression on android by a side-by-side device comparison (docs/04, 2026-09-08) and fixed
+   * there in core; this is the same omission on RN.
+   *
+   * An effect, not a call inside `fetchSupportedLanguages`, because the `SelectLanguage` path it
+   * reuses lives in the dispatcher below — and an effect also covers the list arriving from a
+   * re-dispatched retry. `autoSelectedRef` fires it once per mount so it never overrides a
+   * farmer's own pick.
+   */
+  const autoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (autoSelectedRef.current) return;
+    if (state.selectedLanguageId !== null) return;
+    if (state.languageState.kind !== 'success') return;
+    const groups = state.languageState.data;
+    const all = groups.flatMap((g) => [...g.priority_view, ...g.expanded_view]);
+    const first = groups.flatMap((g) => g.priority_view)[0] ?? all[0];
+    if (!first) return;
+    // A persisted language wins over the first one, matching the app's precedence.
+    const storedId = sdk.store.getInt(StorageKeys.SELECTED_LANGUAGE_ID, -1);
+    const preferred = (storedId > 0 ? all.find((l) => l.id === storedId) : undefined) ?? first;
+    autoSelectedRef.current = true;
+    dispatch({ type: 'SelectLanguage', languageId: preferred.id });
+  }, [dispatch, sdk, state.languageState, state.selectedLanguageId]);
+
   const visibleLanguages = useCallback(
     (groups: SupportedLanguageGroup[]): SupportedLanguage[] => {
       const priority = groups.flatMap((g) => g.priority_view);

@@ -1,5 +1,9 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.input
 
+import android.view.View
+import android.view.HapticFeedbackConstants
+import org.digitalgreen.farmerchat.sdk.views.internal.widgets.VoiceRecorderView
+import org.digitalgreen.farmerchat.sdk.views.internal.util.FcInsets
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -55,18 +59,14 @@ internal class InputOverlaysController(
 
     private val recorder = AudioRecorder(context)
     private var isRecording = false
-    private var recordSeconds = 0
-    private val timerTick = object : Runnable {
-        override fun run() {
-            if (!isRecording) return
-            recordSeconds++
-            binding.fcVoiceTimer.text =
-                String.format("%d:%02d", recordSeconds / 60, recordSeconds % 60)
-            binding.fcVoiceTimer.postDelayed(this, 1000L)
-        }
-    }
 
     private var cameraOutputUri: Uri? = null
+
+    /** XML bottom paddings of the three panels, captured before init's applyImeInsets() so the inset is added, not stacked. */
+    private val voicePanelBasePadding = binding.fcVoicePanel.paddingBottom
+    private val photoPanelBasePadding = binding.fcPhotoPanel.paddingBottom
+    private val textPanelBasePadding = binding.fcTextInputPanel.paddingBottom
+
 
     private val cameraLauncher: ActivityResultLauncher<Uri>
     private val galleryLauncher: ActivityResultLauncher<String>
@@ -123,16 +123,16 @@ internal class InputOverlaysController(
                 onTextSubmitted(text)
             }
         }
-        binding.fcVoiceCancel.setOnClickListener {
+        binding.fcVoiceRecorder.onDelete = {
             graph.analytics.track(
                 AnalyticsEvents.CANCEL_RECORD_AUDIO_CLICK_EVENT,
                 audioProps() // app ChatInputOverlays.kt:182
             )
             cancelAndHide()
         }
-        binding.fcVoiceMain.setOnClickListener {
-            if (isRecording) stopRecordingAndSubmit()
-        }
+        // Send, or the 30 s countdown running out (app VoiceClip `onRecordingComplete`).
+        binding.fcVoiceRecorder.onSend = { if (isRecording) stopRecordingAndSubmit() }
+        binding.fcVoiceRecorder.onAutoSend = { if (isRecording) stopRecordingAndSubmit() }
         binding.fcPhotoCamera.setOnClickListener {
             graph.analytics.track(
                 AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT,
@@ -163,12 +163,10 @@ internal class InputOverlaysController(
 
     private fun renderLabels() {
         binding.fcTextInputField.hint = label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm...")
-        binding.fcVoiceStatus.text = label(Labels.LISTENING, "Speak now")
-        binding.fcVoiceHint.text =
-            label(Labels.VOICE_INPUT_IS_STILL_IMPROVING, "Keep background noise low")
-        binding.fcPhotoTitle.text = label(Labels.PHOTOS, "Photos")
+        renderVoiceLabels()
         binding.fcPhotoCameraLabel.text = label(Labels.CAMERA, "Camera")
-        binding.fcPhotoGalleryLabel.text = label(Labels.GALLERY, "Gallery")
+        // App PhotoInput.kt labels the second tile "Photos", not "Gallery".
+        binding.fcPhotoGalleryLabel.text = label(Labels.PHOTOS, "Photos")
     }
 
     /**
@@ -188,10 +186,19 @@ internal class InputOverlaysController(
             // Read from the ROOT window insets, not the dispatched ones: the overlay is a
             // sibling of a `fitsSystemWindows="true"` LinearLayout in fc_fragment_chat.xml, and
             // a sibling that consumes insets first would leave this callback seeing 0.
-            val source = ViewCompat.getRootWindowInsets(view) ?: insets
-            val ime = source.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val navBar = source.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            view.updatePadding(bottom = maxOf(ime, navBar))
+            // Trimmed to this view's bounds: an embedding host may already keep it clear of them.
+            val ime = FcInsets.overlapping(view, WindowInsetsCompat.Type.ime()).bottom
+            val navBar = FcInsets.overlapping(view, WindowInsetsCompat.Type.navigationBars()).bottom
+            // App parity (PhotoInput.kt / VoiceInput.kt ModalBottomSheet): the sheet's own
+            // background runs BEHIND the nav bar, with only its content lifted clear of it.
+            // Padding the ROOT instead floated each panel above a strip of scrim, so the
+            // nav-bar area read grey under a white sheet. The IME keeps lifting the root, so
+            // the text bar still sits above the keyboard.
+            view.updatePadding(bottom = ime)
+            val sheetInset = if (ime > 0) 0 else navBar
+            binding.fcVoicePanel.updatePadding(bottom = voicePanelBasePadding + sheetInset)
+            binding.fcPhotoPanel.updatePadding(bottom = photoPanelBasePadding + sheetInset)
+            binding.fcTextInputPanel.updatePadding(bottom = textPanelBasePadding + sheetInset)
             insets
         }
         ViewCompat.requestApplyInsets(binding.fcOverlayRoot)
@@ -225,7 +232,6 @@ internal class InputOverlaysController(
     }
 
     fun hide() {
-        stopTimer()
         if (isRecording) {
             recorder.cancelRecording()
             isRecording = false
@@ -240,15 +246,26 @@ internal class InputOverlaysController(
     }
 
     fun setVoiceProcessing(processing: Boolean) {
-        binding.fcVoiceProcessing.isVisible = processing
-        binding.fcVoiceMain.isEnabled = !processing
-        if (processing) {
-            binding.fcVoiceStatus.text = label(Labels.PROCESSING, "Processing...")
+        binding.fcVoiceRecorder.mode =
+            if (processing) VoiceRecorderView.Mode.Processing else VoiceRecorderView.Mode.Listening
+        renderVoiceLabels()
+    }
+
+    /** App VoiceInput.kt copy: Speak now / Ask about your farm… → Processing… / One second… */
+    private fun renderVoiceLabels() {
+        val recorder = binding.fcVoiceRecorder
+        val listening = recorder.mode == VoiceRecorderView.Mode.Listening
+        recorder.title = if (listening) label(Labels.LISTENING, "Speak now")
+        else label(Labels.PROCESSING, "Processing...")
+        recorder.subtitle = if (listening) {
+            label(Labels.ASK_YOUR_FARMING_QUESTION, "Ask about your farm or livestock")
+        } else {
+            label(Labels.ONE_SECOND_PLEASE, "One second, please...")
         }
+        recorder.footer = label(Labels.VOICE_INPUT_IS_STILL_IMPROVING, "Keep background noise low")
     }
 
     fun release() {
-        stopTimer()
         recorder.release()
     }
 
@@ -258,10 +275,27 @@ internal class InputOverlaysController(
 
     private fun showPanel(text: Boolean = false, voice: Boolean = false, photo: Boolean = false) {
         renderLabels()
+        val wasShowingVoice = binding.fcOverlayRoot.isVisible && binding.fcVoicePanel.isVisible
+        val wasShowingPhoto = binding.fcOverlayRoot.isVisible && binding.fcPhotoPanel.isVisible
         binding.fcOverlayRoot.isVisible = true
         binding.fcTextInputPanel.isVisible = text
         binding.fcVoicePanel.isVisible = voice
         binding.fcPhotoPanel.isVisible = photo
+        if (text) binding.fcOverlayScrim.alpha = 1f
+        // App VoiceInput.kt slides from 400dp, PhotoInput.kt from 300dp; both over 300 ms.
+        if (voice && !wasShowingVoice) animateSheetIn(binding.fcVoicePanel, fromDp = 400f)
+        if (photo && !wasShowingPhoto) animateSheetIn(binding.fcPhotoPanel, fromDp = 300f)
+    }
+
+    /**
+     * App sheet entrance: the sheet slides up and the scrim fades to Black @ 25% over 300 ms.
+     * [fc_scrim] is Black @ 50%, so the scrim view fades to half opacity.
+     */
+    private fun animateSheetIn(sheet: View, fromDp: Float) {
+        sheet.translationY = fromDp * context.resources.displayMetrics.density
+        sheet.animate().translationY(0f).setDuration(300L).start()
+        binding.fcOverlayScrim.alpha = 0f
+        binding.fcOverlayScrim.animate().alpha(SHEET_SCRIM_ALPHA).setDuration(300L).start()
     }
 
     // ------------------------------------------------------------------ voice
@@ -282,13 +316,12 @@ internal class InputOverlaysController(
     private fun startVoiceRecording() {
         showPanel(voice = true)
         setVoiceProcessing(false)
-        binding.fcVoiceStatus.text = label(Labels.LISTENING, "Speak now")
-        recordSeconds = 0
-        binding.fcVoiceTimer.text = "0:00"
+        binding.fcVoiceRecorder.session++
         if (recorder.startRecording()) {
             isRecording = true
-            binding.fcVoiceTimer.postDelayed(timerTick, 1000L)
+            binding.fcVoiceRecorder.hasStarted = true
         } else {
+            binding.fcVoiceRecorder.hasStarted = false
             hide()
             onRecordingFailed()
         }
@@ -299,8 +332,13 @@ internal class InputOverlaysController(
             AnalyticsEvents.SEND_RECORD_AUDIO_CLICK_EVENT,
             audioProps() // app ChatInputOverlays.kt:114
         )
-        stopTimer()
         isRecording = false
+        binding.fcVoiceRecorder.hasStarted = false
+        // App VoiceInput.kt `handleSave`: a confirming haptic tick on send.
+        binding.fcVoicePanel.performHapticFeedback(
+            if (android.os.Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM
+            else HapticFeedbackConstants.VIRTUAL_KEY
+        )
         val file = recorder.stopRecording()
         if (file != null) {
             onVoiceFinished(file)
@@ -310,9 +348,6 @@ internal class InputOverlaysController(
         }
     }
 
-    private fun stopTimer() {
-        binding.fcVoiceTimer.removeCallbacks(timerTick)
-    }
 
     // ------------------------------------------------------------------ photo
 
@@ -457,7 +492,8 @@ internal class InputOverlaysController(
                 "Microphone permission is needed to record your voice questions. Please enable it in your device settings."
             )
         }
-        AlertDialog.Builder(context)
+        // The view's context, not the fragment's: embedded, that one carries the SDK theme.
+        AlertDialog.Builder(binding.root.context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(label(Labels.GO_TO_SETTINGS, "Go to Settings")) { _, _ ->
@@ -483,5 +519,10 @@ internal class InputOverlaysController(
                 dialog.dismiss()
             }
             .show()
+    }
+
+    private companion object {
+        /** Scrim view alpha for the voice / photo sheets: fc_scrim (50%) x 0.5 = the app's 25%. */
+        const val SHEET_SCRIM_ALPHA = 0.5f
     }
 }

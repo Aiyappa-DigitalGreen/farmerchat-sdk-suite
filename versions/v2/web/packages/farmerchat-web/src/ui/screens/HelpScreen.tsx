@@ -56,9 +56,9 @@ export function HelpScreen(props: {
 
   return (
     <div className="fcsdk-screen">
-      <DefaultAppBar title={label('help_title', 'Help')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
+      <DefaultAppBar title={label('fc_v2_app_label_help', 'Help')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
       <div className="fcsdk-scroll">
-        <div className="fcsdk-sectionheader">{label('help_faq_header', 'How to use FarmerChat')}</div>
+        <div className="fcsdk-sectionheader">{label('fc_v2_app_label_how_to_use_farmerchat', 'How to use FarmerChat')}</div>
         <ListCard>
           {state.helpState.status === 'loading' || state.helpState.status === 'idle' ? (
             <div className="fcsdk-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -79,29 +79,29 @@ export function HelpScreen(props: {
                 onClick={() => {
                   services.analytics.track(Events.FAQ_CLICKED, { question: faq.question ?? faq.title ?? '' });
                   const url = faqUrl(faq);
-                  if (url) props.onOpenUrl('faq', url, faq.title ?? faq.question ?? label('help_faq_title', 'FAQ'));
+                  if (url) props.onOpenUrl('faq', url, faq.title ?? faq.question ?? label('fc_v2_app_label_faq', 'FAQ'));
                 }}
               />
             ))
           )}
         </ListCard>
 
-        <div className="fcsdk-sectionheader">{label('help_more_header', 'More')}</div>
+        <div className="fcsdk-sectionheader">{label('fc_v2_app_label_more', 'More')}</div>
         <ListCard>
           <ListItem
             icon="📄"
-            text={label('legal_terms_title', 'Terms of use')}
+            text={label('fc_v2_app_label_terms_of_use', 'Terms of use')}
             onClick={() => {
               services.analytics.track(Events.TERMS_OF_USE_OPENED, {});
-              if (termsUrl) props.onOpenUrl('faq_terms', termsUrl, label('legal_terms_title', 'Terms of use'));
+              if (termsUrl) props.onOpenUrl('faq_terms', termsUrl, label('fc_v2_app_label_terms_of_use', 'Terms of use'));
             }}
           />
           <ListItem
             icon="🔒"
-            text={label('legal_privacy_title', 'Privacy policy')}
+            text={label('fc_v2_app_label_privacy_policy', 'Privacy policy')}
             onClick={() => {
               services.analytics.track(Events.PRIVACY_POLICY_OPENED, {});
-              if (privacyUrl) props.onOpenUrl('privacy', privacyUrl, label('legal_privacy_title', 'Privacy policy'));
+              if (privacyUrl) props.onOpenUrl('privacy', privacyUrl, label('fc_v2_app_label_privacy_policy', 'Privacy policy'));
             }}
           />
         </ListCard>
@@ -109,7 +109,7 @@ export function HelpScreen(props: {
         <div className="fcsdk-feedfooter">
           {label('help_version', 'Version {version}', { version: SDK_VERSION })}
           <br />
-          {label('help_copyright', '© Digital Green')}
+          {label('fc_v2_app_label_digital_green', '© Digital Green')}
         </div>
       </div>
     </div>

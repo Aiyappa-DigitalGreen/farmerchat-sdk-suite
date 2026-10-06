@@ -18,20 +18,20 @@ Requirements: minSdk 26, compileSdk 36, Kotlin 2.x, AGP 8.x.
 // settings.gradle.kts — repositories: mavenCentral() (or your internal repo / mavenLocal())
 
 dependencies {
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0")
+    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0")
     // OR
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:1.0.0")
+    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:2.2.0")
 }
 ```
 
 ### Local distribution proof (this repo)
 
 ```bash
-./gradlew publishToMavenLocal                 # publishes core + compose + views @ 1.0.0
+./gradlew publishToMavenLocal                 # publishes core + compose + views @ 2.2.0
 ./gradlew :sample-consumer:assembleDebug      # a host that consumes the SDK BY COORDINATE from mavenLocal()
 ```
 
-`:sample-consumer` depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0` (not `project(...)`), proving import-by-coordinate. Version comes from ONE source: `farmerChatVersion` in the root `build.gradle.kts` (group `org.digitalgreen.farmerchat` on all subprojects), mirrored at runtime by `FarmerChatVersion.VERSION`.
+`:sample-consumer` depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0` (not `project(...)`), proving import-by-coordinate. Version comes from ONE source: `farmerChatVersion` in the root `build.gradle.kts` (group `org.digitalgreen.farmerchat` on all subprojects), mirrored at runtime by `FarmerChatVersion.VERSION`.
 
 ### Public API surface & transitive footprint
 
@@ -84,7 +84,7 @@ Embedding instead of launching an Activity:
 
 | Option | Default | Notes |
 |---|---|---|
-| `environment` | required | dev/stage/demo base `farmerchat.farmstack.co/mobile-app-*/`; prod `v2.api.farmer.chat`; eks `api.farmerchat.in` |
+| `environment` | required | dev/demo base `farmerchat.farmstack.co/mobile-app-*/`; **stage `demo.agent.farmer.chat` in 2.0.0** (debug and release alike — see `../README.md`); prod `v2.api.farmer.chat`; eks `api.farmerchat.in` |
 | `geoApiKey` | null | Google Geolocation (`geolocate`, P1: 5 s / 1 retry). Without it, language detection falls back to guest-init IP data. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
 | `guestApiKey` | built-in | `API-Key` header for `initialize_user` / `send_tokens`. |
 | `appearance` | AUTO | Day/Night/Auto; user can change it in Settings (persisted, survives logout). |
@@ -176,6 +176,16 @@ Verified against RationSmart (`cattle_feed.org`, XML/Fragments, minSdk 24, Java 
 | `packaging { resources { excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }` | The SDK pulls okhttp up (highest-wins), which collides with jspecify's OSGI entry. |
 | Merged manifest gains `RECORD_AUDIO`, `CAMERA`, `ACCESS_FINE/COARSE_LOCATION` | Play-listing-visible for the host app. |
 
+**Switching mode at runtime (2.2.0):** call `FarmerChat.initialize()` again with a different `mode`
+(and/or `showDrawer`/`showHistory`/`showSettings`) right before `launch()` — the graph is rebuilt; the same
+config is a no-op. This is how one host offers a full-journey FAB and a CHAT_ONLY FAB side by side. The
+compose `FarmerChatFab()` has no click hook, so use your own FAB for that; the views `FarmerChatFab` takes
+`setOnClickListener`. Only call it while no SDK screen is showing.
+
+A brand-new Android Studio project (Oct 2026 template) ships `core-ktx 1.19.0` / `lifecycle 2.11.0`, which
+need compileSdk 37 + AGP 9.1 and fail `checkDebugAarMetadata` on AGP 8.13 — pin them to the SDK's
+`1.18.0` / `2.10.0`. Kotlin must be ≥ 2.2 to read the SDK's metadata (2.0.21 cannot).
+
 A host's Kotlin version does **not** have to match the SDK's: Kotlin 2.2.0 reads the
 SDK's 2.3.21 metadata without complaint.
 
@@ -257,7 +267,7 @@ Flavour parity for the composer:
 |---|---|---|
 | Composer on Home + Chat | ✅ | ✅ (`InputComposerView`) |
 | Image attaches to the bar, sent with the text | ⛔ sends on pick | ✅ (app behaviour) |
-| Idle gradient aura (Home) | ✅ | ⛔ |
+| Idle gradient aura (Home + Chat) | ✅ (rendered nothing until 2026-10-06: an `as? Outline.Generic` cast on a `RoundedCornerShape` left the stroke path empty; emulator-verified since) | ✅ (`ComposerAuraDrawable`) |
 | Agentic Home surface / gradient / pinned header | ✅ | ⛔ (header title only) |
 
 The views composer lifts itself above the keyboard by reading **root** window insets

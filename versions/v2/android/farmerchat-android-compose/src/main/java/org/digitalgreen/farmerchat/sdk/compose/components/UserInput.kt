@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateColorAsState
@@ -95,6 +96,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.digitalgreen.farmerchat.sdk.compose.R
+import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.theme.LightContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
@@ -124,7 +126,11 @@ fun PrimaryInputButtons(
     isSticky: Boolean = false
 ) {
     val brandColor = LocalBrandColors.current
-    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Host feature flags — app parity with ios `HomeCells.swift:52-53`, which builds this row by
+    // appending Photo/Speak only when enabled. Honoured on Android from 2026-09-16; see docs/04
+    // "Config-parity audit (2026-09-16)".
+    val fcCfg = FarmerChat.requireGraph().config
+    val navBarPadding = fcNavigationBarsBottom()
 
     val (buttonHeight, buttonPaddingTop, buttonPaddingBottom, containerPaddingBottom) = when (type) {
         PrimaryInputButtonsType.HomeScreen -> ButtonVariant(78.dp, 17.dp, 12.dp, 10.dp)
@@ -182,25 +188,29 @@ fun PrimaryInputButtons(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        UserInputButton(
-            label = label(Labels.PHOTO, "Photo"),
-            iconRes = R.drawable.fc_icon_camera,
-            onClick = onPhotoClick,
-            modifier = Modifier.weight(1f),
-            height = buttonHeight,
-            paddingTop = buttonPaddingTop,
-            paddingBottom = buttonPaddingBottom
-        )
+        if (fcCfg.enableImages) {
+            UserInputButton(
+                label = label(Labels.PHOTO, "Photo"),
+                iconRes = R.drawable.fc_icon_camera,
+                onClick = onPhotoClick,
+                modifier = Modifier.weight(1f),
+                height = buttonHeight,
+                paddingTop = buttonPaddingTop,
+                paddingBottom = buttonPaddingBottom
+            )
+        }
 
-        UserInputButton(
-            label = label(Labels.SPEAK, "Speak"),
-            iconRes = R.drawable.fc_icon_mic,
-            onClick = onSpeakClick,
-            modifier = Modifier.weight(1f),
-            height = buttonHeight,
-            paddingTop = buttonPaddingTop,
-            paddingBottom = buttonPaddingBottom
-        )
+        if (fcCfg.enableVoice) {
+            UserInputButton(
+                label = label(Labels.SPEAK, "Speak"),
+                iconRes = R.drawable.fc_icon_mic,
+                onClick = onSpeakClick,
+                modifier = Modifier.weight(1f),
+                height = buttonHeight,
+                paddingTop = buttonPaddingTop,
+                paddingBottom = buttonPaddingBottom
+            )
+        }
 
         UserInputButton(
             label = label(Labels.TYPE, "Type"),
@@ -623,6 +633,8 @@ fun TextInputOverlay(
     placeholder: String = label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm...")
 ) {
     val contentColors = LocalContentColors.current
+    // Host feature flags — see docs/04 "Config-parity audit (2026-09-16)".
+    val cfg = FarmerChat.requireGraph().config
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     var isFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -722,8 +734,9 @@ fun TextInputOverlay(
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Camera button (hidden when image attached or text typed)
-                    if (photoUris.isEmpty() && textFieldValue.text.isBlank()) {
+                    // Camera button (hidden when image attached, text typed, or the host disabled
+                    // images via FarmerChatConfig.enableImages)
+                    if (cfg.enableImages && photoUris.isEmpty() && textFieldValue.text.isBlank()) {
                         CompositionLocalProvider(LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()) {
                             val buttonColors = LocalContentColors.current
                             Box(
@@ -825,7 +838,10 @@ fun TextInputOverlay(
                         )
                     }
 
-                    // Mic or Send button — always light-mode colors
+                    // Mic or Send button — always light-mode colors. With
+                    // FarmerChatConfig.enableVoice off there is no mic state, so the button only
+                    // exists when there is something to send.
+                    if (hasContent || cfg.enableVoice) {
                     CompositionLocalProvider(LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()) {
                         val buttonColors = LocalContentColors.current
                         Box(
@@ -864,6 +880,7 @@ fun TextInputOverlay(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
@@ -979,7 +996,7 @@ fun VoiceInput(
                         interactionSource = remember { MutableInteractionSource() }
                     ) { handleCancel() }
             ) {
-                val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val navBarPadding = fcNavigationBarsBottom()
 
                 Column(
                     modifier = Modifier
@@ -1138,7 +1155,7 @@ fun PhotoInput(
                     interactionSource = remember { MutableInteractionSource() }
                 ) { isOpen = false }
         ) {
-            val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val navBarPadding = fcNavigationBarsBottom()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

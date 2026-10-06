@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App parity (app SettingsScreen.kt:436-441, mirrored in compose SettingsScreen.kt:457):
+     the SELECTED appearance tile keeps the SAME white surface as the unselected ones and marks
+     selection with a 2dp borderActive ring at Radius.LG.
+
+     Deliberately NOT `fc_bg_selected_option`, which fills with `fc_surface_active` — that read as
+     a different component entirely (measured: views #C6E6D5 vs the app's #FFFFFF) and is the same
+     defect already fixed on the compose flavour. That drawable has other callers, so this is a
+     separate one rather than a change to it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_surface_secondary" />
+    <stroke android:width="2dp" android:color="@color/fc_green500" />
+    <corners android:radius="16dp" />
+</shape>

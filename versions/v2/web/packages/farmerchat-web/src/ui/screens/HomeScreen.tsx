@@ -16,7 +16,7 @@ import { TermsOfUseDialog } from '../components/TermsOfUseDialog';
 import { composerBarHeight } from '../components/composerLayout';
 import { useHome } from '../../state/useHome';
 import { useEnterName } from '../../state/useEnterName';
-import type { LocationPromptActions } from '../../state/useLocationPrompt';
+import type { LocationPromptActions, LocationPromptState } from '../../state/useLocationPrompt';
 import { Events, Screens } from '../../core/analytics';
 import { PrefKeys } from '../../core/storage';
 import type { SectionDto, SectionOption } from '../../core/types';
@@ -33,7 +33,6 @@ const TERMS_URL_WAIT_MS = 5_000;
  * Scroll distance over which the agentic Home gradient band fades out, in px (Compose dp 1:1 —
  * `gradientFadePx = 215.dp`).
  */
-const HOME_BAND_FADE_PX = 215;
 
 type CardKind = 'content' | 'single' | 'multi';
 
@@ -51,6 +50,13 @@ export function HomeScreen(props: {
   onOpenDrawer: () => void;
   onOpenChat: (params: ChatRouteParams) => void;
   locationActions: LocationPromptActions;
+  /** The shared location machine's state (pill searching state, error routing). */
+  locationState: LocationPromptState;
+  /**
+   * Navigate to the shared Error screen (offline weather chip, location-flow errors). App parity:
+   * HomeScreen.kt:258-266 / :546-575.
+   */
+  onNavigateToError: (isNetworkError: boolean, fromScreen: string) => void;
   /**
    * 2.0.0: something outside Home asked for the in-app Terms-of-Use dialog — on the web, the host
    * calling `openScreen('termsofuse')`. Home consumes the request via
@@ -76,10 +82,23 @@ export function HomeScreen(props: {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   // Re-runs the terms-of-use wait effect when its timeout expires with no URL in hand.
   const [termsWaitTick, setTermsWaitTick] = useState(0);
-  // Scroll offset, only read in composer mode: the green gradient band fades out over the first
-  // ~215px of scroll so it does not linger once the feed has risen (Compose `gradientAlpha`).
-  const [scrollTop, setScrollTop] = useState(0);
-  const bandAlpha = Math.max(0, Math.min(1, 1 - scrollTop / HOME_BAND_FADE_PX));
+  // App parity (HomeScreen.kt 70adc5fd): in composer mode the header CONTENT (logo, "For your
+  // farm today", location pill) is a FIXED overlay over the feed, and the feed's top strip masks
+  // out so cards dissolve INTO the gradient band as they scroll up behind it. `headHeight` is
+  // that overlay's measured height: the scroller reserves exactly it, and the mask ends exactly
+  // there — where the first card rests — so the resting card is never faded.
+  const agenticHeadRef = useRef<HTMLDivElement | null>(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  useEffect(() => {
+    const node = agenticHeadRef.current;
+    if (!isComposerUi || node === null) return;
+    const measure = () => setHeadHeight(node.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isComposerUi]);
 
   // Send from the composer: an attached image opens chat through image analysis, plain text as a
   // normal query — the same split Compose's `sendMessage(query, photoUris.firstOrNull())` makes.
@@ -152,20 +171,56 @@ export function HomeScreen(props: {
   const weather = home.weatherState.status === 'success' ? home.weatherState.data : null;
 
   const openWeatherChat = useCallback(() => {
-    services.analytics.track(Events.WEATHER_FORECAST_VIEWED, {});
     props.onOpenChat({
       source: 'home',
       // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
-      question: label('WHAT_IS_THE_PRESENT_WEATHER', 'What is the present weather?'),
+      question: label('fc_v2_app_label_what_is_the_present_weather', 'What is the present weather?'),
       isWeatherAdviceCTA: true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [label, props.onOpenChat]);
 
   const onWeatherClick = useCallback(() => {
-    // Weather routes through the location prompt when location is unknown.
+    // App parity (HomeScreen.kt:546-575): offline → No Internet; ignored while the feed is still
+    // loading or while another location flow is running. With a stored fix triggerFromWeather
+    // navigates straight away; otherwise the location flow runs first.
+    const online = typeof navigator === 'undefined' || !('onLine' in navigator) ? true : navigator.onLine;
+    if (!online) {
+      props.onNavigateToError(true, 'home_weather');
+      return;
+    }
+    if (home.homeFeedState.status === 'loading') return;
+    services.analytics.track(Events.WEATHER_FORECAST_VIEWED, { screen_name: Screens.HOME });
+    if (props.locationState.kind !== 'Idle') return;
     props.locationActions.triggerFromWeather(openWeatherChat);
-  }, [openWeatherChat, props.locationActions]);
+  }, [home.homeFeedState.status, openWeatherChat, props, services.analytics]);
+
+  // App parity (HomeScreen.kt:258-266): a location-flow Error while Home is the visible screen is
+  // not drawn by the overlay — Home routes it to the shared Error screen and closes the flow
+  // silently (FarmerChatRoot passes `hideError` to the overlay while Home is current).
+  const locationErrorType = props.locationState.kind === 'Error' ? props.locationState.errorType : null;
+  useEffect(() => {
+    if (locationErrorType === null) return;
+    props.onNavigateToError(locationErrorType === 'NoNetwork', 'home');
+    props.locationActions.dismiss(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationErrorType]);
+
+  // App parity (HomeScreen.kt:270): reload the feed AND the weather once when the Home pill's own
+  // flow succeeds (Continue(LocalContext, "location_fetched")). Keyed on the success event, not a
+  // state → Idle transition, so a denied or backed-out prompt does not trigger a wasted reload.
+  // (The app's other trigger, LocationUpdatedFromWidget, comes from campaigns, which web has none of.)
+  useEffect(
+    () =>
+      props.locationActions.subscribe((event) => {
+        if (event.source === 'localContext' && event.kind === 'continue' && event.reason === 'location_fetched') {
+          void homeActions.loadHome(true);
+          if (services.config.enableWeather) void homeActions.loadWeather(true);
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.locationActions.subscribe],
+  );
 
   const onContentCardTap = useCallback(
     async (section: SectionDto) => {
@@ -260,24 +315,32 @@ export function HomeScreen(props: {
   // The pill shows the resolved place once known, else invites sharing. Compose's
   // `HomeLocationPill` is driven by the core LocationPromptManager; web has no such widget, so
   // this reads the same prefs that flow writes (district → state → country) and falls back to the
-  // share prompt. Logged as a deviation in docs/04.
+  // share prompt. Logged as a deviation in docs/04. While the pill's own flow is acquiring a fix
+  // (after the permission prompt — RequestEnableGps / FetchingLocation) it shows the app's
+  // "Getting your location" searching state.
+  const isPillSearching =
+    props.locationState.source === 'localContext' &&
+    (props.locationState.kind === 'RequestEnableGps' || props.locationState.kind === 'FetchingLocation');
   const locationPillLabel = (() => {
+    if (isPillSearching) return label('fc_v2_app_label_getting_your_location', 'Getting your location');
     const district = services.store.getString(PrefKeys.USER_DISTRICT);
     const state = services.store.getString(PrefKeys.USER_STATE);
     const country = services.store.getString(PrefKeys.USER_COUNTRY_NAME);
     const place = [district, state, country].find((value) => (value ?? '').trim().length > 0);
     if (place) return place;
-    return label('home_share_location', 'Share your location');
+    return label('fc_v2_app_label_set_your_location', 'Share your location');
   })();
 
   return (
     <div className={'fcsdk-screen' + (isComposerUi ? ' fcsdk-screen--composer fcsdk-home--agentic' : '')}>
       {/* 2.0.0 agentic Home: a fixed green→transparent band behind the header and first card,
           with the yellow glow at top centre. Solid to ~58.8% of a band ~36.6% of the surface
-          tall, transparent by its bottom; fades over ~215px of scroll (HomeScreen.kt:536).
+          tall, transparent by its bottom. App parity (HomeScreen.kt 70adc5fd): it no longer
+          fades out over ~215px of scroll — the header above it is fixed now, so a fading band
+          would leave the pinned logo and title sitting on bare grey.
           Compose also sways decorative `Sunbeams` inside it — not ported; logged in docs/04. */}
       {isComposerUi ? (
-        <div className="fcsdk-home-band" style={{ opacity: bandAlpha }} aria-hidden>
+        <div className="fcsdk-home-band" aria-hidden>
           <span className="fcsdk-home-band-glow" />
         </div>
       ) : null}
@@ -299,7 +362,7 @@ export function HomeScreen(props: {
         ) : (
           <span style={{ width: 10 }} />
         )}
-        <div className="fcsdk-appbar-title">{label('app_name', 'FarmerChat')}</div>
+        <div className="fcsdk-appbar-title">{label('fc_v2_app_label_farmerchat', 'FarmerChat')}</div>
         {services.config.enableWeather ? (
           <button type="button" className="fcsdk-weatherbtn" onClick={onWeatherClick} aria-label={label('weather_chip', 'Weather')}>
             <span aria-hidden>{weather?.weather_icon ? <img src={weather.weather_icon} alt="" style={{ width: 18, height: 18 }} /> : Icon.weatherDefault}</span>
@@ -308,49 +371,82 @@ export function HomeScreen(props: {
         ) : null}
       </div>
 
-      <div
-        className="fcsdk-scroll"
-        onScroll={isComposerUi ? (e) => setScrollTop(e.currentTarget.scrollTop) : undefined}
-        // Reserve the floating composer's height so the last feed card is not hidden behind it
-        // (Compose: `contentPadding = composerBarHeight(floating = true)`).
-        style={isComposerUi ? { paddingBottom: composerBarHeight({ floating: true }) } : undefined}
-      >
-        {/* Agentic top section (2.0.0) / plain greeting (1.0.0). App parity
-            (HomeScreen.kt:668): centred logo mark, leaf-flanked "For your farm today", the
-            location pill, then the greeting centred beneath. */}
-        {isComposerUi ? (
-          <div className="fcsdk-home-agentic-head">
-            <span className="fcsdk-home-logomark" aria-hidden>
-              {Icon.logo}
+      {/* Positioned container for the feed and its fixed header, mirroring Compose's
+          `Box { LazyColumn(...); header }`. Load-bearing: `.fcsdk-screen` is a flex column, and an
+          absolutely-positioned FLEX CHILD resolves its static position to the flex container's
+          content-box origin — not its DOM-order slot — so a head placed directly in the screen
+          would land on top of the app bar and swallow the menu and weather taps. */}
+      <div className="fcsdk-home-feedwrap">
+      {/* FIXED header CONTENT (2.0.0). App parity (HomeScreen.kt 70adc5fd): centred logo mark,
+          leaf-flanked "For your farm today" and the location pill are pinned over the feed while
+          cards scroll beneath them. Rendered outside the scroller, with a transparent background
+          so the green band behind everything shows through. The greeting stays IN the scroller —
+          it is feed content, and Compose's fixed overlay does not carry it either. */}
+      {isComposerUi ? (
+        <div className="fcsdk-home-agentic-head" ref={agenticHeadRef}>
+          <span className="fcsdk-home-logomark" aria-hidden>
+            {Icon.logo}
+          </span>
+          <div className="fcsdk-home-sectionhead">
+            <span className="fcsdk-home-leaf" aria-hidden>
+              🌿
             </span>
-            <div className="fcsdk-home-sectionhead">
-              <span className="fcsdk-home-leaf" aria-hidden>
-                🌿
-              </span>
-              <span>{label('home_feed_header', 'For your farm today')}</span>
-              <span className="fcsdk-home-leaf fcsdk-home-leaf--flip" aria-hidden>
-                🌿
-              </span>
-            </div>
-            <button
-              type="button"
-              className="fcsdk-home-locationpill"
-              onClick={() => {
-                if (props.locationActions.hasKnownLocation()) return;
-                void props.locationActions.shareLocation();
-              }}
-            >
-              <span aria-hidden>{Icon.location}</span>
-              <span>{locationPillLabel}</span>
-            </button>
-            {greeting === null ? (
-              <Skeleton width="70%" height={24} />
+            <span>{label('home_feed_header', 'For your farm today')}</span>
+            <span className="fcsdk-home-leaf fcsdk-home-leaf--flip" aria-hidden>
+              🌿
+            </span>
+          </div>
+          <button
+            type="button"
+            className="fcsdk-home-locationpill"
+            onClick={() => {
+              // App parity: an explicit tap always re-runs the flow (never a silent no-op when a
+              // fix is already stored); with two denies the machine lands on the Recovery sheet.
+              if (props.locationState.kind === 'Idle') props.locationActions.triggerFromLocalContext();
+            }}
+          >
+            {isPillSearching ? (
+              <span className="fcsdk-spinner" style={{ width: 12, height: 12, borderWidth: 2 }} aria-hidden />
             ) : (
+              <span aria-hidden>{Icon.location}</span>
+            )}
+            <span>{locationPillLabel}</span>
+          </button>
+        </div>
+      ) : null}
+
+      <div
+        className={'fcsdk-scroll' + (isComposerUi ? ' fcsdk-scroll--headmask' : '')}
+        style={
+          isComposerUi
+            ? {
+                // Reserve the floating composer's height so the last feed card is not hidden
+                // behind it (Compose: `contentPadding = composerBarHeight(floating = true)`),
+                // and the fixed header's height at the top so the first card rests below it.
+                paddingBottom: composerBarHeight({ floating: true }),
+                paddingTop: headHeight,
+                // The CSS equivalent of Compose's DstIn mask: the strip behind the header body
+                // is fully transparent and ramps to fully-kept only in the last fifth, right
+                // where cards emerge below the header — so nothing ghosts through the gaps
+                // around the logo and title, and the resting first card is not faded.
+                ['--fcsdk-headmask-end' as string]: `${Math.max(headHeight, 1)}px`,
+              }
+            : undefined
+        }
+      >
+        {/* Plain greeting (1.0.0) / centred greeting under the fixed head (2.0.0). */}
+        {isComposerUi ? (
+          greeting === null ? (
+            <div className="fcsdk-home-agentic-greeting">
+              <Skeleton width="70%" height={24} />
+            </div>
+          ) : (
+            <div className="fcsdk-home-agentic-greeting">
               <div className="fcsdk-greeting fcsdk-greeting--centred">
                 {greeting || label('home_greeting_fallback', 'Hello! How can I help your farm today?')}
               </div>
-            )}
-          </div>
+            </div>
+          )
         ) : greeting === null ? (
           <div style={{ padding: '18px 16px 6px' }}>
             <Skeleton width="70%" height={24} />
@@ -431,6 +527,7 @@ export function HomeScreen(props: {
           </>
         )}
       </div>
+      </div>
 
       {/* 2.0.0 floating composer (camera / field / mic|send), replacing BOTH the sticky buttons
           and the text overlay — Compose HomeScreen.kt:947. */}
@@ -438,7 +535,7 @@ export function HomeScreen(props: {
         <InputComposer
           floating
           showAura
-          placeholder={label('home_composer_placeholder', 'Ask about your farm...')}
+          placeholder={label('fc_v2_app_label_ask_about_your_farm', 'Ask about your farm...')}
           attachments={attachments}
           onRemoveAttachment={(index) => setAttachments((list) => list.filter((_, i) => i !== index))}
           onReady={(handle) => {
@@ -454,9 +551,9 @@ export function HomeScreen(props: {
           onSend={sendFromComposer}
           enableImages={services.config.enableImages}
           enableVoice={services.config.enableVoice}
-          photoLabel={label('input_photo', 'Photo')}
-          voiceLabel={label('input_speak', 'Speak')}
-          sendLabel={label('chat_send', 'Send')}
+          photoLabel={label('fc_v2_app_label_photo', 'Photo')}
+          voiceLabel={label('fc_v2_app_label_speak', 'Speak')}
+          sendLabel={label('fc_v2_app_label_send', 'Send')}
           removeLabel={label('photo_remove', 'Remove image')}
         />
       ) : null}
@@ -507,7 +604,7 @@ export function HomeScreen(props: {
       {showTermsOfUseDialog && termsUrl && termsUrl.trim().length > 0 ? (
         <TermsOfUseDialog
           url={termsUrl}
-          title={label('terms_of_use', 'Terms of Use')}
+          title={label('fc_v2_app_label_terms_of_use', 'Terms of Use')}
           onDismiss={() => setShowTermsOfUseDialog(false)}
           onAcceptAndContinue={() => {
             // accept_terms (#7) — best-effort; the dialog closes either way. The app also tracks a

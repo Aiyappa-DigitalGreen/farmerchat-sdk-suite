@@ -40,7 +40,7 @@ struct HomeView: View {
             if showTextInput {
                 FCTextInputOverlay(
                     text: $typedText,
-                    placeholder: fcLabel("type_placeholder", "Ask anything about your farm"),
+                    placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
                     onSend: { question in
                         showTextInput = false
                         typedText = ""
@@ -87,6 +87,22 @@ struct HomeView: View {
         }
         .fcToastHost(toast)
         .task { await initialLoad() }
+        // App HomeScreen.kt:256-266: a location Error while Home is the visible screen goes to the
+        // shared Error screen and the flow is closed silently. Gated on Home being on top — Home
+        // stays alive under Chat, and the chat chip's errors belong to the global host there.
+        .onReceive(locationPrompt.$state) { state in
+            guard case .error(let type) = state, router.current == .home else { return }
+            router.push(.error(isNetworkError: type == .noNetwork, fromScreen: "home"))
+            locationPrompt.dismiss(emitContinue: false)
+        }
+        // App HomeScreen.kt:282-298: reload feed AND weather on a Campaign update or a
+        // LocalContext success (never on a dismiss/deny).
+        .onReceive(locationPrompt.events) { event in
+            let isLocalContextSuccess = event == .locationSaved(source: .localContext)
+            guard event == .locationUpdatedFromWidget || isLocalContextSuccess else { return }
+            loadHome(skipLoadingCheck: true)
+            viewModel.onAction(.loadWeather(userId: FarmerChat.shared.session.userId, skipLoadingCheck: true))
+        }
         .onChange(of: transcribeResult?.transcriptionId?.stringValue) { _ in
             handleTranscription()
         }
@@ -161,9 +177,19 @@ struct HomeView: View {
 
     @ViewBuilder
     private var content: some View {
+        if locationPrompt.isCampaignLocationLoading {
+            // App `isWidgetGpsLoading`: only a CAMPAIGN flow replaces the feed with this spinner.
+            FCLogoSpinner(message: fcLabel(FCLabels.gettingYourLocation, "Getting your location..."))
+        } else {
+            feedContent
+        }
+    }
+
+    @ViewBuilder
+    private var feedContent: some View {
         switch viewModel.state.homeFeedState {
         case .idle, .loading:
-            FCLogoSpinner(message: fcLabel("home_loading", "Getting today's advice"))
+            FCLogoSpinner(message: fcLabel(FCLabels.gettingTodaysAdvice, "Getting today's advice"))
         case .error(let message, _, _):
             FCHomeFeedError(message: message) {
                 FarmerChat.shared.analytics.track(AnalyticsEvents.contentTryAgainClicked)
@@ -180,7 +206,7 @@ struct HomeView: View {
             LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
                 // Greeting
                 Text(greeting(feed))
-                    .font(.system(size: 24, weight: .bold))
+                    .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
@@ -296,15 +322,23 @@ struct HomeView: View {
             let name = FarmerChat.shared.prefs.string(.userName) ?? ""
             return LabelManager.applyTemplate(greeting, params: ["name": name])
         }
-        return fcLabel("home_greeting", "Hello!")
+        return fcLabel(FCLabels.hello, "Hello!")
     }
 
     // MARK: - Weather (routes through LocationPromptManager)
 
     private func weatherTapped() {
+        // App HomeScreen.kt:545-575 order: offline → No Internet error (home_weather); ignore while
+        // the feed is loading; track; ignore while a location flow is already running.
+        if !locationPrompt.isOnline {
+            router.push(.error(isNetworkError: true, fromScreen: "home_weather"))
+            return
+        }
+        if viewModel.state.homeFeedState.isLoading { return }
         FarmerChat.shared.analytics.track(AnalyticsEvents.weatherClicked)
+        guard locationPrompt.state == .idle else { return }
         // App parity: weather CTA asks the app's label WHAT_IS_THE_PRESENT_WEATHER.
-        let question = fcLabel("WHAT_IS_THE_PRESENT_WEATHER", "What is the present weather?")
+        let question = fcLabel(FCLabels.whatIsThePresentWeather, "What is the present weather?")
         if locationPrompt.isLocationKnown {
             openChat(FCDestination.ChatArgs(question: question, isWeatherAdviceCTA: true))
         } else {

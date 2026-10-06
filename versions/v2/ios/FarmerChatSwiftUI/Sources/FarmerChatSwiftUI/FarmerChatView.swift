@@ -13,6 +13,12 @@ public struct FarmerChatView: View {
     @StateObject private var locationPrompt: LocationPromptManager
     @State private var showNameUpdatedToast = false
     @State private var appearanceTick = 0
+    /// Mirrors `appearanceTick` for language. `theme` resolves the per-script type scale from
+    /// the persisted language code, which SwiftUI cannot observe — and the onboarding language
+    /// screen, the first screen a farmer sees, writes it through a view model this view does
+    /// not hold. Without this the Devanagari/Ethiopic/Kannada/Oriya/Telugu tables would not
+    /// take effect until the next launch.
+    @State private var languageTick = 0
 
     public init() {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatView()")
@@ -24,6 +30,7 @@ public struct FarmerChatView: View {
 
     private var theme: FCTheme {
         _ = appearanceTick // re-evaluate when appearance changes
+        _ = languageTick // ...and when the language (hence the type scale) changes
         return FCTheme.theme(for: colorScheme, appearance: FarmerChat.shared.appearance)
     }
 
@@ -87,14 +94,8 @@ public struct FarmerChatView: View {
                 chatHistoryVM.refresh()
             }
         }
-        .onReceive(locationPrompt.events) { event in
-            if event == .locationUpdatedFromWidget {
-                // Refresh Home in place (shouldRefreshHome parity).
-                if router.current == .home {
-                    router.setRoot(.home)
-                }
-            }
-        }
+        // Home reloads its feed + weather itself on a location success (HomeView), as the app's
+        // HomeScreen does — no root rebuild here, which reloaded Home a second time.
     }
 
     private var preferredScheme: ColorScheme? {
@@ -158,6 +159,7 @@ public struct FarmerChatView: View {
             )
             .id(appearanceTick)
             .onChange(of: settingsVM.appearanceMode) { _ in appearanceTick += 1 }
+            .onReceive(FarmerChat.shared.prefs.languageDidChange) { _ in languageTick += 1 }
         case .settingsName:
             SettingsNameView(onSaveComplete: { showNameUpdatedToast = true })
         case .help:

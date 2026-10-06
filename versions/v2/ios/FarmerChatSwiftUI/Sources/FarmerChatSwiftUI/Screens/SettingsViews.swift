@@ -19,7 +19,7 @@ struct SettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("settings_title", "Settings"),
+                title: fcLabel(FCLabels.settings, "Settings"),
                 leading: .menu,
                 onLeadingTap: openDrawer
             )
@@ -27,30 +27,30 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     // Appearance selector (Day/Night/Auto)
-                    FCListCard(title: fcLabel("settings_appearance", "Appearance")) {
+                    FCListCard(title: fcLabel(FCLabels.appearance, "Appearance")) {
                         HStack(spacing: 10) {
-                            appearanceButton(.day, icon: "sun.max.fill", label: fcLabel("appearance_day", "Day"))
-                            appearanceButton(.night, icon: "moon.fill", label: fcLabel("appearance_night", "Night"))
-                            appearanceButton(.auto, icon: "circle.lefthalf.filled", label: fcLabel("appearance_auto", "Auto"))
+                            appearanceButton(.day, icon: "sun.max.fill", label: fcLabel(FCLabels.day, "Day"))
+                            appearanceButton(.night, icon: "moon.fill", label: fcLabel(FCLabels.night, "Night"))
+                            appearanceButton(.auto, icon: "circle.lefthalf.filled", label: fcLabel(FCLabels.auto, "Auto"))
                         }
                         .padding(16)
                     }
 
                     // Account details
-                    FCListCard(title: fcLabel("settings_account", "Account details")) {
+                    FCListCard(title: fcLabel(FCLabels.accountDetails, "Account details")) {
                         FCListItem(
                             icon: "person.fill",
-                            title: fcLabel("settings_your_name", "Your name"),
+                            title: fcLabel(FCLabels.yourName, "Your name"),
                             subtitle: userName,
                             action: { router.push(.settingsName) }
                         )
                     }
 
                     if settingsVM.isAuthenticated {
-                        FCSecondaryButton(title: fcLabel("logout", "Log out"), destructive: true, action: logout)
+                        FCSecondaryButton(title: fcLabel(FCLabels.logout, "Logout"), destructive: true, action: logout)
                             .overlay { if isLoggingOut { ProgressView() } }
                     } else {
-                        FCSecondaryButton(title: fcLabel("sign_up", "Sign up")) {
+                        FCSecondaryButton(title: fcLabel(FCLabels.signUp, "Sign up")) {
                             handleSignUp()
                         }
                     }
@@ -67,7 +67,7 @@ struct SettingsView: View {
             profileVM.fetchProfile(fromScreen: "settings")
             if showNameUpdatedToast {
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                toast.show(.success, fcLabel("name_updated_toast", "Your name has been updated."))
+                toast.show(.success, fcLabel(FCLabels.yourNameHasUpdated, "Your name has been updated."))
                 onToastConsumed()
             }
         }
@@ -85,7 +85,7 @@ struct SettingsView: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 18, weight: .medium))
-                Text(label).font(.system(size: 13, weight: .semibold))
+                Text(label).fcTextStyle(theme.typography.labelSmall)
             }
             .foregroundColor(isActive ? theme.brand.surfacePrimary : theme.content.foregroundSecondary)
             .frame(maxWidth: .infinity)
@@ -129,14 +129,14 @@ struct SettingsNameView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("settings_name_title", "Name"),
+                title: fcLabel(FCLabels.name, "Name"),
                 leading: .back,
                 onLeadingTap: { router.pop() }
             )
 
             VStack(spacing: 20) {
                 FCTextField(
-                    placeholder: fcLabel("enter_name_placeholder", "Your name"),
+                    placeholder: fcLabel(FCLabels.yourName, "Your name"),
                     text: Binding(
                         get: { name },
                         set: { name = NameInputNormalizer.normalize($0) }
@@ -145,7 +145,7 @@ struct SettingsNameView: View {
                 )
 
                 FCPrimaryButton(
-                    title: fcLabel("save_name", "Save name"),
+                    title: fcLabel(FCLabels.saveName, "Save name"),
                     state: viewModel.state.updateUserNameState.isLoading ? .loading : .normal,
                     enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty,
                     action: save
@@ -199,14 +199,14 @@ struct LanguageChooserView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("choose_language_title", "Choose your language"),
+                title: fcLabel(FCLabels.chooseYourLanguage, "Choose your language"),
                 leading: .menu,
                 onLeadingTap: openDrawer
             )
 
             switch settingsVM.state.languageState {
             case .idle, .loading:
-                FCLogoSpinner(message: fcLabel("loading_languages", "Loading languages…"))
+                FCLogoSpinner(message: fcLabel(FCLabels.loadingLanguages, "Loading languages..."))
             case .error:
                 Color.clear.onAppear { onFetchLabelsFailure() }
             case .success:
@@ -222,10 +222,11 @@ struct LanguageChooserView: View {
                             )
                         }
                         if !settingsVM.state.expandedLanguages && settingsVM.state.hasExpandableLanguages() {
-                            Button(fcLabel("all_languages", "All languages")) {
+                            Button(fcLabel(FCLabels.allLanguages, "All languages")) {
                                 settingsVM.toggleExpandedLanguages()
                             }
-                            .font(.system(size: 15, weight: .semibold))
+                            // App parity (LanguageChooserScreen.kt:210): labelLarge = 17/600.
+                            .fcTextStyle(theme.typography.labelLarge)
                             .foregroundColor(theme.brand.surfacePrimary)
                             .padding(.vertical, 10)
                             .buttonStyle(.plain)
@@ -237,8 +238,8 @@ struct LanguageChooserView: View {
 
                 FCPrimaryButton(
                     title: settingsVM.state.isSubmittingLanguage
-                        ? fcLabel("setting_language", "Setting language")
-                        : fcLabel("save_language", "Save language"),
+                        ? fcLabel(FCLabels.settingLanguage, "Setting language")
+                        : fcLabel(FCLabels.saveLanguage, "Save language"),
                     state: settingsVM.state.isSubmittingLanguage ? .loading : .normal,
                     enabled: settingsVM.state.selectedLanguageId != nil && !settingsVM.state.isFetchingLabels,
                     action: { settingsVM.submitLanguage() }
@@ -257,7 +258,7 @@ struct LanguageChooserView: View {
         .onChange(of: settingsVM.state.languageSubmitSuccess) { success in
             guard success else { return }
             settingsVM.consumeLanguageResult()
-            toast.show(.success, fcLabel("language_saved", "Language updated"))
+            toast.show(.success, fcLabel(FCLabels.languageUpdated, "Language updated"))
             Task {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 onLanguageSaved()
@@ -285,14 +286,14 @@ struct HelpView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("help_title", "Help"),
+                title: fcLabel(FCLabels.help, "Help"),
                 leading: .menu,
                 onLeadingTap: openDrawer
             )
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    FCListCard(title: fcLabel("help_faq_title", "How to use FarmerChat")) {
+                    FCListCard(title: fcLabel(FCLabels.howToUseFarmerchat, "How to use FarmerChat")) {
                         switch viewModel.helpState {
                         case .idle, .loading:
                             VStack(spacing: 12) {
@@ -302,10 +303,10 @@ struct HelpView: View {
                         case .error:
                             VStack(spacing: 8) {
                                 Text(fcLabel("help_load_failed", "Couldn't load help topics."))
-                                    .font(.system(size: 14))
+                                    .fcTextStyle(theme.typography.bodySmall)
                                     .foregroundColor(theme.content.foregroundSecondary)
-                                Button(fcLabel("try_again", "Try again")) { viewModel.reload() }
-                                    .font(.system(size: 14, weight: .semibold))
+                                Button(fcLabel(FCLabels.tryAgain, "Try again")) { viewModel.reload() }
+                                    .fcTextStyle(theme.typography.labelMedium)
                                     .foregroundColor(theme.brand.surfacePrimary)
                                     .buttonStyle(.plain)
                             }
@@ -314,7 +315,7 @@ struct HelpView: View {
                         case .success:
                             if viewModel.faqs.isEmpty {
                                 Text(fcLabel("help_empty", "No help topics yet."))
-                                    .font(.system(size: 14))
+                                    .fcTextStyle(theme.typography.bodySmall)
                                     .foregroundColor(theme.content.foregroundSecondary)
                                     .padding(16)
                             } else {
@@ -329,15 +330,15 @@ struct HelpView: View {
                         }
                     }
 
-                    FCListCard(title: fcLabel("help_more", "More")) {
-                        FCListItem(icon: "doc.text", title: fcLabel("terms_of_use", "Terms of use")) {
+                    FCListCard(title: fcLabel(FCLabels.more, "More")) {
+                        FCListItem(icon: "doc.text", title: fcLabel(FCLabels.termsOfUse, "Terms of use")) {
                             if let url = viewModel.legal?.termsOfUse {
-                                router.openLegal(url: url, title: fcLabel("terms_of_use", "Terms of use"))
+                                router.openLegal(url: url, title: fcLabel(FCLabels.termsOfUse, "Terms of use"))
                             }
                         }
-                        FCListItem(icon: "lock.shield", title: fcLabel("privacy_policy", "Privacy policy")) {
+                        FCListItem(icon: "lock.shield", title: fcLabel(FCLabels.privacyPolicy, "Privacy policy")) {
                             if let url = viewModel.legal?.privacyPolicy {
-                                router.openLegal(url: url, title: fcLabel("privacy_policy", "Privacy policy"))
+                                router.openLegal(url: url, title: fcLabel(FCLabels.privacyPolicy, "Privacy policy"))
                             }
                         }
                     }
@@ -346,7 +347,7 @@ struct HelpView: View {
                         Text("FarmerChat SDK \(FarmerChatSDK.version)")
                         Text("© Digital Green")
                     }
-                    .font(.system(size: 12))
+                    .fcTextStyle(theme.typography.caption)
                     .foregroundColor(theme.content.foregroundSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)

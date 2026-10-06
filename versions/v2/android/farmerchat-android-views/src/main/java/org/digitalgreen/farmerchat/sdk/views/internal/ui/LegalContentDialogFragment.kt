@@ -14,6 +14,7 @@ import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.views.R
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcFragmentLegalDialogBinding
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor
 
 /** Full-width legal WebView dialog (doc 01 §3.17). */
 internal class LegalContentDialogFragment : DialogFragment() {
@@ -42,14 +43,20 @@ internal class LegalContentDialogFragment : DialogFragment() {
 
         val url = arguments?.getString("url").orEmpty()
         val titleArg = arguments?.getString("title").orEmpty()
-        binding.fcLegalTitle.text = if (titleArg.equals("faq_terms", ignoreCase = true)) {
+        binding.fcLegalAppBar.fcAppBarTitle.text = if (titleArg.equals("faq_terms", ignoreCase = true)) {
             labels.getLabel(Labels.FAQ, "FAQ")
         } else {
             titleArg
         }
 
-        binding.fcLegalClose.contentDescription = labels.getLabel(Labels.CLOSE, "Close")
-        binding.fcLegalClose.setOnClickListener { dismissAllowingStateLoss() }
+        // App parity (LegalContentScreen.kt:64): CLOSE in the round chip, not the shared bar's
+        // default hamburger.
+        binding.fcLegalAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_ic_close)
+        binding.fcLegalAppBar.fcAppBarLeft.setBackgroundResource(R.drawable.fc_bg_appbar_chip_round)
+        // Set after inflation, so the inflater recolor never saw it.
+        FcRecolor.maybeRecolor(binding.fcLegalAppBar.fcAppBarLeft)
+        binding.fcLegalAppBar.fcAppBarLeft.contentDescription = labels.getLabel(Labels.CLOSE, "Close")
+        binding.fcLegalAppBar.fcAppBarLeft.setOnClickListener { dismissAllowingStateLoss() }
 
         binding.fcLegalWebView.settings.javaScriptEnabled = true
         binding.fcLegalWebView.webViewClient = object : WebViewClient() {

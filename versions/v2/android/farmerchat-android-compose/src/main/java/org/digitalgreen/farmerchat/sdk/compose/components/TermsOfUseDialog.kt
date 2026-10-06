@@ -30,6 +30,7 @@ import androidx.compose.ui.window.DialogProperties
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.compose.util.label
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
+import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 
 /**
  * Full-screen in-app dialog that renders a Terms-of-Use / policy [url] in a WebView,
@@ -72,6 +73,7 @@ fun TermsOfUseDialog(
                 DefaultAppBar(
                     title = title,
                     leftIcon = Icons.Filled.Close,
+                    leftRadius = Radius.Rounded,
                     onLeftClick = onDismiss,
                     showGlow = false,
                     containerColor = brand.surfacePrimary

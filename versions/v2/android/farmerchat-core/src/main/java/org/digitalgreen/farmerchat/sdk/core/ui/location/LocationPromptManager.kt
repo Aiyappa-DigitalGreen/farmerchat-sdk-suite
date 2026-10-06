@@ -19,21 +19,37 @@ import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserLocationUseCase
 
 /**
- * Global GPS/location prompt state machine (port of the app's LocationPromptManager,
- * doc 01 §3.15). The UI host renders per state and reports platform results back:
+ * Global GPS/location prompt state machine — a port of the app's
+ * `core/location/LocationPromptManager.kt` (fc-compose-agentic), doc 01 §3.15.
  *
- * Idle → Interstitial → RequestPermission → RequestEnableGps → FetchingLocation
- *      → (success → Idle + Continue) | Recovery | Error(type)
+ * Every trigger runs the app's `trigger()` decision tree:
  *
- * The host owns the actual permission launcher, SettingsClient resolution and
- * fused-location fetch (10 s, 1 retry → last-known fallback), calling back into
- * [onPermissionResult] / [onGpsEnableResult] / [onLocationFetched] /
- * [onLocationFetchFailed].
+ *  1. offline                                  → Error(NoNetwork)
+ *  2. denied twice and still no FINE permission → Recovery ("We need your location" sheet)
+ *  3. permission granted + a stored fix        → RequestEnableGps (no UI, straight to GPS/fetch)
+ *  4. Weather, permission granted, no fix      → Interstitial
+ *  5. Campaign, permission granted, no fix     → RequestEnableGps
+ *  6. LocalContext / Settings / Campaign, or permission already granted
+ *                                              → RequestPermission (system dialog, no interstitial)
+ *  7. otherwise (Weather, first ask)           → Interstitial
+ *
+ * The UI host renders per state and reports platform results back through [onPermissionResult],
+ * [onGpsEnableResult], [onLocationFetched] and [onLocationFetchFailed]. The host owns the
+ * permission launcher, the SettingsClient resolution and the fused-location fetch.
+ *
+ * Before 2026-10-06 the SDK sent EVERY trigger through the interstitial, decided "permanently
+ * denied" from `shouldShowRequestPermissionRationale` (false after merely tapping outside the
+ * dialog), let the GPS-off error retry back into the same dialog forever, and showed an error
+ * screen when the fix failed. All four diverged from the app.
  */
 class LocationPromptManager(
     private val prefs: SdkPreferences,
     private val updateUserLocationUseCase: UpdateUserLocationUseCase,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    /** Live `ACCESS_FINE_LOCATION` check. The app checks FINE only, so "Approximate" is a deny. */
+    private val hasFineLocationPermission: () -> Boolean = { false },
+    /** Live connectivity check (the app's `NetworkUtils.isOnline`). */
+    private val isOnline: () -> Boolean = { true }
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow<LocationPromptState>(LocationPromptState.Idle)
@@ -61,18 +77,29 @@ class LocationPromptManager(
     /** Navigation the caller wants to perform after the flow completes (weather → chat). */
     var pendingNavigation: (() -> Unit)? = null
 
-    // ------------------------------------------------------------------ GPS analytics
-    //
-    // Port of the app's `LocationPromptHost.trackGpsEvent` / `triggerLabel`
-    // (app ui/location/LocationPromptHost.kt:133-201). EVERY GPS event carries
-    // `screen_name` = "GPS Screen" plus the `Trigger` label, and `Attempt` where the
-    // app supplies one.
+    init {
+        // App LocationPromptHost: Screen_Viewed on entering the interstitial, Screen_Exit on
+        // leaving it, for "GPS Interstitial Screen". Done here so both flavours emit it identically.
+        scope.launch {
+            var previous: LocationPromptState? = null
+            _state.collect { current ->
+                val wasInterstitial = previous is LocationPromptState.Interstitial
+                val isInterstitial = current is LocationPromptState.Interstitial
+                if (wasInterstitial && !isInterstitial) analytics.trackScreenExit(AnalyticsScreens.GPS_INTERSTITIAL)
+                if (isInterstitial && !wasInterstitial) analytics.trackScreenView(AnalyticsScreens.GPS_INTERSTITIAL)
+                previous = current
+            }
+        }
+    }
+
+    /** The trigger that started the running flow (app `activeSource` / `activeCampaign`). */
+    @Volatile private var activeSource: LocationTriggerSource? = null
+    @Volatile private var activeCampaign: LocationCampaignConfig? = null
 
     /**
      * True while the ACTIVE location flow was raised by the chat `gps-prompt` chip. Port of the
-     * app's `activeAgenticChip` (`core/location/LocationPromptManager.kt:58`): set by
-     * [triggerFromLocalContext] and cleared by every other trigger, so it only ever describes the
-     * flow currently running.
+     * app's `activeAgenticChip`: set by [triggerFromLocalContext] and cleared by every other
+     * trigger, so it only ever describes the flow currently running.
      */
     @Volatile
     private var agenticChipOrigin: Boolean = false
@@ -80,17 +107,16 @@ class LocationPromptManager(
     /** True when the running flow came from the chat `gps-prompt` chip. */
     fun isAgenticChipOrigin(): Boolean = agenticChipOrigin
 
-    /**
-     * `{screen_name, Trigger}` (+ `Attempt`, + extras) — the app's trackGpsEvent payload,
-     * defaulted to the current flow's source/campaign. See [gpsAnalyticsProps].
-     *
-     * When the flow was raised by the chat `gps-prompt` chip the whole GPS funnel is re-attributed
-     * to Chat (`screen_name` = Chat, `Trigger` = "Chat Screen") and carries
-     * `agentic_chip_type = gps-prompt`, exactly as the app does. The override is applied AFTER
-     * [extra] on purpose: the fetch-phase `Location_Update_Triggered` passes `screen_name` = Home
-     * as an extra, and the chip attribution has to win over it (app parity —
-     * `LocationPromptManager.kt:438`).
-     */
+    // ------------------------------------------------------------------ GPS analytics
+    //
+    // Port of the app's `LocationPromptHost.trackGpsEvent`. EVERY GPS event carries
+    // `screen_name` = "GPS Screen" plus the `Trigger` label, and `Attempt` where the app supplies
+    // one. When the flow was raised by the chat `gps-prompt` chip the whole funnel is
+    // re-attributed to Chat (`screen_name` = Chat, `Trigger` = "Chat Screen",
+    // `agentic_chip_type = gps-prompt`). The override is applied AFTER [extra] on purpose: the
+    // fetch-phase `Location_Update_Triggered` passes `screen_name` = Home as an extra, and the
+    // chip attribution has to win over it.
+
     private fun gpsProps(
         source: LocationTriggerSource = currentSource(),
         campaign: LocationCampaignConfig? = currentCampaign(),
@@ -114,7 +140,7 @@ class LocationPromptManager(
         is LocationPromptState.RequestEnableGps -> s.source
         is LocationPromptState.FetchingLocation -> s.source
         is LocationPromptState.Error -> s.source
-        else -> LocationTriggerSource.Weather
+        else -> activeSource ?: LocationTriggerSource.Weather
     }
 
     private fun currentCampaign(): LocationCampaignConfig? = when (val s = _state.value) {
@@ -124,190 +150,320 @@ class LocationPromptManager(
         is LocationPromptState.RequestEnableGps -> s.campaign
         is LocationPromptState.FetchingLocation -> s.campaign
         is LocationPromptState.Error -> s.campaign
-        else -> null
+        else -> activeCampaign
     }
 
+    // ------------------------------------------------------------------ queries
+
+    /** App `isLocationEnabledOnce()`: a GPS fix has been saved. */
     fun hasStoredLocation(): Boolean =
         prefs.getString(SdkPreferences.Keys.FARMER_APP_LATITUDE, "").isNotBlank() &&
             prefs.getString(SdkPreferences.Keys.FARMER_APP_LONGITUDE, "").isNotBlank()
 
+    /** Live FINE-permission check — the same one the decision tree uses. */
+    fun hasCurrentLocationPermission(): Boolean = hasFineLocationPermission()
+
+    /**
+     * App `isBlockedByPermission()`: denied twice and still not granted. Unlike the transient
+     * [LocationPromptState.Recovery] this stays true after the sheet is dismissed, until the
+     * permission is actually granted (e.g. from system Settings).
+     */
+    fun isBlockedByPermission(): Boolean =
+        prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) >= 2 && !hasFineLocationPermission()
+
     // ------------------------------------------------------------------ triggers
 
-    /** Weather chip tap without a known location: full interstitial flow. */
+    /**
+     * Weather chip tap. With a stored fix the app skips the GPS flow and navigates straight away;
+     * otherwise the full flow runs and [pendingNav] fires when it ends (any outcome but [cancel]).
+     */
     fun triggerFromWeather(pendingNav: (() -> Unit)? = null) {
         agenticChipOrigin = false
         pendingNavigation = pendingNav
-        _state.value = LocationPromptState.Interstitial(LocationTriggerSource.Weather)
+        if (hasStoredLocation()) {
+            executePendingNavigation()
+            return
+        }
+        trigger(LocationTriggerSource.Weather, null)
     }
 
     fun triggerFromCampaign(config: LocationCampaignConfig) {
         agenticChipOrigin = false
-        _state.value = if (config.skipInterstitial) {
-            LocationPromptState.RequestPermission(LocationTriggerSource.Campaign, config)
-        } else {
-            LocationPromptState.Interstitial(LocationTriggerSource.Campaign, config)
-        }
+        trigger(LocationTriggerSource.Campaign, config)
     }
 
     /**
-     * @param fromAgenticChip true when raised by the chat `gps-prompt` "Share my location" chip, so
-     * the whole GPS funnel is attributed to Chat (`screen_name` = Chat, `Trigger` = "Chat Screen",
-     * `agentic_chip_type` = gps-prompt) instead of Home. Home's own location pill passes false
-     * (the default). App parity: `LocationPromptManager.triggerFromLocalContext(fromAgenticChip)`.
+     * Home location pill, or the chat `gps-prompt` "Share my location" chip.
+     *
+     * @param fromAgenticChip true when raised by the chat chip, so the whole GPS funnel is
+     * attributed to Chat instead of Home. App parity:
+     * `LocationPromptManager.triggerFromLocalContext(fromAgenticChip)`.
      */
     fun triggerFromLocalContext(fromAgenticChip: Boolean = false) {
         agenticChipOrigin = fromAgenticChip
-        _state.value = LocationPromptState.Interstitial(LocationTriggerSource.LocalContext)
+        trigger(LocationTriggerSource.LocalContext, null)
     }
 
-    /**
-     * 2.0.0: the Settings "My Farm" row.
-     *
-     * Goes straight to the permission request rather than through the interstitial: the farmer
-     * has already navigated to Settings and tapped a location row, so the interstitial would be
-     * asking them to opt into something they just explicitly chose.
-     */
+    /** Settings "My Farm" Location row. */
     fun triggerFromSettings() {
         agenticChipOrigin = false
-        trackPermissionPromptShown(LocationTriggerSource.Settings, null)
-        _state.value = LocationPromptState.RequestPermission(LocationTriggerSource.Settings, null)
+        trigger(LocationTriggerSource.Settings, null)
+    }
+
+    /** The app's `trigger()` decision tree — see the class doc. */
+    private fun trigger(source: LocationTriggerSource, campaign: LocationCampaignConfig?) {
+        if (!isOnline()) {
+            activeSource = source
+            activeCampaign = campaign
+            _state.value = LocationPromptState.Error(
+                LocationErrorType.NoNetwork, source, campaign, canRetry = true
+            )
+            return
+        }
+
+        // Already enabled once: only the Weather entry no-ops. Campaign has its own gating, and a
+        // manual tap on the pill / Settings row is an explicit request to refresh the location.
+        val allowRetrigger = campaign?.allowRetrigger == true ||
+            source == LocationTriggerSource.LocalContext ||
+            source == LocationTriggerSource.Settings
+        if (hasStoredLocation() && source != LocationTriggerSource.Campaign && !allowRetrigger) {
+            executePendingNavigation()
+            return
+        }
+
+        activeSource = source
+        activeCampaign = campaign
+
+        val denyCount = prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0)
+        val hasPermission = hasFineLocationPermission()
+        // Denied twice and still not granted → the "We need your location" sheet, for every
+        // source. Granted later from Settings → never blocked again.
+        if (denyCount >= 2 && !hasPermission) {
+            enterRecovery(source, campaign)
+            return
+        }
+
+        val shouldSkipInterstitial = hasPermission ||
+            source == LocationTriggerSource.Campaign ||
+            source == LocationTriggerSource.LocalContext ||
+            source == LocationTriggerSource.Settings ||
+            campaign?.skipInterstitial == true
+        val hasFix = hasStoredLocation()
+
+        // App trigger(): Location_Update_Triggered, screen_name Home, Attempt = deny count + 1
+        // clamped to 1..2, sent as a string.
+        analytics.track(
+            AnalyticsEvents.LOCATION_UPDATE_TRIGGERED,
+            gpsProps(
+                source, campaign, null,
+                mapOf(
+                    AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME,
+                    AnalyticsProps.ATTEMPT to (denyCount + 1).coerceIn(1, 2).toString()
+                )
+            )
+        )
+
+        when {
+            hasPermission && hasFix ->
+                _state.value = LocationPromptState.RequestEnableGps(source, campaign)
+            hasPermission && source == LocationTriggerSource.Weather ->
+                _state.value = LocationPromptState.Interstitial(source, campaign)
+            hasPermission && source == LocationTriggerSource.Campaign ->
+                _state.value = LocationPromptState.RequestEnableGps(source, campaign)
+            shouldSkipInterstitial -> enterRequestPermission(source, campaign)
+            else -> _state.value = LocationPromptState.Interstitial(source, campaign)
+        }
     }
 
     /**
-     * `Permission_popup_shown` + `location_permission_prompt_triggered`, both stamped with
-     * the NEXT attempt number (app LocationPromptHost.kt:370-390).
+     * `Permission_popup_shown` + `location_permission_prompt_triggered`, both with Attempt 1, on
+     * every entry into RequestPermission (app LocationPromptHost's RequestPermission effect).
      */
-    private fun trackPermissionPromptShown(
-        source: LocationTriggerSource,
-        campaign: LocationCampaignConfig?
-    ) {
-        val nextAttempt = prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) + 1
+    private fun enterRequestPermission(source: LocationTriggerSource, campaign: LocationCampaignConfig?) {
         analytics.track(
             AnalyticsEvents.PERMISSION_POPUP_SHOWN,
-            gpsProps(
-                source, campaign, nextAttempt,
-                mapOf(AnalyticsProps.PERMISSION_TYPE to "Location")
-            )
+            gpsProps(source, campaign, 1, mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
         )
         analytics.track(
             AnalyticsEvents.LOCATION_PERMISSION_PROMPT_TRIGGERED,
-            gpsProps(source, campaign, nextAttempt)
+            gpsProps(source, campaign, 1)
+        )
+        _state.value = LocationPromptState.RequestPermission(source, campaign)
+    }
+
+    /** Recovery sheet + its `Permission_Fallback_Default_Setting_Shown` (Attempt 1). */
+    private fun enterRecovery(source: LocationTriggerSource, campaign: LocationCampaignConfig?) {
+        analytics.track(AnalyticsEvents.PERMISSION_FALLBACK_SETTING_SHOWN, gpsProps(source, campaign, 1))
+        _state.value = LocationPromptState.Recovery(source, campaign)
+    }
+
+    // ------------------------------------------------------------------ interstitial / sheet actions
+
+    /** Interstitial "Share Location" CTA. */
+    fun onInterstitialCtaClicked() {
+        val s = _state.value as? LocationPromptState.Interstitial ?: return
+        enterRequestPermission(s.source, s.campaign)
+    }
+
+    /**
+     * Skip / Recovery close: carry on with the original navigation, using IP-based location.
+     * Emits `Continue(reason)`; [reason] is never a success reason.
+     */
+    fun continueWithoutLocation(reason: String = "continue_without_location") {
+        val src = activeSource ?: return dismiss(emitContinue = false)
+        val camp = activeCampaign
+        emit(LocationPromptEvent.Continue(src, camp, reason))
+        executePendingNavigation()
+        dismiss(emitContinue = false)
+    }
+
+    /** Interstitial back: abandon the original navigation. */
+    fun cancel() {
+        val src = activeSource ?: return dismiss(emitContinue = false)
+        val camp = activeCampaign
+        emit(LocationPromptEvent.Cancel(src, camp))
+        pendingNavigation = null
+        dismiss(emitContinue = false)
+    }
+
+    /**
+     * Close the flow. With [emitContinue] an active flow settles with `Continue("dismissed")` and
+     * the pending navigation runs, so a caller armed for the flow (weather → chat, the chat
+     * gps-prompt) never waits forever. "dismissed" is NOT a success reason.
+     */
+    fun dismiss(emitContinue: Boolean = true) {
+        val src = activeSource
+        val camp = activeCampaign
+        if (emitContinue && src != null) {
+            emit(LocationPromptEvent.Continue(src, camp, reason = "dismissed"))
+            executePendingNavigation()
+        } else {
+            pendingNavigation = null
+        }
+        _state.value = LocationPromptState.Idle
+        activeSource = null
+        activeCampaign = null
+    }
+
+    /** Recovery "Turn on in settings" — the host opens the app's settings page. */
+    fun trackRecoverySettingsClicked() {
+        analytics.track(
+            AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CLICKED,
+            gpsProps(attempt = 1, extra = mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
         )
     }
 
-    // ------------------------------------------------------------------ interstitial actions
-
-    /** Interstitial "Turn location on now" / Recovery "Turn on in settings". */
-    fun onShareClicked() {
-        trackPermissionPromptShown(currentSource(), currentCampaign())
-        _state.value = LocationPromptState.RequestPermission(currentSource(), currentCampaign())
-    }
-
-    /** Interstitial "Continue without location" / back. */
-    fun onSkipClicked() {
-        val source = currentSource()
-        val campaign = currentCampaign()
-        _state.value = LocationPromptState.Idle
-        scope.launch {
-            _events.emit(LocationPromptEvent.Cancel(source, campaign))
-        }
-        // Weather flow: continue navigation without location.
-        pendingNavigation?.invoke()
-        pendingNavigation = null
-    }
-
-    fun dismiss() {
-        // Capture before clearing: currentSource() derives from _state and falls back to Weather
-        // once the state is Idle.
-        val wasActive = _state.value !is LocationPromptState.Idle
-        val source = currentSource()
-        val campaign = currentCampaign()
-        _state.value = LocationPromptState.Idle
-        pendingNavigation = null
-        // Every terminal exit MUST emit, or a collector armed for this flow waits forever. The
-        // error branch has no other exit: onLocationFetchFailed / onNoNetwork /
-        // onGpsEnableResult(false) all park in State.Error and dismiss() is how the user leaves
-        // it. "dismissed" is deliberately NOT one of the success reasons, so the chat gps-prompt
-        // settles into its decline query and the blocking question still gets answered.
-        // App parity: `dismiss(emitContinue = true)` emits Continue(reason = "dismissed").
-        // onLocationFetched already sets Idle before emitting, so a dismiss following a success
-        // sees wasActive = false and does not emit a second, contradictory event.
-        if (wasActive) {
-            scope.launch {
-                _events.emit(LocationPromptEvent.Continue(source, campaign, reason = "dismissed"))
-            }
-        }
+    /** Recovery sheet closed without going to settings (close icon, swipe, back). */
+    fun trackRecoveryCanceled() {
+        analytics.track(
+            AnalyticsEvents.PERMISSION_FALLBACK_SETTING_CANCELED,
+            gpsProps(attempt = 1, extra = mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
+        )
     }
 
     // ------------------------------------------------------------------ host callbacks
 
-    fun onPermissionResult(granted: Boolean, canAskAgain: Boolean = true) {
-        val source = currentSource()
-        val campaign = currentCampaign()
-        if (granted) {
-            // App LocationPromptHost.kt:232/241 — Attempt is always 1 on success, and
-            // Permission_granted additionally carries Permission_type.
-            analytics.track(
-                AnalyticsEvents.PERMISSION_GRANTED,
-                gpsProps(source, campaign, 1, mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
-            )
-            analytics.track(
-                AnalyticsEvents.LOCATION_PERMISSION_ALLOW,
-                gpsProps(source, campaign, 1)
-            )
-            prefs.putBoolean(SdkPreferences.Keys.GPS_PERMISSION_SHOULD_ASK, false)
-            prefs.putInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0)
-            _state.value = LocationPromptState.RequestEnableGps(source, campaign)
-        } else {
-            // App LocationPromptHost.kt:254/263 — Attempt is the NEXT deny count.
-            val nextAttempt = prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) + 1
-            prefs.putInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, nextAttempt)
+    fun onPermissionResult(granted: Boolean) {
+        val current = _state.value
+        val source: LocationTriggerSource
+        val campaign: LocationCampaignConfig?
+        when (current) {
+            is LocationPromptState.RequestPermission -> { source = current.source; campaign = current.campaign }
+            is LocationPromptState.Interstitial -> { source = current.source; campaign = current.campaign }
+            is LocationPromptState.Error -> { source = current.source; campaign = current.campaign }
+            is LocationPromptState.Recovery -> { source = current.source; campaign = current.campaign }
+            else -> return
+        }
+
+        if (!granted) {
+            val deny = prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) + 1
+            prefs.putInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, deny)
+            prefs.putBoolean(SdkPreferences.Keys.GPS_PERMISSION_SHOULD_ASK, true)
             analytics.track(
                 AnalyticsEvents.PERMISSION_DENIED,
-                gpsProps(
-                    source, campaign, nextAttempt,
-                    mapOf(AnalyticsProps.PERMISSION_TYPE to "Location")
-                )
+                gpsProps(source, campaign, deny, mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
             )
-            analytics.track(
-                AnalyticsEvents.LOCATION_PERMISSION_DENY,
-                gpsProps(source, campaign, nextAttempt)
-            )
-            prefs.putBoolean(SdkPreferences.Keys.GPS_PERMISSION_SHOULD_ASK, true)
-            _state.value = if (!canAskAgain) {
-                // App LocationPromptHost.kt:411 — the recovery sheet is the permission
-                // fallback surface.
-                analytics.track(
-                    AnalyticsEvents.PERMISSION_FALLBACK_SETTING_SHOWN,
-                    gpsProps(
-                        source, campaign, nextAttempt,
-                        mapOf(AnalyticsProps.PERMISSION_TYPE to "Location")
-                    )
-                )
-                // Permanently denied → recovery sheet ("Turn on in settings").
-                LocationPromptState.Recovery(source, campaign)
-            } else {
-                LocationPromptState.Idle
+            analytics.track(AnalyticsEvents.LOCATION_PERMISSION_DENY, gpsProps(source, campaign, deny))
+            // The 2nd deny escalates to the Recovery sheet, for every source.
+            if (deny >= 2) {
+                enterRecovery(source, campaign)
+                return
             }
-            if (_state.value is LocationPromptState.Idle) {
-                scope.launch { _events.emit(LocationPromptEvent.Cancel(source, campaign)) }
-                pendingNavigation?.invoke()
-                pendingNavigation = null
-            }
+            // Do not block app usage: carry on with IP-based location.
+            _state.value = LocationPromptState.Idle
+            emit(LocationPromptEvent.Continue(source, campaign, reason = "permission_denied"))
+            executePendingNavigation()
+            activeSource = null
+            activeCampaign = null
+            return
         }
-    }
 
-    /** Re-check on ON_RESUME while in Recovery (user may have granted from settings). */
-    fun onResumedWithPermission(granted: Boolean) {
-        if (_state.value is LocationPromptState.Recovery && granted) {
-            _state.value = LocationPromptState.RequestEnableGps(currentSource(), currentCampaign())
+        // App LocationPromptHost — Attempt is always 1 on success.
+        analytics.track(
+            AnalyticsEvents.PERMISSION_GRANTED,
+            gpsProps(source, campaign, 1, mapOf(AnalyticsProps.PERMISSION_TYPE to "Location"))
+        )
+        analytics.track(AnalyticsEvents.LOCATION_PERMISSION_ALLOW, gpsProps(source, campaign, 1))
+        prefs.putBoolean(SdkPreferences.Keys.GPS_PERMISSION_SHOULD_ASK, false)
+        prefs.putInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0)
+
+        val isFromRecovery = current is LocationPromptState.Recovery
+        if (isFromRecovery && hasStoredLocation()) {
+            emit(LocationPromptEvent.Continue(source, campaign, reason = "post_settings_preference_exists"))
+            executePendingNavigation()
+            _state.value = LocationPromptState.Idle
+            activeSource = null
+            activeCampaign = null
+            return
+        }
+        _state.value = if (isFromRecovery && source == LocationTriggerSource.Weather) {
+            LocationPromptState.Interstitial(source, campaign)
+        } else {
+            LocationPromptState.RequestEnableGps(source, campaign)
         }
     }
 
     /**
-     * Enters `FetchingLocation` and emits the app's fetch-phase pair, once per attempt
-     * (app LocationPromptHost.kt:435-462): `Location_Update_Triggered` — whose `screen_name`
-     * the app OVERRIDES to the Dashboard screen rather than the GPS screen — followed by
+     * ON_RESUME while the Recovery sheet is up: the farmer may have granted the permission in
+     * system Settings. App parity: Campaign resumes the flow; every other source goes back to the
+     * interstitial so the farmer re-confirms with "Share Location".
+     */
+    fun onResumedWithPermission(granted: Boolean) {
+        val s = _state.value as? LocationPromptState.Recovery ?: return
+        if (!granted) return
+        if (s.source == LocationTriggerSource.Campaign) {
+            onPermissionResult(granted = true)
+        } else {
+            _state.value = LocationPromptState.Interstitial(s.source, s.campaign)
+        }
+    }
+
+    /**
+     * GPS resolution outcome. Declined → Error(GpsUnavailable) with `canRetry = false`: the farmer
+     * can't fix it inside the app, so the error CTA closes the flow instead of reopening the same
+     * dialog. The Weather entry skips the error and continues without location.
+     */
+    fun onGpsEnableResult(enabled: Boolean) {
+        val s = _state.value as? LocationPromptState.RequestEnableGps ?: return
+        if (enabled) {
+            enterFetchingLocation(s.source, s.campaign)
+            return
+        }
+        if (s.source == LocationTriggerSource.Weather && s.campaign == null) {
+            continueWithoutLocation(reason = "gps_disabled_no_thanks")
+            return
+        }
+        _state.value = LocationPromptState.Error(
+            LocationErrorType.GpsUnavailable, s.source, s.campaign, canRetry = false
+        )
+    }
+
+    /** GPS already enabled — skip the resolution dialog. */
+    fun onGpsAlreadyEnabled() = onGpsEnableResult(true)
+
+    /**
+     * Enters `FetchingLocation` and emits the fetch-phase pair, once per attempt:
+     * `Location_Update_Triggered` (screen_name OVERRIDDEN to the Dashboard screen) followed by
      * `API_Call_Initiated` for "GPS Fetch fresh location".
      */
     private fun enterFetchingLocation(
@@ -326,156 +482,151 @@ class LocationPromptManager(
         _state.value = LocationPromptState.FetchingLocation(source, campaign, attempt)
     }
 
-    fun onGpsEnableResult(enabled: Boolean) {
-        val source = currentSource()
-        val campaign = currentCampaign()
-        if (enabled) {
-            enterFetchingLocation(source, campaign)
-            return
-        }
-        _state.value = LocationPromptState.Error(
-            LocationErrorType.GpsUnavailable, source, campaign
-        )
-    }
-
-    /** GPS already enabled — skip the resolution dialog. */
-    fun onGpsAlreadyEnabled() {
-        enterFetchingLocation(currentSource(), currentCampaign())
-    }
-
+    /**
+     * A fix could not be obtained. Attempt 0 retries once; after that the host has already tried
+     * the last-known fix, so the flow ends quietly with `Continue("location_failed_fallback")` and
+     * the app keeps using IP-based location — no error screen (app `onLocationResult` fallback).
+     */
     fun onLocationFetchFailed(timeout: Boolean) {
-        // App LocationPromptHost.kt:626/660.
+        val s = _state.value as? LocationPromptState.FetchingLocation ?: return
         analytics.track(
             if (timeout) AnalyticsEvents.LOCATION_FETCH_FAILED_TIMEOUT
             else AnalyticsEvents.LOCATION_FETCH_FAILED,
-            gpsProps(attempt = ((_state.value as? LocationPromptState.FetchingLocation)?.attempt ?: 0) + 1)
+            gpsProps(s.source, s.campaign, s.attempt + 1)
         )
-        // App LocationPromptHost.kt:627/661 — the fresh-location fetch is also tracked as an
-        // API_Call_Timeout / API_Call_Failed with API_Name = "GPS Fetch fresh location".
-        analytics.trackApiError(
-            AnalyticsApis.GPS_FETCH_FRESH_LOCATION, AnalyticsScreens.GPS, timeout
-        )
-        val s = _state.value
-        if (s is LocationPromptState.FetchingLocation && s.attempt < 1) {
-            // 1 retry before last-known fallback / error. The app's fetch-phase effect re-runs
-            // on the attempt change, so the retry re-emits the pair with Attempt = 2.
+        analytics.trackApiError(AnalyticsApis.GPS_FETCH_FRESH_LOCATION, AnalyticsScreens.GPS, timeout)
+        if (s.attempt < 1) {
             enterFetchingLocation(s.source, s.campaign, s.attempt + 1)
             return
         }
-        _state.value = LocationPromptState.Error(
-            LocationErrorType.LocationFailed, currentSource(), currentCampaign()
-        )
+        emit(LocationPromptEvent.Continue(s.source, s.campaign, reason = "location_failed_fallback"))
+        executePendingNavigation()
+        _state.value = LocationPromptState.Idle
+        activeSource = null
+        activeCampaign = null
     }
 
+    /** Kept for host compatibility: offline at fetch time. */
     fun onNoNetwork() {
         _state.value = LocationPromptState.Error(
-            LocationErrorType.NoNetwork, currentSource(), currentCampaign()
+            LocationErrorType.NoNetwork, currentSource(), currentCampaign(), canRetry = true
         )
     }
 
-    fun onErrorRetry() {
+    /**
+     * Error-screen CTA. Retryable errors re-run [trigger] from the same context (respecting the
+     * deny count etc.); a non-retryable one (GPS declined) just closes the flow.
+     */
+    fun onErrorCta() {
         val s = _state.value as? LocationPromptState.Error ?: return
-        when (s.type) {
-            LocationErrorType.NoNetwork -> enterFetchingLocation(s.source, s.campaign)
-            LocationErrorType.GpsUnavailable ->
-                _state.value = LocationPromptState.RequestEnableGps(s.source, s.campaign)
-            LocationErrorType.LocationFailed -> enterFetchingLocation(s.source, s.campaign)
+        if (s.canRetry) trigger(s.source, s.campaign) else dismiss()
+    }
+
+    /**
+     * A fix was obtained (fresh or last-known). Saved to prefs only after `update_user_location`
+     * succeeds, as the app does; a guest (no user id) saves immediately. The Weather entry
+     * navigates at once and lets the API finish in the background.
+     */
+    fun onLocationFetched(lat: Double, lng: Double) {
+        val s = _state.value as? LocationPromptState.FetchingLocation ?: return
+        val source = s.source
+        val campaign = s.campaign
+        analytics.track(AnalyticsEvents.LOCATION_FETCH_SUCCESS, gpsProps(source, campaign, s.attempt + 1))
+        analytics.trackApiSuccess(AnalyticsApis.GPS_FETCH_FRESH_LOCATION, AnalyticsScreens.GPS)
+
+        val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
+        if (userId.isBlank()) {
+            saveLocation(lat, lng)
+            finishWithLocation(source, campaign)
+            return
+        }
+        if (source == LocationTriggerSource.Weather) finishWithLocation(source, campaign)
+
+        scope.launch {
+            analytics.trackApiInitiated(AnalyticsApis.UPDATE_USER_LOCATION, AnalyticsScreens.GPS)
+            when (val result = updateUserLocationUseCase.updateUserLocation(
+                UpdateLocationRequest(lat = lat.toString(), long = lng.toString(), user_id = userId)
+            ).first()) {
+                is ApiResult.Success -> {
+                    analytics.trackApiSuccess(AnalyticsApis.UPDATE_USER_LOCATION, AnalyticsScreens.GPS)
+                    analytics.track(AnalyticsEvents.LOCATION_UPDATE_SUCCESS, gpsProps(source, campaign))
+                    result.data.user_profile?.let { profile ->
+                        val country = profile.country_name.orEmpty()
+                        val stateName = profile.geography_level2_name.orEmpty()
+                        val district = profile.geography_level3.orEmpty()
+                        prefs.putString(SdkPreferences.Keys.USER_COUNTRY_CODE, profile.country_code.orEmpty())
+                        prefs.putString(SdkPreferences.Keys.USER_COUNTRY_NAME, country)
+                        prefs.putString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, stateName)
+                        // Best readable place name for the pill: district > state > country.
+                        district.ifBlank { stateName }.ifBlank { country }
+                            .takeIf { it.isNotBlank() }
+                            ?.let { prefs.putString(SdkPreferences.Keys.APPROX_LOCATION_NAME, it) }
+                    }
+                    saveLocation(lat, lng)
+                    if (source != LocationTriggerSource.Weather) {
+                        if (source == LocationTriggerSource.Campaign) {
+                            emit(LocationPromptEvent.LocationUpdatedFromWidget(campaign))
+                        }
+                        finishWithLocation(source, campaign)
+                    }
+                }
+                is ApiResult.Error -> {
+                    analytics.trackApiError(
+                        AnalyticsApis.UPDATE_USER_LOCATION, AnalyticsScreens.GPS, result.isTimeout
+                    )
+                    analytics.track(AnalyticsEvents.LOCATION_UPDATE_FAILURE, gpsProps(source, campaign))
+                    // App: Campaign / LocalContext / Settings dismiss; nothing is saved.
+                    if (source != LocationTriggerSource.Weather) dismiss()
+                }
+            }
         }
     }
 
-    fun onLocationFetched(lat: Double, lng: Double) {
-        // App LocationPromptHost.kt:486/487.
-        analytics.track(AnalyticsEvents.LOCATION_FETCH_SUCCESS, gpsProps(attempt = 1))
-        analytics.trackApiSuccess(AnalyticsApis.GPS_FETCH_FRESH_LOCATION, AnalyticsScreens.GPS)
-        val source = currentSource()
-        val campaign = currentCampaign()
-
+    private fun saveLocation(lat: Double, lng: Double) {
         prefs.putString(SdkPreferences.Keys.FARMER_APP_LATITUDE, lat.toString())
         prefs.putString(SdkPreferences.Keys.FARMER_APP_LONGITUDE, lng.toString())
         prefs.putBoolean(SdkPreferences.Keys.GPS_LOCATION_SHARED, true)
         prefs.putBoolean(SdkPreferences.Keys.LOCATION_DONE, true)
+    }
 
-        val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
-        scope.launch {
-            if (userId.isNotBlank()) {
-                analytics.trackApiInitiated(
-                    AnalyticsApis.UPDATE_USER_LOCATION, AnalyticsScreens.GPS
-                )
-                when (val result = updateUserLocationUseCase.updateUserLocation(
-                    UpdateLocationRequest(
-                        lat = lat.toString(),
-                        long = lng.toString(),
-                        user_id = userId
-                    )
-                ).first()) {
-                    is ApiResult.Success -> {
-                        // App LocationPromptHost.kt:521 — API_Name = "Update user location".
-                        analytics.trackApiSuccess(
-                            AnalyticsApis.UPDATE_USER_LOCATION, AnalyticsScreens.GPS
-                        )
-                        analytics.track(
-                            AnalyticsEvents.LOCATION_UPDATE_SUCCESS,
-                            gpsProps(source, campaign)
-                        )
-                        result.data.user_profile?.let { profile ->
-                            profile.country_name?.let {
-                                prefs.putString(SdkPreferences.Keys.USER_COUNTRY_NAME, it)
-                            }
-                            profile.country_code?.let {
-                                prefs.putString(SdkPreferences.Keys.USER_COUNTRY_CODE, it)
-                            }
-                            profile.geography_level2_name?.let {
-                                prefs.putString(SdkPreferences.Keys.USER_SELECTED_STATE_CODE, it)
-                            }
-                            profile.display_address?.let {
-                                prefs.putString(SdkPreferences.Keys.APPROX_LOCATION_NAME, it)
-                            }
-                        }
-                    }
-                    is ApiResult.Error -> {
-                        analytics.trackApiError(
-                            AnalyticsApis.UPDATE_USER_LOCATION,
-                            AnalyticsScreens.GPS,
-                            result.isTimeout
-                        )
-                        analytics.track(
-                            AnalyticsEvents.LOCATION_UPDATE_FAILURE,
-                            gpsProps(source, campaign)
-                        )
-                        // Location is still saved locally; flow continues.
-                    }
-                }
-            }
+    private fun finishWithLocation(source: LocationTriggerSource, campaign: LocationCampaignConfig?) {
+        _state.value = LocationPromptState.Idle
+        emit(LocationPromptEvent.Continue(source, campaign, reason = "location_fetched"))
+        executePendingNavigation()
+        activeSource = null
+        activeCampaign = null
+    }
 
-            _state.value = LocationPromptState.Idle
-            if (source == LocationTriggerSource.Campaign) {
-                _events.emit(LocationPromptEvent.LocationUpdatedFromWidget(campaign))
-            }
-            _events.emit(LocationPromptEvent.Continue(source, campaign, reason = "location_fetched"))
-            pendingNavigation?.invoke()
-            pendingNavigation = null
-        }
+    private fun executePendingNavigation() {
+        val nav = pendingNavigation ?: return
+        pendingNavigation = null
+        runCatching { nav() }
+    }
+
+    private fun emit(event: LocationPromptEvent) {
+        scope.launch { _events.emit(event) }
     }
 
     /** Full reset (logout). */
     fun clearState() {
         _state.value = LocationPromptState.Idle
         pendingNavigation = null
+        activeSource = null
+        activeCampaign = null
     }
 }
 
 /**
- * `Trigger` values exactly as the app's analytics sheet defines them
- * (app ui/location/LocationPromptHost.kt:133-146). An unknown or absent campaign
- * `triggerSource` falls back to "Plotline Campaign", as the app's `else` branch does.
- */
-/**
- * `Trigger` value when the GPS flow was raised by the chat `gps-prompt` chip. Copied from the app
- * (`LocationPromptManager.kt:439`), which uses this literal rather than a [gpsTriggerLabel] case —
- * the chip reuses `LocalContext` for BEHAVIOUR, so its trigger label cannot come from the source.
+ * `Trigger` value when the GPS flow was raised by the chat `gps-prompt` chip. Copied from the app,
+ * which uses this literal rather than a [gpsTriggerLabel] case — the chip reuses `LocalContext`
+ * for BEHAVIOUR, so its trigger label cannot come from the source.
  */
 private const val TRIGGER_CHAT_SCREEN = "Chat Screen"
 
+/**
+ * `Trigger` values exactly as the app's analytics sheet defines them. An unknown or absent
+ * campaign `triggerSource` falls back to "Plotline Campaign", as the app's `else` branch does.
+ */
 fun gpsTriggerLabel(
     source: LocationTriggerSource,
     campaign: LocationCampaignConfig? = null
@@ -491,10 +642,9 @@ fun gpsTriggerLabel(
 }
 
 /**
- * Every GPS analytics event's base payload, a port of the app's `trackGpsEvent`
- * (app ui/location/LocationPromptHost.kt:169-201): `screen_name` is always the GPS screen
- * unless an [extra] overrides it (the fetch-phase `Location_Update_Triggered` does),
- * `Trigger` is the [gpsTriggerLabel], and `Attempt` appears only when supplied.
+ * Every GPS analytics event's base payload, a port of the app's `trackGpsEvent`: `screen_name`
+ * is always the GPS screen unless an [extra] overrides it, `Trigger` is the [gpsTriggerLabel],
+ * and `Attempt` appears only when supplied.
  */
 fun gpsAnalyticsProps(
     source: LocationTriggerSource,

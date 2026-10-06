@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fully-rounded variant of fc_bg_appbar_chip. Used where the app draws a CIRCLE: the HOME app
+  bar's menu button (`HomeAppBar.kt`, Radius.Rounded since 2026-09-15) and the CHAT back button
+  when chat is opened from Home (the app's `leftbutton` drawable, ChatScreen.kt:1450). The shared
+  `fc_bg_appbar_chip` stays at 12dp for the settings / name / language back+close buttons.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_green800"/>
+    <corners android:radius="999dp"/>
+</shape>

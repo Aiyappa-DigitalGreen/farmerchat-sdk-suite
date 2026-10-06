@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +61,20 @@ fun UserChatBubble(
         bottomEnd = 0.dp
     )
 
+    // App UserChatBubble.kt:72-76: a photo with no caption and no voice is shown bare —
+    // 220x160dp, 16dp corners, no bubble behind it.
+    if (imageUri != null && text.isBlank() && audioUri == null && !showVoiceClip) {
+        AsyncImage(
+            model = imageUri.toString(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(width = 220.dp, height = 160.dp)
+                .clip(RoundedCornerShape(16.dp))
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .widthIn(max = 290.dp)
@@ -87,10 +102,11 @@ fun UserChatBubble(
                     model = imageUri.toString(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    // App UserChatBubble.kt:129-138: full bubble width, 16:9, 16dp corners.
                     modifier = Modifier
-                        .widthIn(max = (290 * 0.85f).dp)
+                        .fillMaxWidth()
                         .aspectRatio(16f / 9f)
-                        .clip(RoundedCornerShape(Radius.SM))
+                        .clip(RoundedCornerShape(16.dp))
                 )
             } else {
                 PhotoThumbnail(

@@ -160,6 +160,11 @@ class SettingsViewModel(
                                 SdkPreferences.Keys.STREAMING_REQUIRED, it.streaming_required
                             )
                         }
+                        // The backend now has this language for the user; a host sharing that user
+                        // keeps its own language state in step through this hook.
+                        runCatching {
+                            config.hooks.onLanguageChanged?.invoke(languageId, language?.code.orEmpty())
+                        }
                         analytics.track(
                             AnalyticsEvents.SAVE_LANGUAGE_CLICK,
                             // App LanguageChooserScreen.kt:295 — Language Settings Screen.

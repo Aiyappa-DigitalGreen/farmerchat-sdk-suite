@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useLabel, useSdk } from '../context';
-import { Icon, LogoGlyph, LogoSpinner, PrimaryButton, RadioRow, Toast } from '../components/common';
+import { LogoGlyph, LogoSpinner, PrimaryButton, RadioRow, Toast } from '../components/common';
 import { useOnboardingLanguage } from '../../state/useOnboardingLanguage';
 import { Screens, Events } from '../../core/analytics';
 import type { SupportedLanguage } from '../../core/types';
@@ -19,6 +19,7 @@ export function LanguageSelectionScreen(props: {
   const { services, toast } = useSdk();
   const label = useLabel();
   const [state, actions] = useOnboardingLanguage(services);
+  const alsoSee = label('fc_v2_app_label_also_see', 'also see').trim();
 
   useEffect(() => {
     services.analytics.screenView(Screens.LANGUAGE);
@@ -60,21 +61,21 @@ export function LanguageSelectionScreen(props: {
         <div style={{ fontSize: 40, marginBottom: 8 }} aria-hidden>
           <LogoGlyph />
         </div>
-        <h2 style={{ margin: '4px 0 2px', fontSize: 22 }}>{label('language_title', 'Choose your language')}</h2>
+        <h2 style={{ margin: '4px 0 2px', fontSize: 22 }}>{label('fc_v2_app_label_choose_your_language', 'Choose your language')}</h2>
         <p style={{ margin: '0 0 14px', color: 'var(--fc-text-muted)' }}>
-          {label('language_subtitle', 'You can change this later')}
+          {label('fc_v2_app_label_you_change_later', 'You can change this later')}
         </p>
 
         {!languageGroups ? (
           <LogoSpinner
             message={
               state.languageState.status === 'idle'
-                ? label('splash_loading', 'FarmerChat is starting…')
-                : label('language_loading', 'Loading languages…')
+                ? label('fc_v2_app_label_farmerchat_starting', 'FarmerChat is starting…')
+                : label('fc_v2_app_label_loading_languages', 'Loading languages…')
             }
           />
         ) : (
-          <div role="radiogroup" aria-label={label('language_title', 'Choose your language')}>
+          <div role="radiogroup" aria-label={label('fc_v2_app_label_choose_your_language', 'Choose your language')}>
             {languageGroups.map((group, gi) => (
               <div key={gi}>
                 {group.display_name ? <div className="fcsdk-sectionheader">{group.display_name}</div> : null}
@@ -82,9 +83,16 @@ export function LanguageSelectionScreen(props: {
                 {state.expandedLanguages ? (group.expanded_view ?? []).map(renderRow) : null}
               </div>
             ))}
+            {/* App parity (LanguageScreen.kt:459-475): a FILLED PRIMARY pill — white on dark
+                green at labelLarge, and NO chevron. The key is the app's real one; web's
+                `language_all_languages` was an SDK invention that endpoint #3 never serves. */}
             {languageGroups.some((g) => (g.expanded_view ?? []).length > 0) && !state.expandedLanguages ? (
-              <button type="button" className="fcsdk-btn-text" onClick={actions.toggleExpanded}>
-                {label('language_all_languages', 'All languages')} {Icon.chevronDown}
+              <button
+                type="button"
+                className="fcsdk-btn-pill-primary"
+                onClick={actions.toggleExpanded}
+              >
+                {label('fc_v2_app_label_all_languages', 'All languages')}
               </button>
             ) : null}
           </div>
@@ -92,36 +100,55 @@ export function LanguageSelectionScreen(props: {
       </div>
 
       <div className="fcsdk-bottombar">
-        <div style={{ textAlign: 'center', fontSize: 13.5, color: 'var(--fc-text-muted)' }}>
-          {label('language_tagline', 'Your personal farming advisor')}
+        {/* App parity (LanguageScreen.kt:250-252): the tagline is titleLarge (22px/700) on the
+            primary text colour. Web had it at 13.5px muted AND with invented copy — "Your
+            personal farming advisor" appears nowhere in the app, whose tagline label reads
+            "FarmerChat: Practical advice for your crops & livestock". Real key restored. */}
+        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, color: 'var(--fc-text)' }}>
+          {label(
+            'fc_v2_app_label_farmerchat_tagline',
+            'FarmerChat: Practical advice for your crops & livestock',
+          )}
         </div>
         <PrimaryButton
-          label={label('language_start_button', 'Start using FarmerChat')}
+          label={label('fc_v2_app_label_start_using_farmerchat', 'Start using FarmerChat')}
           onClick={() => void actions.getStartedClicked()}
           disabled={state.selectedLanguageId === null || state.languageState.status !== 'success'}
           state={state.isSubmittingLanguage ? 'loading' : 'default'}
         />
         <div className="fcsdk-legal-links">
-          {label('language_legal_prefix', 'By continuing you agree to our')}{' '}
+          {/* The app's real server key, not the SDK short key this line used to carry:
+              `language_legal_prefix` is served by nobody, so endpoint #3 could never translate
+              it and every farmer read the English fallback. Copy from app b72ea4da. */}
+          {label(
+            'fc_v2_app_label_by_continuing_you_agree_to_our',
+            'FarmerChat uses AI. By continuing, you agree to our',
+          )}{' '}
           <button
             type="button"
             onClick={() => {
               services.analytics.track(Events.TERMS_OF_USE_OPENED, {});
-              if (state.termsOfUseUrl) props.onOpenLegal(state.termsOfUseUrl, label('legal_terms_title', 'Terms of use'));
+              if (state.termsOfUseUrl) props.onOpenLegal(state.termsOfUseUrl, label('fc_v2_app_label_terms_of_use', 'Terms of use'));
             }}
           >
-            {label('legal_terms_title', 'Terms of use')}
+            {label('fc_v2_app_label_terms_of_use', 'Terms of use')}
           </button>{' '}
-          {label('language_legal_and', 'and')}{' '}
+          {/* The served connector (`fc_v2_app_label_also_see` = "also see" on DEV), replacing
+              the invented `language_legal_and` key — served by nobody — and its "and". A tenant
+              that serves it empty gets the two links separated by one space, as the app
+              degrades. */}
+          {alsoSee ? <>{alsoSee}{' '}</> : null}
           <button
             type="button"
             onClick={() => {
               services.analytics.track(Events.PRIVACY_POLICY_OPENED, {});
-              if (state.privacyPolicyUrl) props.onOpenLegal(state.privacyPolicyUrl, label('legal_privacy_title', 'Privacy policy'));
+              if (state.privacyPolicyUrl) props.onOpenLegal(state.privacyPolicyUrl, label('fc_v2_app_label_privacy_policy', 'Privacy policy'));
             }}
           >
-            {label('legal_privacy_title', 'Privacy policy')}
+            {label('fc_v2_app_label_privacy_policy', 'Privacy policy')}
           </button>
+          {/* Outside the button so the full stop is neither underlined nor clickable. */}
+          .
         </div>
       </div>
       <Toast message={toast.message} />

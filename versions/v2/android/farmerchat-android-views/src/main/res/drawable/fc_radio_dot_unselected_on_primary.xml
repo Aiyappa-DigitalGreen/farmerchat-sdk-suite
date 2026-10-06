@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Country-picker radio, unselected. The app passes `indicatorColor = surfacePrimary` there
+     (AuthScreen.kt CountryPickerScreen) so the empty dot reads as the page colour, not the
+     `surfaceTertiary` grey the language rows use. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/fc_surface_primary"/>
+    <size android:width="20dp" android:height="20dp"/>
+</shape>

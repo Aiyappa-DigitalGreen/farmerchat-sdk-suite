@@ -351,13 +351,13 @@ final class FCUIErrorViewController: UIViewController {
         super.viewDidLoad()
         let message = FCUIFullScreenMessageView(
             title: isNetworkError
-                ? fcuiLabel("no_internet_title", "No internet connection")
-                : fcuiLabel("api_error_title", "Something went wrong"),
+                ? fcuiLabel(FCLabels.noInternetConnection, "No internet connection")
+                : fcuiLabel(FCLabels.somethingWentWrong, "Something went wrong"),
             subtitle: isNetworkError
                 ? fcuiLabel("no_internet_message", "You appear to be offline. Check your connection and try again.")
                 : fcuiLabel("api_error_message", "We're having trouble right now. Please try again."),
             symbolName: "sun.max",
-            primaryTitle: fcuiLabel("try_again", "Try again"),
+            primaryTitle: fcuiLabel(FCLabels.tryAgain, "Try again"),
             secondaryTitle: nil
         )
         message.translatesAutoresizingMaskIntoConstraints = false

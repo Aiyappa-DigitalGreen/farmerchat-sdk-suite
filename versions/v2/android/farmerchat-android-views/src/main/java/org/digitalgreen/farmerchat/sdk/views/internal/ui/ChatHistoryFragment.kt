@@ -24,6 +24,8 @@ import org.digitalgreen.farmerchat.sdk.views.internal.NavRoutes
 import org.digitalgreen.farmerchat.sdk.views.internal.activityCoreVm
 import org.digitalgreen.farmerchat.sdk.views.internal.journeyHost
 import org.digitalgreen.farmerchat.sdk.FarmerChat
+import org.digitalgreen.farmerchat.sdk.views.internal.util.applySystemBarBackdrop
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor
 
 /** Chat history — grouped, paginated conversation list (doc 01 §3.9). */
 internal class ChatHistoryFragment : BaseFragment(R.layout.fc_fragment_chat_history) {
@@ -43,15 +45,25 @@ internal class ChatHistoryFragment : BaseFragment(R.layout.fc_fragment_chat_hist
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FcFragmentChatHistoryBinding.bind(view)
+        // Green status-bar inset + surface nav-bar strip, as the app paints them.
+        binding.root.applySystemBarBackdrop()
 
         binding.fcHistoryAppBar.fcAppBarTitle.text = label(Labels.RECENT_CHATS, "Recent Chats")
         // With the drawer off (CHAT_ONLY) openDrawer() is a no-op and the user would be
         // stranded on this screen — fall back to a plain back navigation.
+        // App parity (DefaultAppBar leftRadius @ 1b961130/b193a95c): the round chip, not the
+        // 12dp square. The app left SettingsName and onboarding Language on Radius.MD.
+        binding.fcHistoryAppBar.fcAppBarLeft.setBackgroundResource(R.drawable.fc_bg_appbar_chip_round)
+        // Set after inflation, so the inflater recolor never saw it.
+        FcRecolor.maybeRecolor(binding.fcHistoryAppBar.fcAppBarLeft)
         binding.fcHistoryAppBar.fcAppBarLeft.setOnClickListener {
             if (FarmerChat.requireGraph().config.showDrawer) {
                 journeyHost()?.openDrawer()
-            } else if (!findNavController().popBackStack()) {
-                NavRoutes.navigateHomeOrChat(findNavController())
+            } else if (findNavController().previousBackStackEntry == null ||
+                !findNavController().popBackStack()
+            ) {
+                // Nothing beneath (a host-opened root): popping would empty the graph.
+                NavRoutes.leaveSecondaryScreen(this@ChatHistoryFragment)
             }
         }
         if (!FarmerChat.requireGraph().config.showDrawer) {

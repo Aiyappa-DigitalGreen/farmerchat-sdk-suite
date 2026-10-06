@@ -1,5 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.compose.screens
 
+import org.digitalgreen.farmerchat.sdk.compose.util.isNetworkAvailable
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationErrorType
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -29,23 +31,29 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
@@ -57,6 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import org.digitalgreen.farmerchat.sdk.FarmerChat
 import org.digitalgreen.farmerchat.sdk.compose.R
+import org.digitalgreen.farmerchat.sdk.compose.components.attentionWobble
 import org.digitalgreen.farmerchat.sdk.compose.components.Glow
 import org.digitalgreen.farmerchat.sdk.compose.components.GlowType
 import org.digitalgreen.farmerchat.sdk.compose.components.HomeAppBar
@@ -122,6 +131,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 
 /**
  * Home / dashboard (doc 01 §3.7). App bar with weather, greeting, sticky
@@ -143,7 +155,12 @@ fun HomeScreen(
     openDrawer: () -> Unit,
     onNavigateToChat: (Destination.Chat) -> Unit,
     openTermsOfUseRequested: Boolean = false,
-    onTermsOfUseRequestConsumed: () -> Unit = {}
+    onTermsOfUseRequestConsumed: () -> Unit = {},
+    /**
+     * App parity: Home's offline weather / card taps and any location-flow error raised while Home
+     * is showing go to the shared Error destination (`fromScreen` = home_weather / home_card / home).
+     */
+    onNavigateToError: (isNetworkError: Boolean, fromScreen: String) -> Unit = { _, _ -> }
 ) {
     val graph = FarmerChat.requireGraph()
     val context = LocalContext.current
@@ -156,6 +173,16 @@ fun HomeScreen(
     val homeState by vm.state.collectAsState()
     val locationState by graph.locationPromptManager.state.collectAsState()
 
+    // App parity (HomeScreen.kt:238-266): a location-flow error while Home is showing is not drawn
+    // by the prompt host — Home routes it to the shared Error screen and closes the flow silently.
+    LaunchedEffect(locationState) {
+        val st = locationState
+        if (st is LocationPromptState.Error) {
+            onNavigateToError(st.type == LocationErrorType.NoNetwork, "home")
+            graph.locationPromptManager.dismiss(emitContinue = false)
+        }
+    }
+
     // 2.0.0 composer/agentic Home. The app gates this on two independent Firebase Remote
     // Config flags (`getComposerUiEnabled()` for the input surface, `getAgenticChatEnabled()`
     // for the visual theme + card-tap API routing). The SDK carries no Remote Config, so the
@@ -164,6 +191,23 @@ fun HomeScreen(
     // initialize(), so the app's post-fetch re-read (`OnboardingRemoteConfig.refresh()` on every
     // feed state change) has no analogue here; a host that needs a live flip re-initializes.
     val isComposerUi = graph.config.resolvedComposerUi
+
+    // App parity (HomeScreen.kt 70adc5fd): in agentic mode the header CONTENT is a FIXED overlay
+    // drawn over the feed, and this is its measured height — item 0 reserves exactly it and the
+    // feed's top fade mask ends exactly there, where the first card rests, so the resting card is
+    // never faded.
+    //
+    // Declared HERE, at the screen's top level, and NOT inside the feed's `Success` branch: that
+    // branch composes fresh on the initial load, on retry and on every refresh, so a `remember`
+    // scoped to it re-initialises to 0f each time. For one frame the reservation would be zero and
+    // the mask would end at 1px — the first card visibly flashes half-faded. The app declares it
+    // at the top of `HomeScreen` for the same reason.
+    //
+    // `rememberSaveable`, not `remember`, so the height also survives Home leaving and re-entering
+    // composition (Chat -> back): otherwise it resets to 0 on return, item 0's Spacer collapses for
+    // a frame while scroll is being restored, then re-measures and grows — shifting the first card.
+    val feedDensity = LocalDensity.current
+    var headerContentPx by rememberSaveable { mutableFloatStateOf(0f) }
 
     val userId = remember { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
     val isAuthenticated = remember {
@@ -435,6 +479,8 @@ fun HomeScreen(
                         skipLoadingCheck = true
                     )
                 )
+                // App parity: the weather chip follows the new location too.
+                vm.onAction(HomeAction.LoadWeather(context, userId, skipLoadingCheck = true))
             }
         }
     }
@@ -524,10 +570,18 @@ fun HomeScreen(
 
     // ------------------------------------------------------------------ weather click
     fun onWeatherClick() {
+        // App parity (HomeScreen.kt:546-575): offline → No Internet; ignored while the feed is
+        // still loading or another location flow is running.
+        if (!isNetworkAvailable(context)) {
+            onNavigateToError(true, "home_weather")
+            return
+        }
+        if (homeState.homeFeedState is UiState.Loading) return
         graph.analytics.track(
             AnalyticsEvents.WEATHER_FORECAST_VIEWED,
             mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
         ) // app HomeScreen.kt:559
+        if (graph.locationPromptManager.state.value != LocationPromptState.Idle) return
         val weatherQuestion = label(Labels.WHAT_IS_THE_PRESENT_WEATHER, "What is the present weather?")
         if (graph.locationPromptManager.hasStoredLocation()) {
             onNavigateToChat(
@@ -567,38 +621,45 @@ fun HomeScreen(
 
     val homeFeedState = homeState.homeFeedState
     val weatherState = homeState.weatherState
-    val isWidgetGpsLoading = locationState is LocationPromptState.FetchingLocation
+    // App parity (HomeScreen.kt:241-255): only the CAMPAIGN (widget) flow swaps the feed for the
+    // "Getting your location" spinner — and for its whole permission → GPS → fetch run. The pill
+    // and weather flows leave the feed in place (the pill shows its own Searching state).
+    val isWidgetGpsLoading = when (val st = locationState) {
+        is LocationPromptState.RequestPermission -> st.source == LocationTriggerSource.Campaign
+        is LocationPromptState.RequestEnableGps -> st.source == LocationTriggerSource.Campaign
+        is LocationPromptState.FetchingLocation -> st.source == LocationTriggerSource.Campaign
+        else -> false
+    }
 
-    // App parity (HomeScreen.kt:976): in agentic mode the app surface is the grey reading
-    // surface and the green lives only in the gradient band below, which bleeds down behind
-    // the header and first card. Non-agentic keeps the v1 green base untouched.
+    // App parity (HomeScreen.kt:1006): the base is the grey `surfacePrimary` in BOTH modes —
+    // the green lives only in the gradient band below, which bleeds down behind the header and
+    // first card. The app is explicit about this ("Non-agentic looks identical — the list still
+    // sits on this same grey base"), and it has no conditional here at all.
+    //
+    // The SDK previously painted the non-agentic base with the BRAND green, so Home's ground
+    // colour was wrong for any host that had not opted into agentic chat.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isComposerUi) colors.surfacePrimary else brand.surfacePrimary)
+            .background(colors.surfacePrimary)
     ) {
         if (isComposerUi) {
-            // Fixed green→transparent vertical gradient fading into the grey surface (Figma 1.2
-            // Home). Solid green to ~58.8% of a band ~36.6% of the screen tall, transparent by
-            // its bottom. It sits BEHIND the list and fades out over ~215dp of scroll so it does
-            // not linger once scrolled. Sunbeams sway inside it; the yellow glow sits top-centre.
+            // App parity (HomeScreen.kt 70adc5fd): BACKGROUND green→transparent gradient band
+            // (+ sunbeams + glow), fixed BEHIND the transparent feed. Solid green to ~58.8% of a
+            // band ~36.6% of the screen tall, transparent by its bottom (Figma 1.2 Home).
+            // It no longer fades out over ~215dp of scroll: the header above it is fixed now, so
+            // a fading band would leave the pinned logo/title sitting on bare grey. Because it is
+            // behind the cards it never washes over them — cards sit on top and the green shows
+            // only in their margins.
             val configuration = LocalConfiguration.current
             val density = LocalDensity.current
-            val fadeEndDp = (configuration.screenHeightDp * 0.366f).dp
-            val fadeEndPx = with(density) { fadeEndDp.toPx() }
-            val gradientFadePx = with(density) { 215.dp.toPx() }
-            val gradientAlpha by remember {
-                derivedStateOf {
-                    if (listState.firstVisibleItemIndex > 0) 0f
-                    else (1f - listState.firstVisibleItemScrollOffset / gradientFadePx)
-                        .coerceIn(0f, 1f)
-                }
-            }
+            val bandDp = (configuration.screenHeightDp * 0.366f).dp
+            val bandPx = with(density) { bandDp.toPx() }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(fadeEndDp)
-                    .graphicsLayer { alpha = gradientAlpha }
+                    .align(Alignment.TopCenter)
+                    .height(bandDp)
                     .background(
                         Brush.verticalGradient(
                             colorStops = arrayOf(
@@ -607,7 +668,7 @@ fun HomeScreen(
                                 1f to brand.surfacePrimary.copy(alpha = 0f),
                             ),
                             startY = 0f,
-                            endY = fadeEndPx,
+                            endY = bandPx,
                         )
                     )
             ) {
@@ -616,7 +677,7 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .height(280.dp)
                         .align(Alignment.TopCenter),
-                    visibleProvider = { gradientAlpha },
+                    visibleProvider = { 1f },
                 )
                 Glow(
                     type = GlowType.Yellow,
@@ -715,97 +776,129 @@ fun HomeScreen(
                         }
                     }
 
+                    Box(modifier = Modifier.weight(1f)) {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                // Fade the feed's TOP STRIP to transparent so cards dissolve INTO
+                                // the background gradient as they scroll up behind the fixed
+                                // header, instead of covering it. DstIn keeps card pixels where
+                                // the mask is opaque; the mask stays transparent through the
+                                // header body and ramps to fully-kept only in the last fifth,
+                                // right where cards emerge below the header — so the resting
+                                // first card is not faded and nothing ghosts through the gaps
+                                // around the logo and title. Offscreen compositing is required
+                                // for DstIn to blend against the list, not the framebuffer.
+                                if (isComposerUi) Modifier
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                colorStops = arrayOf(
+                                                    0f to Color.Transparent,
+                                                    0.80f to Color.Transparent,
+                                                    1f to Color.Black,
+                                                ),
+                                                startY = 0f,
+                                                endY = headerContentPx.coerceAtLeast(1f),
+                                            ),
+                                            blendMode = BlendMode.DstIn,
+                                        )
+                                    }
+                                else Modifier
+                            ),
                         // App parity (HomeScreen.kt:886): reserve the floating composer's height
                         // so the last feed card is not hidden behind it. composerBarHeight already
                         // folds in max(navBar, 20), so it REPLACES the nav-bar inset, not stacks.
                         contentPadding = PaddingValues(
-                            bottom = if (isComposerUi) composerBarHeight(floating = true) else 24.dp
+                            bottom = if (isComposerUi) composerBarHeight(floating = true, hasAttachment = photoUris.isNotEmpty()) else 24.dp
                         )
                     ) {
                         // Greeting (1.0.0) / agentic top section (2.0.0)
                         item(key = "greeting") {
                           if (isComposerUi) {
-                            // App parity (HomeScreen.kt:1042): centred logo mark + leaf-flanked
-                            // "For your farm today" + the location pill (Figma 1.2 Home). It is
-                            // the list's FIRST item so its buttons stay tappable, but it is
-                            // PINNED and FADED as the list scrolls so cards rise and draw over it
-                            // instead of it scrolling away:
-                            //   • translationY = firstVisibleItemScrollOffset → counters the scroll
-                            //   • alpha fades over ~90dp
-                            //   • zIndex(-1) forces later card items to draw on top
-                            //   • the pin is released once invisible (a > 0f) so faded controls
-                            //     do not eat taps meant for cards risen to the top strip
-                            // SDK deviation: the app pins the app bar inside this same block. Here
-                            // the app bar sits in a Column ABOVE the list (it must survive the
-                            // loading and error branches, which render no list at all), so it is
-                            // already fixed and only this block is pinned.
-                            val headerDensity = LocalDensity.current
-                            val headerFadePx = with(headerDensity) { 90.dp.toPx() }
-                            Column(
+                            // App parity (HomeScreen.kt 70adc5fd): the agentic header CONTENT
+                            // (centred logo mark + leaf-flanked "For your farm today" + the
+                            // location pill, Figma 1.2 Home) is a FIXED overlay drawn above this
+                            // list — see the end of the enclosing Box. It used to be this list
+                            // item, pinned by countering the scroll offset and faded over ~90dp,
+                            // with zIndex(-1) so later cards drew over it; the pin fought the
+                            // list and the header scrolled away under fast flings.
+                            // Item 0 now reserves exactly the overlay's height so the first card
+                            // rests right below it, and keeping the item present preserves every
+                            // downstream feed index.
+                            // Floor of 1px: before the overlay is measured (first load only —
+                            // headerContentPx is saveable) a 0-height item 0 is skipped as the
+                            // anchor, so the list anchored on the FIRST CARD and kept it pinned
+                            // under the header once the spacer grew — the image rendered half
+                            // hidden. A non-zero item 0 stays the anchor and grows downward.
+                            Spacer(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .zIndex(-1f)
-                                    .graphicsLayer {
-                                        val idx = listState.firstVisibleItemIndex
-                                        val off = listState.firstVisibleItemScrollOffset
-                                        val a = if (idx > 0) 0f
-                                        else (1f - off / headerFadePx).coerceIn(0f, 1f)
-                                        alpha = a
-                                        translationY =
-                                            if (idx == 0 && a > 0f) off.toFloat() else 0f
-                                    }
-                                    .padding(top = 2.dp, bottom = 16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.fc_logo_mark),
-                                    contentDescription = null,
-                                    colorFilter = ColorFilter.tint(brand.foregroundPrimary),
-                                    modifier = Modifier.size(42.dp)
-                                )
-                                SectionHeader(
-                                    title = label(
-                                        Labels.FOR_YOUR_FARM_TODAY,
-                                        "For your farm today"
-                                    ),
-                                    titleColor = brand.foregroundPrimary,
-                                    verticalPadding = 0.dp,
-                                )
-                                HomeLocationPill(
-                                    manager = graph.locationPromptManager,
-                                    locationState = locationState,
-                                    prefs = graph.prefs
-                                )
-                            }
+                                    .height(with(feedDensity) { headerContentPx.coerceAtLeast(1f).toDp() })
+                            )
                           } else {
-                            // `greeting` is ABSENT from the #12 response whenever the feed is
-                            // empty (no resolved location), so keying the skeleton off it alone
-                            // shimmers forever on a loaded-but-empty feed. App parity:
-                            // fc-compose HomeScreen.kt:892 renders this label and never uses the
-                            // API greeting at all. Here we prefer the API greeting when present
-                            // and fall back to the label — never a permanent skeleton.
-                            val greetingText = feed.greeting?.takeIf { it.isNotBlank() }
-                                ?: label(
-                                    Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
-                                    "Tap a button to ask a question"
-                                ).takeIf { it.isNotBlank() }
+                            // App parity (HomeScreen.kt:1117): the LABEL, and only the label.
+                            //
+                            // This used to prefer `feed.greeting` from the #12 response and fall
+                            // back to the label. That was a LOCALISATION BUG: the API's `greeting`
+                            // is English-only, so preferring it meant a Kannada device rendered
+                            // "Get started by clicking on Photo, Speak, or Type to ask your
+                            // question" while the served `..._kn` value
+                            // ("ಮಾತನಾಡಿ, ಫೋಟೋ ಕಳುಹಿಸಿ ಅಥವಾ ಬರೆದು ಕೇಳಿ") sat unused. Observed on
+                            // emulator-5554. The app reads `.greeting` nowhere — its variable is
+                            // misleadingly NAMED `greetingFromApi` but holds `getLabel(...)`.
+                            //
+                            // The old comment justified the divergence as avoiding a permanent
+                            // skeleton on an empty feed. That reasoning inverts: `label()` always
+                            // returns something (the served string, the fallback, or the key), so
+                            // the label alone can never be null and the skeleton cannot stick.
+                            val greetingText = label(
+                                Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                                "Tap a button to ask a question"
+                            ).takeIf { it.isNotBlank() }
                             Crossfade(
                                 targetState = greetingText,
+                                animationSpec = tween(durationMillis = 300),
+                                // App parity (HomeScreen.kt:1121). The SDK had NO modifier here at
+                                // all, and the missing `.background()` was a readability bug, not a
+                                // spacing one: the greeting is `foregroundPrimary` — WHITE on this
+                                // brand — and without the green band behind it the text landed on
+                                // the page's light grey. Measured on emulator-5554 straight after
+                                // onboarding: #FFFFFF on #ECECEE, a contrast ratio of **1.18:1**
+                                // where WCAG AA wants 3.0:1 for large text. The line was there and
+                                // effectively invisible.
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 40.dp)
+                                    .background(brand.surfacePrimary)
+                                    .wrapContentHeight(Alignment.CenterVertically),
                                 label = "greetingCrossfade"
                             ) { greeting ->
                                 if (greeting != null) {
                                     Text(
                                         text = greeting,
-                                        style = MaterialTheme.typography.displaySmall,
+                                        // App parity (HomeScreen.kt:1165): the LEGACY (non-composer)
+                                        // Home greeting is titleMedium (18sp), not displaySmall
+                                        // (24sp) — a two-step overshoot. The agentic header above
+                                        // is a `SectionHeader` and is unaffected; this branch is
+                                        // what a host that leaves `enableComposerUi` off sees.
+                                        style = MaterialTheme.typography.titleMedium,
                                         color = brand.foregroundPrimary,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 20.dp)
+                                            // App parity: 16 dp horizontal, and the one-second
+                                            // attention wobble. `attentionWobble` was ported into
+                                            // `components/AttentionWobble.kt` but had NO call site
+                                            // anywhere in the SDK — a component that exists is not
+                                            // a feature until something invokes it.
+                                            .padding(horizontal = 16.dp)
+                                            .attentionWobble(trigger = true, delayMs = 1000L)
                                     )
                                 } else {
                                     GreetingSkeleton()
@@ -839,6 +932,10 @@ fun HomeScreen(
                             item(key = "ssfr") {
                                 SsfrCard(
                                     onWheatClick = {
+                                        if (!isNetworkAvailable(context)) {
+                                            onNavigateToError(true, "home_card")
+                                            return@SsfrCard
+                                        }
                                         onNavigateToChat(
                                             Destination.Chat(
                                                 question = label(
@@ -851,6 +948,10 @@ fun HomeScreen(
                                         )
                                     },
                                     onMaizeClick = {
+                                        if (!isNetworkAvailable(context)) {
+                                            onNavigateToError(true, "home_card")
+                                            return@SsfrCard
+                                        }
                                         onNavigateToChat(
                                             Destination.Chat(
                                                 question = label(
@@ -862,7 +963,7 @@ fun HomeScreen(
                                             )
                                         )
                                     },
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
                         }
@@ -888,6 +989,11 @@ fun HomeScreen(
                                     isFetchingStatement = pendingCardSection?.stableId() == section.stableId() &&
                                         homeState.imageStatementState is UiState.Loading,
                                     onCardClick = onCardClick@{
+                                        // App HomeScreen.kt:607 — offline → No Internet, nothing sent.
+                                        if (!isNetworkAvailable(context)) {
+                                            onNavigateToError(true, "home_card")
+                                            return@onCardClick
+                                        }
                                         // App HomeScreen.kt:610 — full HomeCardAnalytics payload.
                                         graph.analytics.trackHomeCardEvent(
                                             AnalyticsEvents.CARD_CLICKED,
@@ -895,30 +1001,49 @@ fun HomeScreen(
                                                 positionLabels.getOrElse(index) { "" }
                                             )
                                         )
-                                        // App parity (HomeScreen.kt:633): with agentic chat on,
-                                        // the card tap SKIPS the pre-generated-answer API (#13
-                                        // FetchImageStatement) and sends the card question into
-                                        // chat as a normal text query, for both image and
-                                        // statement cards.
+                                        // App parity (HomeScreen.kt:616-660).
+                                        val cardType = section.type.orEmpty()
+                                        val isImageCard = cardType == "image"
+                                        val cardTriggerType = when (cardType) {
+                                            "image" -> "image_card"
+                                            "statement" -> "text_card"
+                                            else -> null
+                                        }
+
+                                        // With AGENTIC CHAT on, the card tap SKIPS the
+                                        // pre-generated-answer API (#26 FetchImageStatement) and
+                                        // sends the card question into chat as a normal text
+                                        // query, for both image and statement cards.
                                         //
-                                        // SDK deviation: the app also forwards the card image url
-                                        // so chat can show it as a display-only banner on the user
-                                        // bubble. Destination.Chat has no display-only image
-                                        // field — its `imageUri` routes the query through image
-                                        // analysis, which is exactly what this path must avoid —
-                                        // so the banner is dropped. Likewise the app's
-                                        // `cardTriggerType` (triggered_input_type / click_type)
-                                        // has no carrier on Destination.Chat and is dropped.
-                                        if (isComposerUi) {
+                                        // The gate is `enableAgenticChat`, NOT the composer flag.
+                                        // The app branches on getAgenticChatEnabled(), and the two
+                                        // config flags are independent by design
+                                        // (FarmerChatConfig: `enableComposerUi` null ⇒ follow
+                                        // agentic). Gating on the composer meant a host running
+                                        // composer-UI WITHOUT agentic chat skipped the
+                                        // pre-generated answer it should have fetched, and a host
+                                        // running agentic chat WITHOUT the composer fetched one
+                                        // the app would have skipped.
+                                        if (graph.config.enableAgenticChat) {
                                             val question = section.question_text
                                                 ?: section.title.orEmpty()
                                             if (question.isNotBlank()) {
                                                 onNavigateToChat(
                                                     Destination.Chat(
                                                         question = question,
-                                                        homeStatementId =
-                                                            (section.statement_id ?: section.id)
-                                                                ?.toString()
+                                                        // Display-only banner, image cards only —
+                                                        // `takeIf { isImageCard }` mirrors the app.
+                                                        contentCardImageUrl = section.image_url
+                                                            ?.takeIf { isImageCard && it.isNotBlank() },
+                                                        contentCardTriggerType = cardTriggerType
+                                                        // NO homeStatementId here: the app does not
+                                                        // pass one on this path, and setting it
+                                                        // routed the tap into the PRE-GENERATED
+                                                        // branch of ChatScreen — which then had no
+                                                        // answer, fell back to a bare
+                                                        // initializeWithQuestion(), and so sent no
+                                                        // triggered_input_type and fired neither
+                                                        // Send_Query_Initiated nor Send_Query.
                                                     )
                                                 )
                                             }
@@ -929,13 +1054,12 @@ fun HomeScreen(
                                             HomeAction.FetchImageStatement(
                                                 statementId = (section.statement_id ?: section.id)
                                                     ?.toString().orEmpty(),
-                                                // App parity (HomeScreen.kt:580-584): content-card
-                                                // tap sends image_card / text_card by section type.
-                                                triggered_input_type = when (section.type?.lowercase()) {
-                                                    "image" -> "image_card"
-                                                    "statement" -> "text_card"
-                                                    else -> "card"
-                                                }
+                                                // App parity (HomeScreen.kt:660): the non-agentic
+                                                // path falls back to `statement_type`, not a
+                                                // literal "card".
+                                                triggered_input_type = cardTriggerType
+                                                    ?: section.statement_type
+                                                    ?: "NA"
                                             )
                                         )
                                     },
@@ -1033,12 +1157,63 @@ fun HomeScreen(
                                     },
                                     onDismissed = { vm.dismissCard(section.stableId()) }
                                 )
+                                // App parity (HomeScreen.kt:1507, commit 891142ce "16 dp space
+                                // added between each cards"): the gap between feed cards is this
+                                // TRAILING spacer, skipped only for plotline_widget (which the SDK
+                                // already filters out of visibleSections). Trailing, so the first
+                                // card still rests right under the header.
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
 
                         item(key = "feedFooter") {
                             FeedFooter()
                         }
+                    }
+
+                    if (isComposerUi) {
+                        // App parity (HomeScreen.kt 70adc5fd): the FIXED header CONTENT — centred
+                        // logo, leaf-flanked "For your farm today", location pill — pinned at the
+                        // top of the feed while cards scroll beneath it. Drawn AFTER the
+                        // LazyColumn so it sits above the cards, but with a TRANSPARENT background
+                        // so the green gradient band behind the whole list shows through. Measured
+                        // so item 0 reserves exactly this height and the feed's fade mask ends
+                        // right here.
+                        // SDK deviation (unchanged by this port): the app's fixed overlay also
+                        // carries the app bar. Here the app bar sits in the Column ABOVE this
+                        // list, because it must survive the loading and error branches that render
+                        // no list at all — so it is already fixed and stays where it is.
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopCenter)
+                                .onSizeChanged { headerContentPx = it.height.toFloat() }
+                                .padding(top = 0.dp, bottom = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.fc_logo_mark),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(brand.foregroundPrimary),
+                                modifier = Modifier.size(42.dp)
+                            )
+                            SectionHeader(
+                                title = label(
+                                    Labels.FOR_YOUR_FARM_TODAY,
+                                    "For your farm today"
+                                ),
+                                titleColor = brand.foregroundPrimary,
+                                verticalPadding = 0.dp,
+                            )
+                            HomeLocationPill(
+                                manager = graph.locationPromptManager,
+                                locationState = locationState,
+                                prefs = graph.prefs,
+                                profileApproxLocationName = homeState.approxLocationName
+                            )
+                        }
+                    }
                     }
                 }
             }
@@ -1313,7 +1488,15 @@ fun HomeScreen(
 private fun HomeLocationPill(
     manager: LocationPromptManager,
     locationState: LocationPromptState,
-    prefs: SdkPreferences
+    prefs: SdkPreferences,
+    /**
+     * Profile-derived approximate place name, published to [HomeState.approxLocationName] after
+     * `fetchUserProfile`'s async backfill (app parity: b72ea4da). Passed in as a CHANGING input
+     * so the pill recomposes — and so re-reads the approx pref — once the backfill lands;
+     * otherwise a farmer whose place name only exists server-side keeps seeing the "Set location"
+     * invite until the next resume. Consumed only on the no-permission path.
+     */
+    profileApproxLocationName: String? = null
 ) {
     val context = LocalContext.current
 
@@ -1330,8 +1513,9 @@ private fun HomeLocationPill(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    // FINE only — the same check the manager's decision tree uses (app parity).
     val hasPermission = remember(resumeTick, locationState) {
-        hasLocationPermission(context)
+        manager.hasCurrentLocationPermission()
     }
     val hasExactLocation = remember(resumeTick, locationState) {
         manager.hasStoredLocation() && hasPermission
@@ -1350,7 +1534,7 @@ private fun HomeLocationPill(
     // LocationPromptState.Recovery, so dismissing the "We need your location" sheet does not
     // make the pill fall back to approximate text while the permission is still blocked.
     val isLocationButtonBlocked = remember(resumeTick, locationState) {
-        prefs.getInt(SdkPreferences.Keys.PERMISSION_DENY_COUNT, 0) >= 2 && !hasPermission
+        manager.isBlockedByPermission()
     }
 
     // Only show the "Getting your location" spinner once permission is granted and acquisition
@@ -1363,8 +1547,11 @@ private fun HomeLocationPill(
     }
 
     // Derived fresh every recomposition (cheap prefs read) rather than cached, so a permission
-    // revocation is picked up immediately via resumeTick above.
+    // revocation is picked up immediately via resumeTick above. Falls back to the profile-derived
+    // name from state so the pill resolves in the brief window before the backfill's pref write
+    // is observed (and so it recomposes at all once the profile fetch lands).
     val locationPlaceName = prefs.getString(SdkPreferences.Keys.APPROX_LOCATION_NAME, "")
+        .ifBlank { profileApproxLocationName.orEmpty() }
 
     var showLocationSuccess by remember { mutableStateOf(false) }
     var wasLocationButtonFlowActive by remember { mutableStateOf(false) }
@@ -1418,6 +1605,10 @@ private fun HomeFeedSection(
     onMultiConfirmed: (ids: List<String>, texts: List<String>) -> Boolean,
     onDismissed: () -> Unit
 ) {
+    // App parity (HomeScreen.kt:1310 `cardModifier`, :1241 SsfrCard): horizontal 16dp ONLY. The
+    // list uses spacedBy(0.dp) and the inter-card gap is a trailing 16dp Spacer in the list item
+    // (see the caller), so an extra `vertical = 8.dp` here pushed the FIRST card 8dp below where the app rests it — measured
+    // against the app on emulator-5554: app card top y=655, SDK y=676, with an identical header.
     val type = section.type?.lowercase().orEmpty()
 
     // App HomeScreen.kt:2059-2080 — the app's trackCardVisibility modifier is applied to
@@ -1442,7 +1633,7 @@ private fun HomeFeedSection(
                         )
                     },
                     onDismissed = onDismissed,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             } else {
                 MultiSelectCard(
@@ -1456,7 +1647,7 @@ private fun HomeFeedSection(
                         )
                     },
                     onDismissed = onDismissed,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         }
@@ -1473,11 +1664,14 @@ private fun HomeFeedSection(
             ContentCard(
                 headline = section.question_text ?: section.title.orEmpty(),
                 imageUrl = section.image_url,
-                viewCount = section.badge?.takeIf { it.show == true }?.count,
-                personalizationLabel = section.meta?.asset_name,
+                // App parity (HomeScreen.kt:1337-1355): the view-count badge is passed for IMAGE
+                // cards only, and NO personalisation tag at all — the app's ContentCard still
+                // supports `personalizationLabel` but Home never sets it, so a statement card with
+                // `meta.asset_name` ("Preventive pest management") renders headline-only there.
+                viewCount = if (type == "image") section.badge?.takeIf { it.show == true }?.count else null,
                 isButtonLoading = isFetchingStatement,
                 onClick = onCardClick,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
     }

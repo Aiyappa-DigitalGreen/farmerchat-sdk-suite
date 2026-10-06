@@ -42,12 +42,20 @@ object Labels {
     const val PLEASE_CHECK_TRY_AGAIN = "fc_v2_app_label_please_check_try_again"
     const val BY_CONTINUING_TO_VERIFICATION_YOU_ARE_ACCEPTING_OUR = "fc_v2_app_label_by_continuing_to_verification_you_are_accepting_our"
     // Agreement info card + privacy consent (app 9966b905, ui/auth/AuthScreen.kt AgreementCard /
-    // AuthConsentText). All five verified served by endpoint #3.
+    // AuthConsentText). The first five are verified served by endpoint #3.
     const val AGREEMENT_CARD_TITLE = "fc_v2_app_label_agreement_card_title"
     const val AGREEMENT_POINT_VERIFICATION_CODE = "fc_v2_app_label_agreement_point_verification_code"
     const val AGREEMENT_POINT_UPDATES = "fc_v2_app_label_agreement_point_updates"
+    // Declared for parity, no longer rendered: app 2a5cf2b8 folded the surveys line into
+    // AGREEMENT_POINT_UPDATES and moved the attribution into AGREEMENT_CARD_INFO_TEXT. The app
+    // kept the constant, so the SDK keeps it too rather than dropping a served key.
     const val AGREEMENT_POINT_SURVEYS = "fc_v2_app_label_agreement_point_surveys"
     const val AUTH_CONSENT_PREFIX = "fc_v2_app_label_auth_consent_prefix"
+    // Added by app 2a5cf2b8 / ae37b28e. NOT yet probed against endpoint #3 — no API key is
+    // available in this tree, so both are listed as an ask in docs/05. Until they are served the
+    // English fallbacks below (the app's own) are what the farmer reads.
+    const val AGREEMENT_CARD_INFO_TEXT = "fc_v2_app_label_agreement_card_info_text"
+    const val AUTH_CONSENT_SUFFIX = "fc_v2_app_label_auth_consent_suffix"
 
     const val PLEASE_ALSO_SEE_OUR = "fc_v2_app_label_please_also_see_our"
     const val UNKNOWN_ERROR = "fc_v2_app_label_unknown_error"
@@ -279,6 +287,14 @@ object Labels {
     const val YOU_CAN_ASK_FOLLOWUP_QUESTIONS_TO_GET_MORE_DETAILS = "fc_v2_app_label_tips_you_can_ask_followup_questions_to_get_more_details"
 
     const val UPLOAD_PHOTOS_FOR_PLANT_DISEASE_IDENTIFICATION = "fc_v2_app_label_tips_upload_photos_for_plant_disease_identification"
+    /**
+     * Fallback body for the "Quick tip" card. The app inlines this key in its `fallbackTips`.
+     *
+     * NOTE the near-collision: [ASK_SPECIFIC_CROPS] above is `fc_v2_app_label_ask_specific_crops`
+     * — no `tips_` infix — which the app declares but never uses. Only THIS key reaches the
+     * answer-generation carousel, so the two must not be conflated.
+     */
+    const val TIPS_ASK_SPECIFIC_CROPS = "fc_v2_app_label_tips_ask_specific_crops"
     const val AI_MAY_BE_WRONG_PLEASE_DOUBLE_CHECK = "fc_v2_app_label_tips_ai_may_be_wrong_please_double_check"
 
     const val RELATED_QUESTIONS = "fc_v2_app_label_related_questions"

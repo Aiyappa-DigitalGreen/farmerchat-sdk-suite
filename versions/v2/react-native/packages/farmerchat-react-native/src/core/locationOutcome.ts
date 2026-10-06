@@ -9,12 +9,14 @@
  */
 
 /**
- * Which surface started the flow. `localContext` is the 2.0.0 chat capability chip
- * ("Share my location" on a `gps-prompt` alignment surface) — the RN counterpart of the Android
- * core's `LocationTriggerSource.LocalContext`, so the chat screen can tell ITS outcome apart
- * from one belonging to Home or Settings.
+ * Which surface started the flow — the Android core's `LocationTriggerSource`:
+ *  - `weather`      → `Weather` (Home weather chip; the ONLY entry that shows the interstitial)
+ *  - `widget`       → `Campaign` (home-feed `enable_location` card / campaign widget)
+ *  - `localContext` → `LocalContext` (Home location pill, and the 2.0.0 chat `gps-prompt`
+ *                     "Share my location" chip)
+ *  - `settings`     → `Settings` (Settings "My Farm" Location row)
  */
-export type LocationPromptSource = 'weather' | 'widget' | 'localContext';
+export type LocationPromptSource = 'weather' | 'widget' | 'localContext' | 'settings';
 
 export type LocationPromptEvent =
   | { kind: 'LocationUpdatedFromWidget' }
@@ -41,9 +43,14 @@ export type LocationPromptEvent =
  * caller that treated any `Continue` as success would show the chat `gps-prompt` location bubble
  * for a location the farmer never shared.
  *
- * Only `location_fetched` is emitted by this package today; the other two are the app's reasons
- * for its post-Settings recovery paths, which the SDK does not port (docs/04). They are listed
- * verbatim from the Android core so the rule stays correct if those paths are added.
+ * This package emits `location_fetched` and `post_settings_preference_exists` (permission granted
+ * from system Settings while the Recovery sheet was up, with a fix already stored).
+ * `location_fetched_pending_api` is listed verbatim from the Android core so the rule stays
+ * correct if that path is added.
+ *
+ * Every other `Continue.reason` the state machine emits is a NON-success: `permission_denied`,
+ * `skip`, `recovery_closed`, `recovery_dismissed`, `gps_disabled_no_thanks`,
+ * `location_failed_fallback`, `dismissed`.
  */
 export const LOCATION_OBTAINED_REASONS: readonly string[] = [
   'location_fetched',

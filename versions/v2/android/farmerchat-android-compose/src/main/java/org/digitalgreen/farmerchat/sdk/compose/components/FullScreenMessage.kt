@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
+import androidx.compose.ui.unit.Dp
 
 /**
  * Shared "green full-screen message" layout used by error screens, sign-up
@@ -59,8 +61,10 @@ fun FullScreenMessage(
     subtitleTextStyle: TextStyle = MaterialTheme.typography.bodyMedium,
     primaryButtonState: PrimaryButtonState = PrimaryButtonState.Default,
     leftIcon: ImageVector? = null,
+    leftRadius: Dp = Radius.MD,
     onLeftClick: () -> Unit = {},
     rightLabel: String? = null,
+    rightRadius: Dp = Radius.MD,
     onRightClick: () -> Unit = {},
     secondaryCtaLabel: String? = null,
     onSecondaryCta: (() -> Unit)? = null,
@@ -69,7 +73,7 @@ fun FullScreenMessage(
     primaryButtonModifier: Modifier = Modifier
 ) {
     val brand = LocalBrandColors.current
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = fcNavigationBarsBottom()
 
     var didTapPrimary by remember { mutableStateOf(false) }
     LaunchedEffect(didTapPrimary, enablePrimaryDebounce) {
@@ -97,8 +101,10 @@ fun FullScreenMessage(
             glowType = GlowType.Yellow,
             glowAlpha = 1.0f,
             leftIcon = leftIcon,
+            leftRadius = leftRadius,
             onLeftClick = onLeftClick,
             rightLabel = rightLabel,
+            rightRadius = rightRadius,
             onRightClick = onRightClick
         )
 
@@ -192,11 +198,21 @@ fun FullScreenMessage(
 fun FarmerIllustration(
     painter: androidx.compose.ui.graphics.painter.Painter,
     modifier: Modifier = Modifier,
-    showGradientOverlay: Boolean = false
+    showGradientOverlay: Boolean = false,
+    /**
+     * App parity. 300dp is `FullScreenMessage`'s own FALLBACK box (app NoInternetScreen.kt:158),
+     * which is what this default mirrors. Every screen that supplies its own
+     * `illustrationContent` overrides it to **322dp** — AccountSuccessScreen.kt:82,
+     * AppNavGraph.kt:832 (AccountBenefits) and LocationPromptHost.kt:746/791/864. The SDK's call
+     * sites took the 300 default, so all four rendered 22dp narrower than the app's.
+     *
+     * A parameter rather than a changed default: the 300 is correct for the fallback path.
+     */
+    maxWidth: Dp = 300.dp
 ) {
     Box(
         modifier = modifier
-            .widthIn(max = 300.dp)
+            .widthIn(max = maxWidth)
             .aspectRatio(300f / 450f)
             .clip(SmoothShapes.rounded(Radius.Rounded))
     ) {

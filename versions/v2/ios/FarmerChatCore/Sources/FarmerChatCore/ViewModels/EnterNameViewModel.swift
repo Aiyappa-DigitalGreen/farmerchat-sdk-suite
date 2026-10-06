@@ -92,7 +92,7 @@ public final class EnterNameViewModel: ObservableObject {
             state.updateUserNameState = .success(response)
         case .error(let error):
             state.updateUserNameState = .error(
-                message: error.message ?? env.labels.label("error_generic", fallback: "Something went wrong. Please try again."),
+                message: error.message ?? env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."),
                 code: error.code,
                 isNetworkError: error.isNetworkError
             )

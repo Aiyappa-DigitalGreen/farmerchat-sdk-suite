@@ -15,13 +15,13 @@ struct ChatHistoryView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel("chat_history_title", "Recent Chats"),
+                title: fcLabel(FCLabels.recentChats, "Recent chats"),
                 leading: .menu,
                 onLeadingTap: openDrawer
             )
 
             if viewModel.state.isLoading && viewModel.state.items.isEmpty {
-                FCLogoSpinner(message: fcLabel("loading", "Loading…"))
+                FCLogoSpinner(message: fcLabel(FCLabels.loading, "Loading..."))
             } else if viewModel.state.items.isEmpty {
                 emptyState
             } else {
@@ -53,7 +53,7 @@ struct ChatHistoryView: View {
                 .font(.system(size: 44))
                 .foregroundColor(theme.content.foregroundTertiary)
             Text(fcLabel("chat_history_empty", "Your chats will appear here"))
-                .font(.system(size: 16))
+                .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
             Spacer()
         }
@@ -65,10 +65,13 @@ struct ChatHistoryView: View {
                 ForEach(viewModel.state.items) { row in
                     switch row {
                     case .header(let title):
+                        // App parity (ChatHistoryScreen.kt:165-167): the date-group heading is
+                        // labelLarge (17/600) on foregroundPrimary, in its natural case. iOS had
+                        // it at 13/600, grey, and FORCED TO UPPERCASE — three deviations that
+                        // together made it read as a system caption rather than a section title.
                         Text(title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(theme.content.foregroundSecondary)
-                            .textCase(.uppercase)
+                            .fcTextStyle(theme.typography.labelLarge)
+                            .foregroundColor(theme.content.foregroundPrimary)
                             .padding(.horizontal, 16)
                             .padding(.top, 18)
                             .padding(.bottom, 4)
@@ -99,10 +102,10 @@ struct ChatHistoryView: View {
 
                 if viewModel.state.paginationError {
                     VStack(spacing: 8) {
-                        Text(fcLabel("load_more_failed", "Couldn't load more chats."))
-                            .font(.system(size: 14))
+                        Text(fcLabel(FCLabels.couldntLoadMoreChats, "Couldn't load more chats"))
+                            .fcTextStyle(theme.typography.bodyMedium)
                             .foregroundColor(theme.content.foregroundSecondary)
-                        FCPrimaryButton(title: fcLabel("try_again", "Try again")) {
+                        FCPrimaryButton(title: fcLabel(FCLabels.tryAgain, "Try again")) {
                             viewModel.retryPagination()
                         }
                         .padding(.horizontal, 40)
@@ -112,8 +115,8 @@ struct ChatHistoryView: View {
                 } else if viewModel.state.canLoadMore {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text(fcLabel("loading_more", "Loading more…"))
-                            .font(.system(size: 14))
+                        Text(fcLabel(FCLabels.loadingMore, "Loading more..."))
+                            .fcTextStyle(theme.typography.bodyMedium)
                             .foregroundColor(theme.content.foregroundSecondary)
                     }
                     .frame(maxWidth: .infinity)

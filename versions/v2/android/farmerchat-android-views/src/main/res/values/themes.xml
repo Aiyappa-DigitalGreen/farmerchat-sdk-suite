@@ -14,6 +14,25 @@
         <item name="android:windowBackground">@color/fc_surface_primary</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Compose parity, and the single biggest source of vertical drift in this flavour.
+             Compose 1.6+ defaults `includeFontPadding` to FALSE; a TextView defaults it to TRUE
+             and adds ~3dp of leading per line. Every views text row therefore ran ~8px taller
+             than the app's, and the error ACCUMULATED down a screen — 146px by the bottom of
+             Help. Applied through the default TextView style so it reaches every row at once.
+             Measured on LanguageChooser: rows went from +8px each to within 1-2px of the app. -->
+        <item name="android:textViewStyle">@style/FcTextView</item>
+    </style>
+
+    <style name="FcTextView" parent="Widget.AppCompat.TextView">
+        <item name="android:includeFontPadding">false</item>
+        <!-- The reason views' text weights did not match the app's. `android:textFontWeight`
+             only INTERPOLATES against a named family; with the default typeface it snaps to
+             normal/bold, so a nominal 600 rendered at 400's width. Measured on the Settings
+             section title (same string, same 17sp, same y): app 189px, views 180px at bare
+             `textFontWeight=600`, 199px at `bold`, and **191px** once an explicit
+             `sans-serif` family is present. Applied here so every TextView in the flavour
+             resolves weights the way Compose does. -->
+        <item name="android:fontFamily">sans-serif</item>
     </style>
 
     <style name="Theme.FarmerChatSdk.LegalDialog" parent="ThemeOverlay.Material3.Dialog">

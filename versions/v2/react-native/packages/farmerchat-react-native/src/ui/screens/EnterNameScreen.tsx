@@ -80,7 +80,7 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
     }
     const userId = sdk.session.userId;
     if (!userId) {
-      showToast(label('chat_error_generic', 'Something went wrong. Please try again.'), 'error');
+      showToast(label('fc_v2_app_label_something_went_wrong_please_try_again', 'Something went wrong. Please try again.'), 'error');
       return;
     }
     dispatch({
@@ -105,8 +105,10 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
       >
         <View style={styles.body}>
           <LogoMark size={56} style={{ alignSelf: 'center' }} />
-          <Text style={[typography.title, { color: theme.textPrimary, textAlign: 'center' }]}>
-            {label('name_title', 'What should we call you?')}
+          {/* App parity (EnterNameScreen.kt:127): titleLarge (22), not the legacy `title` alias
+              which is 24 — one type step too large. */}
+          <Text style={[typography.titleLarge, { color: theme.textPrimary, textAlign: 'center' }]}>
+            {label('fc_v2_app_label_what_should_we_call_you', 'What should we call you?')}
           </Text>
           <Text
             style={[typography.body, { color: theme.textSecondary, textAlign: 'center' }]}
@@ -116,7 +118,7 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
           <TextInputField
             value={name}
             onChangeText={(text) => setName(normalizeNameInput(text))}
-            placeholder={label('name_hint', 'Your name')}
+            placeholder={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
             autoFocus
             maxLength={NAME_MAX_LENGTH}
             onSubmitEditing={save}
@@ -125,7 +127,7 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
         </View>
         <View style={styles.footer}>
           <PrimaryButton
-            label={label('name_save', 'Save name')}
+            label={label('fc_v2_app_label_save_name', 'Save name')}
             state={isSaving ? 'Loading' : 'Chevron'}
             enabled={name.trim().length >= 1}
             onPress={save}
@@ -133,7 +135,7 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
           />
           {showSkip ? (
             <SecondaryButton
-              label={label('name_skip', 'Skip for now')}
+              label={label('fc_v2_app_label_skip_for_now', 'Skip for now')}
               onPress={skip}
               testID="fc-name-skip"
             />

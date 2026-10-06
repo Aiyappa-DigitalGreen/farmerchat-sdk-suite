@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Compose parity (Drawer.kt:514): the CURRENT route's drawer row is filled with
+     surfaceTertiary (Green950) clipped to Radius.MD; every other row keeps the panel colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_brand_deep" />
+    <corners android:radius="12dp" />
+</shape>

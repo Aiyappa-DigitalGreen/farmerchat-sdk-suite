@@ -68,7 +68,7 @@ export class FarmerChatSdk {
       overrides: this.config.stringOverrides,
       forcedLocale: this.config.locale,
     });
-    this.analytics = new AnalyticsManager(this.config.onEvent, this.config.callbacks);
+    this.analytics = new AnalyticsManager(this.config.onEvent, this.config.callbacks, this.config.enableAnalytics);
     this.http = new HttpClient(
       this.config,
       this.store,

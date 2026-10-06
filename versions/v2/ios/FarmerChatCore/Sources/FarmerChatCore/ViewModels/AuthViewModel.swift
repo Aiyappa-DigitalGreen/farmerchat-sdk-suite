@@ -89,7 +89,7 @@ public final class AuthViewModel: ObservableObject {
             } else if case .error(let error) = result {
                 state.toast = AuthToast(
                     kind: .error,
-                    message: error.message ?? env.labels.label("error_generic", fallback: "Something went wrong. Please try again.")
+                    message: error.message ?? env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again.")
                 )
             }
         }

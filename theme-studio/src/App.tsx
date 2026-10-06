@@ -45,7 +45,7 @@ export default function App() {
   const [state, setState] = useState<ThemeState>(() => clone(PRESETS[DEFAULT_PRESET].values))
   const [platform, setPlatform] = useState<PlatformId>("web")
   const [appearance, setAppearance] = useState<Appearance>(() => fromUrl("appearance", ["day", "night"], "day"))
-  const [screen, setScreen] = useState<Screen>(() => fromUrl("screen", ["language", "name", "home", "chat", "auth", "settings"], "home"))
+  const [screen, setScreen] = useState<Screen>(() => fromUrl("screen", SCREENS.map(([id]) => id), "home"))
 
   function selectPreset(name: string) {
     setActivePreset(name)
@@ -67,7 +67,8 @@ export default function App() {
           <Tabs value={view} onValueChange={(v) => setView(v as View)} className="ml-2">
             <TabsList>
               <TabsTrigger value="studio">Studio</TabsTrigger>
-              <TabsTrigger value="gallery">Gallery</TabsTrigger>
+              {/* Gallery tab hidden on request. The route still works via
+                  ?view=gallery — restore this trigger to bring the tab back. */}
               <TabsTrigger value="sdk">Get SDK</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -95,7 +96,7 @@ export default function App() {
       {view === "gallery" ? (
         <Gallery />
       ) : view === "sdk" ? (
-        <SdkDownloads state={state} />
+        <SdkDownloads />
       ) : (
       <main className="mx-auto grid max-w-[1500px] grid-cols-1 items-start gap-6 p-4 lg:grid-cols-[360px_1fr] lg:p-6">
         <aside className="lg:sticky lg:top-[73px] lg:max-h-[calc(100vh-89px)] lg:overflow-y-auto lg:pr-1 lg:pb-10">

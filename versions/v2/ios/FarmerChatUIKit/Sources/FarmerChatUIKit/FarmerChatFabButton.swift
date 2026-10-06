@@ -72,7 +72,7 @@ public final class FarmerChatFabButton: UIButton {
         if let title {
             setTitle(title, for: .normal)
             setTitleColor(fg, for: .normal)
-            titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+            titleLabel?.font = FCUITypography.current.labelMedium.font
             contentEdgeInsets = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 22)
             imageEdgeInsets = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 10)
         } else {

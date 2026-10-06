@@ -31,7 +31,7 @@ export function PrimaryInputButtons(props: { onSelect: (kind: InputKind) => void
             props.onSelect('photo');
           }}
         >
-          <span aria-hidden>{Icon.camera}</span> {label('input_photo', 'Photo')}
+          <span aria-hidden>{Icon.camera}</span> {label('fc_v2_app_label_photo', 'Photo')}
         </button>
       ) : null}
       {voiceSupported ? (
@@ -43,7 +43,7 @@ export function PrimaryInputButtons(props: { onSelect: (kind: InputKind) => void
             props.onSelect('speak');
           }}
         >
-          <span aria-hidden>{Icon.mic}</span> {label('input_speak', 'Speak')}
+          <span aria-hidden>{Icon.mic}</span> {label('fc_v2_app_label_speak', 'Speak')}
         </button>
       ) : null}
       <button
@@ -54,7 +54,7 @@ export function PrimaryInputButtons(props: { onSelect: (kind: InputKind) => void
           props.onSelect('type');
         }}
       >
-        <span aria-hidden>{Icon.keyboard}</span> {label('input_type', 'Type')}
+        <span aria-hidden>{Icon.keyboard}</span> {label('fc_v2_app_label_type', 'Type')}
       </button>
     </div>
   );
@@ -79,7 +79,7 @@ export function TextInputOverlay(props: { onSend: (text: string) => void; onClos
           <textarea
             ref={areaRef}
             value={text}
-            placeholder={props.placeholder ?? label('input_type_placeholder', 'Ask your question…')}
+            placeholder={props.placeholder ?? label('fc_v2_app_label_ask_about_your_farm', 'Ask about your farm...')}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -87,7 +87,7 @@ export function TextInputOverlay(props: { onSend: (text: string) => void; onClos
                 send();
               }
             }}
-            aria-label={label('input_type_placeholder', 'Ask your question…')}
+            aria-label={label('fc_v2_app_label_ask_about_your_farm', 'Ask about your farm...')}
           />
           <button type="button" className="fcsdk-sendbtn" onClick={send} disabled={!text.trim()} aria-label="send">
             {Icon.send}
@@ -147,7 +147,7 @@ export function VoiceInputOverlay(props: {
           <>
             <div style={{ fontWeight: 700 }}>
               {recState.status === 'recording'
-                ? label('voice_listening', 'Listening…')
+                ? label('fc_v2_app_label_listening', 'Listening…')
                 : label('voice_preparing', 'Preparing microphone…')}
             </div>
             <div className="fcsdk-timer">{formatSeconds(Math.floor(recState.elapsedMs / 1000))}</div>
@@ -155,7 +155,7 @@ export function VoiceInputOverlay(props: {
               {Icon.mic}
             </button>
             <button type="button" className="fcsdk-btn-text" onClick={cancel}>
-              {label('voice_cancel', 'Cancel')}
+              {label('fc_v2_app_label_cancel', 'Cancel')}
             </button>
           </>
         )}

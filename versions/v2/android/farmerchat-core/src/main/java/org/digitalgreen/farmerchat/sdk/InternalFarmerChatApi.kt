@@ -28,5 +28,10 @@ annotation class InternalFarmerChatApi
  * `farmerChatVersion` declared in the root build script.
  */
 object FarmerChatVersion {
-    const val VERSION: String = "1.0.0"
+    /**
+     * Read from BuildConfig so the doc comment above is actually true. It said "kept in sync
+     * with the `farmerChatVersion` declared in the root build script" while hardcoding 1.0.0
+     * against a root that publishes 2.0.0 — the classic mirror that stopped mirroring.
+     */
+    val VERSION: String = org.digitalgreen.farmerchat.sdk.core.BuildConfig.SDK_VERSION_NAME
 }

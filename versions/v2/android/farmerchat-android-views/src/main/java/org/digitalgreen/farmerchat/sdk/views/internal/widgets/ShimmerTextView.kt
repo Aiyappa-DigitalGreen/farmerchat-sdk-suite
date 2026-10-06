@@ -75,6 +75,15 @@ internal class ShimmerTextView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         rebuildShader()
+        // START the sweep here, not just rebuild the shader.
+        //
+        // [canShimmer] requires a measured width, but EVERY other entry point that calls
+        // [startSweep] — onAttachedToWindow, onVisibilityAggregated, the [shimmerEnabled] setter,
+        // [setShimmerText] — runs BEFORE first layout, when width is still 0. So each one bailed
+        // out, and this callback (the only one that fires once the width is known) rebuilt the
+        // shader without ever starting the animator. Net effect: the view rendered its base
+        // colour and never swept, anywhere it was used.
+        if (shimmerEnabled) startSweep()
     }
 
     override fun onAttachedToWindow() {

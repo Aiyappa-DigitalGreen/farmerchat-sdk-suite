@@ -1,13 +1,21 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.ui
 
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationErrorType
+import org.digitalgreen.farmerchat.sdk.core.ui.location.isLocationObtained
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptEvent
+import org.digitalgreen.farmerchat.sdk.views.internal.util.FcInsets
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
@@ -49,9 +57,21 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor
 
 /** Home dashboard (doc 01 §3.7). */
 internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedAdapter.Callbacks {
+
+    private var lastApproxLocationName: String? = null
+
+    /**
+     * App parity (HomeScreen.kt:241-255): true while a CAMPAIGN (widget) location flow is between
+     * permission and fix — the feed is swapped for the "Getting your location" spinner. The pill
+     * and weather flows leave the feed in place.
+     */
+    private var widgetGpsLoading = false
+
 
     override val analyticsScreenName: String = AnalyticsScreens.HOME
 
@@ -153,6 +173,11 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         renderStaticTexts()
 
         binding.fcHomeAppBar.fcAppBarLeft.setOnClickListener { journeyHost()?.openDrawer() }
+        // App parity: only the HOME menu button is a full pill (HomeAppBar.kt, 2026-09-15).
+        // The shared fc_view_appbar include keeps the 12dp chip for back / close elsewhere.
+        binding.fcHomeAppBar.fcAppBarLeft.setBackgroundResource(R.drawable.fc_bg_appbar_chip_round)
+        // Set after inflation, so the inflater recolor never saw it.
+        FcRecolor.maybeRecolor(binding.fcHomeAppBar.fcAppBarLeft)
         binding.fcHomeAppBar.fcAppBarLeft.isVisible = graph.config.showDrawer  // C3
         if (isComposerUi) setUpComposer() else setUpLegacyInputRow()
         binding.fcHomeAppBar.fcAppBarTitle.text = ""
@@ -193,6 +218,60 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         // would be a lie. The app's agentic header reads "For your farm today" (app parity:
         // HomeScreen.kt:1042); only that title is ported here — the logo mark, leaf flourishes
         // and location pill of the pinned header are not (see versions/v2/README.md).
+        // Compose parity (HomeScreen.kt:1136): the agentic header carries the centred logo mark;
+        // the legacy Home does not.
+        // The sunbeam glow is a HOME-only treatment (see fc_view_appbar.xml); the shared bar
+        // now defaults it off so Settings/Help/etc render the app's flat #008236.
+        binding.fcHomeAppBar.fcAppBarGlow.isVisible = true
+        // App parity (AppBars.kt:186): HomeAppBar is 52dp, where the shared DefaultAppBar is 64dp
+        // (:96). Views' single include is 64dp, which put Home's whole header 12dp low.
+        binding.fcHomeAppBar.root.layoutParams =
+            binding.fcHomeAppBar.root.layoutParams.also {
+                it.height = (52 * resources.displayMetrics.density).toInt()
+            }
+        binding.fcHomeHeaderLogo.isVisible = isComposerUi
+
+        // Compose parity (HomeScreen.kt:1152): the location pill is part of the AGENTIC header
+        // only; the legacy Home has no pill in this position.
+        binding.fcHomeLocationPill.isVisible = isComposerUi
+        if (isComposerUi) {
+            binding.fcHomeLocationPill.bind(
+                manager = graph.locationPromptManager,
+                prefs = graph.prefs,
+                labelFor = { key, fallback -> label(key, fallback) },
+                onTap = {
+                    // Re-run the flow rather than jumping to system Settings: with
+                    // denyCount >= 2 and no permission the manager lands on Recovery, which is
+                    // what re-shows the sheet (with its own "Turn on in Settings" button).
+                    if (graph.locationPromptManager.state.value == LocationPromptState.Idle) {
+                        graph.locationPromptManager.triggerFromLocalContext()
+                    }
+                }
+            )
+            // The pill's text depends on live location state, so follow it. `collectWhenStarted`
+            // is this flavour's own helper (BaseFragment.kt:37) — same STARTED-scoped collection
+            // every other observer here uses.
+            graph.locationPromptManager.state.collectWhenStarted { st ->
+                binding.fcHomeLocationPill.refresh(st)
+            }
+            // App parity (HomeScreen.kt:281): refresh the feed AND the weather once a location
+            // update succeeds while on Home — keyed on the success signals only, so a backed-out
+            // or denied prompt does not trigger a wasted reload.
+            graph.locationPromptManager.events.collectWhenStarted { event ->
+                val isWidgetUpdate = event is LocationPromptEvent.LocationUpdatedFromWidget
+                val isLocalContextSuccess = event is LocationPromptEvent.Continue &&
+                    event.source == LocationTriggerSource.LocalContext &&
+                    event.isLocationObtained()
+                if (isWidgetUpdate || isLocalContextSuccess) {
+                    loadHome(skipLoadingCheck = true)
+                    vm.onAction(
+                        HomeAction.LoadWeather(
+                            requireContext().applicationContext, userId(), skipLoadingCheck = true
+                        )
+                    )
+                }
+            }
+        }
         binding.fcHomeGreeting.text = if (isComposerUi) {
             label(Labels.FOR_YOUR_FARM_TODAY, "For your farm today")
         } else {
@@ -206,7 +285,65 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         binding.fcInputTypeLabel.text = label(Labels.TYPE, "Type")
         binding.fcHomeErrorTitle.text = label(Labels.CANT_LOAD_RIGHT_NOW, "Can't load right now")
         binding.fcHomeErrorRetry.text = label(Labels.TRY_AGAIN, "Try again")
-        binding.fcHomeLoading.text = label(Labels.GETTING_TODAYS_ADVICE, "Getting today's advice")
+        binding.fcHomeLoading.text = if (widgetGpsLoading) {
+            label(Labels.GETTING_YOUR_LOCATION, "Getting your location…")
+        } else {
+            label(Labels.GETTING_TODAYS_ADVICE, "Getting today's advice")
+        }
+        if (isComposerUi) applyAgenticSurface()
+    }
+
+    /**
+     * App HomeScreen.kt `isComposerUi` surface, which views drew as the v1 all-green Home:
+     *  - grey `surfacePrimary` page with the brand band + sunbeams + glow BEHIND the feed;
+     *  - the header (bar, logo, leaf-flanked title, pill) as a FIXED transparent overlay the feed
+     *    scrolls under, the feed reserving its height (the app's item-0 spacer);
+     *  - the feed's top strip masked to transparent so cards dissolve into the band (DstIn,
+     *    transparent to 80% of the header, opaque at its bottom edge).
+     * The bar itself is transparent here (`appBar(showBackground = false)`), so its own glow is
+     * off — the backdrop draws the glow instead.
+     */
+    private fun applyAgenticSurface() {
+        val ctx = requireContext()
+        binding.root.setBackgroundColor(FcTokens.color(ctx, R.color.fc_surface_primary))
+        val rawBrand = FcTokens.color(ctx, R.color.fc_green700)
+        binding.fcHomeBackdrop.brandColor = rawBrand
+        binding.fcHomeBackdrop.glowTint =
+            org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor.active(ctx)?.accent
+        binding.fcHomeBackdrop.isVisible = true
+        binding.fcHomeAppBar.root.background = null
+        binding.fcHomeAppBar.fcAppBarGlow.isVisible = false
+
+        binding.fcHomeGreeting.isVisible = false
+        binding.fcHomeSectionHeader.isVisible = true
+        binding.fcHomeSectionHeader.title = label(Labels.FOR_YOUR_FARM_TODAY, "For your farm today")
+        binding.fcHomeSectionHeader.accentColor = org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens.accent(ctx)
+        binding.fcHomeSectionHeader.titleColor = FcTokens.color(ctx, R.color.fc_brand_foreground_primary)
+
+        val header = binding.fcHomeHeader
+        header.translationZ = 1f
+        header.addOnLayoutChangeListener { v, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            val h = bottom - top
+            if (h == oldBottom - oldTop && (v.layoutParams as ViewGroup.MarginLayoutParams).bottomMargin == -h) {
+                return@addOnLayoutChangeListener
+            }
+            v.post {
+                (v.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
+                    if (lp.bottomMargin != -h) {
+                        lp.bottomMargin = -h
+                        v.layoutParams = lp
+                    }
+                }
+                binding.fcHomeFeed.updatePadding(top = h)
+                // The app's mask runs in SCREEN coordinates from 0 to the header's bottom
+                // (status bar included); this list starts below the status bar.
+                val statusTop = (binding.fcHomeHeader.parent as View).paddingTop
+                binding.fcHomeFeed.setFade(
+                    startPx = (0.80f * (h + statusTop)).toInt() - statusTop,
+                    endPx = h
+                )
+            }
+        }
     }
 
     // ------------------------------------------------------------------ input surface
@@ -215,6 +352,11 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
     private fun setUpLegacyInputRow() {
         binding.fcHomeComposer.isVisible = false
         binding.fcHomeInputButtons.isVisible = true
+        // Host feature flags — app parity with ios `HomeCells.swift:52-53`. `enableImages` /
+        // `enableVoice` were declared on Android and honoured by NOTHING until 2026-09-16;
+        // see docs/04 "Config-parity audit (2026-09-16)".
+        binding.fcInputPhoto.isVisible = graph.config.enableImages
+        binding.fcInputSpeak.isVisible = graph.config.enableVoice
         binding.fcInputPhoto.setOnClickListener {
             trackIconClick("Image")
             overlays?.showPhotoInput()
@@ -237,11 +379,13 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         composer.isVisible = true
         composer.compact = false
         composer.setSurfaceColorRes(R.color.fc_green700)
-        // Compose defaults the band to `surfacePrimary` because agentic Home IS the grey reading
-        // surface. The Views Home surface is still v1 green (the agentic surface + gradient +
-        // pinned header are not ported — recorded in versions/v2/README.md), so the band takes
-        // green700 to read as part of the screen it is actually sitting on.
-        composer.setFadeColorRes(R.color.fc_green700)
+        // Compose defaults the band to `surfacePrimary`: agentic Home IS the grey surface, so the
+        // 10dp gutters and the nav strip under the floating pill read grey (measured on the app:
+        // (236,236,238) either side of the pill). Now that views paints the agentic surface
+        // (applyAgenticSurface), the band follows it.
+        composer.setFadeColorRes(R.color.fc_surface_primary)
+        // The idle rainbow aura around the field is a Home treatment in the app.
+        composer.showAura = true
         composer.setPlaceholder(label(Labels.ASK_ABOUT_YOUR_FARM, "Ask about your farm..."))
 
         composer.onPhotoClick = {
@@ -308,8 +452,7 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
      * outside the feed — subtract it or the last card stops short.
      */
     private fun reserveComposerSpace(barHeightPx: Int) {
-        val navBottom = ViewCompat.getRootWindowInsets(binding.root)
-            ?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        val navBottom = FcInsets.overlapping(binding.root, WindowInsetsCompat.Type.navigationBars()).bottom
         binding.fcHomeFeed.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0))
         // The toast is declared after the composer in the root FrameLayout, so it draws on top
         // of it. Its 24dp XML margin was safe while the only bottom content was the feed; the
@@ -320,46 +463,85 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         }
     }
 
-    private fun loadHome() {
+    /** Which of spinner / feed / error shows — the widget GPS flow forces the spinner. */
+    private fun renderFeedVisibility(feed: UiState<*>) {
+        val loading = widgetGpsLoading || feed is UiState.Loading || feed is UiState.Idle
+        binding.fcHomeLoading.isVisible = loading
+        binding.fcHomeFeed.isVisible = !loading && feed is UiState.Success
+        binding.fcHomeError.isVisible = !loading && feed is UiState.Error
+    }
+
+    private fun loadHome(skipLoadingCheck: Boolean = false) {
         val time = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
         // Guest passes userId = null (doc 01).
         vm.onAction(
             HomeAction.LoadHome(
                 context = requireContext().applicationContext,
                 userDeviceTime = time,
-                userId = userId().ifBlank { null }
+                userId = userId().ifBlank { null },
+                skipLoadingCheck = skipLoadingCheck
             )
         )
     }
 
     private fun observeState() {
+        graph.locationPromptManager.state.collectWhenStarted { st ->
+            // App parity (HomeScreen.kt:258-266): a location-flow error while Home is showing goes
+            // to the shared Error screen, and the flow closes silently.
+            if (st is LocationPromptState.Error) {
+                findNavController().navigate(
+                    R.id.fc_dest_error,
+                    NavRoutes.errorArgs(
+                        isNetworkError = st.type == LocationErrorType.NoNetwork,
+                        fromScreen = "home"
+                    ),
+                    NavRoutes.singleTop()
+                )
+                graph.locationPromptManager.dismiss(emitContinue = false)
+            }
+            val loading = when (st) {
+                is LocationPromptState.RequestPermission -> st.source == LocationTriggerSource.Campaign
+                is LocationPromptState.RequestEnableGps -> st.source == LocationTriggerSource.Campaign
+                is LocationPromptState.FetchingLocation -> st.source == LocationTriggerSource.Campaign
+                else -> false
+            }
+            if (loading != widgetGpsLoading) {
+                widgetGpsLoading = loading
+                binding.fcHomeLoading.text = if (loading) {
+                    label(Labels.GETTING_YOUR_LOCATION, "Getting your location…")
+                } else {
+                    label(Labels.GETTING_TODAYS_ADVICE, "Getting today's advice")
+                }
+                renderFeedVisibility(vm.state.value.homeFeedState)
+            }
+        }
         vm.state.collectWhenStarted { state ->
+            // App b72ea4da / compose HomeLocationPill(profileApproxLocationName): the profile
+            // backfill writes the IP-derived place name AFTER first paint. The pill only followed
+            // location-prompt state, so it stayed on "Set your location" while Settings — read
+            // later — already showed "Bengaluru Urban (approximate)".
+            if (isComposerUi && state.approxLocationName != lastApproxLocationName) {
+                lastApproxLocationName = state.approxLocationName
+                binding.fcHomeLocationPill.refresh(graph.locationPromptManager.state.value)
+            }
             // 2.0.0 Terms-of-Use acceptance gate (#7a) — shows/hides its own sheet and content
             // screen from policyAcceptanceState + acceptTermsState. Guarded internally against
             // this collector's repeat emissions.
             termsGate?.render(state)
 
             // Feed
+            renderFeedVisibility(state.homeFeedState)
             when (val feed = state.homeFeedState) {
-                is UiState.Loading, UiState.Idle -> {
-                    binding.fcHomeLoading.isVisible = true
-                    binding.fcHomeError.isVisible = false
-                    binding.fcHomeFeed.isVisible = false
-                }
+                is UiState.Loading, UiState.Idle -> Unit
                 is UiState.Success -> {
-                    binding.fcHomeLoading.isVisible = false
-                    binding.fcHomeError.isVisible = false
-                    binding.fcHomeFeed.isVisible = true
-                    // renderStaticTexts() already seeded this TextView with the
-                    // GET_STARTED_BY_CLICKING... label, so a missing API greeting (the case on an
-                    // empty feed) leaves the label in place rather than blanking the header.
-                    // Composer mode keeps the fixed agentic header instead (app parity: the
-                    // agentic Home never renders the API greeting).
-                    if (!isComposerUi) {
-                        feed.data.greeting?.takeIf { it.isNotBlank() }?.let {
-                            binding.fcHomeGreeting.text = it
-                        }
-                    }
+                    // App parity (HomeScreen.kt:1117): the greeting is the LABEL, never the API
+                    // field. `renderStaticTexts()` already seeded this TextView with the
+                    // GET_STARTED_BY_CLICKING... label, so there is nothing to do here.
+                    //
+                    // Overwriting it with `feed.data.greeting` was a LOCALISATION BUG, the same
+                    // one fixed in the compose flavour: the #12 `greeting` is English-only, so
+                    // this replaced a correctly translated label with English on every
+                    // non-English device. The app reads `.greeting` nowhere.
                     val renderable = feed.data.renderableSections()
                     val labels = cardPositionLabels(renderable)
                     feedPositionLabels =
@@ -381,15 +563,15 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                         sections = renderable,
                         // C3: SSFR card gated by config.enableSsfr.
                         ssfrEnabled = feed.data.ssfr_enable == true && graph.config.enableSsfr,
-                        dismissedIds = state.dismissedCardIds
+                        dismissedIds = state.dismissedCardIds,
+                        // Compose parity (HomeScreen.kt:926): in composer mode the header above
+                        // the feed already carries FOR_YOUR_FARM_TODAY, so the in-feed one is a
+                        // duplicate of the same served string.
+                        showHeader = !isComposerUi
                     )
                     binding.fcHomeFeed.post { trackVisibleCards() }
                 }
-                is UiState.Error -> {
-                    binding.fcHomeLoading.isVisible = false
-                    binding.fcHomeFeed.isVisible = false
-                    binding.fcHomeError.isVisible = true
-                }
+                is UiState.Error -> Unit
             }
 
             // Weather pill (silent failures — pill hides). C3: gated by config.enableWeather.
@@ -482,12 +664,37 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         pendingQuestion = question
         pendingCardImageUrl = section.image_url?.takeIf { section.type == "image" }
         pendingStatementId = section.statement_id?.toString().orEmpty()
-        val triggerType = when (section.type) {
+        val cardTriggerType = when (section.type) {
             "image" -> "image_card"
             "statement" -> "text_card"
-            else -> section.statement_type ?: ""
+            else -> null
         }
-        vm.onAction(HomeAction.FetchImageStatement(pendingStatementId.orEmpty(), triggerType))
+
+        // App parity (HomeScreen.kt:653): with AGENTIC CHAT on, the card tap skips the
+        // pre-generated-answer API (#26) entirely and sends the card question into chat as a
+        // normal text query — carrying the card's trigger type and, for image cards, its artwork
+        // as a display-only banner. The views flavour had no agentic branch at all: it always
+        // fetched the pre-generated answer, so an agentic host got the wrong request AND lost the
+        // image_card / text_card provenance on both the API and the analytics.
+        if (graph.config.enableAgenticChat) {
+            if (question.isNotBlank()) {
+                navigateToChat(
+                    question = question,
+                    contentCardImageUrl = pendingCardImageUrl,
+                    contentCardTriggerType = cardTriggerType
+                )
+            }
+            clearPendingCard()
+            return
+        }
+
+        vm.onAction(
+            HomeAction.FetchImageStatement(
+                pendingStatementId.orEmpty(),
+                // App falls back to statement_type, then "NA".
+                cardTriggerType ?: section.statement_type ?: "NA"
+            )
+        )
     }
 
     private fun handleImageStatementState(state: UiState<org.digitalgreen.farmerchat.sdk.core.model.ImageStatementResponse>) {
@@ -652,10 +859,14 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
             )
             return
         }
+        // App parity (HomeScreen.kt:558/572): ignored while the feed is still loading or another
+        // location flow is running.
+        if (vm.state.value.homeFeedState is UiState.Loading) return
         graph.analytics.track(
             AnalyticsEvents.WEATHER_FORECAST_VIEWED,
             mapOf(AnalyticsProps.SCREEN_NAME to AnalyticsScreens.HOME)
         ) // app HomeScreen.kt:559
+        if (graph.locationPromptManager.state.value != LocationPromptState.Idle) return
         val weatherQuestion =
             label(Labels.WHAT_IS_THE_PRESENT_WEATHER, "What is the present weather?")
         if (graph.locationPromptManager.hasStoredLocation()) {
@@ -776,7 +987,9 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
         homeStatementId: String? = null,
         isWeatherAdviceCTA: Boolean = false,
         isSSFR: Boolean = false,
-        ssfrCrop: String? = null
+        ssfrCrop: String? = null,
+        contentCardImageUrl: String? = null,
+        contentCardTriggerType: String? = null
     ) {
         if (!isAdded) return
         findNavController().navigate(
@@ -792,7 +1005,9 @@ internal class HomeFragment : BaseFragment(R.layout.fc_fragment_home), HomeFeedA
                 homeStatementId = homeStatementId,
                 isWeatherAdviceCTA = isWeatherAdviceCTA,
                 isSSFR = isSSFR,
-                ssfrCrop = ssfrCrop
+                ssfrCrop = ssfrCrop,
+                contentCardImageUrl = contentCardImageUrl,
+                contentCardTriggerType = contentCardTriggerType
             )
         )
     }

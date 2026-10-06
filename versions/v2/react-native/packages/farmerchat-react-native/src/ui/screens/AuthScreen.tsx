@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalyticsEvents, ScreenNames } from '../../core/analytics';
+import { Labels } from '../../core/labels';
 import { useLabel, useSdk, useTheme } from '../context';
 import { useAuth } from '../../state/useAuth';
 import { PrimaryButton, SecondaryButton } from '../components/Buttons';
@@ -97,11 +98,26 @@ export function AuthScreen(props: {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {state.step === 'PhoneEntry' ? (
             <>
-              <Text style={[typography.title, { color: theme.textPrimary }]}>
-                {label('auth_title', 'Sign up with phone number')}
+              {/* App parity (AuthScreen.kt:801-814). THREE things were wrong, not just the type:
+                  `auth_title` / `auth_subtitle` are SDK-invented keys that endpoint #3 serves for
+                  nobody, so every farmer read the English fallback whatever their language; the
+                  fallback copy was invented rather than the app's; and the headings sat at the
+                  24 pt legacy `title` alias, left-aligned, where the app centres them at 22/17. */}
+              <Text
+                style={[
+                  typography.titleLarge,
+                  { color: theme.textPrimary, textAlign: 'center' },
+                ]}
+              >
+                {label(Labels.ENTER_YOUR_PHONE_NUMBER, 'Enter your phone number')}
               </Text>
-              <Text style={[typography.body, { color: theme.textSecondary }]}>
-                {label('auth_subtitle', 'We will send you a verification code')}
+              <Text
+                style={[
+                  typography.bodyMedium,
+                  { color: theme.textSecondary, textAlign: 'center' },
+                ]}
+              >
+                {label(Labels.SEND_OTP_SIGNIN, "We'll send a one-time code to sign you in")}
               </Text>
               <View style={styles.phoneRow}>
                 <CountryCodeSelector
@@ -113,9 +129,8 @@ export function AuthScreen(props: {
                 <TextInputField
                   value={state.phoneLocal}
                   onChangeText={auth.setPhoneLocal}
-                  placeholder={label('auth_phone_hint', 'Phone number')}
+                  placeholder="00000 00000"
                   keyboardType="phone-pad"
-                  autoFocus
                   style={{ flex: 1 }}
                   testID="fc-auth-phone"
                 />
@@ -156,30 +171,38 @@ export function AuthScreen(props: {
                   onPress={() =>
                     props.onOpenLegal(
                       'https://digitalgreen.org/terms-of-use/',
-                      label('legal_terms', 'Terms of use'),
+                      label('fc_v2_app_label_terms_of_use', 'Terms of use'),
                     )
                   }
                 >
-                  {label('legal_terms', 'Terms of use')}
+                  {label('fc_v2_app_label_terms_of_use', 'Terms of use')}
                 </Text>
               </Text>
             </>
           ) : (
             <>
-              <Text style={[typography.title, { color: theme.textPrimary }]}>
-                {label('otp_title', 'Enter the 4-digit code')}
+              {/* App parity (AuthScreen.kt:1039-1050) — same three problems as the phone step.
+                  Note the app's OTP subtitle is a FIXED sentence with no phone number and no
+                  channel suffix interpolated into it. */}
+              <Text
+                style={[
+                  typography.titleLarge,
+                  { color: theme.textPrimary, textAlign: 'center' },
+                ]}
+              >
+                {label(Labels.ENTER_CODE_WE_SENT, 'Enter the code we sent')}
               </Text>
-              <Text style={[typography.body, { color: theme.textSecondary }]}>
-                {label('otp_subtitle', 'Code sent to {name}', {
-                  name: `${state.countryCode} ${state.phoneLocal}`,
-                })}
-                {state.sentVia
-                  ? ` (${state.sentVia === 'whatsapp' ? 'WhatsApp' : 'SMS'})`
-                  : ''}
+              <Text
+                style={[
+                  typography.bodyMedium,
+                  { color: theme.textSecondary, textAlign: 'center' },
+                ]}
+              >
+                {label(Labels.CHECK_YOUR_MESSAGES_CODE, 'Check your messages for the code')}
               </Text>
               <OtpInput value={state.otp} onChange={auth.setOtp} error={state.otpError} />
               <PrimaryButton
-                label={label('otp_verify', 'Verify')}
+                label={label('fc_v2_app_label_verify', 'Verify')}
                 state={isVerifying ? 'Loading' : 'Default'}
                 enabled={state.otp.length === 4}
                 onPress={auth.verifyOtp}
@@ -199,7 +222,7 @@ export function AuthScreen(props: {
               ) : (
                 <View style={{ gap: spacing.md }}>
                   <SecondaryButton
-                    label={label('otp_resend', 'Resend code')}
+                    label={label('fc_v2_app_label_resend_code', 'Resend code')}
                     onPress={() => auth.resendOtp(state.sentVia ?? 'sms')}
                   />
                   <Text
@@ -216,7 +239,7 @@ export function AuthScreen(props: {
                       },
                     ]}
                   >
-                    {label('otp_start_over', 'Start over')}
+                    {label('fc_v2_app_label_start_over', 'Start over')}
                   </Text>
                 </View>
               )}

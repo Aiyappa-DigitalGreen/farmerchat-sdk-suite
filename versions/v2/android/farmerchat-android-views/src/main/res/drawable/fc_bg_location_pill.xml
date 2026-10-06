@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Compose parity (LocationButton.kt:43): the pill is brand surfaceSecondary, fully rounded.
+     The Invite state renders it at 72% alpha, which the view applies programmatically. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/fc_brand_surface_secondary" />
+    <corners android:radius="999dp" />
+</shape>

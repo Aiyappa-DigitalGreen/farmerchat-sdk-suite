@@ -59,7 +59,7 @@ export function PrimaryButton(props: {
         styles.primary,
         {
           height: props.height ?? 48,
-          borderRadius: props.radiusOverride ?? radius.md,
+          borderRadius: props.radiusOverride ?? radius.rounded,
           backgroundColor: surface,
           opacity: pressed ? 0.9 : 1,
         },
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.md,
+    borderRadius: radius.rounded,
     paddingHorizontal: 16,
   },
   action: {
@@ -344,8 +344,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   weather: {
-    height: 42,
-    borderRadius: radius.lg,
+    height: 44,
+    borderRadius: radius.rounded,
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 14,

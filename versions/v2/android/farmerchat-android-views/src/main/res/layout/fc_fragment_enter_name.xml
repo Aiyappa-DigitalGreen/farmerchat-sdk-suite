@@ -19,11 +19,11 @@
         android:paddingBottom="24dp">
 
         <ImageView
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:importantForAccessibility="no"
             android:src="@drawable/fc_logo_mark"
-            app:tint="@color/fc_foreground_primary" />
+            app:tint="@color/fc_border_active" />
 
         <TextView
             android:id="@+id/fcNameTitle"
@@ -32,7 +32,7 @@
             android:layout_marginTop="20dp"
             android:gravity="center"
             android:textColor="@color/fc_foreground_primary"
-            android:textSize="24sp"
+            android:textSize="22sp"
             android:textStyle="bold"
             tools:text="What should we call you?" />
 
@@ -52,7 +52,7 @@
             android:layout_height="56dp"
             android:layout_marginTop="28dp"
             android:background="@drawable/fc_bg_input_field"
-            android:inputType="textPersonName|textCapWords"
+            android:inputType="textPersonName"
             android:maxLines="1"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"

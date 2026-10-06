@@ -27,7 +27,7 @@ struct SplashView: View {
                     Spacer()
                     FCToastView(toast: FCToastData(
                         kind: .loading,
-                        message: fcLabel("splash_starting", "FarmerChat is starting…")
+                        message: fcLabel(FCLabels.farmerchatStarting, "FarmerChat is Starting...")
                     ))
                     .padding(.bottom, 48)
                 }

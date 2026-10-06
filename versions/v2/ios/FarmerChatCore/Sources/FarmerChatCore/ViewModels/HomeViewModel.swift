@@ -168,8 +168,38 @@ public final class HomeViewModel: ObservableObject {
             if let name = profile.userProfile?.displayName {
                 env.prefs.setString(name, .userName)
             }
+            if let userProfile = profile.userProfile {
+                backfillGeographyPrefs(userProfile)
+            }
         }
-        state.userProfileState = UiState.from(result, fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."))
+        state.userProfileState = UiState.from(result, fallbackMessage: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."))
+    }
+
+    /// Fills the geography prefs from the profile when they are empty (app parity:
+    /// `HomeViewModel.fetchUserProfile`, fc-compose-agentic b72ea4da).
+    ///
+    /// `userDistrict` / `userState` / `userCountryName` are normally written by the GPS flow from
+    /// #16 (`LocationPromptManager`). A farmer whose geography exists SERVER-side but not in this
+    /// install's prefs — a reinstall, a fresh host app, any already-onboarded user reaching Home
+    /// without re-running the GPS flow — leaves them blank, and they are read for the chat
+    /// location context (`ChatViewController`) and the Settings location row (`SettingsViewModel`).
+    /// The profile already carries the place, so fill from there.
+    ///
+    /// Fill-WHEN-BLANK, never overwrite: a live GPS fix is more precise than the profile's coarse
+    /// geography, and this runs on every Home entry.
+    ///
+    /// Android collapses this to its single `APPROX_LOCATION_NAME` key; iOS keeps the app's three
+    /// separate keys, so each is filled from its own field rather than from a precedence chain.
+    private func backfillGeographyPrefs(_ profile: UserProfile) {
+        func fillIfBlank(_ value: String?, _ key: PrefKey) {
+            guard let value, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            let existing = env.prefs.string(key)?.trimmingCharacters(in: .whitespaces) ?? ""
+            guard existing.isEmpty else { return }
+            env.prefs.setString(value, key)
+        }
+        fillIfBlank(profile.geographyLevel3, .userDistrict)
+        fillIfBlank(profile.geographyLevel2Name, .userState)
+        fillIfBlank(profile.countryName, .userCountryName)
     }
 
     // MARK: - Crops (multi-select card)
@@ -178,7 +208,7 @@ public final class HomeViewModel: ObservableObject {
         state.cropUpdateState = .loading
         let request = SetCultivatedCropsRequest(userId: userId, cropDetails: cropIds.map(CropDetailPayload.init(cropId:)))
         let result = await env.api.updateCropDetails(request)
-        state.cropUpdateState = UiState.from(result, fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."))
+        state.cropUpdateState = UiState.from(result, fallbackMessage: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."))
         if case .success = result {
             env.prefs.setString(cropIds.map(String.init).joined(separator: ","), .cultivatedCrops)
         }
@@ -189,7 +219,7 @@ public final class HomeViewModel: ObservableObject {
     private func newConversation(userId: String, contentProviderId: Int?) async {
         state.newConversationState = .loading
         let result = await env.api.newConversation(NewConversationRequest(userId: userId, contentProviderId: contentProviderId))
-        state.newConversationState = UiState.from(result, fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."))
+        state.newConversationState = UiState.from(result, fallbackMessage: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."))
         if case .success(let response) = result, let conversationId = response.conversationId?.stringValue {
             env.prefs.setString(conversationId, .newConversationId)
         }
@@ -244,7 +274,7 @@ public final class HomeViewModel: ObservableObject {
         state.imageStatementState = .loading
         env.analytics.track(AnalyticsEvents.cardClicked, props: ["statement_id": statementId.stringValue])
         let result = await env.api.imageStatement(ImageStatementRequest(statementId: statementId, triggeredInputType: triggeredInputType))
-        state.imageStatementState = UiState.from(result, fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."))
+        state.imageStatementState = UiState.from(result, fallbackMessage: env.labels.label(FCLabels.somethingWentWrongPleaseTryAgain, fallback: "Something went wrong. Please try again."))
     }
 
     /// Local dismissal only (parity with app's `dismissCard(sectionId)`).

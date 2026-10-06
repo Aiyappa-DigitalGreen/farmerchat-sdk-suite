@@ -18,10 +18,17 @@
         android:layout_weight="1"
         android:background="@color/fc_surface_primary">
 
+        <!-- Compose parity (LanguageChooserScreen.kt:156-157): the list is inset 32dp at the
+             top and 20dp at the bottom. Views had none, so the first row sat flush under the
+             app bar — 35px (13dp) above where the app rests it. Horizontal 20dp already comes
+             from the row item's own margins. -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/fcChooserList"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="32dp"
+            android:paddingBottom="20dp" />
 
         <org.digitalgreen.farmerchat.sdk.views.internal.widgets.LogoSpinnerView
             android:id="@+id/fcChooserLoading"
@@ -31,17 +38,27 @@
             android:visibility="gone" />
     </FrameLayout>
 
+    <!-- App LanguageChooserScreen.kt: the save area is `.background(surfaceSecondary)` —
+         a WHITE band from 16dp above the button to the screen bottom, not the page grey. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/fc_surface_primary"
+        android:background="@color/fc_surface_secondary"
         android:orientation="vertical">
 
+        <!-- Compose parity (LanguageChooserScreen.kt:230-231): 24dp sides, 16dp top, 8dp
+             bottom. The height comes from PrimaryButton's own 48dp default — the fixed 56dp
+             56dp height is CORRECT here and was verified by measurement, not assumed: the app's
+             save button spans y2169..2315 = 146px = 55.6dp. (SettingsName is the screen where the
+             app takes PrimaryButton's 48dp default — the two screens genuinely differ.) -->
         <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
             android:id="@+id/fcChooserSave"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_margin="20dp" />
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp" />
 
         <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
             android:id="@+id/fcChooserToast"

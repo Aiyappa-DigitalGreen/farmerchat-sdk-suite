@@ -251,6 +251,7 @@ fun TermsOfUseContentDialog(
                 DefaultAppBar(
                     title = title,
                     rightIcon = Icons.Filled.Close,
+                    rightRadius = Radius.Rounded,
                     // The app dims this while accepting via a `rightEnabled` param the SDK's
                     // shared DefaultAppBar does not have; guarding the callback keeps the
                     // behaviour (taps are inert) without changing a shared component.

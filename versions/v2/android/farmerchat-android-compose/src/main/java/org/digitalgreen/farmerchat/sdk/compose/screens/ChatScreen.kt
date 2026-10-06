@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -19,12 +20,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +43,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
@@ -50,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -96,6 +101,9 @@ import org.digitalgreen.farmerchat.sdk.compose.components.SuggestedCard
 import org.digitalgreen.farmerchat.sdk.compose.components.Chip
 import org.digitalgreen.farmerchat.sdk.compose.components.ChipType
 import org.digitalgreen.farmerchat.sdk.compose.components.InputComposer
+import org.digitalgreen.farmerchat.sdk.compose.components.ListenButton
+import org.digitalgreen.farmerchat.sdk.compose.components.Tips
+import org.digitalgreen.farmerchat.sdk.compose.components.answerGenerationTips
 import org.digitalgreen.farmerchat.sdk.compose.components.composerBarHeight
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInputOverlay
 import org.digitalgreen.farmerchat.sdk.compose.components.ThinkingIndicator
@@ -110,6 +118,9 @@ import org.digitalgreen.farmerchat.sdk.compose.navigation.Destination
 import org.digitalgreen.farmerchat.sdk.compose.theme.Green500
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import org.digitalgreen.farmerchat.sdk.compose.components.ActionButton
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
 import org.digitalgreen.farmerchat.sdk.compose.theme.SmoothShapes
 import org.digitalgreen.farmerchat.sdk.compose.util.label
@@ -123,10 +134,14 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.AlignmentChipRoute
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.chatScrollAnchorIndex
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.holdsChatReserve
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.routeAlignmentChip
 import java.io.File
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import org.digitalgreen.farmerchat.sdk.compose.components.StreamErrorCard
+import org.digitalgreen.farmerchat.sdk.FarmerChatMode
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentChip
 import org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
@@ -136,6 +151,8 @@ import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationPromptState
 import org.digitalgreen.farmerchat.sdk.core.ui.location.LocationTriggerSource
 import org.digitalgreen.farmerchat.sdk.compose.components.AlignmentSurface
 import org.digitalgreen.farmerchat.sdk.compose.components.LocationChatBubble
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
 
 /**
  * Chat thread (doc 01 §3.8). Handles all entry modes (history, pre-generated,
@@ -152,7 +169,19 @@ private const val PAUSE_HINT_DELAY_MS = 4000L
 fun ChatScreen(
     args: Destination.Chat,
     openDrawer: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    /**
+     * Past Advice, from the chat app bar. Only reachable when the drawer is OFF — see
+     * [ChatAppBarActions].
+     */
+    onNavigateToHistory: () -> Unit = {},
+    /** Language, from the chat app bar. Same gating. */
+    onNavigateToLanguage: () -> Unit = {},
+    /**
+     * Leaving a thread that was opened from Past Advice while the drawer is off — step back to
+     * the history list, or exit the SDK if there is nothing to pop.
+     */
+    onBackToHistory: () -> Unit = {}
 ) {
     val graph = FarmerChat.requireGraph()
     val context = LocalContext.current
@@ -198,8 +227,29 @@ fun ChatScreen(
     // History pagination scroll restore
     var prependOldCount by remember { mutableStateOf<Int?>(null) }
     var initialScrollDone by remember { mutableStateOf(false) }
+    // Tail message id when the history thread was first positioned; auto-scroll stays off until a
+    // NEW message (a follow-up) is appended after it.
+    var historyOpenedTailId by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
+
+    // Height reserved below the pinned question for the last response (see `streamReserve`).
+    // App parity (fc-compose-agentic ChatThreadContent.kt, commit 9023b57f): use the LazyColumn's
+    // OWN viewport height, not `screenHeightDp`. screenHeightDp is the whole window and ignores
+    // the app bar, the composer and the system insets, so it over-reserves by exactly that much —
+    // leaving a band of scrollable empty space under a finished answer that the farmer can drag
+    // into view. Falls back to screenHeightDp on the very first frame, before the list has been
+    // measured.
+    val reserveDensity = LocalDensity.current
+    // App parity (ChatThreadContent.kt:132): "at least two lines hidden below" is 2 * 24 dp.
+    val twoLinesPx: Int = with(reserveDensity) { 48.dp.roundToPx() }
+    val fallbackReserveDp = LocalConfiguration.current.screenHeightDp.dp
+    val reserveHeightDp by remember(reserveDensity, fallbackReserveDp) {
+        derivedStateOf {
+            val viewportPx = listState.layoutInfo.viewportSize.height
+            if (viewportPx > 0) with(reserveDensity) { viewportPx.toDp() } else fallbackReserveDp
+        }
+    }
 
     // ------------------------------------------------------------------ answer reveal (client-side typewriter)
     // Tracks AiResponse ids whose reveal has finished. Fresh answers animate once;
@@ -254,10 +304,23 @@ fun ChatScreen(
                         question = args.question,
                         transcriptionId = args.transcriptionId,
                         audioUri = args.audioUri?.let(Uri::parse),
+                        // Home is the origin for a content-card tap, and the app stamps
+                        // screen_name accordingly (ChatScreen.kt:1195).
+                        originScreenName = if (args.contentCardTriggerType != null) {
+                            AnalyticsScreens.HOME
+                        } else {
+                            AnalyticsScreens.CHAT
+                        },
                         isWeatherAdviceCTA = args.isWeatherAdviceCTA,
                         isSSFR = args.isSSFR,
                         ssfrCrop = args.ssfrCrop,
-                        channel = args.channel
+                        channel = args.channel,
+                        contentCardTriggerType = args.contentCardTriggerType,
+                        // Display-only banner on the user bubble; the query still goes out as
+                        // text. App: ChatScreen.kt:1189 `cardImageUri`.
+                        userMessageImageUri = args.contentCardImageUrl
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(Uri::parse)
                     )
                 )
             }
@@ -280,12 +343,13 @@ fun ChatScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Release players + ClearMessages on dispose.
+    // Release players on dispose. NOT ClearMessages: navigating to Past Advice / language disposes
+    // this screen while its back-stack entry (and ViewModel) lives on, and clearing here wiped the
+    // thread the farmer returns to. The ViewModel goes with the entry when the chat really closes.
     DisposableEffect(Unit) {
         onDispose {
             voicePlayback.release()
             ttsPlayback.release()
-            vm.onAction(ChatAction.ClearMessages)
             graph.analytics.trackScreenExit(AnalyticsScreens.CHAT)
         }
     }
@@ -334,16 +398,21 @@ fun ChatScreen(
     }
 
     // ------------------------------------------------------------------ history pagination + scroll behavior
-    LaunchedEffect(state.isInitialHistoryLoaded) {
-        if (state.isInitialHistoryLoaded && !initialScrollDone && state.messages.isNotEmpty()) {
-            initialScrollDone = true
-            listState.scrollToItem((state.messages.size - 1).coerceAtLeast(0))
-        }
-    }
+    // The initial history positioning lives in the auto-scroll effect below (one effect, so a
+    // second one relaunched by the same state emission cannot override it).
 
+    // Older pages load when the farmer scrolls up onto the pagination spinner (item 0). The
+    // thread opens with the FIRST MESSAGE (item 1 while a spinner is shown) at the top, so the
+    // spinner starts just above the viewport and this only fires on a user scroll-up — or at once
+    // when the page is too short to scroll, since the spinner is then already on screen.
+    // `initialScrollDone` is part of the flow (and only set after the initial scroll has been
+    // applied) so the empty/unpositioned list's `atTop` can never trigger a load on open.
     LaunchedEffect(listState, isHistoryEntry) {
         if (!isHistoryEntry) return@LaunchedEffect
-        snapshotFlow { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 }
+        snapshotFlow {
+            initialScrollDone &&
+                listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
             .distinctUntilChanged()
             .collect { atTop ->
                 val nextPage = state.historyNextPage
@@ -358,21 +427,47 @@ fun ChatScreen(
     }
 
     // Restore scroll position after older page prepends.
-    LaunchedEffect(state.messages.size) {
+    // Also keyed on `historyNextPage`: the LAST page answers 404, which only clears
+    // `historyNextPage` (the size never grows), and without this `prependOldCount` stayed set for
+    // good — blocking the follow-up auto-scroll below and making the next follow-up's size change
+    // jump the list to a stale restore index.
+    LaunchedEffect(state.messages.size, state.historyNextPage) {
         val old = prependOldCount
         if (old != null && state.messages.size > old) {
-            listState.scrollToItem(state.messages.size - old)
+            // Keep the previously-first message where it was: skip the prepended rows AND the
+            // pagination spinner (item 0 while more pages remain).
+            val spinnerItems = if (state.historyNextPage != null) 1 else 0
+            listState.scrollToItem(state.messages.size - old + spinnerItems)
             prependOldCount = null
-        } else if (old != null && !state.isLoading) {
+        } else if (old != null && (!state.isLoading || state.historyNextPage == null)) {
             prependOldCount = null
         }
     }
 
     // Auto-scroll on new messages (non-history appends).
-    LaunchedEffect(state.messages.size, state.isLoading) {
-        if (prependOldCount == null && state.messages.isNotEmpty() &&
-            (!isHistoryEntry || initialScrollDone)
-        ) {
+    //
+    // Keyed on the LAST message's id, not `messages.size`: replacing the loading placeholder with
+    // the answer changes the tail without changing the size, and the anchor must be re-applied
+    // then; a history PREPEND changes the size without changing the tail, and must not scroll.
+    val lastMessageId = state.messages.lastOrNull()?.id
+    LaunchedEffect(lastMessageId, state.isLoading, state.isInitialHistoryLoaded) {
+        if (prependOldCount != null || state.messages.isEmpty()) return@LaunchedEffect
+        if (isHistoryEntry && !initialScrollDone) {
+            if (!state.isInitialHistoryLoaded) return@LaunchedEffect
+            // A conversation opened from Chat History starts at its FIRST question (the first
+            // message of the loaded page), not the last. Product decision: this deliberately
+            // differs from fc-compose-agentic ChatScreen.kt:1210-1227, which pins the last
+            // question. Item index skips the pagination spinner so it sits just above the
+            // viewport and older pages load only on a scroll-up (see the collector above).
+            val spinnerItems = if (state.historyNextPage != null) 1 else 0
+            historyOpenedTailId = lastMessageId
+            listState.scrollToItem(spinnerItems)
+            initialScrollDone = true
+            return@LaunchedEffect
+        }
+        // Nothing new since the history thread was opened (only older pages prepended): stay put.
+        if (isHistoryEntry && lastMessageId == historyOpenedTailId) return@LaunchedEffect
+        run {
             // While a stream is live, anchor the row ABOVE it — the farmer's question — to the top
             // of the viewport rather than the streaming row itself. `streamReserve` gives that row
             // a full screen of minimum height precisely so the question can stay pinned while the
@@ -383,15 +478,28 @@ fun ChatScreen(
             // smoothScrollToPosition parked the viewport at the far end of the reserve, so the
             // thread went BLANK mid-stream (device-verified 2026-09-03). Keep both flavours on the
             // same rule.
-            val streamingIndex = state.messages.indexOfLast {
-                it is ChatMessage.AiResponse && (it.isStreaming || it.isInterrupted)
-            }
-            val target = if (streamingIndex > 0) {
-                streamingIndex - 1
-            } else {
-                (state.messages.size - 1).coerceAtLeast(0)
-            }
-            listState.animateScrollToItem(target)
+            //
+            // The anchor follows the RESERVE, not just the streaming flag, and it is derived in
+            // core from the SAME predicate `streamReserve` uses — see
+            // `ui/chat/ChatReserve.kt.chatScrollAnchorIndex`, which documents why the two must not
+            // be computed separately (this effect re-runs at the exact moment a settling stream
+            // starts holding the reserve).
+            // `chatScrollAnchorIndex()` returns an index into `state.messages`, but
+            // `animateScrollToItem` wants a LazyColumn ITEM index. Anything emitted BEFORE the
+            // message loop shifts the two apart. Today that is the pagination spinner, emitted on
+            // `isHistoryEntry && state.historyNextPage != null` — which this effect's own guard
+            // does NOT exclude (it only rules out `prependOldCount != null` and a pre-initial-
+            // scroll history entry), so asking a follow-up inside a paginated history conversation
+            // anchored one row too high. The trailing `inline_error` / `followups` items are
+            // harmless because they sit below every message.
+            //
+            // App parity: `fc-compose-agentic` keeps the same invariant in `findAnchorIndex`,
+            // which walks the message list counting the items each message actually emits. The
+            // SDK does not need that walk — its anchor is positional, not keyed on `anchor-<id>`
+            // marker items — but it needs the same discipline: keep this in step with the items
+            // emitted above the message loop.
+            val leadingItemCount = if (isHistoryEntry && state.historyNextPage != null) 1 else 0
+            listState.animateScrollToItem(state.chatScrollAnchorIndex() + leadingItemCount)
         }
     }
 
@@ -758,42 +866,92 @@ fun ChatScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             LogoAppBar(
                 showLogo = isThread && !state.isLoading,
-                leftIcon = if (isHistoryEntry) Icons.Filled.Menu else Icons.Filled.Close,
+                actions = chatAppBarActions(
+                    onHistory = onNavigateToHistory,
+                    onLanguage = onNavigateToLanguage
+                ),
+                // A thread opened FROM HISTORY normally shows the drawer affordance. With the
+                // drawer off (CHAT_ONLY) `openDrawer` is a no-op, so that button was dead and the
+                // farmer was stranded inside the thread — parity fix with the views
+                // `ChatFragment`, which swaps in a back arrow that returns to the history list.
+                // App parity (ChatScreen.kt:173 `actionIcon`):
+                //   entry from Home    -> BACK ARROW (the app draws its own back-arrow drawable)
+                //   entry from History -> Menu
+                //
+                // The SDK showed a CLOSE (✕) for the from-Home case, which contradicted what the
+                // button actually does: `onClose` pops back to Home in FULL_JOURNEY and only
+                // finishes the Activity in CHAT_ONLY (FarmerChatRoot.kt:512-516). So a farmer in
+                // the full journey saw an ✕ on a button that went back — and the app's ← in the
+                // same place. The icon now follows the behaviour: ✕ ONLY when the tap really does
+                // leave the SDK.
+                leftIcon = when {
+                    !isHistoryEntry ->
+                        if (graph.config.mode == FarmerChatMode.CHAT_ONLY) {
+                            Icons.Filled.Close
+                        } else {
+                            Icons.AutoMirrored.Filled.ArrowBack
+                        }
+                    graph.config.showDrawer -> Icons.Filled.Menu
+                    else -> Icons.AutoMirrored.Filled.ArrowBack
+                },
+                // App parity (ChatScreen.kt:1450): from Home the app draws its `leftbutton`
+                // drawable — a CIRCLE — not the rounded-square ActionButton the other bars use.
+                leftRadius = if (!isHistoryEntry && graph.config.mode != FarmerChatMode.CHAT_ONLY) {
+                    org.digitalgreen.farmerchat.sdk.compose.theme.Radius.Rounded
+                } else {
+                    org.digitalgreen.farmerchat.sdk.compose.theme.Radius.MD
+                },
                 onLeftClick = {
-                    if (isHistoryEntry) {
-                        graph.analytics.track(AnalyticsEvents.HAMBURGER_MENU_CLICKED)
-                        openDrawer()
-                    } else {
-                        graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
-                        onClose()
+                    when {
+                        isHistoryEntry && graph.config.showDrawer -> {
+                            graph.analytics.track(AnalyticsEvents.HAMBURGER_MENU_CLICKED)
+                            openDrawer()
+                        }
+                        isHistoryEntry -> onBackToHistory()
+                        else -> {
+                            graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
+                            onClose()
+                        }
                     }
                 }
             )
 
             when {
                 !isThread && state.isLoading -> {
-                    // Initial loading — first question bubble + spinner.
-                    Column(
+                    // Initial loading — first question bubble + spinner, with the tips carousel
+                    // anchored to the bottom over the top of it.
+                    //
+                    // App parity (ChatLoadingContent.kt:63): the whole loading state is a Box so
+                    // `Tips` can position itself at BottomCenter regardless of how tall the
+                    // question bubble is.
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(16.dp)
                     ) {
-                        if (!args.question.isNullOrBlank()) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.CenterEnd
-                            ) {
-                                UserChatBubble(
-                                    text = args.question,
-                                    imageUri = args.imageUri?.let(Uri::parse)
-                                )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            if (!args.question.isNullOrBlank()) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    UserChatBubble(
+                                        text = args.question,
+                                        imageUri = args.imageUri?.let(Uri::parse)
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            ThinkingIndicator(
+                                label = label(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
+                            )
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        ThinkingIndicator(
-                            label = label(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
-                        )
+
+                        Tips(tips = answerGenerationTips())
                     }
                 }
 
@@ -838,7 +996,7 @@ fun ChatScreen(
                             // hidden behind the floating pill; the legacy input keeps 24.dp.
                             contentPadding = PaddingValues(
                                 start = 16.dp, end = 16.dp, top = 16.dp,
-                                bottom = if (isComposerUi) composerBarHeight(floating = true) else 24.dp
+                                bottom = if (isComposerUi) composerBarHeight(floating = true, hasAttachment = photoUris.isNotEmpty()) else 24.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -917,17 +1075,20 @@ fun ChatScreen(
                                                 message.id !in revealedIds
                                             val answerRevealed = message.id in revealedIds
 
-                                            // 2.0.0 agentic streaming: while a stream is live the
-                                            // answer grows in place, so reserve a screen's height to
-                                            // pin the question at the top instead of letting the list
-                                            // clamp it downward as text arrives. Also held for the
-                                            // interrupted state so the error card sits near the top.
+                                            // The reserve RULE lives in core
+                                            // (`ui/chat/ChatReserve.kt`) so this flavour, the
+                                            // views flavour and the auto-scroll anchor below
+                                            // cannot drift on it — read that file for the app
+                                            // parity and for why the SDK's `isLoading` is not the
+                                            // app's. Only the reserve HEIGHT is a pixel concern
+                                            // and stays here.
                                             val streamReserve = if (
-                                                isLastAi && (message.isStreaming || message.isInterrupted)
-                                            ) {
-                                                Modifier.heightIn(
-                                                    min = LocalConfiguration.current.screenHeightDp.dp
+                                                message.holdsChatReserve(
+                                                    isLastResponse = isLastAi,
+                                                    isLoading = state.isLoading
                                                 )
+                                            ) {
+                                                Modifier.heightIn(min = reserveHeightDp)
                                             } else Modifier
 
                                             val alignmentKind = message.alignmentKind
@@ -937,19 +1098,28 @@ fun ChatScreen(
                                             // through to the normal answer branch and renders
                                             // below it as a nudge.
                                             if (alignmentKind != null && !alignmentKind.isAdditive) {
-                                                AlignmentSurface(
-                                                    kind = alignmentKind,
-                                                    message = message.text,
-                                                    chips = message.alignmentChips.orEmpty(),
-                                                    selectedValues = message.alignmentSelectedValues,
-                                                    isLoading = state.isLoading,
-                                                    isLatest = isLastAi,
-                                                    blocking = message.alignmentBlocking,
-                                                    onChipClick = { chip ->
-                                                        handleAlignmentChip(message.id, alignmentKind, chip)
-                                                    },
-                                                    onTypeInstead = { focusTextInput?.invoke() }
-                                                )
+                                                // Keep the SAME reserve the streaming answer uses.
+                                                // An exclusive surface REPLACES the answer, so
+                                                // without this the reserved screen-height vanished
+                                                // the instant the surface arrived and the whole
+                                                // thread collapsed upward — the streamed text and
+                                                // the chips that follow it read as two separate
+                                                // jumps instead of one continuous flow.
+                                                Column(modifier = streamReserve) {
+                                                    AlignmentSurface(
+                                                        kind = alignmentKind,
+                                                        message = message.text,
+                                                        chips = message.alignmentChips.orEmpty(),
+                                                        selectedValues = message.alignmentSelectedValues,
+                                                        isLoading = state.isLoading,
+                                                        isLatest = isLastAi,
+                                                        blocking = message.alignmentBlocking,
+                                                        onChipClick = { chip ->
+                                                            handleAlignmentChip(message.id, alignmentKind, chip)
+                                                        },
+                                                        onTypeInstead = { focusTextInput?.invoke() }
+                                                    )
+                                                }
                                                 return@item
                                             }
 
@@ -1008,23 +1178,6 @@ fun ChatScreen(
                                                     }
                                                 }
 
-                                                // ADDITIVE surface: a nudge below the real answer
-                                                // (gender-select / commodity-confirm). Single-tap;
-                                                // the answer above keeps its own action row.
-                                                if (alignmentKind?.isAdditive == true) {
-                                                    AlignmentSurface(
-                                                        kind = alignmentKind,
-                                                        message = message.alignmentMessage.orEmpty(),
-                                                        chips = message.alignmentChips.orEmpty(),
-                                                        selectedValues = message.alignmentSelectedValues,
-                                                        isLoading = state.isLoading,
-                                                        isLatest = isLastAi,
-                                                        onChipClick = { chip ->
-                                                            handleAlignmentChip(message.id, alignmentKind, chip)
-                                                        }
-                                                    )
-                                                }
-
                                                 // Interrupted terminal state: keep any partial answer
                                                 // above and offer retry. Only the latest answer shows
                                                 // the card — an older failed question keeps its partial
@@ -1081,6 +1234,7 @@ fun ChatScreen(
                                                             ChatResponseActions(
                                                                 isTtsEnabled = state.isTtsEnabled,
                                                                 isLoadingAudio = state.isLoadingSynthesiseAudio,
+                                                                hasAudioUrl = state.audioPlaybackUrl != null,
                                                                 isAudioPlaying = state.isAudioPlaying &&
                                                                     state.audioPlaybackUrl != null,
                                                                 onShare = { shareImage() },
@@ -1102,18 +1256,68 @@ fun ChatScreen(
                                                         }
                                                     }
                                                 }
+
+                                                // ADDITIVE surface: a nudge BELOW the answer's own
+                                                // action row (gender-select / commodity-confirm).
+                                                // Single-tap; the answer keeps its action row.
+                                                //
+                                                // ORDER IS APP PARITY and it was wrong. The app
+                                                // renders the answer, then `ChatResponseActions`
+                                                // (the "Local conditions may vary" caption +
+                                                // Share/Listen + follow-ups), and only THEN the
+                                                // additive nudge — `ChatThreadContent.kt`, where
+                                                // the nudge sits after the interrupted/actions
+                                                // if-else chain. The SDK emitted the nudge BEFORE
+                                                // that chain, so a farmer saw
+                                                //   answer → "Help us tailor your advice" + chips
+                                                //          → caption → Share/Listen
+                                                // where the app shows
+                                                //   answer → caption → Share/Listen
+                                                //          → "Help us tailor your advice" + chips.
+                                                // Confirmed side by side on a device 2026-09-08:
+                                                // the two blocks were simply transposed.
+                                                if (alignmentKind?.isAdditive == true) {
+                                                    AlignmentSurface(
+                                                        kind = alignmentKind,
+                                                        message = message.alignmentMessage.orEmpty(),
+                                                        chips = message.alignmentChips.orEmpty(),
+                                                        selectedValues = message.alignmentSelectedValues,
+                                                        isLoading = state.isLoading,
+                                                        isLatest = isLastAi,
+                                                        onChipClick = { chip ->
+                                                            handleAlignmentChip(message.id, alignmentKind, chip)
+                                                        }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
 
                                     is ChatMessage.LoadingPlaceholder -> {
                                         item(key = "msg_${message.id}") {
-                                            ThinkingIndicator(
-                                                label = label(
-                                                    Labels.GETTING_YOUR_ANSWER,
-                                                    "Getting your answer…"
+                                            // The in-flight placeholder holds the SAME reserve the
+                                            // answer will (core `chatScrollAnchorIndex` treats it
+                                            // as a reserve holder): without it the anchor scroll
+                                            // clamps at the list end, the just-asked question
+                                            // cannot reach the top, and — since swapping the
+                                            // placeholder for the answer changes neither the size
+                                            // nor `isLoading` on a stream — it never got there.
+                                            val placeholderReserve =
+                                                if (message.id == state.messages.lastOrNull()?.id) {
+                                                    Modifier.heightIn(min = reserveHeightDp)
+                                                } else Modifier
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .then(placeholderReserve)
+                                            ) {
+                                                ThinkingIndicator(
+                                                    label = label(
+                                                        Labels.GETTING_YOUR_ANSWER,
+                                                        "Getting your answer…"
+                                                    )
                                                 )
-                                            )
+                                            }
                                         }
                                     }
                                 }
@@ -1152,13 +1356,21 @@ fun ChatScreen(
                             ) {
                                 item(key = "followups") {
                                     Column {
-                                        val followUpsVisible =
-                                            remember { MutableTransitionState(false) }
-                                        followUpsVisible.targetState = true
+                                        // App parity (ChatResponseActions.kt 0456f364): fade the
+                                        // whole related-questions block in over 0.3s so it eases
+                                        // in instead of snapping. Fade ONLY — the SDK previously
+                                        // also slid the block up by a quarter of its height, which
+                                        // moves the content under it while it settles; the app is
+                                        // explicit that no size/position animation may run here.
+                                        // ExitTransition.None because the block is only ever
+                                        // removed by dropping the list item, never animated out.
+                                        val followUpsVisible = remember {
+                                            MutableTransitionState(false).apply { targetState = true }
+                                        }
                                         AnimatedVisibility(
                                             visibleState = followUpsVisible,
-                                            enter = fadeIn(tween(350)) +
-                                                slideInVertically(tween(350)) { it / 4 }
+                                            enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+                                            exit = ExitTransition.None
                                         ) {
                                             FollowUpSection(
                                                 title = if (state.clarificationRequired)
@@ -1169,7 +1381,7 @@ fun ChatScreen(
                                                 else
                                                     label(
                                                         Labels.RELATED_QUESTIONS,
-                                                        "Related questions"
+                                                        "You can also ask"
                                                     ),
                                                 questions = followUps,
                                                 onQuestionClick = { qIndex, question ->
@@ -1186,7 +1398,33 @@ fun ChatScreen(
                         }
 
                         // Scroll-to-bottom indicator when an answer arrives.
-                        if (lastAiMessage != null && !state.isLoading) {
+                        //
+                        // App parity (ChatThreadContent.kt, commit 9023b57f): suppress it when
+                        // there is nothing below to scroll TO. The last response reserves at least
+                        // a viewport of height (`streamReserve`), so a short answer's item is
+                        // exactly that reserve and everything under the text is EMPTY reserved
+                        // space — an indicator there invites the farmer to scroll into a blank
+                        // screen. The app's rule: if the last item's size is within the reserve,
+                        // hide it; only when the answer overflows the reserve is there real
+                        // content below, and then it must also be at least two lines' worth.
+                        val hasContentBelow by remember(listState) {
+                            derivedStateOf {
+                                val info = listState.layoutInfo
+                                val last = info.visibleItemsInfo.lastOrNull()
+                                    ?: return@derivedStateOf false
+                                // Not the final item -> there is certainly more below.
+                                if (last.index < info.totalItemsCount - 1) return@derivedStateOf true
+                                val reservePx = info.viewportSize.height
+                                // Item fits inside the reserve -> only empty reserved space below.
+                                if (reservePx > 0 && last.size <= reservePx) {
+                                    return@derivedStateOf false
+                                }
+                                val hiddenBelow =
+                                    (last.offset + last.size) - info.viewportEndOffset
+                                hiddenBelow >= twoLinesPx
+                            }
+                        }
+                        if (lastAiMessage != null && !state.isLoading && hasContentBelow) {
                             ScrollIndicator(
                                 triggerKey = lastAiMessage.id,
                                 onClick = {
@@ -1200,6 +1438,20 @@ fun ChatScreen(
                                     .align(Alignment.BottomCenter)
                                     .padding(bottom = 12.dp)
                             )
+                        }
+
+                        // Tips overlay — anchored to the bottom, OUTSIDE the LazyColumn.
+                        //
+                        // App parity (ChatThreadContent.kt:605): shown for the whole wait, then
+                        // hidden the moment the streamed answer produces its first text chunk.
+                        // It deliberately stays up through the pre-text "thinking"/tool phase,
+                        // and through a follow-up wait — where `lastAiMessage` is the PREVIOUS,
+                        // already-settled answer and so is neither streaming nor blank.
+                        val streamingWithText = lastAiMessage != null &&
+                            lastAiMessage.isStreaming &&
+                            lastAiMessage.text.isNotBlank()
+                        if (state.isLoading && !streamingWithText) {
+                            Tips(tips = answerGenerationTips())
                         }
                     }
                 }
@@ -1273,7 +1525,13 @@ fun ChatScreen(
                 // Slides off-screen while an answer is generating, then back — the same
                 // visibility rhythm PrimaryInputButtons has in the legacy layout.
                 visible = !(isThread && state.isLoading),
-                showAura = false,
+                // NO LONGER A DIVERGENCE. This was turned on by request while the app passed
+                // false ("Home-only … keep the composer calm amid live content"); app
+                // 2a5cf2b8 flipped ChatInputOverlays.kt to `showAura = true` with the same
+                // reasoning the request had, so the SDK and the app now agree.
+                // Still idle-only — `showAura && !isFocused` gates the draw, so it stops the
+                // moment a farmer taps in.
+                showAura = true,
                 surfaceColor = brand.surfacePrimary,
                 fadeColor = colors.surfaceReadingPrimary,
                 photoUris = photoUris,
@@ -1372,7 +1630,7 @@ private fun InlineErrorContent(
 }
 
 /**
- * Titled "Related questions" section with tappable suggestion cards.
+ * Titled "You can also ask" section with tappable suggestion cards.
  * The accent dot + card affordances recolor with the host brand theme.
  */
 @Composable
@@ -1430,6 +1688,9 @@ private fun ChatResponseActions(
     isTtsEnabled: Boolean,
     isLoadingAudio: Boolean,
     isAudioPlaying: Boolean,
+    /** True once synthesise_audio has returned a URL — the app's `hasAudioUrl`, which is what
+     *  turns the Listen pill into the Play + static-wave state instead of the plain label. */
+    hasAudioUrl: Boolean,
     onShare: () -> Unit,
     onDownload: () -> Unit,
     onListen: () -> Unit,
@@ -1466,15 +1727,18 @@ private fun ChatResponseActions(
                 ChatActionChip(
                     iconRes = R.drawable.fc_icon_share,
                     text = label(Labels.SHARE_DOWNLOAD, "Share"),
-                    onClick = onShare
+                    onClick = onShare,
+                    borderBrush = LocalBrandColors.current.accentSweepBorder
                 )
                 if (isTtsEnabled) {
-                    ChatActionChip(
-                        iconRes = null,
-                        imageVector = if (isAudioPlaying) Icons.Filled.Pause else Icons.Filled.VolumeUp,
-                        text = label(Labels.LISTEN, "Listen"),
+                    // App parity: Listen is its own component, and once audio exists the LABEL
+                    // is replaced by the animated sound wave (ListenButton.kt:161).
+                    ListenButton(
+                        onClick = onListen,
                         isLoading = isLoadingAudio,
-                        onClick = onListen
+                        isPlaying = isAudioPlaying,
+                        hasAudioUrl = hasAudioUrl,
+                        light = true
                     )
                 }
             }
@@ -1493,47 +1757,69 @@ private fun ChatResponseActions(
             onClick = onDownload
         )
         if (isTtsEnabled) {
-            ChatActionChip(
-                iconRes = null,
-                imageVector = if (isAudioPlaying) Icons.Filled.Pause else Icons.Filled.VolumeUp,
-                text = label(Labels.LISTEN, "Listen"),
+            ListenButton(
+                onClick = onListen,
                 isLoading = isLoadingAudio,
-                onClick = onListen
+                isPlaying = isAudioPlaying,
+                hasAudioUrl = hasAudioUrl,
+                light = true
             )
         }
     }
 }
 
+/**
+ * The answer action pill (Share / Save / Listen).
+ *
+ * App parity — this is the app's `ActionButton` (agentic call site, ChatResponseActions.kt:110)
+ * and, for [listenMetrics], its `ListenButton(light = true)`:
+ *
+ *  - `RoundedCornerShape(percent = 50)` — a TRUE pill. The app deliberately drops corner
+ *    smoothing here (`radius >= Radius.Rounded` branch), so `SmoothShapes` must NOT be used.
+ *  - 42dp tall, 23dp icon.
+ *  - `surfaceReadingSecondary` fill, `foregroundPrimary` icon AND label.
+ *  - NO border. The SDK previously drew a 1dp brand-tinted outline and tinted the glyphs
+ *    `foregroundSecondary`, which rendered as an outlined white pill with green icons where
+ *    the app draws a filled neutral-grey pill with dark ones.
+ */
 @Composable
 private fun ChatActionChip(
     iconRes: Int?,
     text: String,
     onClick: () -> Unit,
     imageVector: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    /**
+     * Listen is a different component in the app (`ListenButton`), and its padding/gap differ
+     * from `ActionButton`'s: 12/12 with a 6dp gap rather than 12/16 with a 10dp gap.
+     */
+    listenMetrics: Boolean = false,
+    /** Gradient border, as `ActionButton(borderBrush = ...)` — the agentic Share pill's sweep. */
+    borderBrush: Brush? = null,
+    borderWidth: Dp = 3.dp
 ) {
     val colors = LocalContentColors.current
-    val brand = LocalBrandColors.current
-    val accent = brand.foregroundSecondary
+    // App: `iconColor`/`labelColor` are both foregroundPrimary on the agentic pill.
+    val accent = colors.foregroundPrimary
 
+    val chipShape = RoundedCornerShape(percent = 50)
     Row(
         modifier = Modifier
-            .heightIn(min = 40.dp)
-            .clip(SmoothShapes.rounded(Radius.Rounded))
-            .background(colors.surfaceSecondary)
-            .border(
-                width = 1.dp,
-                color = accent.copy(alpha = 0.28f),
-                shape = SmoothShapes.rounded(Radius.Rounded)
+            .height(42.dp)
+            .clip(chipShape)
+            .background(colors.surfaceReadingSecondary)
+            .then(
+                if (borderBrush != null) Modifier.border(borderWidth, borderBrush, chipShape)
+                else Modifier
             )
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 9.dp),
+            .padding(start = 12.dp, end = if (listenMetrics) 12.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalArrangement = Arrangement.spacedBy(if (listenMetrics) 6.dp else 10.dp)
     ) {
         if (isLoading) {
             androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(20.dp),
                 strokeWidth = 2.dp,
                 color = accent
             )
@@ -1542,20 +1828,21 @@ private fun ChatActionChip(
                 painter = painterResource(id = iconRes),
                 contentDescription = null,
                 colorFilter = ColorFilter.tint(accent),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(23.dp)
             )
         } else if (imageVector != null) {
             androidx.compose.material3.Icon(
                 imageVector = imageVector,
                 contentDescription = null,
                 tint = accent,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(23.dp)
             )
         }
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
-            color = colors.foregroundPrimary
+            color = colors.foregroundPrimary,
+            maxLines = 1
         )
     }
 }
@@ -1620,5 +1907,53 @@ private fun ShareCard(
             style = MaterialTheme.typography.labelSmall,
             color = brand.foregroundPrimary
         )
+    }
+}
+
+/**
+ * Past Advice + Language icons for the chat app bar.
+ *
+ * Parity with the views flavour's `ChatFragment.setUpAppBarActions`. Only shown when the drawer
+ * is OFF: with `showDrawer(false)` (the CHAT_ONLY setup) there is otherwise no way to reach
+ * either screen at all. When the drawer is on these stay hidden and the drawer remains the single
+ * navigation surface.
+ *
+ * History is gated on `showHistory` as well, so a host can expose language without history.
+ * Language is shown whenever the drawer is off, because once onboarding is skipped it is the only
+ * way for a farmer to change language.
+ *
+ * Returns null when nothing should be shown, so [LogoAppBar] falls back to its normal spacer.
+ */
+@Composable
+private fun chatAppBarActions(
+    onHistory: () -> Unit,
+    onLanguage: () -> Unit
+): (@Composable RowScope.() -> Unit)? {
+    val config = FarmerChat.requireGraph().config
+    val drawerOff = !config.showDrawer
+    val showHistory = drawerOff && config.showHistory
+    val showLanguage = drawerOff
+    if (!showHistory && !showLanguage) return null
+
+    val brand = LocalBrandColors.current
+    return {
+        if (showHistory) {
+            ActionButton(
+                onClick = onHistory,
+                icon = ImageVector.vectorResource(R.drawable.fc_icon_timer),
+                background = brand.surfaceSecondary,
+                iconColor = brand.foregroundPrimary,
+                radius = Radius.MD
+            )
+        }
+        if (showLanguage) {
+            ActionButton(
+                onClick = onLanguage,
+                icon = ImageVector.vectorResource(R.drawable.fc_icon_language),
+                background = brand.surfaceSecondary,
+                iconColor = brand.foregroundPrimary,
+                radius = Radius.MD
+            )
+        }
     }
 }

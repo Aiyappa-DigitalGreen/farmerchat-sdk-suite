@@ -64,7 +64,7 @@ export function TermsOfUseDialog(props: {
           />
           {!loaded ? (
             <div className="fcsdk-terms-loading">
-              <LogoSpinner message={label('loading', 'Loading...')} />
+              <LogoSpinner message={label('fc_v2_app_label_loading', 'Loading...')} />
             </div>
           ) : null}
         </div>
@@ -72,7 +72,7 @@ export function TermsOfUseDialog(props: {
         {/* Elevated footer: lifts the accept button above the scrolling terms content. */}
         <div className="fcsdk-terms-footer">
           <PrimaryButton
-            label={label('accept_and_continue', 'Accept and continue')}
+            label={label('fc_v2_app_label_accept_and_continue', 'Accept and continue')}
             state="chevron"
             onClick={props.onAcceptAndContinue}
           />

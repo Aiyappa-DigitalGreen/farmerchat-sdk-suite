@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.widgets
 
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import android.content.Context
 import android.text.InputFilter
 import android.text.InputType
@@ -51,7 +52,7 @@ internal class OtpView @JvmOverloads constructor(
             val box = TextView(context).apply {
                 gravity = Gravity.CENTER
                 textSize = 22f
-                setTextColor(ContextCompat.getColor(context, R.color.fc_foreground_primary))
+                setTextColor(FcTokens.color(context, R.color.fc_foreground_primary))
                 background = ContextCompat.getDrawable(context, R.drawable.fc_bg_otp_box)
             }
             boxes += box

@@ -13,7 +13,8 @@
 
 import {
   blockTopSpacing,
-  isTableScrollable,
+  isCardTable,
+  isWideTable,
   isTableSeparator,
   looksLikeTableRow,
   parseAlignments,
@@ -181,7 +182,19 @@ check(
   parseMarkdownBlocks('| a |\n| --- |\n| 1 |\n\nafter').map((b) => b.type),
   ['table', 'paragraph'],
 );
-check('1-2 columns are weighted, 3+ scroll', [1, 2, 3, 4].map(isTableScrollable), [false, false, true, true]);
+check('only a lone single column stays weighted; 2+ stack into row cards', [1, 2, 3, 4].map(isWideTable), [false, true, true, true]);
+
+// A card is `| Title | | |` — 3 columns, title in cell 0, the other two empty. Anything with text
+// in a trailing header cell is an ordinary grid, and a 2- or 4-column table is never a card.
+check('card detection is strict about the empty trailing headers', [
+  isCardTable(['Saturday, 19 Sep', '', '']),
+  isCardTable(['Saturday, 19 Sep', '   ', '']),
+  isCardTable(['Reading', 'Value', 'Meaning']),
+  isCardTable(['Saturday, 19 Sep', '', 'Meaning']),
+  isCardTable(['', '', '']),
+  isCardTable(['Title', '']),
+  isCardTable(['Title', '', '', '']),
+], [true, true, false, false, false, false, false]);
 
 // ---------------------------------------------------------------------------
 // Vertical rhythm — the Kotlin `topSpacing` when-expression

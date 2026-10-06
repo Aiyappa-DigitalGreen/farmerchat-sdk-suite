@@ -4,19 +4,30 @@
  * appearance hint line, "Account details" ListCard with the name row, and a
  * Logout/Sign up secondary button. "Your name has been updated." toast.
  */
-import React, { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  AppState,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { AnalyticsEvents, ScreenNames } from '../../core/analytics';
 import type { AppearanceMode } from '../../core/config';
 import { Labels } from '../../core/labels';
 import { StorageKeys } from '../../core/sessionStore';
+import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
+import { isLocationObtained } from '../../core/locationOutcome';
+import { LocationPinGlyph } from '../components/LocationChatBubble';
 import { useLabel, useSdk, useSdkContext, useTheme } from '../context';
 import { SecondaryButton } from '../components/Buttons';
 import { DefaultAppBar, Toast, useToastState } from '../components/Chrome';
 import { ListCard, ListItem } from '../components/Cards';
 import { FcIcon } from '../components/Icon';
 import type { IconName } from '../assets';
-import { radius, spacing, typography } from '../theme';
+import { Green700, radius, spacing, typography } from '../theme';
 
 function AppearanceModeButton(props: {
   icon: IconName;
@@ -55,6 +66,8 @@ export function SettingsScreen(props: {
   onLogOutClick: () => void;
   showNameUpdatedToast: boolean;
   onNameToastShown: () => void;
+  /** Shared location flow — drives the "My Farm" Location row (2.0.0). */
+  locationPrompt: UseLocationPromptResult;
 }): React.ReactElement {
   const theme = useTheme();
   const c = theme.content;
@@ -83,6 +96,64 @@ export function SettingsScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.showNameUpdatedToast]);
 
+  // ---- My Farm → Location row (app SettingsScreen.kt:230-300) ----
+  const { locationPrompt } = props;
+  // A stored fix only counts as "exact" while the permission is still held; re-checked whenever
+  // the flow changes state and when the app returns to the foreground (permission changes in
+  // system Settings).
+  const [hasPermission, setHasPermission] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      void locationPrompt.hasLocationPermission().then((granted) => {
+        if (alive) setHasPermission(granted);
+      });
+    };
+    refresh();
+    const sub = AppState.addEventListener('change', (status) => {
+      if (status === 'active') refresh();
+    });
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationPrompt.state.kind]);
+  const hasExactLocation = locationPrompt.hasKnownLocation() && hasPermission;
+  // The RN store has no APPROX_LOCATION_NAME; same district → state → country chain as the Home
+  // pill.
+  const locationPlaceName = (
+    sdk.store.getString(StorageKeys.USER_DISTRICT) ??
+    sdk.store.getString(StorageKeys.USER_STATE) ??
+    sdk.store.getString(StorageKeys.USER_COUNTRY_NAME) ??
+    ''
+  ).trim();
+  // Only reacts to states raised by THIS row, so Home's own flow does not animate it.
+  const isSettingsLocationFlowActive =
+    locationPrompt.source === 'settings' &&
+    (locationPrompt.state.kind === 'RequestPermission' ||
+      locationPrompt.state.kind === 'RequestEnableGps' ||
+      locationPrompt.state.kind === 'FetchingLocation');
+  const labelRef = useRef(label);
+  labelRef.current = label;
+  useEffect(
+    () =>
+      locationPrompt.addEventListener((event) => {
+        if (event.kind !== 'Continue' || event.source !== 'settings') return;
+        if (!isLocationObtained(event)) return;
+        showToast(labelRef.current(Labels.LOCATION_FOUND, 'Location found'), 'success');
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locationPrompt],
+  );
+  const locationRightText = isSettingsLocationFlowActive
+    ? label(Labels.GETTING_YOUR_LOCATION, 'Getting your location')
+    : locationPlaceName.length === 0
+      ? '—'
+      : !hasExactLocation
+        ? `${locationPlaceName} (${label(Labels.APPROXIMATE, 'approximate')})`
+        : locationPlaceName;
+
   const appearanceHint =
     appearanceMode === 'day'
       ? label(Labels.FARMERCHAT_ALWAYS_LIGHT_MODE, 'FarmerChat is always in light mode')
@@ -106,7 +177,8 @@ export function SettingsScreen(props: {
         onNavPress={props.onOpenDrawer}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[typography.titleSmall, { color: c.foregroundPrimary }]}>
+        {/* App parity (SettingsScreen.kt:137): labelLarge, not titleSmall. */}
+        <Text style={[typography.labelLarge, { color: c.foregroundPrimary }]}>
           {label(Labels.APPEARANCE, 'Appearance')}
         </Text>
         <View style={styles.appearanceRow}>
@@ -133,7 +205,52 @@ export function SettingsScreen(props: {
           {appearanceHint}
         </Text>
 
-        <Text style={[typography.titleSmall, { color: c.foregroundPrimary, marginTop: 4 }]}>
+        {/* My Farm (2.0.0) — app SettingsScreen.kt:195-300. */}
+        <Text style={[typography.labelLarge, { color: c.foregroundPrimary, marginTop: 4 }]}>
+          {label(Labels.MY_FARM, 'My Farm')}
+        </Text>
+        <View style={{ gap: 10 }}>
+          <ListCard>
+            <Pressable
+              accessibilityRole="button"
+              testID="fc-settings-location"
+              onPress={() => {
+                if (locationPrompt.isIdle()) locationPrompt.triggerFromSettings();
+              }}
+              style={({ pressed }) => [styles.locationRow, pressed && { opacity: 0.7 }]}
+            >
+              <LocationPinGlyph size={22} color={c.foregroundPrimary} holeColor={c.surfaceSecondary} />
+              <Text style={[typography.bodyMedium, { color: c.foregroundPrimary }]}>
+                {label(Labels.LOCATION, 'Location')}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  typography.bodyMedium,
+                  { color: c.foregroundSecondary, flex: 1, textAlign: 'right' },
+                ]}
+              >
+                {locationRightText}
+              </Text>
+              {isSettingsLocationFlowActive ? (
+                <ActivityIndicator size="small" color={c.foregroundSecondary} />
+              ) : null}
+            </Pressable>
+          </ListCard>
+          <Text style={[typography.bodySmall, { color: c.foregroundSecondary }]}>
+            {hasExactLocation
+              ? label(Labels.LOCATION_HELPER_ADVICE_WEATHER, 'Advice and weather for this area.')
+              : `${label(Labels.ESTIMATED, 'Estimated')}.`}{' '}
+            <Text style={{ color: Green700 }}>
+              {hasExactLocation
+                ? label(Labels.LOCATION_HELPER_CHANGE_ANYTIME, 'Change anytime.')
+                : label(Labels.LOCATION_HELPER_SHARE, 'Share your location for better advice.')}
+            </Text>
+          </Text>
+        </View>
+
+        {/* App parity (SettingsScreen.kt:302): labelLarge, not titleSmall. */}
+        <Text style={[typography.labelLarge, { color: c.foregroundPrimary, marginTop: 4 }]}>
           {label(Labels.ACCOUNT_DETAILS, 'Account details')}
         </Text>
         <ListCard>
@@ -171,6 +288,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: spacing.lg, gap: spacing.lg },
   appearanceRow: { flexDirection: 'row', gap: spacing.sm },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   appearanceButton: {
     flex: 1,
     height: 76,

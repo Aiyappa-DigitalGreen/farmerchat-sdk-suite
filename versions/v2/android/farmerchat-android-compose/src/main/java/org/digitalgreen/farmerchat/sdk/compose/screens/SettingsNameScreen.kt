@@ -126,7 +126,9 @@ fun SettingsNameScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             DefaultAppBar(
-                title = label(Labels.NAME, "Name"),
+                // App parity: the app's bar on this screen passes showGlow = false (solid Green700).
+                showGlow = false,
+title = label(Labels.NAME, "Name"),
                 leftIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 onLeftClick = onBack
             )
@@ -136,7 +138,8 @@ fun SettingsNameScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .imePadding()
-                    .padding(16.dp),
+                    // App parity (SettingsNameScreen.kt:131): 20dp sides / 32dp ends.
+                    .padding(horizontal = 20.dp, vertical = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 TextInput(
@@ -156,8 +159,9 @@ fun SettingsNameScreen(
                     state = if (isSaving) PrimaryButtonState.Loading else PrimaryButtonState.Default,
                     enabled = name.trim().isNotEmpty(),
                     onClick = { saveName() },
-                    modifier = Modifier.fillMaxWidth(),
-                    height = 56
+                    // App parity (SettingsNameScreen.kt:156): no height override — the button
+                    // takes PrimaryButton's 48dp default. 56 made it 8dp taller than the app's.
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

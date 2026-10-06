@@ -1,0 +1,179 @@
+/* Integration-guide renderer styles.
+ * Scoped under .fcg-* so nothing here can leak into the Studio or the phone
+ * preview. Colours come from the app's shadcn CSS variables, so the guide
+ * follows the Studio's light/dark toggle for free. */
+
+.fcg {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+/* --- navigation ----------------------------------------------------------
+   Never hidden at any width. A narrow viewport collapses it into a <details>
+   disclosure above the content instead of display:none — an earlier version
+   hid it under a max-width media query and the nav became invisible. */
+.fcg-nav {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding-right: 6px;
+  font-size: 0.8rem;
+}
+.fcg-nav-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin: 0 0 8px;
+}
+.fcg-nav-plat {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+.fcg-nav-plat:hover { background: var(--muted); }
+.fcg-nav-plat[aria-current="true"] {
+  background: var(--muted);
+  border-color: var(--border);
+}
+.fcg-nav-flavour {
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+  flex: none;
+}
+.fcg-nav-secs {
+  list-style: none;
+  margin: 2px 0 10px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--border);
+}
+.fcg-nav-secs a {
+  display: block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+.fcg-nav-secs a:hover { background: var(--muted); color: var(--foreground); }
+
+/* --- content -------------------------------------------------------------- */
+.fcg-body { min-width: 0; }
+.fcg-plat-head { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 4px; }
+.fcg-kicker {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted-foreground); margin: 0 0 4px;
+}
+.fcg-plat-head h2 { font-size: 1.45rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+.fcg-plat-flavour { font-weight: 500; color: var(--muted-foreground); }
+.fcg-badge {
+  display: inline-block; margin: 8px 0 0; padding: 2px 9px;
+  border: 1px solid var(--border); border-radius: 999px;
+  font-size: 0.7rem; color: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.fcg-intro { margin: 10px 0 0; max-width: 72ch; color: var(--muted-foreground); font-size: 0.875rem; }
+
+.fcg-sec { scroll-margin-top: 16px; padding-top: 26px; }
+.fcg-sec h3 {
+  font-size: 1.02rem; font-weight: 700; margin: 0 0 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.fcg-sec h4.fcg-sub {
+  font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted-foreground); margin: 20px 0 8px;
+}
+.fcg-sec p { margin: 0 0 10px; max-width: 72ch; font-size: 0.875rem; line-height: 1.65; }
+.fcg-sec code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82em; background: var(--muted); padding: 1px 5px; border-radius: 4px;
+}
+
+/* --- tables --------------------------------------------------------------- */
+.fcg-tw { overflow-x: auto; margin: 0 0 12px; border: 1px solid var(--border); border-radius: 10px; }
+.fcg-tw table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+.fcg-tw th, .fcg-tw td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.fcg-tw th { background: var(--muted); font-weight: 700; white-space: nowrap; }
+.fcg-tw tr:last-child td { border-bottom: 0; }
+.fcg-tw td code { background: none; padding: 0; }
+
+/* --- callouts ------------------------------------------------------------- */
+.fcg-note {
+  border: 1px solid var(--border); border-left: 3px solid var(--muted-foreground);
+  background: var(--muted); border-radius: 8px; padding: 10px 14px; margin: 0 0 12px;
+}
+.fcg-note.fcg-warn { border-left-color: #d97706; }
+.fcg-note .fcg-tag {
+  display: block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; margin-bottom: 4px; color: var(--muted-foreground);
+}
+.fcg-note.fcg-warn .fcg-tag { color: #b45309; }
+.fcg-note p { margin: 0 0 6px; font-size: 0.82rem; }
+.fcg-note p:last-child { margin-bottom: 0; }
+
+/* --- code blocks ---------------------------------------------------------- */
+.fcg-cb { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 0 0 14px; background: #0b0f14; }
+.fcg-cb-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: #11161d; border-bottom: 1px solid #1f2933; padding: 4px 6px 4px 8px;
+}
+.fcg-cb-tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
+.fcg-cb-tab {
+  background: none; border: 0; cursor: pointer; color: #8b98a8;
+  font: inherit; font-size: 0.72rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 6px; white-space: nowrap;
+}
+.fcg-cb-tab:hover { color: #d7e0ea; }
+.fcg-cb-tab[aria-selected="true"] { background: #1d2733; color: #e8eef5; }
+.fcg-cb-tabs.single { color: #8b98a8; font-size: 0.72rem; font-weight: 600; padding: 4px 10px; }
+.fcg-cb-copy {
+  flex: none; background: none; border: 1px solid #263140; color: #8b98a8;
+  font: inherit; font-size: 0.68rem; font-weight: 600;
+  padding: 3px 9px; border-radius: 6px; cursor: pointer;
+}
+.fcg-cb-copy:hover { color: #e8eef5; border-color: #3a4a5e; }
+.fcg-cb .fcg-fname {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem; color: #6b7a8d; padding: 6px 14px 0;
+}
+.fcg-cb pre { margin: 0; padding: 12px 14px; overflow-x: auto; }
+.fcg-cb code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem; line-height: 1.6; color: #d7e0ea;
+  background: none; padding: 0; white-space: pre;
+}
+
+/* syntax tokens */
+.fcg-cb .t-c { color: #5f7183; font-style: italic; }
+.fcg-cb .t-s { color: #8fd18b; }
+.fcg-cb .t-k { color: #7fb6ff; }
+.fcg-cb .t-n { color: #f0c987; }
+.fcg-cb .t-a { color: #d79bf0; }
+
+/* --- narrow viewports ----------------------------------------------------- */
+.fcg-nav-details { display: none; }
+@media (max-width: 1000px) {
+  .fcg { grid-template-columns: minmax(0, 1fr); }
+  .fcg-nav-aside { display: none; }
+  .fcg-nav-details {
+    display: block; border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; margin-bottom: 8px;
+  }
+  .fcg-nav-details > summary { cursor: pointer; font-size: 0.8rem; font-weight: 700; }
+  .fcg-nav-details .fcg-nav { position: static; max-height: none; margin-top: 10px; }
+}

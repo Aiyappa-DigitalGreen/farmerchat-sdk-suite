@@ -18,19 +18,34 @@
         android:layout_weight="1"
         android:background="@color/fc_surface_primary"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="32dp">
+
+        <!-- Compose parity (SettingsNameScreen.kt:146 → Form.kt TextInput): the field carries a
+             LABEL above it — labelMedium, foregroundPrimary, 8dp clear of the input. Views had
+             no label at all, so the screen opened with an unlabelled box. -->
+        <org.digitalgreen.farmerchat.sdk.views.internal.widgets.FcText
+            android:id="@+id/fcSettingsNameLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            app:fcTextColor="@color/fc_foreground_primary"
+            app:fcTextSizeSp="15"
+            app:fcTextWeight="700" />
 
         <EditText
             android:id="@+id/fcSettingsNameInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/fc_bg_input_field"
-            android:inputType="textPersonName|textCapWords"
+            android:background="@drawable/fc_bg_input_field_states"
+            android:inputType="textPersonName"
             android:maxLines="1"
             android:padding="16dp"
             android:textColor="@color/fc_foreground_primary"
-            android:textColorHint="@color/fc_foreground_tertiary"
-            android:textSize="16sp"
+            android:textColorHint="@color/fc_form_placeholder"
+            android:textSize="19sp"
             android:importantForAutofill="no"
             tools:hint="Enter your name" />
 
@@ -38,7 +53,7 @@
             android:id="@+id/fcSettingsNameSave"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" />
+            android:layout_marginTop="16dp" />
 
         <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ToastView
             android:id="@+id/fcSettingsNameToast"

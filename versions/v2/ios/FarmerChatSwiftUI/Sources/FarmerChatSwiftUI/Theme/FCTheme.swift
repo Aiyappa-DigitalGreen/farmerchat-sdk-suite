@@ -28,6 +28,10 @@ enum FCPrimitive {
     static let green950 = Color(hex: 0x032E15)
     static let green500Alpha16 = Color(hex: 0x00C950).opacity(0.16)
 
+    // Accent gradient stops (Share chip conic/sweep border)
+    static let cyan400 = Color(hex: 0x22D3EE)
+    static let yellow300 = Color(hex: 0xFFF947)
+
     // Sky / Sun / Red
     static let sky400 = Color(hex: 0x00BCFF)
     static let sky700 = Color(hex: 0x0069A8)
@@ -47,6 +51,33 @@ public struct FCBrandColors {
     public var foregroundSecondary = FCPrimitive.green500
     public var feedbackSuccess = FCPrimitive.green500
     public var feedbackFail = FCPrimitive.red500
+
+    // Accent gradient stops for the Share chip's conic/sweep border. The green stop follows the
+    // host accent so the border stays coherent with a host brand; cyan and yellow are fixed
+    // design primitives, exactly as in the app (ColorBrandSemantic.kt @ bda80659).
+    public var accentGradientGreen = FCPrimitive.green500
+    public var accentGradientCyan = FCPrimitive.cyan400
+    public var accentGradientYellow = FCPrimitive.yellow300
+
+    /// SwiftUI equivalent of the design's
+    /// `conic-gradient(from 0deg at 50% 50%, green 0deg, cyan 90deg, green 180deg, yellow 270deg, green 360deg)`.
+    ///
+    /// `AngularGradient` IS the conic gradient, and unlike Compose's sweep its angle is measured
+    /// from 12 o'clock — the same origin CSS uses — so these stops are NOT rotated the way the
+    /// Kotlin ones are. The rendered orientation is identical: top green, right cyan, bottom
+    /// green, left yellow.
+    public var accentSweepBorder: AngularGradient {
+        AngularGradient(
+            gradient: Gradient(stops: [
+                .init(color: accentGradientGreen, location: 0.00),
+                .init(color: accentGradientCyan, location: 0.25),
+                .init(color: accentGradientGreen, location: 0.50),
+                .init(color: accentGradientYellow, location: 0.75),
+                .init(color: accentGradientGreen, location: 1.00),
+            ]),
+            center: .center
+        )
+    }
 }
 
 public struct FCContentColors {
@@ -119,7 +150,14 @@ public struct FCContentColors {
 
 public struct FCShapes {
     public var card: CGFloat = 24
-    public var button: CGFloat = 12
+    /// Android `Radius.Rounded` (999.dp) — buttons are fully rounded pills as of the
+    /// 2026-09-15 app pass. A host `buttonCornerRadius` overrides it.
+    ///
+    /// Read by `FCPrimaryButton` / `FCSecondaryButton`. Until 2026-09-16 NOTHING read this
+    /// property — both buttons hardcoded `cornerRadius: 12` — so the host's
+    /// `buttonCornerRadius` theming option was silently dead on iOS. Keep the buttons
+    /// reading the token; inputs and cards deliberately do not.
+    public var button: CGFloat = 999
     public var input: CGFloat = 12
 }
 
@@ -132,6 +170,10 @@ public struct FCTheme {
     public var typeScale: CGFloat = 1.0
     /// Host font name, if supplied. Default: platform font.
     public var fontName: String? = nil
+    /// Script-correct, host-scaled type scale. Resolved in `theme(for:appearance:)` once
+    /// `typeScale`/`fontName` are known — see FCTypography.swift for why leading cannot be
+    /// baked into a static table here. Reached as `theme.typography.bodyLarge`.
+    public var typography: FCTypography = .roman
     /// Host logo override, if supplied.
     public var logo: Image? = nil
 
@@ -146,6 +188,19 @@ public struct FCTheme {
         if FarmerChat.isInitialized, let host = FarmerChat.shared.config.theme {
             theme.applyHostOverrides(host, isDark: isDark)
         }
+        // Typography resolves LAST: it depends on `typeScale`/`fontName`, which the host
+        // overrides above may have just changed. The language comes from the same
+        // preference the rest of the SDK reads, seeded at `initialize` from
+        // `config.languageCode` or the device locale, so a script-specific scale is picked
+        // even before the farmer has visited language selection.
+        let languageCode = FarmerChat.isInitialized
+            ? (FarmerChat.shared.prefs.string(.selectedLanguageCode) ?? "en")
+            : "en"
+        theme.typography = FCTypography.forLanguage(
+            languageCode,
+            typeScale: theme.typeScale,
+            fontName: theme.fontName
+        )
         return theme
     }
 
@@ -219,6 +274,10 @@ public struct FCTheme {
     }
 
     /// Themed font honoring host `fontName` + `typeScale` (docs/07 typography).
+    ///
+    /// Prefer `fcTextStyle(theme.typography.<slot>)`, which also applies the script-correct
+    /// leading. This remains for the genuinely off-scale sizes (glyph-as-text, the 96pt
+    /// splash mark) that have no type-scale slot to name.
     public func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let scaled = size * typeScale
         if let fontName {

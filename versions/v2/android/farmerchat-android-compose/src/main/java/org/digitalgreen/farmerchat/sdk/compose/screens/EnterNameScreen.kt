@@ -1,5 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.compose.screens
 
+import org.digitalgreen.farmerchat.sdk.compose.util.fcNavigationBarsBottom
+import org.digitalgreen.farmerchat.sdk.compose.util.fcStatusBarsTop
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
@@ -127,8 +130,8 @@ fun EnterNameScreen(
     }
 
     val isSaving = state.updateUserNameState is UiState.Loading
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val topInset = fcStatusBarsTop()
+    val bottomInset = fcNavigationBarsBottom()
 
     fun saveName() {
         val trimmed = name.trim()
@@ -165,36 +168,52 @@ fun EnterNameScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 20.dp)
-                .padding(top = topInset + 48.dp, bottom = bottomInset + 24.dp),
+                // App parity (EnterNameScreen.kt:109-110): 24 dp horizontal, 32 dp top, 24 dp
+                // bottom. `topInset`/`bottomInset` stay because this screen draws edge-to-edge
+                // where the app sits in a Scaffold.
+                .padding(horizontal = 24.dp)
+                .padding(top = topInset + 32.dp, bottom = bottomInset + 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
                 painter = painterResource(id = R.drawable.fc_logo_mark),
                 contentDescription = "FarmerChat",
-                colorFilter = ColorFilter.tint(colors.foregroundPrimary),
-                modifier = Modifier.size(44.dp)
+                // App parity (EnterNameScreen.kt:118): borderActive — the brand GREEN. The SDK
+                // tinted it foregroundPrimary, drawing a BLACK flower. Same defect the Language
+                // screen had; these are the only two screens where the app greens the mark (on
+                // Splash, Home and the chat app bar it IS foregroundPrimary, because those sit on
+                // a green surface where that token resolves to white — verified, left alone).
+                colorFilter = ColorFilter.tint(colors.borderActive),
+                // App parity: 32 dp, not 44 dp.
+                modifier = Modifier.size(32.dp)
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            // App parity: 14 dp, not 20 dp.
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = label(Labels.WHAT_SHOULD_WE_CALL_YOU, "What should we call you?"),
-                style = MaterialTheme.typography.displaySmall,
+                // App parity (EnterNameScreen.kt:127): titleLarge, not displaySmall.
+                style = MaterialTheme.typography.titleLarge,
                 color = colors.foregroundPrimary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            // App parity: 8 dp, not 6 dp.
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = label(Labels.WE_GREET_YOU_NAME, "So we can greet you by name"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.foregroundSecondary,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                // App parity (EnterNameScreen.kt:140): the subtitle is capped at 260 dp so it
+                // wraps to two balanced lines instead of running the full content width.
+                modifier = Modifier.widthIn(max = 260.dp)
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            // App parity: 24 dp, not 28 dp.
+            Spacer(modifier = Modifier.height(24.dp))
 
             TextInput(
                 value = name,

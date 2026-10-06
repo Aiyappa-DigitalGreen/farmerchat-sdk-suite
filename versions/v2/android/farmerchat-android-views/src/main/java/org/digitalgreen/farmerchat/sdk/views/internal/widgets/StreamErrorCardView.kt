@@ -9,7 +9,6 @@ import android.widget.TextView
 import org.digitalgreen.farmerchat.sdk.core.labels.Labels
 import org.digitalgreen.farmerchat.sdk.core.model.StreamErrorKind
 import org.digitalgreen.farmerchat.sdk.views.R
-import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcRecolor
 import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import org.digitalgreen.farmerchat.sdk.views.internal.util.dp
 
@@ -36,37 +35,54 @@ internal class StreamErrorCardView @JvmOverloads constructor(
 
     private val icon = ImageView(context)
     private val title = TextView(context).apply {
-        textSize = 17f // bodyMedium
+        textSize = 17f // bodyMedium, Bold (app StreamErrorCard.kt)
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
         setTextColor(FcTokens.color(context, R.color.fc_foreground_primary))
     }
     private val header = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
-    private val retry = PrimaryButtonView(context)
+    // App StreamErrorCard.kt:118-148: a full-width buttonPrimarySurface row, radius 12, 14dp
+    // vertical padding, a centred 20dp Refresh icon + 8dp + labelLarge Bold in onBrand.
+    private val retryIcon = ImageView(context)
+    private val retryLabel = TextView(context).apply {
+        textSize = 17f
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+    }
+    private val retry = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER
+        setPadding(0, 14.dp(context), 0, 14.dp(context))
+        isClickable = true
+        isFocusable = true
+        addView(retryIcon, LayoutParams(20.dp(context), 20.dp(context)))
+        addView(
+            retryLabel,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                marginStart = 8.dp(context)
+            }
+        )
+    }
 
     init {
         orientation = VERTICAL
         setPadding(16.dp(context), 16.dp(context), 16.dp(context), 16.dp(context))
 
-        header.addView(icon, LayoutParams(20.dp(context), 20.dp(context)))
+        header.addView(icon, LayoutParams(24.dp(context), 24.dp(context)))
         header.addView(
             title,
             LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = 10.dp(context)
+                marginStart = 12.dp(context)
             }
         )
         addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         addView(
             retry,
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 12.dp(context)
+                topMargin = 16.dp(context)
             }
         )
-        // This card is built in code, so [FcThemeInflaterFactory] (which only sees INFLATED views)
-        // never reaches the button. Recolor it explicitly, otherwise a host-themed SDK would show
-        // a default-green "Try again" next to XML-inflated buttons in the host's brand color.
-        FcRecolor.maybeRecolor(retry)
     }
 
     fun bind(
@@ -101,8 +117,14 @@ internal class StreamErrorCardView @JvmOverloads constructor(
         )
         icon.setColorFilter(fail)
 
-        retry.text = labelFor(Labels.TRY_AGAIN, "Try again")
-        retry.state = PrimaryButtonView.State.DEFAULT
+        // Colours resolved in code through FcTokens, so a host theme / fc_* override applies.
+        retry.background = FcTokens.roundedRect(
+            context, 12f, FcTokens.color(context, R.color.fc_button_primary_surface)
+        )
+        retryIcon.setImageResource(R.drawable.fc_ic_refresh)
+        retryIcon.setColorFilter(FcTokens.color(context, R.color.fc_brand_icon))
+        retryLabel.setTextColor(FcTokens.color(context, R.color.fc_on_brand))
+        retryLabel.text = labelFor(Labels.TRY_AGAIN, "Try again")
         retry.setOnClickListener { onRetry() }
     }
 

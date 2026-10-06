@@ -17,7 +17,7 @@ final class FCUIStreamStatusView: UIView {
         spinner.color = FCUITheme.brandAccent
         spinner.hidesWhenStopped = false
 
-        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.font = FCUITypography.current.labelLarge.font
         label.textColor = FCUITheme.foregroundSecondary
         label.numberOfLines = 0
 
@@ -174,7 +174,7 @@ final class FCUIStreamErrorCardView: UIView {
         iconView.contentMode = .center
         iconView.setContentHuggingPriority(.required, for: .horizontal)
 
-        titleLabel.font = .systemFont(ofSize: 15)
+        titleLabel.font = FCUITypography.current.titleSmall.font
         titleLabel.textColor = FCUITheme.foregroundPrimary
         titleLabel.numberOfLines = 0
 
@@ -261,12 +261,12 @@ final class FCUIAlignmentChipView: UIControl {
 
         badgeBackground.layer.cornerRadius = 10
         badgeBackground.translatesAutoresizingMaskIntoConstraints = false
-        badge.font = .systemFont(ofSize: 12, weight: .bold)
+        badge.font = FCUITypography.current.labelMedium.font
         badge.textAlignment = .center
         badge.translatesAutoresizingMaskIntoConstraints = false
         badgeBackground.addSubview(badge)
 
-        titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        titleLabel.font = FCUITypography.current.labelMedium.font
         titleLabel.textColor = FCUITheme.foregroundPrimary
         titleLabel.numberOfLines = 0
 
@@ -347,11 +347,11 @@ final class FCUIAlignmentSurfaceView: UIView {
         layer.cornerRadius = 16
         layer.cornerCurve = .continuous
 
-        messageLabel.font = .systemFont(ofSize: FarmerChat.shared.config.messageFontSize ?? 16)
+        messageLabel.font = FCUITypography.current.bodyLarge(atSize: FarmerChat.shared.config.messageFontSize ?? 19).font
         messageLabel.textColor = FCUITheme.foregroundPrimary
         messageLabel.numberOfLines = 0
 
-        headingLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        headingLabel.font = FCUITypography.current.titleMedium.font
         headingLabel.textColor = FCUITheme.foregroundPrimary
         headingLabel.numberOfLines = 0
 
@@ -365,10 +365,10 @@ final class FCUIAlignmentSurfaceView: UIView {
         info.tintColor = FCUITheme.brandAccent
         info.contentMode = .center
         info.setContentHuggingPriority(.required, for: .horizontal)
-        escapeHatchLabel.font = .systemFont(ofSize: 13)
+        escapeHatchLabel.font = FCUITypography.current.bodySmall.font
         escapeHatchLabel.textColor = FCUITheme.foregroundSecondary
         escapeHatchLabel.numberOfLines = 0
-        escapeHatchButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        escapeHatchButton.titleLabel?.font = FCUITypography.current.bodySmall.font
         escapeHatchButton.setTitleColor(FCUITheme.brandAccent, for: .normal)
         escapeHatchButton.addAction(
             UIAction { [weak self] _ in self?.onTypeInstead?() },
@@ -427,7 +427,7 @@ final class FCUIAlignmentSurfaceView: UIView {
         }
 
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        messageLabel.text = message
+        messageLabel.fcSetText(message, style: FCUITypography.current.bodyLarge(atSize: FarmerChat.shared.config.messageFontSize ?? 19))
         messageLabel.isHidden = trimmedMessage.isEmpty
 
         let showHeading = !isEscalate && !additive
