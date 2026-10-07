@@ -106,6 +106,8 @@ internal class HomeFeedAdapter(
      */
     private fun animateFooter(fb: FcItemHomeFooterBinding) {
         val wave = fb.fcFeedFooterWave
+        // Set in code: aapt does not reliably decode a surrogate-pair escape in a layout attribute.
+        wave.text = "\uD83D\uDC4B\uD83C\uDFFE"
         val text = fb.fcFeedFooterText
         wave.animate().cancel(); text.animate().cancel()
         wave.alpha = 0f; text.alpha = 0f; wave.rotation = 0f

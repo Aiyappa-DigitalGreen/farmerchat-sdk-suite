@@ -7691,3 +7691,45 @@ points. Tests: ios `AgenticFinalTextTests` (110 tests, 0 failures) + SwiftUI/UIK
 `xcodebuild … iOS Simulator` BUILD SUCCEEDED; rn `test/agenticFinalText.test.ts` (4/4) + `tsc
 --noEmit`; web `agentic.test.ts` (78 assertions) + `tsc --noEmit` + `vite build`. Not run against a
 live stream on those platforms.
+
+## Screen-fidelity pass: app vs compose vs XML, 2.2.0 (Android v2, 2026-10-06)
+
+Oracle: fc-compose-agentic HEAD `31a789e0` built from a scratch clone (`assembleStageDebug`,
+backend `mobile-app-stage`); SDK 2.2.0 in LastCheckSDKCompose / LastCheckSDKXML on the same
+backend; `rs_qa` API 36, 1080x2400, same guest state. Captured side by side.
+
+**Matching (no change):** Splash, Language (onboarding + chooser + all-languages), Name, Home header /
+weather / location pill / composer, Drawer, Settings, Help, Sign up (phone), camera + voice sheets,
+loading tips (both shuffle — a different first tip is chance), chat answer + action row + gender nudge.
+
+**Fixed:**
+- **Home content card** (both): rendered a "✦ Preventive pest management" tag from `meta.asset_name`
+  and a view-count badge on statement cards; the app's Home never passes `personalizationLabel` and
+  only passes `viewCount` for image cards (HomeScreen.kt:1337-1355).
+- **Feed footer** (both): the SDK drew the logo mark over a green glow; the app draws a waving-hand
+  emoji with a fade-in + 3 waves (`FeedFooter.kt`). XML text colour was white (now foregroundPrimary).
+- **App bar glow** (compose): Settings, Help, Language chooser, SettingsName, ChatHistory and Auth
+  showed the radial glow; the app passes `showGlow = false` on all of them.
+- **Chat back button** (both): from Home the app draws its `leftbutton` drawable — a circle; the SDK
+  used the 12dp rounded square.
+- **Sign up "Send via" buttons** (compose): enabled with an empty number; the app gates on
+  `isPhoneValid` (AuthScreen.kt:888).
+- **XML system bars:** white status icons on light screens; now day/night-aware like the app's
+  `enableEdgeToEdge`.
+- **XML SettingsName:** Save enabled while empty, pale hint, caps keyboard; now app-matched. XML
+  EnterName now opens the keyboard on entry like compose/app.
+- **XML composer IME:** newline key instead of the app's ✓ Done (`textMultiLine` overrode
+  `actionDone`).
+- **XML full-screen message illustration:** capped at 300dp; the app's screens pass 322dp.
+- **XML input sheets:** the nav-bar strip under the camera/voice sheet showed scrim; the sheet now runs
+  behind the nav bar like the app's ModalBottomSheet.
+
+**Not changed / not compared:**
+- Splash: matches — both flavours show the app's `boot_bg` gradient + white logo (captured at
+  ~0.3s; a later capture lands on the Language-loading spinner, which the app shows too).
+- OTP, AccountBenefits/Success, Past Advice (ChatHistory) and drawer recents need a signed-in
+  account (real SMS) — not captured.
+- Chat loading label: compose showed a grey "Getting your answer… •••" at the capture instant vs the
+  app's green shimmer; not reproduced reliably, not changed.
+
+Compile-verified (core/compose/views); every fix above re-captured on `rs_qa` against the app.
