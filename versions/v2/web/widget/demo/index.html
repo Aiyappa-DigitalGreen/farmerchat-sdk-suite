@@ -298,6 +298,7 @@
       <button type="button" onclick="FarmerChatWidget.toggle()">toggle()</button>
       <button type="button" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
       <button type="button" onclick="bootWidget()">boot()</button>
+      <button type="button" onclick="resetSession()" title="Forget the stored FarmerChat session and start as a new guest">Reset session</button>
       <div class="state">Widget: <b id="status">closed</b></div>
       <div class="state" style="margin-top:0">Backend: <b id="backend"></b></div>
     </div>
@@ -335,6 +336,16 @@
         onOpen: function () { document.getElementById('status').textContent = 'open'; },
         onClose: function () { document.getElementById('status').textContent = 'closed'; },
       });
+    }
+
+    // Drops everything the SDK stored in this browser (all fc_sdk_ keys) and reloads, so the
+    // widget starts as a brand-new guest. Useful after switching between the mock and stage.
+    function resetSession() {
+      try {
+        Object.keys(localStorage).filter(function (k) { return k.indexOf('fc_sdk_') === 0; })
+          .forEach(function (k) { localStorage.removeItem(k); });
+      } catch (e) {}
+      location.reload();
     }
 
     // Page buttons that open the widget, optionally with the question already asked.

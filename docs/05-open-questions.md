@@ -778,3 +778,15 @@ embeds v2. Open: bump v2 web to `2.0.0` (as Android did) so the peer range can s
 the bytes itself, so it renders; a browser `<img>` refuses an SVG with that type and `fetch()` cannot
 read it cross-origin. Web v2 falls back to the app's `fc_weather_sunclouds` drawable. Ask: serve the
 icons as `image/svg+xml` (and ideally with CORS) so web shows the real condition icon.
+
+## A guest the backend no longer recognises never recovers (2026-10-08)
+
+When the stored guest's tokens are rejected and the guest fallback `send_tokens` answers
+**400 "User not found or inactive."** (seen when a session from another backend survives, or a guest
+is deleted server-side), every platform clears the tokens and fires `onSessionExpired`, but keeps
+the stale `user_id` and never re-runs `initialize_user` — so every later request repeats the same
+401 → `send_tokens` 400 loop and Home shows "Can't load right now". The base-URL wipe (docs/04,
+2026-10-08) prevents the environment-switch case. Open: should a 400 from `send_tokens` for a
+guest (no phone login) wipe the session and re-initialise a new guest? Not done without a decision —
+it would change docs/02's 401 flow on all platforms. The widget demo has a "Reset session" test
+control for now.

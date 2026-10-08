@@ -43,6 +43,14 @@ http
       const out = { ...up.headers, ...cors(req) };
       delete out['access-control-allow-credentials'];
       res.writeHead(up.statusCode || 502, out);
+      // Log status, and the start of the body for errors, so a failing flow is diagnosable.
+      if ((up.statusCode || 0) >= 400) {
+        let body = '';
+        up.on('data', (c) => { if (body.length < 300) body += c; });
+        up.on('end', () => console.log(up.statusCode, req.method, target.pathname, body.replace(/\s+/g, ' ').slice(0, 300)));
+      } else {
+        console.log(up.statusCode, req.method, target.pathname);
+      }
       up.pipe(res);
     });
     upstream.on('error', (e) => {
@@ -50,6 +58,5 @@ http
       res.end(String(e));
     });
     req.pipe(upstream);
-    console.log(req.method, target.pathname);
   })
   .listen(PORT, () => console.log(`stage proxy → ${UPSTREAM.href} on http://localhost:${PORT}/`));
