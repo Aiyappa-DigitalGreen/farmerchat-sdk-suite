@@ -23,14 +23,13 @@
     "typecheck": "tsc --noEmit",
     "demo": "vite demo --port 5181"
   },
-  "dependencies": {
-    "@digitalgreenorg/farmerchat-web": "file:../packages/farmerchat-web"
-  },
   "peerDependencies": {
+    "@digitalgreenorg/farmerchat-web": "^1.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
+    "@digitalgreenorg/farmerchat-web": "file:../packages/farmerchat-web",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "react": "^18.3.1",

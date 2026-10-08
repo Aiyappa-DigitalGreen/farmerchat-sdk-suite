@@ -760,3 +760,13 @@ ports added it on the other platforms in each package's own convention: web `fc_
 iOS `fc_sdk_PERMISSION_DENY_COUNT`, react-native `PERMISSION_DENY_COUNT`. Conservative reading
 implemented (same semantics, per-package naming). Open: align iOS/RN to the app's `deny_count`
 value? Only matters if a host ever migrates prefs between platforms — none does today.
+
+
+## Web widget can't pin the v2 web SDK by version (2026-10-08)
+
+`@digitalgreenorg/farmerchat-widget` (`versions/v2/web/widget`) declares the web SDK as a peer
+dependency (its ESM build keeps the SDK external). Both web lines, v1 `web/` and v2
+`versions/v2/web/`, are published as `@digitalgreenorg/farmerchat-web@1.0.0`, so a semver
+range cannot require v2. The conservative reading is implemented: peer `^1.0.0`, plus a README
+note that the widget is built and verified against v2. The IIFE bundle is unaffected because it
+embeds v2. Open: bump v2 web to `2.0.0` (as Android did) so the peer range can say `^2.0.0`?

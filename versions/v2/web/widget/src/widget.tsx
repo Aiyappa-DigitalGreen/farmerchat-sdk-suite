@@ -62,6 +62,34 @@ export function currentWidget(): WidgetHandle | null {
   return activeHandle;
 }
 
+let initializedFor: FarmerChatConfig | null = null;
+let generation = 0;
+
+/**
+ * Initialises the SDK singleton for this host config (no-op when it is the same
+ * object). Runs before the panel ever opens — `createServices` is synchronous and
+ * makes no requests — so `FarmerChatWidget.sdk.logout()`, `isAuthenticated()`,
+ * `onAuthStateChanged()` and `updateTokens()` act on the stored session even on a
+ * page load where the user never opens the widget.
+ *
+ * Returns a generation number that changes only when the services were rebuilt.
+ */
+export function ensureSdk(config: FarmerChatConfig): number {
+  if (config === initializedFor) return generation;
+  initializedFor = config;
+  generation += 1;
+  FarmerChat.initialize({
+    ...config,
+    // The SDK's "nowhere to go back to" exit (e.g. CHAT_ONLY close) collapses
+    // the panel; the host's own onExit still fires.
+    onExit: () => {
+      activeHandle?.close();
+      config.onExit?.();
+    },
+  });
+  return generation;
+}
+
 const DEFAULT_BRAND = '#146152';
 
 function ChatBubbleIcon(): ReactElement {
@@ -140,8 +168,14 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
   const openRef = useRef(open);
   openRef.current = open;
 
-  // Callbacks read through a ref so the memoised SDK config below stays stable:
-  // the SDK rebuilds its whole service graph when the config identity changes.
+  // Only a NEW config object rebuilds the SDK services; the same object across
+  // re-renders (or `update()` calls that leave it out) keeps the live session.
+  const sdkGeneration = useMemo(() => ensureSdk(config), [config]);
+  // A question asked while the SDK root is not mounted yet is handed over in an
+  // effect, after the root (a child, so its effects run first) has registered its
+  // controller — not synchronously, where it could reach a stale, unmounted one.
+  const [pendingQuestion, setPendingQuestion] = useState<{ text: string } | null>(null);
+
   const callbacksRef = useRef(props);
   callbacksRef.current = props;
 
@@ -153,9 +187,14 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
       setOpen(true);
       callbacksRef.current.onOpen?.();
     }
-    // Queues inside the SDK until its root mounts, then replays.
-    if (question) FarmerChat.openChat(question);
+    if (question) setPendingQuestion({ text: question });
   }, []);
+
+  useEffect(() => {
+    if (!mounted || !pendingQuestion) return;
+    FarmerChat.openChat(pendingQuestion.text);
+    setPendingQuestion(null);
+  }, [mounted, pendingQuestion]);
 
   const doClose = useCallback(() => {
     if (!openRef.current) return;
@@ -165,19 +204,6 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
     // it from wherever the host page put it.
     if (panelRef.current?.contains(document.activeElement)) launcherRef.current?.focus();
   }, []);
-
-  const sdkConfig = useMemo<FarmerChatConfig>(
-    () => ({
-      ...config,
-      // The SDK's "nowhere to go back to" exit (e.g. CHAT_ONLY close) collapses
-      // the panel; the host's own onExit still fires.
-      onExit: () => {
-        doClose();
-        config.onExit?.();
-      },
-    }),
-    [config, doClose],
-  );
 
   // Register the imperative handle and replay anything queued before mount.
   useEffect(() => {
@@ -257,7 +283,9 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
             <MinimizeIcon />
           </button>
         </div>
-        <div className="fcw-panel-body">{mounted ? <FarmerChat config={sdkConfig} inline /> : null}</div>
+        <div className="fcw-panel-body">{/* No config prop: the root reuses the services `ensureSdk` built. Keyed by
+            generation so a genuinely new config remounts onto the new services. */}
+          {mounted ? <FarmerChat key={sdkGeneration} inline /> : null}</div>
       </div>
 
       <button

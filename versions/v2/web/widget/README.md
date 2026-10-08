@@ -34,7 +34,7 @@ Configuration is JavaScript, not `data-*` attributes, because callbacks such as 
 
 ```js
 FarmerChatWidget.boot(options)        // mount (a second boot updates instead of stacking)
-FarmerChatWidget.update(options)      // re-render with new options; the open panel keeps its state
+FarmerChatWidget.update(options)      // merge new options; omit `config` to keep the live session
 FarmerChatWidget.open()               // open the panel
 FarmerChatWidget.open('How do I treat leaf blight?')  // open straight into a chat with this question
 FarmerChatWidget.close()
@@ -45,19 +45,36 @@ FarmerChatWidget.sdk                  // the SDK statics: logout(), sendQuestion
                                       // isAuthenticated(), onAuthStateChanged(), updateTokens() …
 ```
 
-Calls made before the widget mounts are queued and replayed.
+Calls made before the widget mounts are queued and replayed. The SDK is initialized during
+`boot()`. That step is synchronous and makes no requests, so `FarmerChatWidget.sdk.logout()`,
+`isAuthenticated()` and `onAuthStateChanged()` work even on a page load where the user never
+opens the panel. **Call `sdk.logout()` from your own sign-out** so the previous user's FarmerChat
+session does not stay on a shared device.
+
+`update({ position: 'bottom-left' })` keeps the conversation. Passing a **new `config` object**
+rebuilds the SDK services and remounts the panel, so pass `config` only when it actually changed.
 
 ## React hosts
 
 ```tsx
-import { FarmerChatWidget } from '@digitalgreenorg/farmerchat-widget';
+import { FarmerChatWidget, type FarmerChatConfig } from '@digitalgreenorg/farmerchat-widget';
 
-<FarmerChatWidget config={{ environment: 'prod', guestApiKey, geoApiKey }} launcherLabel="Ask FarmerChat" />
+// A module constant (or useMemo): a new config object rebuilds the SDK and remounts the panel.
+const FC_CONFIG: FarmerChatConfig = { environment: 'prod', guestApiKey: GUEST_KEY, geoApiKey: GEO_KEY };
+
+export function App() {
+  return <FarmerChatWidget config={FC_CONFIG} launcherLabel="Ask FarmerChat" />;
+}
 ```
 
-The ESM build keeps `react`, `react-dom` and `@digitalgreenorg/farmerchat-web` external, so your
-app's copies are used. Keep the `config` object stable (useMemo or a module constant). When its
-identity changes, the SDK rebuilds its services.
+```bash
+npm install @digitalgreenorg/farmerchat-widget @digitalgreenorg/farmerchat-web react react-dom
+```
+
+The ESM build keeps `react`, `react-dom` and `@digitalgreenorg/farmerchat-web` external, so it
+uses your app's copies (they are peer dependencies). The widget is built and verified against the
+**v2** web SDK. Both web lines currently publish as `1.0.0`, so the peer range cannot enforce
+that; see docs/05.
 
 ## Options
 
@@ -82,15 +99,32 @@ identity changes, the SDK rebuilds its services.
 - **Closing hides the panel; it does not unmount it.** The conversation, scroll position and
   screen stack are there when the panel reopens. (`FarmerChatFab` unmounts, so it replays the
   splash every time.) The SDK mounts lazily on first open unless `preload` is set.
-- **Layout.** `src/layout.ts → shouldUseFullscreen()` decides when the panel becomes a full-screen
-  sheet. It runs on mount and on every resize. In fullscreen the launcher hides, since it would
-  cover the composer, and a slim bar above the SDK carries the close chevron.
+- **Layout.** See below.
 - **Isolation.** The widget's classes are all `fcw-` prefixed and the SDK's are `.fcsdk-`. Neither
   styles the host page. The panel is the containing block (`transform`) for anything positioned
   inside it, so SDK overlays such as the drawer, modals and location prompt stay inside the panel.
 - **Keyboard and accessibility.** Esc closes the panel. Focus moves into the panel on open and
   back to the launcher on close. The launcher carries `aria-expanded` / `aria-controls`.
+- **Deep links survive re-boots.** `open(question)` hands the question to the SDK in an effect
+  after the SDK root mounts, so it is not lost after a `shutdown()` → `boot()` cycle.
 - **One widget per page.** The SDK holds page-level singleton state.
+
+## Layout
+
+`src/layout.ts → shouldUseFullscreen(viewportWidth, viewportHeight, panelWidth, panelHeight)`
+decides when the floating panel becomes a full-screen sheet. It runs on mount and on every
+resize or orientation change. In fullscreen the launcher hides, since it would cover the
+composer, and a slim bar above the SDK carries the close chevron. The shipped policy is
+width-only: fullscreen when the viewport is narrower than the panel plus 80 px.
+
+Things to weigh when tuning it:
+
+- **Width only, or height too?** A landscape phone (e.g. 844×390) is wide enough for the panel
+  but too short. The panel's `max-height` clamp then squeezes the SDK into about 300 px.
+- **Tablets near the cutoff.** A 768 px portrait tablet fits a 400 px panel comfortably, but a
+  floating panel over a tablet page can feel odd. Intercom keeps it floating.
+- **Slack.** The `+ 80` leaves room for the side paddings and some page behind the panel. Less
+  slack makes a cramped panel; more sends small laptops to fullscreen.
 
 ## Develop
 

@@ -12,7 +12,7 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { FarmerChat } from '@digitalgreenorg/farmerchat-web';
-import { FarmerChatWidget, withWidget, currentWidget, type FarmerChatWidgetProps } from './widget';
+import { FarmerChatWidget, withWidget, currentWidget, ensureSdk, type FarmerChatWidgetProps } from './widget';
 
 export { FarmerChatWidget };
 export type { FarmerChatWidgetProps, WidgetHandle } from './widget';
@@ -27,12 +27,17 @@ export interface WidgetBootOptions extends FarmerChatWidgetProps {
 }
 
 let bootedRoot: Root | null = null;
+let lastOptions: WidgetBootOptions | null = null;
 let bootedEl: HTMLElement | null = null;
 
 export interface FarmerChatWidgetStatics {
   boot(options: WidgetBootOptions): void;
-  /** Re-render with new options without losing the open panel's state. Ignored before boot. */
-  update(options: WidgetBootOptions): void;
+  /**
+   * Merge new options into the booted widget. Omit `config` (or pass the same
+   * object) to keep the live session; a new `config` object rebuilds the SDK and
+   * remounts the panel. Ignored before boot.
+   */
+  update(options: Partial<WidgetBootOptions>): void;
   shutdown(): void;
   open(question?: string): void;
   close(): void;
@@ -44,6 +49,9 @@ export interface FarmerChatWidgetStatics {
 }
 
 function render(options: WidgetBootOptions): void {
+  lastOptions = options;
+  // Synchronously, so `.sdk.*` works on the very next line after boot().
+  ensureSdk(options.config);
   const { container: _container, ...props } = options;
   bootedRoot?.render(createElement(FarmerChatWidget, props));
 }
@@ -67,7 +75,7 @@ export const FarmerChatWidgetAPI: FarmerChatWidgetStatics = {
   },
 
   update(options) {
-    if (bootedRoot) render(options);
+    if (bootedRoot && lastOptions) render({ ...lastOptions, ...options });
   },
 
   shutdown() {
@@ -75,6 +83,7 @@ export const FarmerChatWidgetAPI: FarmerChatWidgetStatics = {
     bootedEl?.remove();
     bootedRoot = null;
     bootedEl = null;
+    lastOptions = null;
   },
 
   open(question) {
