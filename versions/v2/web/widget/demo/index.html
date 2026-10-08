@@ -3,63 +3,368 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FarmerChat Widget Demo</title>
+  <title>Kaveri Valley Farmers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Noto+Sans+Kannada:wght@500&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
-    /* A deliberately ordinary host page: the widget must not restyle any of it. */
-    body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #f6f3ec; }
-    header { padding: 48px 24px 24px; max-width: 720px; margin: 0 auto; }
-    main { max-width: 720px; margin: 0 auto; padding: 0 24px 160px; }
-    button.host { font: inherit; padding: 8px 14px; margin: 4px 6px 4px 0; border: 1px solid #555; background: #fff; border-radius: 4px; }
-    code { background: #ece6d8; padding: 1px 5px; border-radius: 3px; }
+    /*
+     * Demo host page for the FarmerChat widget: the website of a FICTIONAL farmer producer
+     * company. Every name, price and event here is illustrative. The page deliberately uses no
+     * green, so the widget's brand green is the only green on screen.
+     */
+    :root {
+      --water: #E9F0EC;      /* pale paddy-water background */
+      --slate: #1E3A4C;      /* river slate — text and rules */
+      --slate-soft: #4B6474;
+      --turmeric: #E3A008;   /* the one warm accent */
+      --ragi: #7A4A2E;       /* ragi-brown secondary marks */
+      --paper: #FFFFFF;
+      --line: #C9D6D0;
+      --display: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
+      --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --kn: "Noto Sans Kannada", var(--body);
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--water); color: var(--slate); font: 400 17px/1.6 var(--body); }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--turmeric); outline-offset: 3px; border-radius: 4px; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---------- header */
+    header.site { padding: 22px 0; }
+    header.site .wrap { display: flex; align-items: center; gap: 28px; }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .brand svg { flex: 0 0 auto; }
+    .brand-name { font: 700 19px/1.1 var(--display); letter-spacing: -0.01em; }
+    .brand-kn { display: block; font: 500 12px/1.4 var(--kn); color: var(--slate-soft); }
+    nav.main { display: flex; gap: 22px; margin-left: auto; font-weight: 500; font-size: 15px; }
+    nav.main a { text-decoration: none; padding: 6px 0; border-bottom: 2px solid transparent; }
+    nav.main a:hover { border-bottom-color: var(--turmeric); }
+    .ask-btn { white-space: nowrap; font: 600 15px/1 var(--body); color: var(--paper); background: var(--slate); border: 0; border-radius: 999px;
+      padding: 12px 18px; cursor: pointer; }
+    .ask-btn:hover { background: #163042; }
+
+    /* ---------- hero: the season timeline is the page's one bold element */
+    .hero { padding: 36px 0 56px; }
+    .hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
+    .hero h1 { margin: 0 0 18px; font: 800 clamp(38px, 5.2vw, 64px)/1.02 var(--display); letter-spacing: -0.025em; }
+    .hero .when { margin: 0 0 14px; font-weight: 600; color: var(--ragi); }
+    .hero .lede { margin: 0 0 26px; max-width: 30em; color: var(--slate-soft); }
+    .hero .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .ghost-btn { font: 600 15px/1 var(--body); color: var(--slate); background: transparent; border: 1.5px solid var(--slate);
+      border-radius: 999px; padding: 11px 18px; cursor: pointer; text-decoration: none; }
+
+    .season { background: var(--paper); border-radius: 28px; padding: 26px 26px 22px; box-shadow: 0 1px 0 var(--line); }
+    .season h2 { margin: 0 0 4px; font: 700 18px/1.3 var(--display); }
+    .season .sub { margin: 0 0 18px; font-size: 14px; color: var(--slate-soft); }
+    .timeline { position: relative; padding-top: 30px; display: grid; grid-template-columns: 92px 1fr; row-gap: 14px; column-gap: 14px; }
+    .months { grid-column: 2; display: grid; grid-template-columns: repeat(6, 1fr); font-size: 12.5px; font-weight: 600; color: var(--slate-soft); }
+    .crop { font: 600 14px/1.2 var(--body); align-self: center; }
+    .crop small { display: block; font: 500 11.5px/1.3 var(--kn); color: var(--slate-soft); }
+    .lane { position: relative; height: 34px; border-radius: 10px; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / 6 - 1px), var(--line) calc(100% / 6 - 1px), var(--line) calc(100% / 6)); }
+    .stage { position: absolute; top: 4px; bottom: 4px; border-radius: 7px; transform-origin: left center;
+      animation: grow 900ms cubic-bezier(.2, .7, .2, 1) both; }
+    .stage.grow { background: #A7C4D3; }
+    .stage.field { background: var(--slate); }
+    .stage.harvest { background: var(--turmeric); }
+    .lane:nth-of-type(2) .stage { animation-delay: 80ms; }
+    @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .today { position: absolute; top: 22px; bottom: -4px; width: 2px; background: var(--ragi); pointer-events: none; }
+    .today span { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+      font: 600 12px/1 var(--body); color: var(--paper); background: var(--ragi); padding: 4px 8px; border-radius: 999px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 18px; font-size: 13px; color: var(--slate-soft); }
+    .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+    /* ---------- sections */
+    section.band { padding: 56px 0; }
+    section.band.paper { background: var(--paper); }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .section-head h2 { margin: 0; font: 700 clamp(26px, 3vw, 34px)/1.15 var(--display); letter-spacing: -0.015em; }
+    .note { font-size: 13.5px; color: var(--slate-soft); }
+
+    /* prices: a real table, not cards */
+    table.prices { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    .prices th { text-align: left; font: 600 13.5px/1.4 var(--body); color: var(--slate-soft); padding: 0 12px 10px 0; border-bottom: 1.5px solid var(--slate); }
+    .prices td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); }
+    .prices td.num, .prices th.num { text-align: right; }
+    .prices .crop-name { font-weight: 600; }
+    .up { color: #2F6A3F; } .down { color: #A33A2A; }
+    .up::before { content: "▲ "; font-size: 10px; } .down::before { content: "▼ "; font-size: 10px; }
+
+    /* ask + events */
+    .split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; }
+    .ask h2 { margin: 0 0 12px; font: 700 clamp(26px, 3vw, 34px)/1.15 var(--display); letter-spacing: -0.015em; }
+    .ask p { margin: 0 0 22px; max-width: 34em; color: var(--slate-soft); }
+    .questions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .questions button { width: 100%; text-align: left; font: 500 16px/1.4 var(--body); color: var(--slate); background: var(--water);
+      border: 0; border-left: 4px solid var(--turmeric); border-radius: 0 14px 14px 0; padding: 14px 16px; cursor: pointer; }
+    .questions button:hover { background: #DDE8E3; }
+    .questions .kn { display: block; font: 500 13px/1.5 var(--kn); color: var(--slate-soft); }
+
+    .events h2 { margin: 0 0 18px; font: 700 22px/1.2 var(--display); }
+    .events ol { list-style: none; margin: 0; padding: 0; }
+    .events li { display: grid; grid-template-columns: 64px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .date { text-align: center; line-height: 1.1; }
+    .date b { display: block; font: 800 26px/1 var(--display); }
+    .date span { font-size: 13px; color: var(--slate-soft); }
+    .events h3 { margin: 0 0 2px; font: 600 16px/1.35 var(--body); }
+    .events p { margin: 0; font-size: 14.5px; color: var(--slate-soft); }
+
+    footer.site { padding: 36px 0 120px; font-size: 14.5px; color: var(--slate-soft); }
+    footer.site .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px; }
+
+    /* ---------- test controls: kept out of the way, for SDK testing */
+    details.devtools { position: fixed; left: 16px; bottom: 16px; z-index: 10; font: 500 13px/1.4 var(--body);
+      background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 20px rgba(30, 58, 76, 0.12); max-width: 300px; }
+    details.devtools summary { cursor: pointer; padding: 10px 14px; list-style: none; color: var(--slate-soft); }
+    details.devtools summary::-webkit-details-marker { display: none; }
+    details.devtools[open] summary { border-bottom: 1px solid var(--line); }
+    .devtools .body { padding: 12px 14px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .devtools button { font: 500 12.5px/1 var(--body); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--water); color: var(--slate); cursor: pointer; }
+    .devtools .state { width: 100%; margin-top: 4px; color: var(--slate-soft); }
+    .devtools .state b { color: var(--slate); }
+
+    @media (max-width: 880px) {
+      nav.main { display: none; }
+      .hero .wrap, .split { grid-template-columns: 1fr; gap: 32px; }
+      header.site .ask-btn { margin-left: auto; }
+    }
+    @media (max-width: 520px) {
+      .wrap { padding: 0 16px; }
+      .brand-kn { display: none; }
+      header.site .ask-btn { display: none; }
+      .timeline { grid-template-columns: 70px 1fr; column-gap: 10px; }
+      .prices .market { display: none; }
+      .section-head { flex-direction: column; gap: 4px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .stage { animation: none; } }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Krishi Co-op</h1>
-    <p>A plain host page with no React and no bundler. FarmerChat is one <code>&lt;script&gt;</code> tag.</p>
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="#" aria-label="Kaveri Valley Farmers, home">
+        <!-- A paddy stalk over a river line. -->
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+          <circle cx="20" cy="20" r="20" fill="#1E3A4C" />
+          <path d="M20 31V12" stroke="#E3A008" stroke-width="2.4" stroke-linecap="round" />
+          <path d="M20 16c-4-1-6-4-6-7 4 0 6 3 6 7zM20 21c4-1 6-4 6-7-4 0-6 3-6 7zM20 26c-4-1-6-4-6-7 4 0 6 3 6 7z" fill="#E3A008" />
+          <path d="M9 31c4 2 7-2 11 0s7 2 11 0" stroke="#A7C4D3" stroke-width="2" fill="none" stroke-linecap="round" />
+        </svg>
+        <span>
+          <span class="brand-name">Kaveri Valley Farmers</span>
+          <span class="brand-kn">ಕಾವೇರಿ ಕಣಿವೆ ರೈತ ಉತ್ಪಾದಕ ಕಂಪನಿ</span>
+        </span>
+      </a>
+      <nav class="main" aria-label="Main">
+        <a href="#season">This season</a>
+        <a href="#prices">Market prices</a>
+        <a href="#events">At the centre</a>
+      </nav>
+      <button class="ask-btn" type="button" data-ask>Ask FarmerChat</button>
+    </div>
   </header>
+
   <main>
-    <p>Host controls (call the widget API from page buttons):</p>
-    <button class="host" onclick="FarmerChatWidget.open()">open()</button>
-    <button class="host" onclick="FarmerChatWidget.close()">close()</button>
-    <button class="host" onclick="FarmerChatWidget.toggle()">toggle()</button>
-    <button class="host" onclick="FarmerChatWidget.open('How do I treat leaf blight on tomato?')">open(question)</button>
-    <button class="host" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
-    <button class="host" onclick="bootWidget()">boot()</button>
-    <p id="status">status: —</p>
-    <p style="height: 1200px">Scroll the page: the launcher and panel stay pinned.</p>
+    <section class="hero" id="season">
+      <div class="wrap">
+        <div>
+          <p class="when" id="when">Mandya and Mysuru, week of 8 October</p>
+          <h1>Paddy harvest opens this week.</h1>
+          <p class="lede">
+            Fields transplanted in late June are ready once 80–85% of grains turn straw-coloured.
+            Drain the water ten days before cutting, and book the community harvester early —
+            the queue fills by Friday.
+          </p>
+          <div class="actions">
+            <button class="ask-btn" type="button" data-ask="When should I drain my paddy field before harvest?">Ask when to drain your field</button>
+            <a class="ghost-btn" href="#events">Book the harvester</a>
+          </div>
+        </div>
+
+        <figure class="season" style="margin:0" aria-labelledby="season-title">
+          <h2 id="season-title">Where each crop stands</h2>
+          <p class="sub">Typical kharif calendar for the valley's main crops.</p>
+          <div class="timeline" id="timeline">
+            <div></div>
+            <div class="months" aria-hidden="true"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span></div>
+            <!-- Each lane is Jun 1 → Nov 30; stage positions are % of that span. -->
+            <div class="crop">Paddy<small>ಭತ್ತ</small></div>
+            <div class="lane" role="img" aria-label="Paddy: nursery June, in field July to September, harvest October to mid November">
+              <span class="stage grow" style="left:2%;width:14%"></span>
+              <span class="stage field" style="left:17%;width:51%"></span>
+              <span class="stage harvest" style="left:69%;width:22%"></span>
+            </div>
+            <div class="crop">Ragi<small>ರಾಗಿ</small></div>
+            <div class="lane" role="img" aria-label="Ragi: sowing July, in field August to October, harvest November">
+              <span class="stage grow" style="left:22%;width:10%"></span>
+              <span class="stage field" style="left:33%;width:48%"></span>
+              <span class="stage harvest" style="left:82%;width:17%"></span>
+            </div>
+            <div class="crop">Maize<small>ಮೆಕ್ಕೆಜೋಳ</small></div>
+            <div class="lane" role="img" aria-label="Maize: sowing June, in field July to September, harvest late September to October">
+              <span class="stage grow" style="left:4%;width:9%"></span>
+              <span class="stage field" style="left:14%;width:46%"></span>
+              <span class="stage harvest" style="left:61%;width:18%"></span>
+            </div>
+            <div class="crop">Groundnut<small>ಕಡಲೆಕಾಯಿ</small></div>
+            <div class="lane" role="img" aria-label="Groundnut: sowing June to July, in field July to September, harvest October">
+              <span class="stage grow" style="left:6%;width:12%"></span>
+              <span class="stage field" style="left:19%;width:44%"></span>
+              <span class="stage harvest" style="left:64%;width:16%"></span>
+            </div>
+            <div class="today" id="today" aria-hidden="true"><span>This week</span></div>
+          </div>
+          <div class="legend">
+            <span><i style="background:#A7C4D3"></i>Nursery and sowing</span>
+            <span><i style="background:#1E3A4C"></i>In the field</span>
+            <span><i style="background:#E3A008"></i>Harvest</span>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band paper" id="prices">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Today's market prices</h2>
+          <span class="note">Illustrative prices for this demo page, ₹ per quintal.</span>
+        </div>
+        <table class="prices">
+          <thead>
+            <tr><th>Crop</th><th class="market">Market</th><th class="num">Modal price</th><th class="num">Since last week</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="crop-name">Paddy (common)</td><td class="market">Mandya</td><td class="num">₹2,310</td><td class="num up">₹45</td></tr>
+            <tr><td class="crop-name">Ragi</td><td class="market">Mysuru</td><td class="num">₹3,980</td><td class="num up">₹60</td></tr>
+            <tr><td class="crop-name">Maize</td><td class="market">Chamarajanagar</td><td class="num">₹2,140</td><td class="num down">₹30</td></tr>
+            <tr><td class="crop-name">Groundnut</td><td class="market">Hunsur</td><td class="num">₹6,450</td><td class="num up">₹110</td></tr>
+            <tr><td class="crop-name">Tomato</td><td class="market">Kolar</td><td class="num">₹1,200</td><td class="num down">₹180</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="band" id="ask">
+      <div class="wrap split">
+        <div class="ask">
+          <h2>Not sure what's wrong with a crop?</h2>
+          <p>
+            Ask FarmerChat in Kannada, Hindi or English — by typing, speaking, or sending a photo
+            of the leaf. It answers for your crop and your location, any time of day.
+          </p>
+          <ul class="questions">
+            <li><button type="button" data-ask="My paddy leaves have brown spots with grey centres. What is it?">My paddy leaves have brown spots with grey centres. What is it?<span class="kn">ಭತ್ತದ ಎಲೆಗಳ ಮೇಲೆ ಕಂದು ಚುಕ್ಕೆಗಳು</span></button></li>
+            <li><button type="button" data-ask="How much fertilizer does ragi need after the first weeding?">How much fertilizer does ragi need after the first weeding?<span class="kn">ರಾಗಿಗೆ ಗೊಬ್ಬರ ಎಷ್ಟು?</span></button></li>
+            <li><button type="button" data-ask="How do I store groundnut so it doesn't get aflatoxin?">How do I store groundnut so it doesn't get aflatoxin?<span class="kn">ಕಡಲೆಕಾಯಿ ಸಂಗ್ರಹಣೆ</span></button></li>
+          </ul>
+        </div>
+
+        <div class="events" id="events">
+          <h2>At the centre</h2>
+          <ol>
+            <li>
+              <div class="date"><b>10</b><span>Oct</span></div>
+              <div><h3>Harvester booking opens</h3><p>Two machines for members, booked in four-hour slots. Bring your member card.</p></div>
+            </li>
+            <li>
+              <div class="date"><b>14</b><span>Oct</span></div>
+              <div><h3>Soil testing camp</h3><p>Free tests before rabi sowing. Collect samples from five spots per acre.</p></div>
+            </li>
+            <li>
+              <div class="date"><b>22</b><span>Oct</span></div>
+              <div><h3>Ragi value-addition training</h3><p>Malt and flour processing, with the women's self-help groups.</p></div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
   </main>
 
+  <footer class="site">
+    <div class="wrap">
+      <span>Kaveri Valley Farmers is a fictional producer company, made up to demonstrate the FarmerChat widget.</span>
+      <span>Member helpline: 1800 000 0000 (sample number)</span>
+    </div>
+  </footer>
+
+  <details class="devtools">
+    <summary>Test controls</summary>
+    <div class="body">
+      <button type="button" onclick="FarmerChatWidget.open()">open()</button>
+      <button type="button" onclick="FarmerChatWidget.close()">close()</button>
+      <button type="button" onclick="FarmerChatWidget.toggle()">toggle()</button>
+      <button type="button" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
+      <button type="button" onclick="bootWidget()">boot()</button>
+      <div class="state">Widget: <b id="status">closed</b></div>
+      <div class="state" style="margin-top:0">Backend: <b id="backend"></b></div>
+    </div>
+  </details>
+
   <script>
-    // Demo wiring only. Query params:
+    // Demo wiring. Query params:
     //   ?base=<url>   API base (default: the local mock, tools/mock-server → :8899)
     //   ?env=<env>    dev | stage | demo | prod | eks (ignored when base is set)
     //   ?guestKey=…   guest init API key (never hardcode one in a page you commit)
     //   ?geoKey=…     Google geolocation key
     //   ?stage=1      the app's real stage backend via demo/stage-proxy.mjs (:8898) + agentic chat
     //   ?agentic=1    enableAgenticChat (2.0.0 composer + streaming)
-    //   ?mode=CHAT_ONLY  ?left=1  ?label=Ask%20FarmerChat
+    //   ?appearance=day|night|auto (default day)   ?mode=CHAT_ONLY   ?left=1   ?label=none
     var q = new URLSearchParams(location.search);
     var useEnv = q.get('env');
     var stage = q.get('stage') === '1';
+    var base = useEnv ? null : (q.get('base') || (stage ? 'http://localhost:8898/' : 'http://localhost:8899/'));
+    document.getElementById('backend').textContent = useEnv ? useEnv : stage ? 'stage (proxy)' : 'mock';
+
     function bootWidget() {
       FarmerChatWidget.boot({
         position: q.get('left') ? 'bottom-left' : 'bottom-right',
-        launcherLabel: q.get('label') || undefined,
+        launcherLabel: q.get('label') === 'none' ? undefined : (q.get('label') || 'Ask FarmerChat'),
         config: {
           environment: useEnv || 'dev',
-          customBaseUrl: useEnv ? undefined : (q.get('base') || (stage ? 'http://localhost:8898/' : 'http://localhost:8899/')),
+          customBaseUrl: base || undefined,
           enableAgenticChat: stage || q.get('agentic') === '1',
           guestApiKey: q.get('guestKey') || undefined,
           geoApiKey: q.get('geoKey') || undefined,
           mode: q.get('mode') || 'FULL_JOURNEY',
-          appearance: 'auto',
+          appearance: q.get('appearance') || 'day',
           onEvent: function (name, props) { console.log('[fc-event]', name, props); },
         },
-        onOpen: function () { document.getElementById('status').textContent = 'status: open'; },
-        onClose: function () { document.getElementById('status').textContent = 'status: closed'; },
+        onOpen: function () { document.getElementById('status').textContent = 'open'; },
+        onClose: function () { document.getElementById('status').textContent = 'closed'; },
       });
     }
+
+    // Page buttons that open the widget, optionally with the question already asked.
+    document.addEventListener('click', function (e) {
+      var el = e.target.closest('[data-ask]');
+      if (!el) return;
+      var question = el.getAttribute('data-ask');
+      FarmerChatWidget.open(question || undefined);
+    });
+
+    // Place "this week" on the season timeline (lanes span 1 Jun → 30 Nov).
+    (function placeToday() {
+      var now = new Date();
+      var start = new Date(now.getFullYear(), 5, 1);
+      var end = new Date(now.getFullYear(), 10, 30);
+      var frac = Math.min(1, Math.max(0, (now - start) / (end - start)));
+      var timeline = document.getElementById('timeline');
+      var lane = timeline.querySelector('.lane');
+      var marker = document.getElementById('today');
+      function place() {
+        var left = lane.offsetLeft + lane.offsetWidth * frac;
+        marker.style.left = left + 'px';
+        // The pill sits in the strip above the month labels; the line runs down through the lanes.
+        marker.style.top = '22px';
+      }
+      place();
+      window.addEventListener('resize', place);
+      var d = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+      document.getElementById('when').textContent = 'Mandya and Mysuru, week of ' + d;
+    })();
   </script>
   <script src="../dist/farmerchat-widget.iife.js"></script>
   <script>bootWidget();</script>
