@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FarmerChat Widget Demo</title>
+  <style>
+    /* A deliberately ordinary host page: the widget must not restyle any of it. */
+    body { margin: 0; font: 16px/1.6 Georgia, serif; color: #222; background: #f6f3ec; }
+    header { padding: 48px 24px 24px; max-width: 720px; margin: 0 auto; }
+    main { max-width: 720px; margin: 0 auto; padding: 0 24px 160px; }
+    button.host { font: inherit; padding: 8px 14px; margin: 4px 6px 4px 0; border: 1px solid #555; background: #fff; border-radius: 4px; }
+    code { background: #ece6d8; padding: 1px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Krishi Co-op</h1>
+    <p>A plain host page with no React and no bundler. FarmerChat is one <code>&lt;script&gt;</code> tag.</p>
+  </header>
+  <main>
+    <p>Host controls (call the widget API from page buttons):</p>
+    <button class="host" onclick="FarmerChatWidget.open()">open()</button>
+    <button class="host" onclick="FarmerChatWidget.close()">close()</button>
+    <button class="host" onclick="FarmerChatWidget.toggle()">toggle()</button>
+    <button class="host" onclick="FarmerChatWidget.open('How do I treat leaf blight on tomato?')">open(question)</button>
+    <button class="host" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
+    <button class="host" onclick="bootWidget()">boot()</button>
+    <p id="status">status: —</p>
+    <p style="height: 1200px">Scroll the page: the launcher and panel stay pinned.</p>
+  </main>
+
+  <script>
+    // Demo wiring only. Query params:
+    //   ?base=<url>   API base (default: the local mock, tools/mock-server → :8899)
+    //   ?env=<env>    dev | stage | demo | prod | eks (ignored when base is set)
+    //   ?guestKey=…   guest init API key (never hardcode one in a page you commit)
+    //   ?geoKey=…     Google geolocation key
+    //   ?mode=CHAT_ONLY  ?left=1  ?label=Ask%20FarmerChat
+    var q = new URLSearchParams(location.search);
+    var useEnv = q.get('env');
+    function bootWidget() {
+      FarmerChatWidget.boot({
+        position: q.get('left') ? 'bottom-left' : 'bottom-right',
+        launcherLabel: q.get('label') || undefined,
+        config: {
+          environment: useEnv || 'dev',
+          customBaseUrl: useEnv ? undefined : (q.get('base') || 'http://localhost:8899/'),
+          guestApiKey: q.get('guestKey') || undefined,
+          geoApiKey: q.get('geoKey') || undefined,
+          mode: q.get('mode') || 'FULL_JOURNEY',
+          appearance: 'auto',
+          onEvent: function (name, props) { console.log('[fc-event]', name, props); },
+        },
+        onOpen: function () { document.getElementById('status').textContent = 'status: open'; },
+        onClose: function () { document.getElementById('status').textContent = 'status: closed'; },
+      });
+    }
+  </script>
+  <script src="../dist/farmerchat-widget.iife.js"></script>
+  <script>bootWidget();</script>
+</body>
+</html>

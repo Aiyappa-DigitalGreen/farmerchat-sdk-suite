@@ -1,0 +1,41 @@
+{
+  "name": "@digitalgreenorg/farmerchat-widget",
+  "version": "1.0.0",
+  "description": "Intercom-style FarmerChat web widget: a launcher bubble that opens the full FarmerChat SDK in a floating panel. ESM for React hosts, one <script> tag for any page.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/farmerchat-widget.js",
+  "module": "./dist/farmerchat-widget.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/farmerchat-widget.js"
+    },
+    "./embed": "./dist/farmerchat-widget.iife.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "vite build && vite build -c vite.embed.config.ts && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "demo": "vite demo --port 5181"
+  },
+  "dependencies": {
+    "@digitalgreenorg/farmerchat-web": "file:../packages/farmerchat-web"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
