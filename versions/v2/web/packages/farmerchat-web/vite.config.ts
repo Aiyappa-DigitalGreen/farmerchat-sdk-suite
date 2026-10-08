@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { copyIllustrations } from '../../tools/copyIllustrations';
 
 export default defineConfig({
+  plugins: [copyIllustrations(resolve(__dirname, 'dist'))],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),

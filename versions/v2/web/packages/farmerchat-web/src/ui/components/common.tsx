@@ -153,6 +153,8 @@ export function DefaultAppBar(props: {
   trailing?: ReactNode;
   glow?: boolean;
   background?: string;
+  /** Replaces the leading ActionButton (FullScreenMessage passes its own or a spacer). */
+  leading?: ReactNode;
 }) {
   const { services, navigator } = useSdk();
   const drawerOff = props.leadingIcon === 'menu' && !services.config.showDrawer;
@@ -161,7 +163,9 @@ export function DefaultAppBar(props: {
   return (
     <div className="fcsdk-c-appbar" style={props.background ? { background: props.background } : undefined}>
       {props.glow ? <img className="fcsdk-c-appbar-glow" src={Assets.glowYellow} alt="" aria-hidden /> : null}
-      <ActionButton icon={LEADING_ICON[icon]} onClick={onLeading} radius={props.leadingRadius ?? 'rounded'} ariaLabel={icon} />
+      {props.leading ?? (
+        <ActionButton icon={LEADING_ICON[icon]} onClick={onLeading} radius={props.leadingRadius ?? 'rounded'} ariaLabel={icon} />
+      )}
       <div className="fcsdk-c-appbar-title fc-t-titleMedium">{props.title}</div>
       {props.trailing ?? <span className="fcsdk-c-appbar-spacer" aria-hidden />}
     </div>
@@ -186,6 +190,10 @@ export function PrimaryButton(props: {
   height?: number;
   /** @deprecated kept for FullScreenMessage until that screen is ported. */
   light?: boolean;
+  /** Compose `colors = Dark…`: the #008236 fill used on the dark-green drawer. */
+  variant?: 'dark';
+  /** Leading custom icon (24dp, accent): padding 8/16, 8dp before the label. */
+  leadingIcon?: IconName;
   className?: string;
 }) {
   const state = props.state ?? 'default';
@@ -193,14 +201,17 @@ export function PrimaryButton(props: {
   return (
     <button
       type="button"
-      className={`fcsdk-c-btn-primary fcsdk-c-btn-primary--${state}${props.light ? ' fcsdk-c-btn-primary--light' : ''}${
+      className={`fcsdk-c-btn-primary fcsdk-c-btn-primary--${state}${props.light ? ' fcsdk-c-btn-primary--light' : ''}${props.variant === 'dark' ? ' fcsdk-c-btn-primary--dark' : ''}${
         props.className ? ' ' + props.className : ''
       }`}
-      style={{ height: props.height ?? 48 }}
+      style={{ height: props.height ?? 48, ...(props.leadingIcon ? { padding: '0 16px 0 8px' } : null) }}
       onClick={props.onClick}
       disabled={!enabled || state === 'loading'}
       data-enabled={enabled}
     >
+      {props.leadingIcon ? (
+        <FcIcon name={props.leadingIcon} size={24} tint="var(--fc-c-button-accent)" className="fcsdk-c-btn-icon" style={{ marginRight: 8 }} />
+      ) : null}
       <span className="fcsdk-c-btn-label fc-t-labelLarge">{props.label}</span>
       {state === 'chevron' ? (
         <FcIcon name="m_chevron_right" size={24} tint="var(--fc-c-button-accent)" className="fcsdk-c-btn-icon" style={{ marginLeft: 8 }} />
@@ -416,7 +427,7 @@ export function CheckboxRow(props: { label: string; checked: boolean; onClick: (
 }
 
 /** 4-digit OTP input with Web OTP API assist where available (docs/03 fidelity map). */
-export function OtpInput(props: { value: string; onChange: (v: string) => void; length?: number }) {
+export function OtpInput(props: { value: string; onChange: (v: string) => void; length?: number; error?: boolean; disabled?: boolean }) {
   const length = props.length ?? 4;
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -469,7 +480,7 @@ export function OtpInput(props: { value: string; onChange: (v: string) => void; 
   };
 
   return (
-    <div className="fcsdk-otp">
+    <div className={`fcsdk-c-otp${props.error ? ' fcsdk-c-otp--error' : ''}`}>
       {digits.map((d, i) => (
         <input
           key={i}
@@ -477,6 +488,8 @@ export function OtpInput(props: { value: string; onChange: (v: string) => void; 
             refs.current[i] = el;
           }}
           value={d}
+          className={i === props.value.length && !props.error && !props.disabled ? 'fcsdk-c-otp-active' : undefined}
+          disabled={props.disabled}
           inputMode="numeric"
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
           aria-label={`OTP digit ${i + 1}`}
@@ -562,77 +575,110 @@ export function ListItem(props: {
 
 // --- FullScreenMessage (docs/01 §3.14) ----------------------------------------------------------
 
+export type FarmerImage = 'camera' | 'sky' | 'phone' | 'phone_square';
+
+/**
+ * The country farmer illustration (`farmer_looking_at_*`) Android bundles as assets, served from
+ * `config.assetBaseUrl` (the `illustrations/` folder shipped in dist). Country = the user's
+ * country code when one of ke/et/ng/in, else ke — compose `rememberCountryFarmerPainter`.
+ * Without an asset base URL nothing renders (the slot keeps its size).
+ */
+export function FarmerIllustration(props: {
+  image: FarmerImage;
+  /** farmer: max 322 wide, 300:450, stadium clip, crop · fit: contain the box · crop: cover the box */
+  mode: 'farmer' | 'fit' | 'crop';
+  className?: string;
+}) {
+  const { services } = useSdk();
+  const base = services.config.assetBaseUrl;
+  if (!base) return null;
+  const cc = (services.store.getString('USER_COUNTRY_CODE') ?? '').toLowerCase();
+  const country = ['ke', 'et', 'ng', 'in'].includes(cc) ? cc : 'ke';
+  const src = `${base}${country}/farmer_looking_at_${props.image}.webp`;
+  return <img className={`fcsdk-c-farmer fcsdk-c-farmer--${props.mode}${props.className ? ' ' + props.className : ''}`} src={src} alt="" />;
+}
+
+/**
+ * FullScreenMessage.kt: a #008236 screen (both themes) — DefaultAppBar with the yellow glow and
+ * optional 42dp actions (12dp radius unless given), the illustration filling the flexible box,
+ * then a displaySmall white headline and a bodyMedium (or bodyLarge) subtitle 10 apart, and a 64dp
+ * #08361B CTA. `debounce` switches the CTA to Loading for 1500ms after a tap.
+ */
 export function FullScreenMessage(props: {
   title: string;
-  subtitle?: string;
-  /** Glyph illustration, or any node (e.g. an image) when {@link illustrationNode} is given. */
-  illustration: string;
-  illustrationNode?: ReactNode;
-  /**
-   * Larger message under the title (Compose `mainMessage`). When present, [title] renders as the
-   * small app-bar title, as the app's FullScreenMessage does.
-   */
   mainMessage?: string;
+  subtitle?: string;
+  subtitleLarge?: boolean;
+  image?: FarmerImage;
+  imageMode?: 'farmer' | 'fit' | 'crop';
   primaryLabel: string;
   onPrimary: () => void;
   primaryLoading?: boolean;
-  primaryDisabled?: boolean;
   primaryState?: PrimaryButtonState;
+  /** Taps are ignored (busy) without dimming the button. */
+  primaryInert?: boolean;
+  debounce?: boolean;
+  left?: { icon: IconName; onClick: () => void; radius?: 'rounded' | 'md'; ariaLabel: string };
+  right?: { label: string; onClick: () => void; radius?: 'rounded' | 'md' };
   secondaryLabel?: string;
   onSecondary?: () => void;
-  onClose?: () => void;
-  /** Leading Back (←) action (Compose `leftIcon`). */
-  onBack?: () => void;
-  /** Trailing text action, e.g. "Skip" (Compose `rightLabel`). */
-  rightLabel?: string;
-  onRight?: () => void;
+  /** @deprecated legacy glyph slot; ignored. */
+  illustration?: string;
 }) {
-  const withHeaderTitle = props.mainMessage !== undefined;
+  const [debouncing, setDebouncing] = useState(false);
+  const loading = props.primaryLoading || debouncing;
   return (
-    <div className="fcsdk-fullmsg">
-      <div className="fcsdk-appbar" style={{ background: 'transparent' }}>
-        {props.onBack ? (
-          <button type="button" className="fcsdk-iconbtn" aria-label="back" onClick={props.onBack}>
-            {Icon.back}
-          </button>
-        ) : props.onClose ? (
-          <button type="button" className="fcsdk-iconbtn" aria-label="close" onClick={props.onClose}>
-            {Icon.close}
-          </button>
-        ) : withHeaderTitle ? (
-          <span className="fcsdk-fullmsg-barspacer" aria-hidden />
-        ) : null}
-        {withHeaderTitle ? <div className="fcsdk-fullmsg-bartitle">{props.title}</div> : null}
-        {props.rightLabel && props.onRight ? (
-          <button type="button" className="fcsdk-fullmsg-barright" onClick={props.onRight}>
-            {props.rightLabel}
-          </button>
-        ) : withHeaderTitle ? (
-          <span className="fcsdk-fullmsg-barspacer" aria-hidden />
-        ) : null}
+    <div className="fcsdk-c-fullmsg">
+      <DefaultAppBar
+        title={props.title}
+        glow
+        leadingIcon="back"
+        onLeadingClick={() => undefined}
+        background="transparent"
+        trailing={
+          props.right ? (
+            <ActionButton label={props.right.label} radius={props.right.radius ?? 'md'} onClick={props.right.onClick} />
+          ) : undefined
+        }
+        leading={
+          props.left ? (
+            <ActionButton icon={props.left.icon} radius={props.left.radius ?? 'md'} ariaLabel={props.left.ariaLabel} onClick={props.left.onClick} />
+          ) : (
+            <span className="fcsdk-c-appbar-spacer" aria-hidden />
+          )
+        }
+      />
+      <div className="fcsdk-c-fullmsg-body">
+        <div className="fcsdk-c-fullmsg-illustration">
+          {props.image ? <FarmerIllustration image={props.image} mode={props.imageMode ?? 'farmer'} /> : null}
+        </div>
+        <div className="fcsdk-c-fullmsg-text">
+          {props.mainMessage ? <div className="fc-t-displaySmall fcsdk-c-fullmsg-main">{props.mainMessage}</div> : null}
+          {props.subtitle ? (
+            <div className={`${props.subtitleLarge ? 'fc-t-bodyLarge' : 'fc-t-bodyMedium'} fcsdk-c-fullmsg-sub`}>{props.subtitle}</div>
+          ) : null}
+        </div>
       </div>
-      <div className="fcsdk-fullmsg-body">
-        {props.illustrationNode !== undefined ? (
-          <div className="fcsdk-fullmsg-illustration fcsdk-fullmsg-illustration--node" aria-hidden>
-            {props.illustrationNode}
-          </div>
-        ) : (
-          <div className="fcsdk-fullmsg-illustration" aria-hidden>
-            {props.illustration}
-          </div>
-        )}
-        <div className="fcsdk-fullmsg-title">{withHeaderTitle ? props.mainMessage : props.title}</div>
-        {props.subtitle ? <div className="fcsdk-fullmsg-sub">{props.subtitle}</div> : null}
-      </div>
-      <div className="fcsdk-fullmsg-footer">
+      <div className="fcsdk-c-fullmsg-cta">
         <PrimaryButton
+          height={64}
+          className="fcsdk-c-btn-primary--forcelight"
           label={props.primaryLabel}
-          onClick={props.onPrimary}
-          light
-          disabled={props.primaryDisabled}
-          state={props.primaryLoading ? 'loading' : (props.primaryState ?? 'default')}
+          state={loading ? 'loading' : (props.primaryState ?? 'default')}
+          onClick={() => {
+            if (props.primaryInert || debouncing) return;
+            if (props.debounce) {
+              setDebouncing(true);
+              window.setTimeout(() => setDebouncing(false), 1500);
+            }
+            props.onPrimary();
+          }}
         />
-        {props.secondaryLabel && props.onSecondary ? <SecondaryButton label={props.secondaryLabel} onClick={props.onSecondary} /> : null}
+        {props.secondaryLabel && props.onSecondary ? (
+          <button type="button" className="fc-t-bodyMedium fcsdk-c-fullmsg-secondary" onClick={props.onSecondary}>
+            {props.secondaryLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );

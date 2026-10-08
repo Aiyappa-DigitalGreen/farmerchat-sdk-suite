@@ -169,6 +169,13 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
    * base URL — point the SDK at your own backend, or a local mock. Should end with `/`.
    */
   customBaseUrl?: string;
+  /**
+   * Web only. Where the SDK's bundled illustrations are served from — the `illustrations/` folder
+   * shipped in `dist/` (Android bundles them as APK assets). Must end with `/`. When unset the
+   * full-screen messages (sign up, errors, location) render without the farmer picture. The
+   * widget's script-tag build defaults it to its own folder.
+   */
+  assetBaseUrl?: string;
   /** Google Geolocation API key (language auto-detect fallback). */
   geoApiKey?: string;
   /** Overrides the built-in guest init API key. */
@@ -307,6 +314,7 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
 export interface ResolvedConfig {
   environment: FarmerChatEnvironment;
   baseUrl: string;
+  assetBaseUrl: string;
   geoApiKey: string;
   guestApiKey: string;
   appearance: AppearanceMode;
@@ -361,6 +369,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
   return {
     environment: config.environment,
     baseUrl,
+    assetBaseUrl: config.assetBaseUrl ?? '',
     geoApiKey: config.geoApiKey ?? '',
     guestApiKey: config.guestApiKey ?? DEFAULT_GUEST_API_KEY,
     appearance: config.appearance ?? 'auto',

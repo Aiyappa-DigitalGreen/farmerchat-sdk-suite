@@ -1,11 +1,13 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { copyIllustrations } from '../tools/copyIllustrations';
 
 /**
  * Script-tag build: one self-contained IIFE with React, ReactDOM and the SDK
  * bundled in, for pages that have no React and no bundler.
  */
 export default defineConfig({
+  plugins: [copyIllustrations(resolve(__dirname, 'dist'))],
   // Library mode does not replace this, and React reads it at load time; a plain
   // page has no `process`, so leaving it in throws before the widget boots.
   define: { 'process.env.NODE_ENV': '"production"' },

@@ -25,6 +25,7 @@
         environment: 'dev',
         customBaseUrl: q.get('base') || 'http://localhost:8898/',
         enableAgenticChat: q.get('agentic') !== '0',
+        assetBaseUrl: new URL('../dist/illustrations/', location.href).href,
         appearance: q.get('appearance') || 'day',
         // Same data as the Android device (India): its geoApiKey resolves IN, a headless browser cannot.
         defaultCountryCode: q.get('country') || 'IN',
