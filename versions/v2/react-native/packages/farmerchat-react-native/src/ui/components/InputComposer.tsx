@@ -7,15 +7,12 @@
  * `compact` (shorter button row + tighter internal padding once focused).
  *
  * Deviations from the Compose reference (all deliberate — see the RN report):
- *  - **No ambient "aura".** The Compose idle state strokes the field with a
- *    rotating multi-colour sweep gradient built from three stacked
- *    `drawPath` strokes. RN has no gradient/shader primitive in this package's
- *    dependency set (no react-native-svg, no expo-linear-gradient), so the
- *    effect is SKIPPED rather than approximated. `showAura` is not a prop.
- *  - **No placeholder shimmer.** `ShimmerText` sweeps a linear gradient
- *    through the glyphs; gradient-masked text needs a masked-view + gradient
- *    library. The rotating placeholder crossfades (400ms, same timing) in a
- *    static colour instead.
+ *  - **Aura drawn with Views.** The Compose idle state strokes the field with a
+ *    rotating multi-colour sweep gradient (7s flow, breathing intensity). Here it
+ *    is a {@link SweepBorder} ring (`./Gradients`) — the same colours, flow and
+ *    breathing — without the two faint bloom strokes under the core stroke.
+ *  - **Placeholder shimmer** uses `ShimmerText` from `./Gradients` (2250ms, as
+ *    Compose); its base colour switches with the field state instead of fading.
  *  - **Flow layout, not an overlay.** Compose renders the composer in a
  *    `fillMaxSize` Box over the screen. Because `FloatingFadeHeight` is 0.dp
  *    and the floating wrapper paints `fadeColor` opaquely, nothing behind the
@@ -43,6 +40,7 @@ import React, {
 } from 'react';
 import {
   Animated,
+  Easing,
   Image,
   Keyboard,
   Platform,
@@ -55,6 +53,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context';
 import { dayTheme, radius, typography } from '../theme';
 import { FcIcon } from './Icon';
+import { ShimmerText, SweepBorder, type SweepStop } from './Gradients';
 
 // ---------------------------------------------------------------------------
 // Composer geometry — single source of truth, values copied 1:1 from
@@ -107,6 +106,20 @@ const SLIDE_MS = 300;
 /** Single attached image per query — thumbnail metrics from Compose PhotoThumbnail. */
 const THUMBNAIL_SIZE = 64;
 const THUMBNAIL_GAP_BELOW = 10;
+
+/** InputComposer.kt aura: 2.4dp core stroke, one colour rotation per 7s. */
+const AURA_WIDTH = 2.4;
+/** InputComposer.kt `ComposerShimmerPeriodMs`: the placeholder shimmer's sweep period. */
+const COMPOSER_SHIMMER_PERIOD_MS = 2250;
+const AURA_FLOW_MS = 7000;
+/** InputComposer.kt `AuraColors`: green → cyan → green → yellow → green, evenly spaced. */
+const AURA_STOPS: readonly SweepStop[] = [
+  [0, '#00C950'],
+  [0.25, '#22D3EE'],
+  [0.5, '#00C950'],
+  [0.75, '#FFF947'],
+  [1, '#00C950'],
+];
 
 /**
  * Height of the composer bar at rest, measured from the bottom of the screen.
@@ -180,6 +193,11 @@ export interface InputComposerProps {
   showPhoto?: boolean;
   /** Mirrors config.enableVoice — the mic never replaces send when false. */
   showVoice?: boolean;
+  /**
+   * The idle "alive" aura around the field (Compose `showAura`, default true). Only drawn while
+   * the field is not focused.
+   */
+  showAura?: boolean;
 }
 
 /** Circular action button; always light-mode colours (Compose wraps these in LightContentColors). */
@@ -231,6 +249,7 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
     const visible = props.visible !== false;
     const showPhoto = props.showPhoto !== false;
     const showVoice = props.showVoice !== false;
+    const showAura = props.showAura !== false;
     const attachedImageUri = props.attachedImageUri ?? null;
     const hasContent = text.trim().length > 0 || attachedImageUri !== null;
 
@@ -359,10 +378,24 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
       inputRange: [0, 1],
       outputRange: [c.surfaceSecondary, c.surfaceReadingTertiary],
     });
-    const placeholderColor = fieldProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [c.foregroundPrimary, c.formPlaceholder],
-    });
+    // InputComposer.kt aura intensity: two gentle 2.4s breaths (1 ↔ 0.5), then one slow ebb to
+    // 0.04 and swell back over ~2.7s each way. Starts at 0.8.
+    const auraIntensity = useRef(new Animated.Value(0.8)).current;
+    const auraOn = showAura && !isFocused;
+    useEffect(() => {
+      if (!auraOn) return;
+      const to = (toValue: number, duration: number) =>
+        Animated.timing(auraIntensity, { toValue, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true });
+      const loop = Animated.loop(
+        Animated.sequence([to(1, 2400), to(0.5, 2400), to(1, 2400), to(0.5, 2400), to(0.04, 2800), to(1, 2600)]),
+      );
+      loop.start();
+      return () => loop.stop();
+    }, [auraOn, auraIntensity]);
+
+    // The shimmering placeholder needs a plain colour, so it switches at the field state rather
+    // than fading over FIELD_FADE_MS like the background.
+    const placeholderBaseColor = isFieldActive ? c.formPlaceholder : c.foregroundPrimary;
 
     const slide = useRef(new Animated.Value(visible ? 0 : SLIDE_OFF)).current;
     useEffect(() => {
@@ -460,15 +493,16 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                 />
               ) : null}
 
-              <Animated.View
-                style={[
-                  styles.field,
-                  {
-                    minHeight: animatedButtonRow,
-                    borderRadius: radius.lg,
-                    backgroundColor: fieldBackgroundColor,
-                  },
-                ]}
+              <SweepBorder
+                width={AURA_WIDTH}
+                radius={radius.lg}
+                rotateMs={AURA_FLOW_MS}
+                stops={AURA_STOPS}
+                visible={auraOn}
+                opacity={auraIntensity}
+                idleColor={fieldBackgroundColor}
+                style={[styles.fieldOuter, { minHeight: animatedButtonRow }]}
+                innerStyle={[styles.field, { backgroundColor: fieldBackgroundColor }]}
               >
                 {attachedImageUri !== null ? (
                   <View style={styles.thumbnailRow}>
@@ -501,29 +535,35 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                     onPress={props.onTextFieldTap}
                     style={styles.launcherTap}
                   >
-                    <Animated.Text
-                      numberOfLines={1}
-                      style={[
-                        typography.bodyMedium,
-                        { color: placeholderColor, opacity: placeholderOpacity },
-                      ]}
-                    >
-                      {displayedPlaceholder}
-                    </Animated.Text>
+                    <Animated.View style={{ opacity: placeholderOpacity }}>
+                      <ShimmerText
+                        key={displayedPlaceholder}
+                        text={displayedPlaceholder}
+                        numberOfLines={1}
+                        style={typography.bodyMedium}
+                        baseColor={placeholderBaseColor}
+                        highlightColor={c.borderActive}
+                        durationMs={COMPOSER_SHIMMER_PERIOD_MS}
+                      />
+                    </Animated.View>
                   </Pressable>
                 ) : (
                   <View style={styles.inputWrap}>
                     {text.length === 0 ? (
-                      <Animated.Text
-                        numberOfLines={1}
-                        style={[
-                          typography.bodyMedium,
-                          styles.placeholderOverlay,
-                          { color: placeholderColor, opacity: placeholderOpacity },
-                        ]}
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[styles.placeholderOverlay, { opacity: placeholderOpacity }]}
                       >
-                        {displayedPlaceholder}
-                      </Animated.Text>
+                        <ShimmerText
+                          key={displayedPlaceholder}
+                          text={displayedPlaceholder}
+                          numberOfLines={1}
+                          style={typography.bodyMedium}
+                          baseColor={placeholderBaseColor}
+                          highlightColor={c.borderActive}
+                          durationMs={COMPOSER_SHIMMER_PERIOD_MS}
+                        />
+                      </Animated.View>
                     ) : null}
                     <TextInput
                       ref={inputRef}
@@ -553,7 +593,7 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                     />
                   </View>
                 )}
-              </Animated.View>
+              </SweepBorder>
 
               {showTrailingButton ? (
                 <CircleButton
@@ -578,9 +618,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 6,
   },
+  fieldOuter: {
+    flex: 1,
+  },
   field: {
     flex: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 14 - AURA_WIDTH,
     justifyContent: 'center',
   },
   inputWrap: {

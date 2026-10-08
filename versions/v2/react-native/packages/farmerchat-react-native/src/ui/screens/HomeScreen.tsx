@@ -835,9 +835,7 @@ export function HomeScreen(props: {
           mic|send) replacing BOTH the sticky PrimaryInputButtons and the text overlay. It
           consumes the nav + IME insets itself, so it takes no extra padding here.
 
-          SDK deviation from Compose: no idle "aura" — Compose strokes the idle field with a
-          rotating multi-colour sweep gradient, and this package has no gradient/shader
-          primitive (see InputComposer's header), so `showAura` does not exist as a prop. */}
+          The idle "aura" (showAura, default on) is drawn by InputComposer itself. */}
       {isComposerUi ? (
         <InputComposer
           ref={composerRef}

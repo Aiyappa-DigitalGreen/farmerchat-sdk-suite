@@ -71,6 +71,7 @@ import { LocationChatBubble } from '../components/LocationChatBubble';
 import { useShareCard } from '../components/ShareCard';
 import { stopAllVoiceClips, VoiceClip } from '../components/VoiceClip';
 import { FcIcon } from '../components/Icon';
+import { SweepBorder } from '../components/Gradients';
 import type { ChatRouteParams } from '../navigation/types';
 import { Green500, radius, spacing, typography } from '../theme';
 
@@ -1036,22 +1037,10 @@ function AiBubble(props: {
 }
 
 /**
- * `ChatResponseActions.kt` sweep border (`brand.accentSweepBorder`): right = cyan, bottom = green,
- * left = yellow, top = green (Compose ColorPrimitives Cyan400 / Green500 / Yellow300).
- */
-const ACCENT_SWEEP_GREEN = Green500;
-const ACCENT_SWEEP_CYAN = '#22D3EE';
-const ACCENT_SWEEP_YELLOW = '#FFF947';
-
-/**
  * Light (agentic) action pill under the last answer — Compose `ActionButton(radius = Rounded,
  * background = surfaceReadingSecondary)` for Share and `ListenButton(light = true)` for Listen:
- * 42dp tall, foregroundPrimary 23dp icon + labelMedium.
- *
- * SDK deviation (deliberate): Share's `accentSweepBorder` is a `Brush.sweepGradient`. This
- * package has no gradient primitive (no react-native-svg / expo-linear-gradient — the same
- * constraint documented in InputComposer's header), so the 3dp border is drawn with RN's
- * per-side border colours at the brush's four cardinal stops instead of a continuous blend.
+ * 42dp tall, foregroundPrimary 23dp icon + labelMedium. Share carries the 3dp
+ * `brand.accentSweepBorder` sweep gradient ({@link SweepBorder}).
  */
 function ActionChip(props: {
   icon: React.ComponentProps<typeof FcIcon>['name'];
@@ -1063,18 +1052,37 @@ function ActionChip(props: {
 }): React.ReactElement {
   const theme = useTheme();
   const c = theme.content;
-  const border: ViewStyle = props.accentBorder
-    ? {
-        borderWidth: 3,
-        borderTopColor: ACCENT_SWEEP_GREEN,
-        borderRightColor: ACCENT_SWEEP_CYAN,
-        borderBottomColor: ACCENT_SWEEP_GREEN,
-        borderLeftColor: ACCENT_SWEEP_YELLOW,
-        paddingLeft: 12 - 3,
-        paddingRight: 16 - 3,
-        gap: 10,
-      }
-    : { paddingHorizontal: 12, gap: 6 };
+  const content = (
+    <>
+      {props.isLoading ? (
+        <ActivityIndicator size="small" color={c.foregroundPrimary} />
+      ) : (
+        <FcIcon name={props.icon} size={23} tint={c.foregroundPrimary} />
+      )}
+      <Text style={[typography.labelMedium, { color: c.foregroundPrimary }]}>{props.text}</Text>
+    </>
+  );
+  if (props.accentBorder) {
+    return (
+      <Pressable
+        onPress={props.onPress}
+        disabled={props.isLoading === true}
+        accessibilityRole="button"
+        style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
+      >
+        <SweepBorder
+          width={ACCENT_BORDER_WIDTH}
+          radius={ACTION_CHIP_HEIGHT / 2}
+          innerStyle={[
+            styles.actionChipInner,
+            { backgroundColor: c.surfaceReadingSecondary, paddingLeft: 12 - ACCENT_BORDER_WIDTH, paddingRight: 16 - ACCENT_BORDER_WIDTH },
+          ]}
+        >
+          {content}
+        </SweepBorder>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       onPress={props.onPress}
@@ -1082,19 +1090,17 @@ function ActionChip(props: {
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.actionChip,
-        border,
-        { backgroundColor: c.surfaceReadingSecondary, opacity: pressed ? 0.75 : 1 },
+        { paddingHorizontal: 12, gap: 6, backgroundColor: c.surfaceReadingSecondary, opacity: pressed ? 0.75 : 1 },
       ]}
     >
-      {props.isLoading ? (
-        <ActivityIndicator size="small" color={c.foregroundPrimary} />
-      ) : (
-        <FcIcon name={props.icon} size={23} tint={c.foregroundPrimary} />
-      )}
-      <Text style={[typography.labelMedium, { color: c.foregroundPrimary }]}>{props.text}</Text>
+      {content}
     </Pressable>
   );
 }
+
+/** ActionButton.kt: 42dp pill; the accent border is 3dp of it. */
+const ACTION_CHIP_HEIGHT = 42;
+const ACCENT_BORDER_WIDTH = 3;
 
 /** Fade + slight rise, used for the reveal-gated action row and follow-ups. */
 /**
@@ -1229,8 +1235,14 @@ const styles = StyleSheet.create({
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 42,
+    height: ACTION_CHIP_HEIGHT,
     borderRadius: radius.rounded,
+  },
+  actionChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: ACTION_CHIP_HEIGHT - 2 * ACCENT_BORDER_WIDTH,
   },
   // ChatResponseActions.kt: info icon + "AI may be wrong" note, 6dp apart; the 12dp gap above the
   // pills is aiActions' own gap.

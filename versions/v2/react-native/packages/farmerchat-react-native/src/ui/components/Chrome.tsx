@@ -21,6 +21,7 @@ import { useTheme } from '../context';
 import { brandLogo, radius, typography } from '../theme';
 import { ActionButton, WeatherButton, type WeatherButtonState } from './Buttons';
 import { FcIcon } from './Icon';
+import { ShimmerText } from './Gradients';
 import type { IconName } from '../assets';
 
 // ---------------------------------------------------------------------------
@@ -165,9 +166,15 @@ export function LogoSpinner(props: {
     <View style={styles.spinnerRow}>
       <LogoWithSpinner spinnerSize={40} logoSize={23} />
       {label ? (
-        <Text style={[typography.bodyMedium, { color: theme.content.foregroundPrimary }]}>
-          {label}
-        </Text>
+        // LogoSpinnerHorizontal.kt LabelTextMedium: a labelMedium ShimmerText in
+        // foregroundPrimary, highlight = ShimmerText's default borderActive.
+        <ShimmerText
+          key={label}
+          text={label}
+          style={typography.labelMedium}
+          baseColor={theme.content.foregroundPrimary}
+          highlightColor={theme.content.borderActive}
+        />
       ) : null}
     </View>
   );

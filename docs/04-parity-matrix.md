@@ -7958,9 +7958,26 @@ Reported from the widget: the chat loader "doesn't change text as per the API" a
 | RN v2 | tsc + tests. Not run on a device |
 
 **Gaps left (UNVERIFIED on device everywhere except web):**
-- RN: no shimmer on the loading label and the Share border is 4 solid sides, because RN has no gradient primitive (no svg/linear-gradient peer).
+- ~~RN: no shimmer, 4-solid-side Share border~~ — closed the same day, see below.
 - All platforms: no attention wobble on Read full advice. Listen is hidden when TTS is off; the app shows it disabled. The placeholder is not hidden while a voice question is still transcribing (app `isTranscribing`).
 - Compose: the follow-up header keeps the accent dot + `titleSmall` secondary; the app uses `titleMedium` primary. The Read-full predicate is `== null` vs the app's `!= message.id`.
 - Views: the pre-thread loader is still centred rather than under the question; `fc_item_suggested_question.xml` is now unused.
 - SwiftUI: chat no longer offers Save (no Save in the agentic row); `FCThinkingIndicator` was removed from the public surface. iOS Listen now needs a server `messageId`, the same rule as web.
 - UIKit still has no follow-up title row or fade.
+
+### RN v2 gradients without a gradient library (same day)
+
+RN has no gradient primitive, and even react-native-svg cannot draw a sweep (conic) gradient. So `src/ui/components/Gradients.tsx` builds the app's effects from plain Views, with no new dependency:
+
+| App effect | RN now | Was |
+|---|---|---|
+| `brand.accentSweepBorder` on Share (3dp sweep) | `SweepBorder`: 72 coloured spokes clipped to the pill, content inset 3dp, so the corners are truly rounded | one solid colour per side |
+| `InputComposer` aura (2.4dp sweep, 7s rotation, breathing 1↔0.5, ebb to 0.04) | `SweepBorder` with `rotateMs` + the same intensity loop; new `showAura` prop (default true, as in Compose); hidden while focused | skipped |
+| `ShimmerText` on the horizontal LogoSpinner label (labelMedium, primary → borderActive, 1200ms) | `ShimmerText`: highlight copy in 3 nested sliding clip windows (soft band edges); label now labelMedium | static bodyMedium |
+| `ShimmerText` on the composer placeholder (2250ms) | same `ShimmerText` | static colour |
+
+Reduce Motion stops the rotation and the shimmer.
+
+Verified with `tsc` + package tests, and by rendering `Gradients.tsx` through react-native-web in headless Chrome: sweep orientation (cyan right, green bottom, yellow left), rounded pill ring, aura rotating between frames, shimmer band passing. **Not run on a device**; Expo Go on the emulator was not set up this pass.
+
+Remaining deltas: the aura has no faint bloom strokes; the placeholder's base colour switches rather than fading over 220ms; there is no low-RAM fallback (the app shows static text on low-RAM devices).
