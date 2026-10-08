@@ -106,9 +106,15 @@ http
       up.pipe(res);
     });
     upstream.on('error', (e) => {
+      console.log('upstream error', target.pathname, e.code || e.message);
+      // Mid-stream drop (e.g. a reset during an SSE answer): headers are already out, so just
+      // cut the response — writing a 502 now would throw and kill the proxy.
+      if (res.headersSent) return res.destroy();
       res.writeHead(502, cors(req));
       res.end(String(e));
     });
+    // The browser gave up (tab closed, request aborted): stop the upstream call too.
+    res.on('close', () => { if (!res.writableEnded) upstream.destroy(); });
     req.pipe(upstream);
   })
   .listen(PORT, () => console.log(`stage proxy → ${UPSTREAM.href} on http://localhost:${PORT}/`));
