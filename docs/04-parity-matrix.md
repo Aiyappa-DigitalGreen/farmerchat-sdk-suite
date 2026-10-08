@@ -7875,3 +7875,23 @@ Per-platform differences (honest ledger):
   not repeated. The v2 terms-of-use check is not re-run for the new guest.
 - Delivery-path tests (signal → Home reload / Chat reset) exist only as the web Chrome run; native
   platforms are unit-tested at the authenticator and build-verified above it.
+
+## Widget logic review (web v2 widget + SDK, 2026-10-08)
+
+Review of `versions/v2/web/widget` against the SDK it hosts. Fixed:
+
+| Issue | Fix | Verified (Chrome, stage) |
+|---|---|---|
+| Closing the panel left the microphone recording (no time limit) and TTS / voice clips playing — the panel only hides | SDK: page-level media-suspend signal (`core/mediaSuspend.ts`) + web-only `<FarmerChat active>` prop; recorder cancels (discards, never sends; also a start still waiting on the permission prompt), TTS and voice clips pause. Widget passes `active={open}` | stubbed `getUserMedia`: track `live` → `ended` on close |
+| Landscape phones got a ~300 px floating panel; `layout.ts` still carried a `TODO(you)` stub | fullscreen when narrower than panel + 80 px **or** shorter than 560 px (`FULLSCREEN_MAX_HEIGHT`) | rule checked on 390×844, 844×390, 1440×900, 768×1024, 1366×550, 1280×560 |
+| Esc closed the whole widget, and swallowed the event so the Terms dialog's own Esc never fired | Esc dismisses the topmost SDK layer (open drawer, bottom sheet, terms dialog — via its scrim) first; only with none open closes the panel; the location-permission modal is left to its buttons | real key events: drawer closes, widget stays; second Esc closes it, focus back on launcher |
+| Launcher painted unstyled for one frame (styles injected in `useEffect`) | `useLayoutEffect` | styles present when the launcher is inserted |
+| Scrolling past the end of an SDK list scrolled the host page | `overscroll-behavior: contain` on the panel and its descendants (host page untouched) | computed style |
+| `hideLauncher` + floating panel had no close control | panel close bar shown whenever the launcher is hidden | bar visible, closes the panel |
+| `defaultOpen` took focus from the host page on load | focus moves into the panel only on user-initiated opens | — (code only) |
+| After `shutdown()`, SDK calls (`.sdk.openChat` …) went to the dead root and were lost | SDK clears its controller when the root unmounts, so calls queue for the next root | `.sdk.openChat(q)` after shutdown → boot → question delivered |
+
+Not changed: a React host passing an inline `config={{…}}` rebuilds the session on every render
+(documented in the widget README). iOS Safari can still scroll the page behind a fullscreen panel
+when the touch starts on a non-scrolling area — fixing that needs host-page styling, which the
+web rules forbid. Verified: `tsc --noEmit` + builds for the SDK and the widget; auth tests 6/6.

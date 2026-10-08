@@ -102,6 +102,7 @@ Expose the journey/chat as a host-placeable component, in addition to `launch()`
 - iOS SwiftUI: `FarmerChatInlineView()`; UIKit: `FarmerChatViewController` usable as a child VC.
 - RN: `<FarmerChatInlineView style={...}/>` (fills its container, not the screen).
 - Web: `<FarmerChat inline/>` already fills its container — document + ensure no full-viewport assumptions.
+- Web (v2, 2026-10-08): `active={false}` on `<FarmerChat>` tells a mounted-but-hidden SDK (e.g. a collapsed widget panel) to cancel voice recording and pause playback. Web-only: native hosts own their view lifecycle.
 
 ### C2. Host identity injection (`authMode`)
 `FarmerChatConfig.authMode = SDK_OTP` (default) | `HOST_TOKEN`.

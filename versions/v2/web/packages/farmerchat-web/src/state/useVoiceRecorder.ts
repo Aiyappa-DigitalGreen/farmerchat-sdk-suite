@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { onSuspendMedia } from '../core/mediaSuspend';
 import { blobToBase64 } from './helpers';
 
 export type VoiceRecorderStatus = 'idle' | 'requesting' | 'recording' | 'processing' | 'error' | 'denied';
@@ -60,6 +61,8 @@ export function useVoiceRecorder(): [VoiceRecorderState, VoiceRecorderActions] {
   const startedAtRef = useRef(0);
   const formatRef = useRef('ogg');
   const tickRef = useRef<number | null>(null);
+  /** Bumped by cancel(): a start() still awaiting getUserMedia must not begin recording after it. */
+  const startSeqRef = useRef(0);
 
   const cleanupStream = useCallback(() => {
     if (tickRef.current !== null) {
@@ -87,10 +90,17 @@ export function useVoiceRecorder(): [VoiceRecorderState, VoiceRecorderActions] {
       return;
     }
     setState({ status: 'requesting', elapsedMs: 0, errorMessage: null });
+    const seq = ++startSeqRef.current;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (seq !== startSeqRef.current) {
+        // Cancelled (or the SDK was hidden) while the permission prompt was up.
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
     } catch (err) {
+      if (seq !== startSeqRef.current) return;
       const denied = err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
       setState({
         status: denied ? 'denied' : 'error',
@@ -146,6 +156,7 @@ export function useVoiceRecorder(): [VoiceRecorderState, VoiceRecorderActions] {
   }, [cleanupStream]);
 
   const cancel = useCallback(() => {
+    startSeqRef.current += 1;
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.onstop = null;
@@ -154,6 +165,9 @@ export function useVoiceRecorder(): [VoiceRecorderState, VoiceRecorderActions] {
     cleanupStream();
     setState({ status: 'idle', elapsedMs: 0, errorMessage: null });
   }, [cleanupStream]);
+
+  // Hidden SDK (widget closed): never keep the microphone open.
+  useEffect(() => onSuspendMedia(cancel), [cancel]);
 
   return [state, { start, stop, cancel, isSupported }];
 }

@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { onSuspendMedia } from '../core/mediaSuspend';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
 import type {
@@ -1148,6 +1149,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
     const retry = lastRequestRef.current;
     if (retry) await retry();
   }, []);
+
+  // Hidden SDK (widget closed): stop reading the answer aloud.
+  useEffect(() => onSuspendMedia(() => audioRef.current?.pause()), []);
 
   const clearError = useCallback(() => {
     patch({ errorMessage: null, failedMessageId: null });

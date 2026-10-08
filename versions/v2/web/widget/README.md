@@ -91,8 +91,8 @@ that; see docs/05.
 | `launcherIconColor` | `config.fabContentColor` → `theme.colors.onBrand` → white | |
 | `launcherLabel` | `config.fabLabel` | adds text beside the icon (extended launcher) |
 | `launcherIcon` | `theme.logo` → chat bubble | React node (ESM only) |
-| `hideLauncher` | `false` | drive the widget from your own button with the API |
-| `defaultOpen` | `false` | |
+| `hideLauncher` | `false` | drive the widget from your own button with the API; the panel then shows its own close bar |
+| `defaultOpen` | `false` | opens on load without taking focus from the page |
 | `preload` | `false` | mount the SDK on page load instead of first open (saves the splash, costs guest-init requests up front) |
 | `zIndex` | `2147483000` | |
 | `onOpen` / `onClose` | — | widget state callbacks. These are **not** analytics events; the SDK's event names are unchanged |
@@ -102,12 +102,18 @@ that; see docs/05.
 - **Closing hides the panel; it does not unmount it.** The conversation, scroll position and
   screen stack are there when the panel reopens. (`FarmerChatFab` unmounts, so it replays the
   splash every time.) The SDK mounts lazily on first open unless `preload` is set.
+- **Closing stops live media.** The SDK is rendered with `active={open}`: on close a voice
+  recording in progress is cancelled (discarded, never sent) and any answer being read aloud or
+  voice clip playing is paused. Nothing resumes on its own.
 - **Layout.** See below.
 - **Isolation.** The widget's classes are all `fcw-` prefixed and the SDK's are `.fcsdk-`. Neither
   styles the host page. The panel is the containing block (`transform`) for anything positioned
   inside it, so SDK overlays such as the drawer, modals and location prompt stay inside the panel.
-- **Keyboard and accessibility.** Esc closes the panel. Focus moves into the panel on open and
-  back to the launcher on close. The launcher carries `aria-expanded` / `aria-controls`.
+- **Keyboard and accessibility.** Esc first dismisses the topmost SDK layer (drawer, bottom sheet,
+  terms dialog); with none open it closes the panel. The location-permission modal is left to its
+  own buttons. Focus moves into the panel when the user opens it and back to the launcher on close.
+- **Scroll containment.** Scrolling past the end of an SDK list does not scroll the host page
+  (`overscroll-behavior: contain`, scoped to the panel). The launcher carries `aria-expanded` / `aria-controls`.
 - **Deep links survive re-boots.** `open(question)` hands the question to the SDK in an effect
   after the SDK root mounts, so it is not lost after a `shutdown()` → `boot()` cycle.
 - **One widget per page.** The SDK holds page-level singleton state.
@@ -117,13 +123,13 @@ that; see docs/05.
 `src/layout.ts → shouldUseFullscreen(viewportWidth, viewportHeight, panelWidth, panelHeight)`
 decides when the floating panel becomes a full-screen sheet. It runs on mount and on every
 resize or orientation change. In fullscreen the launcher hides, since it would cover the
-composer, and a slim bar above the SDK carries the close chevron. The shipped policy is
-width-only: fullscreen when the viewport is narrower than the panel plus 80 px.
+composer, and a slim bar above the SDK carries the close chevron. The shipped policy:
+fullscreen when the viewport is narrower than the panel plus 80 px, **or** shorter than
+560 px (`FULLSCREEN_MAX_HEIGHT`) — so a landscape phone gets the full sheet instead of a
+~300 px floating panel.
 
 Things to weigh when tuning it:
 
-- **Width only, or height too?** A landscape phone (e.g. 844×390) is wide enough for the panel
-  but too short. The panel's `max-height` clamp then squeezes the SDK into about 300 px.
 - **Tablets near the cutoff.** A 768 px portrait tablet fits a 400 px panel comfortably, but a
   floating panel over a tablet page can feel odd. Intercom keeps it floating.
 - **Slack.** The `+ 80` leaves room for the side paddings and some page behind the panel. Less

@@ -12,7 +12,8 @@
  *   FarmerChat.setAnalyticsListener(listener)
  */
 
-import { createElement, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
+import { suspendMedia } from './core/mediaSuspend';
 import { createRoot, Root } from 'react-dom/client';
 import type { FarmerChatConfig, FarmerChatEventListener } from './core/config';
 import { createServices, SdkServices } from './core/services';
@@ -100,10 +101,27 @@ export interface FarmerChatProps {
   config?: FarmerChatConfig;
   /** C1 — inline embedding: fill the host container (no full-viewport assumptions). */
   inline?: boolean;
+  /**
+   * Web only. `false` while the host keeps the SDK mounted but hidden (e.g. a collapsed widget
+   * panel): on every change to `false` the microphone recording is cancelled and audio playback
+   * pauses. Navigation, chat state and in-flight answers are untouched. Default `true`.
+   */
+  active?: boolean;
 }
 
 function FarmerChatComponent(props: FarmerChatProps): React.ReactElement {
   const services = useMemo(() => getOrCreateServices(props.config), [props.config]);
+  useEffect(() => {
+    if (props.active === false) suspendMedia();
+  }, [props.active]);
+  // An unmounted root must not stay the command target: later calls (openChat / sendQuestion …)
+  // queue for the next root instead of vanishing into a dead one (e.g. widget shutdown → boot).
+  useEffect(
+    () => () => {
+      activeController = null;
+    },
+    [],
+  );
   return createElement(FarmerChatRoot, { services, onController: handleController, inline: props.inline });
 }
 

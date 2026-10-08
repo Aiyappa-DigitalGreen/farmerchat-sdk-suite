@@ -64,6 +64,11 @@ const css = `
   height: 40px; padding: 0 6px; background: var(--fcw-launcher-bg); color: var(--fcw-launcher-fg);
 }
 .fcw-panel--fullscreen .fcw-panel-bar { display: flex; }
+/* hideLauncher: the floating panel has no launcher to close from either, so it gets the bar too. */
+.fcw-panel--barred .fcw-panel-bar { display: flex; }
+/* Scrolling past the end of an SDK list must not scroll the host page behind the panel
+   (scoped to the panel; the host page itself is never styled). */
+.fcw-panel, .fcw-panel * { overscroll-behavior: contain; }
 .fcw-panel-close {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; padding: 0 10px; border: none; border-radius: 999px; cursor: pointer;

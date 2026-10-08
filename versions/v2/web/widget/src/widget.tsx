@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ReactElement, ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactElement, ReactNode } from 'react';
 import { FarmerChat } from '@digitalgreenorg/farmerchat-web';
 import type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-web';
 import { ensureWidgetStyles } from './styles';
@@ -192,7 +192,8 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
   const callbacksRef = useRef(props);
   callbacksRef.current = props;
 
-  useEffect(() => ensureWidgetStyles(), []);
+  // Before the first paint, so the launcher never shows up as an unstyled in-flow button.
+  useLayoutEffect(() => ensureWidgetStyles(), []);
 
   const doOpen = useCallback((question?: string) => {
     setMounted(true);
@@ -237,10 +238,38 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
     };
   }, [doOpen, doClose]);
 
-  // Move focus into the panel when it opens so keyboard users land in it.
+  // Move focus into the panel when the USER opens it, so keyboard users land in it. Not for
+  // `defaultOpen`: a widget must not take focus from the host page on load.
+  const skipInitialFocus = useRef(defaultOpen);
   useEffect(() => {
-    if (open) panelRef.current?.focus({ preventScroll: true });
+    if (!open) return;
+    if (skipInitialFocus.current) {
+      skipInitialFocus.current = false;
+      return;
+    }
+    panelRef.current?.focus({ preventScroll: true });
   }, [open]);
+
+  // Escape dismisses the topmost SDK layer first (drawer, sheet, dialog — each closes on a scrim
+  // tap, which is what Escape stands in for); only with none open does it collapse the panel.
+  // The location-permission modal has no dismissing scrim and is left to its own buttons.
+  const onPanelKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.stopPropagation();
+      const scrims = panelRef.current?.querySelectorAll<HTMLElement>(
+        // The drawer stays mounted when shut; only its open host counts.
+        '.fcsdk-c-drawer-host--open .fcsdk-c-drawer-scrim, .fcsdk-c-sheet-scrim, .fcsdk-modal-scrim',
+      );
+      const top = scrims && scrims.length ? scrims[scrims.length - 1] : null;
+      if (top) {
+        if (!top.classList.contains('fcsdk-location-layer')) top.click();
+        return;
+      }
+      doClose();
+    },
+    [doClose],
+  );
 
   const side = position === 'bottom-left' ? 'left' : 'right';
   const colors = config.theme?.colors;
@@ -283,13 +312,9 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
           `fcw-panel--${side}`,
           open ? '' : 'fcw-panel--closed',
           fullscreen ? 'fcw-panel--fullscreen' : '',
+          hideLauncher ? 'fcw-panel--barred' : '',
         ].filter(Boolean).join(' ')}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            doClose();
-          }
-        }}
+        onKeyDown={onPanelKeyDown}
       >
         <div className="fcw-panel-bar">
           <button type="button" className="fcw-panel-close" aria-label="Close FarmerChat" onClick={doClose}>
@@ -298,7 +323,9 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
         </div>
         <div className="fcw-panel-body">{/* No config prop: the root reuses the services `ensureSdk` built. Keyed by
             generation so a genuinely new config remounts onto the new services. */}
-          {mounted ? <FarmerChat key={sdkGeneration} inline /> : null}</div>
+          {/* active: a collapsed panel stays mounted, so the SDK is told to cancel any voice
+              recording and pause playback — never a live microphone behind a closed widget. */}
+          {mounted ? <FarmerChat key={sdkGeneration} inline active={open} /> : null}</div>
       </div>
 
       <button

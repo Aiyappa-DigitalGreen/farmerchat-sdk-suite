@@ -16,7 +16,7 @@ import { FarmerChatWidget, withWidget, currentWidget, ensureSdk, type FarmerChat
 
 export { FarmerChatWidget };
 export type { FarmerChatWidgetProps, WidgetHandle } from './widget';
-export { shouldUseFullscreen } from './layout';
+export { shouldUseFullscreen, FULLSCREEN_MAX_HEIGHT } from './layout';
 export { FARMERCHAT_WIDGET_VERSION } from './version';
 export type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-web';
 

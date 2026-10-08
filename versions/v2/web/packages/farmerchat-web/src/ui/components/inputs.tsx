@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { onSuspendMedia } from '../../core/mediaSuspend';
 import { FcIcon } from './FcIcon';
 import { useLabel, useSdk } from '../context';
 import { useVoiceRecorder, VoiceRecording } from '../../state/useVoiceRecorder';
@@ -357,7 +358,10 @@ export function VoiceClip(props: { src: string }) {
       if (audio.duration && Number.isFinite(audio.duration)) setProgress(audio.currentTime / audio.duration);
     };
     audioRef.current = audio;
+    // Hidden SDK (widget closed): stop playback.
+    const offSuspend = onSuspendMedia(() => audio.pause());
     return () => {
+      offSuspend();
       audio.pause();
       audioRef.current = null;
     };
