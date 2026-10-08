@@ -5,67 +5,253 @@
  */
 
 import type { AppearanceMode, FarmerChatTheme, FarmerChatThemeColors } from '../core/config';
+import { robotoFontFaces } from './fonts';
 
 export const STYLE_ELEMENT_ID = 'farmerchat-web-styles';
 
 const css = `
+/* ---------------------------------------------------------------------------
+   Tokens — a faithful port of the compose module's theme (Color.kt, Type.kt,
+   Shapes.kt), which is itself a port of the app. --fc-c-* are the compose
+   semantic roles; resolveThemeVars() overlays a host theme onto them exactly as
+   HostTheme.kt does. The older --fc-* names are aliases kept for the CSS that
+   still uses them.
+   --------------------------------------------------------------------------- */
 .fcsdk-root {
-  --fc-brand: #146152;
-  --fc-brand-deep: #0e4a3e;
-  --fc-brand-bright: #1b7a67;
-  --fc-brand-soft: #e3f0ec;
-  --fc-accent: #f2c94c;
-  --fc-danger: #c94f3d;
-  --fc-radius: 14px;
-  --fc-radius-lg: 22px;
-  --fc-radius-btn: 999px;
-  --fc-radius-input: 12px;
-  --fc-radius-bubble: 20px;
-  --fc-font-scale: 1;
-  --fc-font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-}
-.fcsdk-root[data-fc-theme="day"] {
-  --fc-bg: #ffffff;
-  --fc-surface: #f4f7f5;
-  --fc-surface-reading: #f7f5ef;
-  --fc-card: #ffffff;
-  --fc-text: #1c2b26;
-  --fc-text-muted: #5b6f68;
-  --fc-border: #dbe5e1;
-  --fc-bubble-user: #146152;
-  --fc-bubble-user-text: #ffffff;
-  --fc-bubble-ai: #ffffff;
-  --fc-chip: #e3f0ec;
-  --fc-chip-text: #146152;
-  --fc-appbar: #146152;
-  /* Accent gradient stops for the Share chip's sweep border (app ColorPrimitives.kt @ bda80659).
-     Cyan and yellow are fixed design primitives; the green stop follows the host brand, exactly
-     as resolveBrandColors does on Android. */
+  /* BrandColors (BrandSemanticColors) — same in day and night */
+  --fc-c-brand-surface-primary: #008236;   /* Green700 */
+  --fc-c-brand-surface-secondary: #08361B; /* Green800 */
+  --fc-c-brand-surface-tertiary: #032E15;  /* Green950 */
+  --fc-c-brand-fg-primary: #FFFFFF;
+  --fc-c-brand-fg-secondary: #00C950;      /* Green500 */
+  --fc-c-feedback-success: #00C950;
+  --fc-c-feedback-fail: #E5533D;           /* Red500 */
+  --fc-accent-gradient-green: #00C950;
   --fc-accent-gradient-cyan: #22D3EE;
   --fc-accent-gradient-yellow: #FFF947;
-  --fc-accent-gradient-green: #00C950;
-  --fc-appbar-text: #ffffff;
-  --fc-overlay: rgba(12, 28, 23, 0.55);
-  --fc-skeleton: #e4eae7;
+
+  /* Radius tokens (Shapes.kt) + FcShapes defaults */
+  --fc-r-rounded: 999px; --fc-r-xxl: 24px; --fc-r-xl: 20px; --fc-r-lg: 16px; --fc-r-md: 12px; --fc-r-sm: 8px;
+  --fc-radius: 12px;
+  --fc-radius-lg: 24px;     /* FcShapes.card */
+  --fc-radius-btn: 999px;   /* FcShapes.button */
+  --fc-radius-input: 12px;  /* FcShapes.input */
+  --fc-radius-bubble: 20px;
+
+  /* Type (Type.kt): FontFamily.SansSerif = Roboto on Android; bundled as "FC Roboto". */
+  --fc-font-scale: 1;
+  --fc-font: "FC Roboto", Roboto, "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(42px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displayMedium: 700 calc(28px * var(--fc-font-scale)) / calc(36px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(32px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleLarge: 700 calc(22px * var(--fc-font-scale)) / calc(28px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleMedium: 700 calc(18px * var(--fc-font-scale)) / calc(24px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleSmall: 700 calc(16px * var(--fc-font-scale)) / calc(22px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyLarge: 400 calc(19px * var(--fc-font-scale)) / calc(27px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyMedium: 400 calc(17px * var(--fc-font-scale)) / calc(25px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodySmall: 400 calc(15px * var(--fc-font-scale)) / calc(22px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-labelLarge: 600 calc(17px * var(--fc-font-scale)) / calc(22px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-labelMedium: 600 calc(15px * var(--fc-font-scale)) / calc(20px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-labelSmall: 600 calc(13px * var(--fc-font-scale)) / calc(18px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-caption: 400 calc(13px * var(--fc-font-scale)) / calc(18px * var(--fc-font-scale)) var(--fc-font);
+}
+.fcsdk-root[data-fc-script="deva"] {
+  --fc-tl-displayLarge: 48px;
+  --fc-tl-displaySmall: 34px;
+  --fc-tl-titleMedium: 26px;
+  --fc-tl-titleSmall: 24px;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(48px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(34px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleMedium: 700 calc(18px * var(--fc-font-scale)) / calc(26px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleSmall: 700 calc(16px * var(--fc-font-scale)) / calc(24px * var(--fc-font-scale)) var(--fc-font);
+}
+.fcsdk-root[data-fc-script="ethi"] {
+  --fc-tl-displayLarge: 46px;
+  --fc-tl-displayMedium: 34px;
+  --fc-tl-displaySmall: 30px;
+  --fc-tl-titleLarge: 30px;
+  --fc-tl-titleSmall: 20px;
+  --fc-tl-bodyLarge: 28px;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(46px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displayMedium: 700 calc(28px * var(--fc-font-scale)) / calc(34px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(30px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleLarge: 700 calc(22px * var(--fc-font-scale)) / calc(30px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleSmall: 700 calc(16px * var(--fc-font-scale)) / calc(20px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyLarge: 400 calc(19px * var(--fc-font-scale)) / calc(28px * var(--fc-font-scale)) var(--fc-font);
+}
+.fcsdk-root[data-fc-script="knda"] {
+  --fc-tl-displayLarge: 48px;
+  --fc-tl-displayMedium: 40px;
+  --fc-tl-displaySmall: 34px;
+  --fc-tl-titleLarge: 32px;
+  --fc-tl-titleMedium: 26px;
+  --fc-tl-titleSmall: 24px;
+  --fc-tl-bodyLarge: 28px;
+  --fc-tl-bodyMedium: 26px;
+  --fc-tl-bodySmall: 23px;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(48px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displayMedium: 700 calc(28px * var(--fc-font-scale)) / calc(40px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(34px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleLarge: 700 calc(22px * var(--fc-font-scale)) / calc(32px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleMedium: 700 calc(18px * var(--fc-font-scale)) / calc(26px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleSmall: 700 calc(16px * var(--fc-font-scale)) / calc(24px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyLarge: 400 calc(19px * var(--fc-font-scale)) / calc(28px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyMedium: 400 calc(17px * var(--fc-font-scale)) / calc(26px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodySmall: 400 calc(15px * var(--fc-font-scale)) / calc(23px * var(--fc-font-scale)) var(--fc-font);
+}
+.fcsdk-root[data-fc-script="orya"] {
+  --fc-tl-displayLarge: 46px;
+  --fc-tl-displayMedium: 34px;
+  --fc-tl-displaySmall: 30px;
+  --fc-tl-titleLarge: 30px;
+  --fc-tl-titleSmall: 20px;
+  --fc-tl-bodyLarge: 28px;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(46px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displayMedium: 700 calc(28px * var(--fc-font-scale)) / calc(34px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(30px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleLarge: 700 calc(22px * var(--fc-font-scale)) / calc(30px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-titleSmall: 700 calc(16px * var(--fc-font-scale)) / calc(20px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-bodyLarge: 400 calc(19px * var(--fc-font-scale)) / calc(28px * var(--fc-font-scale)) var(--fc-font);
+}
+.fcsdk-root[data-fc-script="telu"] {
+  --fc-tl-displayLarge: 44px;
+  --fc-tl-displaySmall: 30px;
+  --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(44px * var(--fc-font-scale)) var(--fc-font);
+  --fc-t-displaySmall: 700 calc(24px * var(--fc-font-scale)) / calc(30px * var(--fc-font-scale)) var(--fc-font);
+}
+
+.fcsdk-root[data-fc-theme="day"] {
+  /* LightContentColors */
+  --fc-c-surface-primary: #ECECEE;          /* Neutral150 */
+  --fc-c-surface-secondary: #FFFFFF;
+  --fc-c-surface-tertiary: #E4E4E7;         /* Neutral200 */
+  --fc-c-surface-active: rgba(0, 201, 80, 0.16);
+  --fc-c-reading-primary: #FFFFFF;
+  --fc-c-reading-secondary: #ECECEE;
+  --fc-c-reading-tertiary: #FFFFFF;
+  --fc-c-fg-primary: #000000;
+  --fc-c-fg-secondary: #52525C;             /* Neutral600 */
+  --fc-c-fg-tertiary: #D4D4D8;              /* Neutral300 */
+  --fc-c-button-surface: #08361B;           /* Green800 */
+  --fc-c-button-fg: #FFFFFF;
+  --fc-c-button-accent: #00C950;
+  --fc-c-border-default: #D4D4D8;
+  --fc-c-border-active: #00C950;
+  --fc-c-placeholder: #71717B;              /* Neutral500 */
+  --fc-c-scrim: rgba(0, 0, 0, 0.5);
+  --fc-c-shimmer: #F4F4F5;
+  --fc-c-shine: #000000;
 }
 .fcsdk-root[data-fc-theme="night"] {
-  --fc-bg: #0e1a16;
-  --fc-surface: #142420;
-  --fc-surface-reading: #12201b;
-  --fc-card: #1a2e28;
-  --fc-text: #e8f1ed;
-  --fc-text-muted: #9db3ab;
-  --fc-border: #2a4038;
-  --fc-bubble-user: #1b7a67;
-  --fc-bubble-user-text: #ffffff;
-  --fc-bubble-ai: #1a2e28;
-  --fc-chip: #1e3a32;
-  --fc-chip-text: #9fd8c9;
-  --fc-appbar: #0e4a3e;
-  --fc-appbar-text: #ffffff;
-  --fc-overlay: rgba(0, 0, 0, 0.65);
-  --fc-skeleton: #22362f;
+  /* DarkContentColors */
+  --fc-c-surface-primary: #18181B;          /* Neutral900 */
+  --fc-c-surface-secondary: #27272A;        /* Neutral800 */
+  --fc-c-surface-tertiary: #3F3F46;         /* Neutral700 */
+  --fc-c-surface-active: rgba(0, 201, 80, 0.16);
+  --fc-c-reading-primary: #18181B;
+  --fc-c-reading-secondary: #27272A;
+  --fc-c-reading-tertiary: #18181B;
+  --fc-c-fg-primary: #FFFFFF;
+  --fc-c-fg-secondary: #9F9FA9;             /* Neutral400 */
+  --fc-c-fg-tertiary: #3F3F46;
+  --fc-c-button-surface: #008236;           /* Green700 */
+  --fc-c-button-fg: #FFFFFF;
+  --fc-c-button-accent: #00C950;
+  --fc-c-border-default: #3F3F46;
+  --fc-c-border-active: #00C950;
+  --fc-c-placeholder: #9F9FA9;
+  --fc-c-scrim: rgba(0, 0, 0, 0.6);
+  --fc-c-shimmer: #18181B;
+  --fc-c-shine: #FFFFFF;
 }
+/* Legacy aliases onto the compose roles. */
+.fcsdk-root[data-fc-theme] {
+  --fc-bg: var(--fc-c-surface-primary);
+  --fc-surface: var(--fc-c-surface-primary);
+  --fc-surface-reading: var(--fc-c-reading-primary);
+  --fc-card: var(--fc-c-surface-secondary);
+  --fc-text: var(--fc-c-fg-primary);
+  --fc-text-muted: var(--fc-c-fg-secondary);
+  --fc-border: var(--fc-c-border-default);
+  --fc-brand: var(--fc-c-brand-surface-primary);
+  --fc-brand-deep: var(--fc-c-button-surface);
+  --fc-brand-bright: var(--fc-c-brand-fg-secondary);
+  --fc-brand-soft: var(--fc-c-surface-active);
+  --fc-accent: var(--fc-c-brand-fg-secondary);
+  --fc-danger: var(--fc-c-feedback-fail);
+  --fc-chip: var(--fc-c-surface-active);
+  --fc-chip-text: var(--fc-c-brand-surface-primary);
+  --fc-appbar: var(--fc-c-surface-primary);
+  --fc-appbar-text: var(--fc-c-fg-primary);
+  --fc-bubble-user: var(--fc-c-surface-secondary);
+  --fc-bubble-user-text: var(--fc-c-fg-primary);
+  --fc-bubble-ai: var(--fc-c-reading-primary);
+  --fc-overlay: var(--fc-c-scrim);
+  --fc-skeleton: var(--fc-c-shimmer);
+}
+.fcsdk-root .fc-t-displayLarge { font: var(--fc-t-displayLarge); }
+.fcsdk-root .fc-t-displayMedium { font: var(--fc-t-displayMedium); }
+.fcsdk-root .fc-t-displaySmall { font: var(--fc-t-displaySmall); }
+.fcsdk-root .fc-t-titleLarge { font: var(--fc-t-titleLarge); }
+.fcsdk-root .fc-t-titleMedium { font: var(--fc-t-titleMedium); }
+.fcsdk-root .fc-t-titleSmall { font: var(--fc-t-titleSmall); }
+.fcsdk-root .fc-t-bodyLarge { font: var(--fc-t-bodyLarge); }
+.fcsdk-root .fc-t-bodyMedium { font: var(--fc-t-bodyMedium); }
+.fcsdk-root .fc-t-bodySmall { font: var(--fc-t-bodySmall); }
+.fcsdk-root .fc-t-labelLarge { font: var(--fc-t-labelLarge); }
+.fcsdk-root .fc-t-labelMedium { font: var(--fc-t-labelMedium); }
+.fcsdk-root .fc-t-labelSmall { font: var(--fc-t-labelSmall); }
+.fcsdk-root .fc-t-caption { font: var(--fc-t-caption); }
+/* Compose's default LineHeightStyle (Alignment.Proportional, Trim.Both) trims the extra
+   leading above the first line and below the last: a text block is natural + (n-1)*lineHeight,
+   where CSS gives n*lineHeight. CSS splits leading evenly, so pulling (L - natural)/2 off both
+   ends lands the first baseline and every line exactly where Compose puts them. The trims
+   are zero-height pseudo-elements so they never fight a layout margin. */
+.fcsdk-root {
+  --fc-tl-displayLarge: 42px;
+  --fc-tl-displayMedium: 36px;
+  --fc-tl-displaySmall: 32px;
+  --fc-tl-titleLarge: 28px;
+  --fc-tl-titleMedium: 24px;
+  --fc-tl-titleSmall: 22px;
+  --fc-tl-bodyLarge: 27px;
+  --fc-tl-bodyMedium: 25px;
+  --fc-tl-bodySmall: 22px;
+  --fc-tl-labelLarge: 22px;
+  --fc-tl-labelMedium: 20px;
+  --fc-tl-labelSmall: 18px;
+  --fc-tl-caption: 18px;
+}
+/* --fc-tn: the natural line box of the font actually rendering the text, as a multiple of the
+   font size. Roboto is 2400/2048. Native-script names (a language list) are drawn by Noto on
+   Android, whose boxes are taller; RadioRow sets the measured factor for those. */
+.fcsdk-root [class*="fc-t-"]::before, .fcsdk-root [class*="fc-t-"]::after { content: ""; display: block; height: 0; }
+.fcsdk-root .fc-t-displayLarge::before { margin-bottom: calc(-1 * ((var(--fc-tl-displayLarge) - 35px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-displayLarge::after { margin-top: calc(-1 * ((var(--fc-tl-displayLarge) - 35px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-displayMedium::before { margin-bottom: calc(-1 * ((var(--fc-tl-displayMedium) - 28px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-displayMedium::after { margin-top: calc(-1 * ((var(--fc-tl-displayMedium) - 28px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-displaySmall::before { margin-bottom: calc(-1 * ((var(--fc-tl-displaySmall) - 24px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-displaySmall::after { margin-top: calc(-1 * ((var(--fc-tl-displaySmall) - 24px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleLarge::before { margin-bottom: calc(-1 * ((var(--fc-tl-titleLarge) - 22px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleLarge::after { margin-top: calc(-1 * ((var(--fc-tl-titleLarge) - 22px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleMedium::before { margin-bottom: calc(-1 * ((var(--fc-tl-titleMedium) - 18px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleMedium::after { margin-top: calc(-1 * ((var(--fc-tl-titleMedium) - 18px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleSmall::before { margin-bottom: calc(-1 * ((var(--fc-tl-titleSmall) - 16px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-titleSmall::after { margin-top: calc(-1 * ((var(--fc-tl-titleSmall) - 16px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodyLarge::before { margin-bottom: calc(-1 * ((var(--fc-tl-bodyLarge) - 19px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodyLarge::after { margin-top: calc(-1 * ((var(--fc-tl-bodyLarge) - 19px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodyMedium::before { margin-bottom: calc(-1 * ((var(--fc-tl-bodyMedium) - 17px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodyMedium::after { margin-top: calc(-1 * ((var(--fc-tl-bodyMedium) - 17px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodySmall::before { margin-bottom: calc(-1 * ((var(--fc-tl-bodySmall) - 15px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-bodySmall::after { margin-top: calc(-1 * ((var(--fc-tl-bodySmall) - 15px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelLarge::before { margin-bottom: calc(-1 * ((var(--fc-tl-labelLarge) - 17px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelLarge::after { margin-top: calc(-1 * ((var(--fc-tl-labelLarge) - 17px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelMedium::before { margin-bottom: calc(-1 * ((var(--fc-tl-labelMedium) - 15px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelMedium::after { margin-top: calc(-1 * ((var(--fc-tl-labelMedium) - 15px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelSmall::before { margin-bottom: calc(-1 * ((var(--fc-tl-labelSmall) - 13px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-labelSmall::after { margin-top: calc(-1 * ((var(--fc-tl-labelSmall) - 13px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-caption::before { margin-bottom: calc(-1 * ((var(--fc-tl-caption) - 13px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
+.fcsdk-root .fc-t-caption::after { margin-top: calc(-1 * ((var(--fc-tl-caption) - 13px * var(--fc-tn, 1.171875)) / 2 * var(--fc-font-scale))); }
 
 .fcsdk-root {
   position: relative;
@@ -78,8 +264,8 @@ const css = `
   background: var(--fc-bg);
   color: var(--fc-text);
   font-family: var(--fc-font);
-  font-size: calc(15px * var(--fc-font-scale, 1));
-  line-height: 1.45;
+  /* Material3 Text's default style is bodyLarge. */
+  font: var(--fc-t-bodyLarge);
   border-radius: var(--fc-radius);
   box-sizing: border-box;
 }
@@ -770,6 +956,109 @@ const css = `
 .fcsdk-settings-location-helper em { font-style: normal; color: var(--fc-brand); }
 .fcsdk-li-trailing-text { color: var(--fc-text-muted); font-size: 14px; display: inline-flex; align-items: center; gap: 6px;
   max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===========================================================================
+   Compose-fidelity components (fcsdk-c-*). Values come from the compose module;
+   comments name the source.
+   =========================================================================== */
+
+/* M3 indeterminate CircularProgressIndicator: 1332ms rotation, arc 10%..75% sweep. */
+.fcsdk-c-progress { display: block; flex: 0 0 auto; animation: fcsdk-c-rotate 1568ms linear infinite; }
+.fcsdk-c-progress circle {
+  stroke-dasharray: calc(var(--fc-c-circ) * 1px) calc(var(--fc-c-circ) * 1px);
+  transform-origin: 50% 50%;
+  animation: fcsdk-c-arc 1333ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes fcsdk-c-rotate { to { transform: rotate(360deg); } }
+@keyframes fcsdk-c-arc {
+  0%   { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); transform: rotate(0deg); }
+  50%  { stroke-dashoffset: calc(var(--fc-c-circ) * 0.25px); transform: rotate(45deg); }
+  100% { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); transform: rotate(360deg); }
+}
+
+/* Buttons.kt PrimaryButton */
+.fcsdk-c-btn-primary {
+  display: flex; align-items: center; justify-content: center; width: 100%;
+  margin: 0; border: none; border-radius: var(--fc-radius-btn);
+  background: var(--fc-c-button-surface); color: var(--fc-c-button-fg);
+  padding: 0 8px 0 16px; -webkit-tap-highlight-color: transparent;
+}
+.fcsdk-root .fcsdk-c-btn-primary { cursor: pointer; }
+.fcsdk-c-btn-primary--default { padding: 0 16px 0 24px; }
+.fcsdk-c-btn-primary:disabled { cursor: default; }
+.fcsdk-c-btn-label { text-align: center; color: var(--fc-c-button-fg); }
+.fcsdk-c-btn-primary[data-enabled="false"] .fcsdk-c-btn-label,
+.fcsdk-c-btn-primary[data-enabled="false"] .fcsdk-c-btn-icon { opacity: 0.5; }
+.fcsdk-c-btn-spinner { margin-left: 12px; }
+.fcsdk-c-btn-primary--light { background: #FFFFFF; }
+.fcsdk-c-btn-primary--light .fcsdk-c-btn-label { color: #08361B; }
+
+/* Buttons.kt SecondaryButton */
+.fcsdk-c-btn-secondary {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 48px;
+  margin: 0; padding: 0 16px 0 24px; border: none; border-radius: 999px;
+  background: var(--fc-c-surface-secondary); color: var(--fc-c-fg-primary);
+}
+.fcsdk-c-btn-secondary[data-enabled="false"] span { opacity: 0.5; }
+
+/* LogoSpinner.kt — Vertical */
+.fcsdk-c-logospinner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.fcsdk-c-logospinner-mark { position: relative; width: 55px; height: 55px; }
+.fcsdk-c-logospinner-logo { position: absolute; left: 11.5px; top: 11.5px; }
+.fcsdk-c-logospinner-label { color: var(--fc-c-fg-primary); text-align: center; animation: fcsdk-c-fadein 400ms ease-in-out; }
+@keyframes fcsdk-c-fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* Toast.kt */
+.fcsdk-c-toast {
+  position: absolute; left: 20px; right: 20px; bottom: 24px; z-index: 70;
+  display: flex; align-items: center; padding: 13px 16px; border-radius: 16px;
+  background: var(--fc-c-surface-secondary);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  animation: fcsdk-c-toast-in 300ms ease-out;
+}
+@keyframes fcsdk-c-toast-in { from { transform: translateY(calc(100% + 24px)); } to { transform: none; } }
+.fcsdk-c-toast-badge { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: #00C950; }
+.fcsdk-c-toast-badge--error { background: #E5533D; }
+.fcsdk-c-toast-text { flex: 1; padding-left: 12px; color: var(--fc-c-fg-primary); }
+
+/* Form.kt RadioButton */
+.fcsdk-c-radio {
+  display: flex; align-items: center; width: 100%; margin: 0; padding: 14px 16px;
+  border: none; border-radius: 12px; text-align: left;
+  background: var(--fc-c-surface-secondary); color: var(--fc-c-fg-primary);
+  -webkit-tap-highlight-color: transparent;
+}
+.fcsdk-c-radio--selected { background: var(--fc-c-surface-active); background-image: linear-gradient(var(--fc-c-surface-active), var(--fc-c-surface-active)); }
+.fcsdk-c-radio:disabled { cursor: default; }
+.fcsdk-c-radio-indicator { flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--fc-c-surface-secondary); display: flex; align-items: center; justify-content: center; }
+.fcsdk-c-radio-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--fc-c-surface-tertiary); }
+.fcsdk-c-radio--selected .fcsdk-c-radio-dot { width: 10px; height: 10px; background: var(--fc-c-border-active); }
+.fcsdk-c-radio-label { flex: 1; min-width: 0; margin-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fc-c-fg-primary); }
+.fcsdk-c-radio-trailing { margin-left: 14px; }
+
+/* "All languages" chip — Surface(onClick), labelLarge, 20/10 padding inside a 48dp target. */
+.fcsdk-c-chip-primary {
+  display: inline-flex; align-items: center; height: 48px; padding: 0 20px; border: none;
+  border-radius: 999px; background: var(--fc-c-button-surface); color: var(--fc-c-button-fg);
+}
+
+/* Screen scaffolding shared by the ported screens */
+.fcsdk-c-screen { position: relative; background: var(--fc-c-surface-primary); }
+.fcsdk-c-center { flex: 1; display: flex; align-items: center; justify-content: center; }
+.fcsdk-c-title { margin: 0; text-align: center; color: var(--fc-c-fg-primary); }
+.fcsdk-c-subtitle { margin: 0; text-align: center; color: var(--fc-c-fg-secondary); }
+
+/* LanguageScreen.kt */
+.fcsdk-c-lang-scroll { display: flex; flex-direction: column; align-items: center; padding: 32px 24px 24px; }
+.fcsdk-c-lang-list { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 24px; }
+.fcsdk-c-lang-panel {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 20px;
+  padding: 28px 24px 16px; border-radius: 24px 24px 0 0; background: var(--fc-c-surface-secondary);
+}
+.fcsdk-c-legal { margin: 0; max-width: 260px; text-align: justify; color: var(--fc-c-fg-secondary); }
+.fcsdk-c-legal [role="link"] { color: var(--fc-c-fg-secondary); text-decoration: underline; cursor: pointer; }
 `;
 
 /** Injects the stylesheet once per document. */
@@ -777,8 +1066,29 @@ export function ensureStylesInjected(doc: Document = document): void {
   if (doc.getElementById(STYLE_ELEMENT_ID)) return;
   const style = doc.createElement('style');
   style.id = STYLE_ELEMENT_ID;
-  style.textContent = css;
+  style.textContent = robotoFontFaces() + css;
   doc.head.appendChild(style);
+}
+
+/**
+ * Script group for a language code — compose Type.kt `typographyForLanguage`. Drives
+ * `data-fc-script` on the root, which swaps in that script's line heights.
+ */
+export function scriptForLanguage(code: string | undefined): string | undefined {
+  switch ((code ?? '').toLowerCase().trim()) {
+    case 'hi': case 'mr': case 'ne': case 'bho': case 'mai': case 'doi': case 'kok': case 'sa': case 'brx': case 'raj':
+      return 'deva';
+    case 'am': case 'ti': case 'om': case 'so': case 'aa':
+      return 'ethi';
+    case 'kn':
+      return 'knda';
+    case 'or': case 'od':
+      return 'orya';
+    case 'te':
+      return 'telu';
+    default:
+      return undefined;
+  }
 }
 
 /** Resolves 'auto' via prefers-color-scheme. */
@@ -823,77 +1133,89 @@ function softTint(color: string, alpha: number): string | null {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
 }
 
-/** Perceived luminance (0..255-ish) → pick black/white on-color if host omits `onBrand`. */
-function onColorFor(color: string): string | null {
+
+
+/** Auto on-colour, HostTheme.kt `contrastOn`: white on a dark brand, black on a light one. */
+function contrastOn(color: string): string | null {
   const rgb = parseHex(color);
   if (!rgb) return null;
-  const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
-  return lum > 150 ? '#111111' : '#ffffff';
+  const lin = rgb.map((c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return lum < 0.5 ? '#FFFFFF' : '#000000';
 }
 
-/** Slightly darken a hex color (for a `brandPrimaryDark` derivation from `brandPrimary`). */
-function darken(color: string, factor: number): string | null {
+/** `Color.darken(f)` in HostTheme.kt multiplies each channel by f. */
+function scaleRgb(color: string, factor: number): string | null {
   const rgb = parseHex(color);
   if (!rgb) return null;
-  const d = rgb.map((c) => Math.max(0, Math.round(c * (1 - factor)))) as [number, number, number];
+  const d = rgb.map((c) => Math.round(c * factor));
   return `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
 }
 
-function colorVars(colors: FarmerChatThemeColors, softAlpha: number): Record<string, string> {
+/**
+ * Port of HostTheme.kt resolveBrandColors + resolveContentColors onto the --fc-c-* roles.
+ * `night` is the host's dark set (null in day mode); like `pick(light, night, dark)` the night
+ * value wins in dark mode and the light value is used otherwise.
+ */
+function hostColorVars(
+  light: FarmerChatThemeColors,
+  night: FarmerChatThemeColors | null,
+  dark: boolean,
+): Record<string, string> {
   const vars: Record<string, string> = {};
-  const {
-    brandPrimary,
-    brandPrimaryDark,
-    brandAccent,
-    onBrand,
-    background,
-    readingSurface,
-    cardSurface,
-    error,
-    onBackground,
-    onSurface,
-  } = colors;
+  const pick = <K extends keyof FarmerChatThemeColors>(k: K): string | undefined =>
+    (dark ? night?.[k] ?? light[k] : light[k]) as string | undefined;
 
-  if (brandPrimary) {
-    // Brand surfaces: app bar, brand fills, splash, drawer head, user bubble.
-    vars['--fc-brand'] = brandPrimary;
-    vars['--fc-appbar'] = brandPrimary;
-    vars['--fc-bubble-user'] = brandPrimary;
-    const deep = brandPrimaryDark ?? darken(brandPrimary, 0.28);
-    if (deep) vars['--fc-brand-deep'] = deep;
-    const soft = softTint(brandPrimary, softAlpha);
-    if (soft) {
-      vars['--fc-brand-soft'] = soft;
-      vars['--fc-chip'] = soft;
-    }
-    const onBrandColor = onBrand ?? onColorFor(brandPrimary);
-    if (onBrandColor) {
-      vars['--fc-appbar-text'] = onBrandColor;
-      vars['--fc-bubble-user-text'] = onBrandColor;
-    }
-  }
-  if (brandPrimaryDark) vars['--fc-brand-deep'] = brandPrimaryDark;
-  if (brandAccent) {
-    // Accents: chevrons, active radio dot, spinner top, focus, links.
-    vars['--fc-brand-bright'] = brandAccent;
-    vars['--fc-chip-text'] = brandAccent;
-    // The Share chip's sweep keeps its green stop on the host accent, so the border stays
-    // coherent with a host brand. Cyan and yellow are fixed design primitives, as in the app.
-    vars['--fc-accent-gradient-green'] = brandAccent;
+  const primary = pick('brandPrimary');
+  const primaryDark = pick('brandPrimaryDark');
+  const accent = pick('brandAccent');
+  const onBrand = pick('onBrand') ?? (primary ? contrastOn(primary) ?? undefined : undefined);
+  const error = pick('error');
+
+  // Brand
+  if (primary) vars['--fc-c-brand-surface-primary'] = primary;
+  if (primaryDark) {
+    vars['--fc-c-brand-surface-secondary'] = primaryDark;
+    const tertiary = scaleRgb(primaryDark, 0.6);
+    if (tertiary) vars['--fc-c-brand-surface-tertiary'] = tertiary;
   }
   if (onBrand) {
-    vars['--fc-appbar-text'] = onBrand;
-    vars['--fc-bubble-user-text'] = onBrand;
+    vars['--fc-c-brand-fg-primary'] = onBrand;
+    vars['--fc-c-button-fg'] = onBrand;
   }
-  if (background) vars['--fc-bg'] = background;
-  if (readingSurface) vars['--fc-surface-reading'] = readingSurface;
-  if (cardSurface) {
-    vars['--fc-card'] = cardSurface;
-    vars['--fc-bubble-ai'] = cardSurface;
+  if (accent) {
+    vars['--fc-c-brand-fg-secondary'] = accent;
+    vars['--fc-c-feedback-success'] = accent;
+    vars['--fc-accent-gradient-green'] = accent;
+    vars['--fc-c-button-accent'] = accent;
+    vars['--fc-c-border-active'] = accent;
+    const active = softTint(accent, 0.16);
+    if (active) vars['--fc-c-surface-active'] = active;
   }
-  if (error) vars['--fc-danger'] = error;
-  const text = onBackground ?? onSurface;
-  if (text) vars['--fc-text'] = text;
+  if (error) vars['--fc-c-feedback-fail'] = error;
+
+  // Button surface: light uses brandPrimaryDark (Green800), dark uses brandPrimary (Green700).
+  const buttonSurface = dark ? primary : light.brandPrimaryDark;
+  if (buttonSurface) vars['--fc-c-button-surface'] = buttonSurface;
+
+  // Neutral surfaces
+  const background = pick('background');
+  const card = pick('cardSurface');
+  const reading = pick('readingSurface');
+  if (background) {
+    vars['--fc-c-surface-primary'] = background;
+    vars['--fc-c-reading-secondary'] = background;
+  }
+  if (card) vars['--fc-c-surface-secondary'] = card;
+  if (reading) {
+    vars['--fc-c-reading-primary'] = reading;
+    vars['--fc-c-reading-tertiary'] = reading;
+  }
+  const fg = pick('onSurface') ?? pick('onBackground');
+  if (fg) vars['--fc-c-fg-primary'] = fg;
   return vars;
 }
 
@@ -908,12 +1230,7 @@ export function resolveThemeVars(
   if (!theme) return {};
   const vars: Record<string, string> = {};
 
-  // Colors: dark palette when in night mode (falls back to light set).
-  const light = theme.colors ?? {};
-  const dark = theme.dark ?? theme.colors ?? {};
-  const active = mode === 'night' ? dark : light;
-  // Slightly stronger tint in dark mode so the soft brand surface reads.
-  Object.assign(vars, colorVars(active, mode === 'night' ? 0.22 : 0.12));
+  Object.assign(vars, hostColorVars(theme.colors ?? {}, theme.dark ?? null, mode === 'night'));
 
   // Shape.
   if (theme.shape) {

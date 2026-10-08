@@ -11,7 +11,7 @@ import type { CSSProperties } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
 import type { AppearanceMode } from '../core/config';
-import { ensureStylesInjected, resolveTheme, resolveThemeVars } from './theme';
+import { ensureStylesInjected, resolveTheme, resolveThemeVars, scriptForLanguage } from './theme';
 import { SdkProvider, useToastState } from './context';
 import { useNavigator, ChatRouteParams, PendingTarget } from './router';
 import { useChatHistory } from '../state/useChatHistory';
@@ -315,6 +315,7 @@ export function FarmerChatRoot(props: {
       <div
         className={`fcsdk-root${props.inline ? ' fcsdk-root--inline' : ''}`}
         data-fc-theme={theme}
+        data-fc-script={scriptForLanguage(services.labels.languageCode)}
         style={{ ...themeVars, ...chatVars } as CSSProperties}
       >
         {renderScreen()}

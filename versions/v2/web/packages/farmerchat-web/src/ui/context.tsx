@@ -9,9 +9,18 @@ import type { Navigator } from './router';
 import type { LabelParams } from '../core/labels';
 import type { AppearanceMode } from '../core/config';
 
+/** Compose Toast.kt `ToastState`: the badge on the left of the card. */
+export type ToastKind = 'success' | 'error' | 'loading';
+
 export interface ToastState {
   message: string | null;
-  show: (message: string, durationMs?: number) => void;
+  kind: ToastKind;
+  /**
+   * Show a toast. The second argument is either a duration (legacy) or options. Like the
+   * app, Loading toasts stay until replaced; the others auto-dismiss after 3000ms.
+   */
+  show: (message: string, opts?: number | { kind?: ToastKind; durationMs?: number }) => void;
+  hide: () => void;
 }
 
 export interface SdkContextValue {
@@ -48,19 +57,26 @@ export function useLabel(): (baseKey: string, englishFallback: string, params?: 
 
 export function useToastState(): ToastState {
   const [message, setMessage] = useState<string | null>(null);
+  const [kind, setKind] = useState<ToastKind>('success');
   const timerRef = useRef<number | null>(null);
-  const show = useCallback((msg: string, durationMs = 2600) => {
-    setMessage(msg);
+  const clear = () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => setMessage(null), durationMs);
+    timerRef.current = null;
+  };
+  const show = useCallback((msg: string, opts?: number | { kind?: ToastKind; durationMs?: number }) => {
+    const o = typeof opts === 'number' ? { durationMs: opts } : opts ?? {};
+    const k = o.kind ?? 'success';
+    setMessage(msg);
+    setKind(k);
+    clear();
+    if (k !== 'loading') timerRef.current = window.setTimeout(() => setMessage(null), o.durationMs ?? 3000);
   }, []);
-  useEffect(
-    () => () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    },
-    [],
-  );
-  return { message, show };
+  const hide = useCallback(() => {
+    clear();
+    setMessage(null);
+  }, []);
+  useEffect(() => clear, []);
+  return { message, kind, show, hide };
 }
 
 /** Screen_Viewed / Screen_Exited lifecycle tracking. */

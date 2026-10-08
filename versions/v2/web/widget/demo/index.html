@@ -36,16 +36,20 @@
     //   ?env=<env>    dev | stage | demo | prod | eks (ignored when base is set)
     //   ?guestKey=…   guest init API key (never hardcode one in a page you commit)
     //   ?geoKey=…     Google geolocation key
+    //   ?stage=1      the app's real stage backend via demo/stage-proxy.mjs (:8898) + agentic chat
+    //   ?agentic=1    enableAgenticChat (2.0.0 composer + streaming)
     //   ?mode=CHAT_ONLY  ?left=1  ?label=Ask%20FarmerChat
     var q = new URLSearchParams(location.search);
     var useEnv = q.get('env');
+    var stage = q.get('stage') === '1';
     function bootWidget() {
       FarmerChatWidget.boot({
         position: q.get('left') ? 'bottom-left' : 'bottom-right',
         launcherLabel: q.get('label') || undefined,
         config: {
           environment: useEnv || 'dev',
-          customBaseUrl: useEnv ? undefined : (q.get('base') || 'http://localhost:8899/'),
+          customBaseUrl: useEnv ? undefined : (q.get('base') || (stage ? 'http://localhost:8898/' : 'http://localhost:8899/')),
+          enableAgenticChat: stage || q.get('agentic') === '1',
           guestApiKey: q.get('guestKey') || undefined,
           geoApiKey: q.get('geoKey') || undefined,
           mode: q.get('mode') || 'FULL_JOURNEY',

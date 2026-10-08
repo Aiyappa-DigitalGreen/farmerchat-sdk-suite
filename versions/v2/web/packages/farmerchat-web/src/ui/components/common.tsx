@@ -4,8 +4,9 @@
  * FullScreenMessage (green full-screen layout).
  */
 
-import { ReactNode, useEffect, useRef } from 'react';
-import { useSdk } from '../context';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import { useSdk, type ToastKind } from '../context';
+import { FcIcon } from './FcIcon';
 
 // --- Icons (inline glyphs; no external assets allowed in the SDK bundle) ----
 
@@ -45,13 +46,52 @@ export const Icon = {
  * treated as an image URL; any other node is rendered as-is; otherwise the
  * built-in glyph (or a caller fallback) is used.
  */
-export function LogoGlyph(props: { fallback?: ReactNode; alt?: string }) {
+export function LogoGlyph(props: { fallback?: ReactNode; alt?: string; size?: number; tint?: string }) {
   const { logo } = useSdk();
+  const size = props.size;
   if (typeof logo === 'string' && logo) {
-    return <img src={logo} alt={props.alt ?? 'logo'} style={{ width: '1em', height: '1em', objectFit: 'contain', display: 'block' }} />;
+    return (
+      <img
+        src={logo}
+        alt={props.alt ?? 'logo'}
+        style={{ width: size ?? '1em', height: size ?? '1em', objectFit: 'contain', display: 'block' }}
+      />
+    );
   }
   if (logo) return <>{logo}</>;
-  return <>{props.fallback ?? Icon.logo}</>;
+  if (props.fallback != null) return <>{props.fallback}</>;
+  // The app's `fc_logo_mark`, a solid-black drawable that every call site tints.
+  return <FcIcon name="logo_mark" size={size ?? 32} tint={props.tint ?? 'currentColor'} />;
+}
+
+/**
+ * Material3 indeterminate `CircularProgressIndicator`: a rotating arc whose sweep grows
+ * and shrinks. `size` and `stroke` are dp, as at the Compose call sites.
+ */
+export function CircularProgress(props: { size: number; stroke: number; color: string; className?: string }) {
+  const r = (props.size - props.stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg
+      className={`fcsdk-c-progress${props.className ? ' ' + props.className : ''}`}
+      width={props.size}
+      height={props.size}
+      viewBox={`0 0 ${props.size} ${props.size}`}
+      role="progressbar"
+      aria-busy="true"
+      style={{ ['--fc-c-circ' as string]: String(c) }}
+    >
+      <circle
+        cx={props.size / 2}
+        cy={props.size / 2}
+        r={r}
+        fill="none"
+        stroke={props.color}
+        strokeWidth={props.stroke}
+        strokeLinecap="square"
+      />
+    </svg>
+  );
 }
 
 // --- App bars -----------------------------------------------------------------
@@ -85,32 +125,57 @@ export function DefaultAppBar(props: {
 
 export type PrimaryButtonState = 'default' | 'chevron' | 'loading';
 
+/**
+ * Buttons.kt `PrimaryButton`: a full-width pill on `buttonPrimarySurface`, labelLarge text.
+ * Disabled fades only the label and icon (to 0.5); the surface keeps its colour. The loading
+ * spinner sits AFTER the label, and padding depends on the state (Default 24/16, else 16/8).
+ */
 export function PrimaryButton(props: {
   label: string;
   onClick: () => void;
   state?: PrimaryButtonState;
   disabled?: boolean;
+  /** Compose `height` (dp); the onboarding screens pass 56, the default is 48. */
+  height?: number;
+  /** @deprecated kept for FullScreenMessage until that screen is ported. */
   light?: boolean;
+  className?: string;
 }) {
   const state = props.state ?? 'default';
+  const enabled = !props.disabled;
   return (
     <button
       type="button"
-      className={`fcsdk-btn-primary${props.light ? ' fcsdk-btn-primary--light' : ''}`}
+      className={`fcsdk-c-btn-primary fcsdk-c-btn-primary--${state}${props.light ? ' fcsdk-c-btn-primary--light' : ''}${
+        props.className ? ' ' + props.className : ''
+      }`}
+      style={{ height: props.height ?? 48 }}
       onClick={props.onClick}
-      disabled={props.disabled || state === 'loading'}
+      disabled={!enabled || state === 'loading'}
+      data-enabled={enabled}
     >
-      {state === 'loading' ? <span className="fcsdk-spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : null}
-      <span>{props.label}</span>
-      {state === 'chevron' ? <span>{Icon.chevronRight}</span> : null}
+      <span className="fcsdk-c-btn-label fc-t-labelLarge">{props.label}</span>
+      {state === 'chevron' ? (
+        <FcIcon name="m_chevron_right" size={24} tint="var(--fc-c-button-accent)" className="fcsdk-c-btn-icon" style={{ marginLeft: 8 }} />
+      ) : null}
+      {state === 'loading' ? (
+        <CircularProgress size={20} stroke={2} color="var(--fc-c-button-accent)" className="fcsdk-c-btn-spinner" />
+      ) : null}
     </button>
   );
 }
 
+/** Buttons.kt `SecondaryButton`: a borderless pill on `surfaceSecondary`, 48 tall. */
 export function SecondaryButton(props: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" className="fcsdk-btn-secondary" onClick={props.onClick} disabled={props.disabled}>
-      {props.label}
+    <button
+      type="button"
+      className="fcsdk-c-btn-secondary"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      data-enabled={!props.disabled}
+    >
+      <span className="fc-t-labelLarge">{props.label}</span>
     </button>
   );
 }
@@ -125,20 +190,53 @@ export function TextButton(props: { label: string; onClick: () => void; disabled
 
 // --- Spinner / Toast ---------------------------------------------------------------
 
-export function LogoSpinner(props: { message?: string }) {
+/**
+ * LogoSpinner.kt (Vertical): a 55dp Green500 progress ring around a static 32dp mark, and a
+ * labelMedium caption. With several `labels` the caption cycles every 3000ms, crossfading
+ * over 400ms.
+ */
+export function LogoSpinner(props: { message?: string; labels?: string[] }) {
+  const labels = props.labels ?? (props.message ? [props.message] : []);
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (labels.length < 2) return;
+    const t = window.setInterval(() => setIndex((i) => (i + 1) % labels.length), 3000);
+    return () => window.clearInterval(t);
+  }, [labels.length]);
+  const text = labels.length ? labels[index % labels.length] : null;
   return (
-    <div className="fcsdk-logospinner" role="status">
-      <span className="fcsdk-spinner" />
-      {props.message ? <span>{props.message}</span> : null}
+    <div className="fcsdk-c-logospinner" role="status">
+      <div className="fcsdk-c-logospinner-mark">
+        <CircularProgress size={55} stroke={3} color="#00C950" />
+        <FcIcon name="logo_mark" size={32} tint="#00C950" className="fcsdk-c-logospinner-logo" />
+      </div>
+      {text ? (
+        <span key={index} className="fcsdk-c-logospinner-label fc-t-labelMedium">
+          {text}
+        </span>
+      ) : null}
     </div>
   );
 }
 
-export function Toast(props: { message: string | null }) {
+/**
+ * Toast.kt: a white card pinned 20dp from the sides and 24dp from the bottom, with a 32dp
+ * status badge (success ✓ / error ✕ / loading spinner) and wrapping bodySmall text.
+ */
+export function Toast(props: { message: string | null; kind?: ToastKind }) {
+  const { toast } = useSdk();
+  const kind = props.kind ?? toast.kind;
   if (!props.message) return null;
   return (
-    <div className="fcsdk-toast" role="status">
-      {props.message}
+    <div className="fcsdk-c-toast" role="status">
+      <span className={`fcsdk-c-toast-badge fcsdk-c-toast-badge--${kind}`} aria-hidden>
+        {kind === 'loading' ? (
+          <CircularProgress size={18} stroke={2} color="#FFFFFF" />
+        ) : (
+          <FcIcon name={kind === 'error' ? 'm_close' : 'm_check'} size={18} tint="#FFFFFF" />
+        )}
+      </span>
+      <span className="fcsdk-c-toast-text fc-t-bodySmall">{props.message}</span>
     </div>
   );
 }
@@ -178,6 +276,11 @@ export function TextInput(props: {
   );
 }
 
+/**
+ * Form.kt `RadioButton`: a white 12-radius card, padding 14/16, a 20dp indicator (a solid
+ * grey disc, or a white disc with a 10dp green dot), a 12dp gap and a single-line bodyMedium
+ * label. The selected tint is painted twice in Compose, so its effective alpha is about 0.296.
+ */
 export function RadioRow(props: {
   label: string;
   selected: boolean;
@@ -187,12 +290,44 @@ export function RadioRow(props: {
   disabled?: boolean;
 }) {
   return (
-    <button type="button" role="radio" aria-checked={props.selected} className="fcsdk-radiorow" onClick={props.onClick} disabled={props.disabled}>
-      <span className="fcsdk-radio-dot" />
-      <span style={{ flex: 1 }}>{props.label}</span>
-      {props.loading ? <span className="fcsdk-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : props.trailing}
+    <button
+      type="button"
+      role="radio"
+      aria-checked={props.selected}
+      className={`fcsdk-c-radio${props.selected ? ' fcsdk-c-radio--selected' : ''}`}
+      onClick={props.onClick}
+      disabled={props.disabled}
+    >
+      <span className="fcsdk-c-radio-indicator" aria-hidden>
+        <span className="fcsdk-c-radio-dot" />
+      </span>
+      <span className="fcsdk-c-radio-label fc-t-bodyMedium" style={nativeScriptMetrics(props.label)}>
+        {props.label}
+      </span>
+      {props.loading ? (
+        <CircularProgress size={20} stroke={2} color="var(--fc-c-border-active)" className="fcsdk-c-radio-trailing" />
+      ) : props.trailing ? (
+        <span className="fcsdk-c-radio-trailing">{props.trailing}</span>
+      ) : null}
     </button>
   );
+}
+
+/**
+ * Natural line-box factor (line box / font size) of the Noto face Android draws a script with,
+ * measured on the rs_qa emulator (API 36): a bodyMedium Kannada row label is 24.76dp tall,
+ * Devanagari 22.48dp, against Roboto's 19.92dp. Feeds the line-height trim (`--fc-tn`), so a
+ * native-script row is as tall as on Android even though Chrome draws it with another font.
+ */
+const SCRIPT_LINE_BOX: Array<[RegExp, number]> = [
+  [/[\u0C80-\u0CFF]/, 1.456], // Kannada
+  [/[\u0900-\u097F]/, 1.322], // Devanagari
+];
+function nativeScriptMetrics(text: string): React.CSSProperties | undefined {
+  for (const [re, factor] of SCRIPT_LINE_BOX) {
+    if (re.test(text)) return { ['--fc-tn' as string]: String(factor) } as React.CSSProperties;
+  }
+  return undefined;
 }
 
 export function CheckboxRow(props: { label: string; checked: boolean; onClick: () => void }) {
