@@ -39,6 +39,8 @@ export const PrefKeys = {
   USER_COUNTRY_NAME: 'USER_COUNTRY_NAME',
   USER_STATE: 'USER_STATE',
   USER_DISTRICT: 'USER_DISTRICT',
+  /** Android SdkPreferences.Keys.APPROX_LOCATION_NAME: the pill/Settings place name. */
+  APPROX_LOCATION_NAME: 'approx_location_name',
   GPS_LOCATION_SHARED: 'GPS_LOCATION_SHARED',
   // chat
   NEW_CONVERSATION_ID: 'NEW_CONVERSATION_ID',

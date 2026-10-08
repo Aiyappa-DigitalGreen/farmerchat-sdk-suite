@@ -6,6 +6,7 @@
 
 import type { AppearanceMode, FarmerChatTheme, FarmerChatThemeColors } from '../core/config';
 import { robotoFontFaces } from './fonts';
+import { ICONS } from './icons';
 
 export const STYLE_ELEMENT_ID = 'farmerchat-web-styles';
 
@@ -39,6 +40,11 @@ const css = `
   --fc-radius-bubble: 20px;
 
   /* Type (Type.kt): FontFamily.SansSerif = Roboto on Android; bundled as "FC Roboto". */
+  /* System-bar insets. Default to the browser's safe areas; a host embedding the SDK under a
+     native status/navigation bar (a WebView) can set these, as Compose reads WindowInsets. */
+  --fc-inset-top: var(--farmerchat-inset-top, env(safe-area-inset-top, 0px));
+  --fc-inset-bottom: var(--farmerchat-inset-bottom, env(safe-area-inset-bottom, 0px));
+
   --fc-font-scale: 1;
   --fc-font: "FC Roboto", Roboto, "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --fc-t-displayLarge: 700 calc(35px * var(--fc-font-scale)) / calc(42px * var(--fc-font-scale)) var(--fc-font);
@@ -840,43 +846,44 @@ const css = `
 .fcsdk-composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 14;
   transition: transform 300ms ease; pointer-events: none; }
 .fcsdk-composer > * { pointer-events: auto; }
-.fcsdk-composer--floating { padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px); }
-.fcsdk-composer--anchored { padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--fc-bg); }
+/* InputComposer.kt: the floating wrapper paints an opaque surfacePrimary slab from the sheet's
+   top edge to the bottom, so no feed content shows in the gutters or below the pill. */
+.fcsdk-composer--floating { padding-bottom: max(var(--fc-inset-bottom), 20px); background: var(--fc-c-surface-primary); }
+.fcsdk-composer--anchored { padding-bottom: var(--fc-inset-bottom); background: var(--fc-bg); }
 .fcsdk-composer--hidden { transform: translateY(160%); }
 .fcsdk-composer--hidden > * { pointer-events: none; }
-.fcsdk-composer-sheet { background: var(--fc-brand);
+.fcsdk-composer-sheet { background: var(--fc-c-brand-surface-primary);
   transition: padding 250ms ease, border-radius 250ms ease; }
-.fcsdk-composer--floating .fcsdk-composer-sheet { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24); }
 .fcsdk-composer-row { display: flex; align-items: flex-end; }
 .fcsdk-composer-btn { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%; background: #fff; color: var(--fc-brand); line-height: 1; padding: 0;
+  border: none; border-radius: 50%; background: #08361B; line-height: 1; padding: 0;
   transition: width 250ms ease, height 250ms ease, font-size 250ms ease; }
-.fcsdk-composer-btn:hover { filter: brightness(0.94); }
 .fcsdk-composer-field { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center; cursor: text;
-  background: var(--fc-surface);
+  background: var(--fc-c-surface-secondary);
   transition: background 220ms ease, min-height 250ms ease; }
-.fcsdk-composer-field--active { background: var(--fc-bg); }
+.fcsdk-composer-field--active { background: var(--fc-c-reading-tertiary); }
 .fcsdk-composer-thumbs, .fcsdk-composer-fieldrow { position: relative; z-index: 2; }
 .fcsdk-composer-thumbs { display: flex; gap: 5px; padding: 10px 0; }
-.fcsdk-composer-thumb { position: relative; flex: 0 0 auto; border-radius: 10px; overflow: hidden; }
+.fcsdk-composer-thumb { position: relative; flex: 0 0 auto; border-radius: 8px; overflow: hidden; }
 .fcsdk-composer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.fcsdk-composer-thumb button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px;
+.fcsdk-composer-thumb button { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px;
   display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 11px; line-height: 1; padding: 0; }
-.fcsdk-composer-fieldrow { display: flex; align-items: center; width: 100%; padding: 7px 0; }
+  background: var(--fc-c-surface-secondary); padding: 0; }
+.fcsdk-composer-fieldrow { display: flex; align-items: center; width: 100%; padding: 0; }
 .fcsdk-composer-input { flex: 1 1 auto; width: 100%; min-height: 24px; max-height: 72px;
-  border: none; outline: none; resize: none; background: transparent; color: var(--fc-text);
-  font-size: 15px; line-height: 1.35; padding: 0; overflow-y: auto; }
+  border: none; outline: none; resize: none; background: transparent; color: var(--fc-c-fg-primary);
+  caret-color: var(--fc-c-fg-primary); font: var(--fc-t-bodyMedium); padding: 0; overflow-y: auto; }
 .fcsdk-composer-placeholder { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
   pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: var(--fc-text-muted); font-size: 15px; }
+  color: var(--fc-c-placeholder); font: var(--fc-t-bodyMedium); transition: color 220ms ease; }
+.fcsdk-composer-field:not(.fcsdk-composer-field--active) .fcsdk-composer-placeholder { color: var(--fc-c-fg-primary); }
 .fcsdk-composer-placeholder--in { animation: fcsdk-ph-in 400ms ease both; }
 .fcsdk-composer-placeholder--out { animation: fcsdk-ph-out 400ms ease both; }
 /* Placeholder shimmer sweep — Compose ShimmerText, 2250ms, idle only. */
 .fcsdk-composer-placeholder--shimmer {
-  background-image: linear-gradient(100deg, currentColor 0%, currentColor 30%,
-    var(--fc-brand-bright) 45%, var(--fc-brand-bright) 55%, currentColor 70%, currentColor 100%);
+  background-image: linear-gradient(100deg, currentColor 0%, currentColor 32.5%,
+    var(--fc-c-border-active) 41.25%, var(--fc-c-border-active) 48.75%, currentColor 57.5%, currentColor 100%);
   background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
   color: transparent; -webkit-text-fill-color: transparent;
   animation: fcsdk-ph-shimmer 2250ms linear infinite; }
@@ -892,7 +899,6 @@ const css = `
 .fcsdk-composer-field--aura::before { content: ''; position: absolute; z-index: 0;
   left: 50%; top: 50%; width: 260%; aspect-ratio: 1; border-radius: 50%;
   background: conic-gradient(from 0turn, #00C950, #22D3EE, #00C950, #FFF947, #00C950);
-  filter: blur(3px);
   animation: fcsdk-aura-spin 7s linear infinite, fcsdk-aura-breathe 15s ease-in-out infinite; }
 .fcsdk-composer-field--aura::after { content: ''; position: absolute; z-index: 1; inset: 2.4px;
   border-radius: 14px; background: inherit; }
@@ -900,8 +906,8 @@ const css = `
   from { transform: translate(-50%, -50%) rotate(0turn); }
   to { transform: translate(-50%, -50%) rotate(1turn); } }
 @keyframes fcsdk-aura-breathe {
-  0% { opacity: 1; } 16% { opacity: 0.5; } 32% { opacity: 1; }
-  48% { opacity: 0.5; } 66.67% { opacity: 0.04; } 100% { opacity: 1; } }
+  0% { opacity: 1; } 16% { opacity: 1; } 32% { opacity: 0.5; } 48% { opacity: 1; }
+  64% { opacity: 0.5; } 82.667% { opacity: 0.04; } 100% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .fcsdk-composer-field--aura::before { animation: none; opacity: 0.7; }
   .fcsdk-composer-placeholder--shimmer { animation: none; color: var(--fc-text-muted);
@@ -1055,7 +1061,7 @@ const css = `
 .fcsdk-c-lang-list { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 24px; }
 .fcsdk-c-lang-panel {
   flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 20px;
-  padding: 28px 24px 16px; border-radius: 24px 24px 0 0; background: var(--fc-c-surface-secondary);
+  padding: 28px 24px calc(16px + var(--fc-inset-bottom)); border-radius: 24px 24px 0 0; background: var(--fc-c-surface-secondary);
 }
 .fcsdk-c-legal { margin: 0; max-width: 260px; text-align: justify; color: var(--fc-c-fg-secondary); }
 .fcsdk-c-legal [role="link"] { color: var(--fc-c-fg-secondary); text-decoration: underline; cursor: pointer; }
@@ -1154,15 +1160,123 @@ const css = `
 @keyframes fcsdk-c-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .fcsdk-c-btn-wrap { width: auto; }
 
-.fcsdk-c-footer { flex: 0 0 auto; padding: 16px 24px 8px; background: var(--fc-c-surface-secondary); }
+.fcsdk-c-footer { flex: 0 0 auto; padding: 16px 24px calc(8px + var(--fc-inset-bottom)); background: var(--fc-c-surface-secondary); }
+
+/* ---------------------------------------------------------------- HomeScreen.kt */
+.fcsdk-c-home { position: relative; }
+.fcsdk-c-home-band { position: absolute; left: 0; right: 0; top: 0; height: 36.6%; z-index: 0; pointer-events: none;
+  background: linear-gradient(to bottom, var(--fc-c-brand-surface-primary) 0%, var(--fc-c-brand-surface-primary) 58.8%, rgba(0, 130, 54, 0) 100%); }
+.fcsdk-c-home-glow { position: absolute; left: 0; top: 0; width: 100%; height: 148px; }
+.fcsdk-c-home-appbar { position: relative; z-index: 3; flex: 0 0 52px; height: 52px; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 16px; }
+.fcsdk-c-home-appbar--legacy { background: var(--fc-c-brand-surface-primary); }
+.fcsdk-c-home-appbar--legacy .fcsdk-c-appbar-glow { height: 52px; }
+.fcsdk-c-home-appbar > :not(.fcsdk-c-appbar-glow) { position: relative; }
+/* Buttons.kt WeatherButton */
+.fcsdk-c-weather { display: inline-flex; align-items: center; height: 44px; margin: 0; padding: 0 8px 0 14px; border: none;
+  border-radius: 999px; background: var(--fc-c-brand-surface-secondary); color: var(--fc-c-brand-fg-primary); }
+.fcsdk-c-weather--loading { padding-right: 16px; }
+.fcsdk-c-home .fcsdk-home-feedwrap { z-index: 1; }
+/* Agentic fixed header (HomeScreen.kt FixedHeader) */
+.fcsdk-c-home-head { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 12px; padding: 0 0 16px; }
+.fcsdk-c-sectionheader { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0 24px; box-sizing: border-box; }
+.fcsdk-c-sectionheader-title { font-weight: 600; text-align: center; color: #FFFFFF; }
+.fcsdk-c-leafdivider { flex: 1; height: 4px; background-color: var(--fc-c-button-accent);
+  -webkit-mask: var(--fc-leaf-mask) repeat-x center / 8px 4px; mask: var(--fc-leaf-mask) repeat-x center / 8px 4px; }
+/* LocationButton.kt */
+.fcsdk-c-pill { display: inline-flex; align-items: center; max-width: calc(100% - 32px); height: 42px; margin: 0;
+  padding: 0 22px 0 14px; border: none; border-radius: 999px; background: var(--fc-c-brand-surface-secondary);
+  color: #FFFFFF; transition: background-color 300ms ease; }
+.fcsdk-c-pill--invite { background: rgba(8, 54, 27, 0.72); }
+.fcsdk-c-pill--success, .fcsdk-c-pill--located { height: 40px; }
+.fcsdk-c-pill-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #FFFFFF; }
+/* Legacy header blocks */
+.fcsdk-c-greeting { display: flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 16px;
+  background: var(--fc-c-brand-surface-primary); text-align: center; color: var(--fc-c-brand-fg-primary); }
+.fcsdk-c-wobble { display: inline-block; animation: fcsdk-c-wobble 900ms ease-in-out 1000ms 1 both; }
+@keyframes fcsdk-c-wobble {
+  0% { transform: scale(1); } 15% { transform: scale(0.95); } 33% { transform: scale(1); }
+  42% { transform: rotate(1.5deg); } 58% { transform: rotate(-1.5deg); } 67% { transform: rotate(0); }
+  75% { transform: rotate(1.5deg); } 92% { transform: rotate(-1.5deg); } 100% { transform: rotate(0); } }
+.fcsdk-c-tiles { position: sticky; top: 0; z-index: 2; background: var(--fc-c-brand-surface-primary); padding: 8px 16px 10px; }
+.fcsdk-c-tilerow { display: flex; gap: 6px; }
+.fcsdk-c-tile { flex: 1; height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  margin: 0; padding: 17px 8px 12px; border: none; border-radius: 16px; background: var(--fc-c-brand-surface-secondary);
+  transition: transform 200ms cubic-bezier(.42, 0, .58, 1); }
+.fcsdk-c-tile:active { transform: scale(0.92); transition-duration: 100ms; }
+.fcsdk-c-tile-label { font: 600 13px/18px var(--fc-font); color: var(--fc-c-button-fg); }
+.fcsdk-c-feedheader { padding: 16px 24px; text-align: center; color: var(--fc-c-fg-primary); }
+/* Feed items */
+.fcsdk-c-feeditem { padding: 0 16px; }
+.fcsdk-c-feeditem--gap { padding-bottom: 16px; }
+.fcsdk-c-card { position: relative; overflow: hidden; border-radius: var(--fc-radius-lg); background: var(--fc-c-surface-secondary);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.06); transition: opacity 400ms ease; }
+.fcsdk-c-card--leaving { opacity: 0; }
+.fcsdk-c-press { transition: transform 200ms cubic-bezier(.42, 0, .58, 1); }
+.fcsdk-c-press:active { transform: scale(0.95); transition: transform 100ms cubic-bezier(0, 0, .58, 1); }
+.fcsdk-c-card-imgwrap { padding: 8px 8px 0; margin-bottom: 8px; }
+.fcsdk-c-card-imgframe { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 16px; background: var(--fc-c-surface-primary); }
+.fcsdk-c-card-imgframe img { display: block; width: 100%; height: 220px; object-fit: cover; object-position: center top; }
+.fcsdk-c-card-badge { position: absolute; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 5px; height: 28px;
+  padding: 0 10px 0 8px; border-radius: 8px; background: var(--fc-c-scrim); color: #FFFFFF; }
+.fcsdk-c-card-body { display: flex; flex-direction: column; gap: 16px; padding: 4px 24px 20px; }
+.fcsdk-c-card-headline { color: var(--fc-c-fg-primary); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.fcsdk-c-qbody { display: flex; flex-direction: column; padding: 26px 24px 20px; }
+.fcsdk-c-qoptions { display: flex; flex-direction: column; gap: 6px; }
+.fcsdk-c-qradio .fcsdk-c-radio:not(.fcsdk-c-radio--selected) { background: var(--fc-c-surface-primary); }
+.fcsdk-c-qchecks { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+.fcsdk-c-qcheck { display: flex; align-items: center; margin: 0; padding: 12px 15px; border: none; border-radius: 12px; text-align: left;
+  background: var(--fc-c-surface-primary); color: var(--fc-c-fg-primary); box-shadow: inset 0 0 0 0.25px var(--fc-c-border-default); }
+.fcsdk-c-qcheck span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcsdk-c-qcheck--on { background: var(--fc-c-surface-active); box-shadow: inset 0 0 0 0.25px var(--fc-c-border-active); }
+.fcsdk-c-confirm { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin: 0; border: none;
+  border-radius: 0; background: var(--fc-c-button-surface); color: var(--fc-c-button-fg); }
+.fcsdk-c-qfeedback { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 40px; }
+.fcsdk-c-qfeedback-check { width: 40px; height: 40px; border-radius: 50%; background: #00C950; display: flex; align-items: center;
+  justify-content: center; animation: fcsdk-c-pop 600ms cubic-bezier(.34, 1.56, .64, 1); }
+.fcsdk-c-qfeedback-text { text-align: center; color: var(--fc-c-fg-primary); animation: fcsdk-c-fadein 400ms ease 150ms both; }
+@keyframes fcsdk-c-pop { from { transform: scale(0.3); } to { transform: scale(1); } }
+.fcsdk-c-ssfr { display: flex; flex-direction: column; gap: 4px; padding: 16px; }
+.fcsdk-c-ssfr-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 44px; margin: 0; padding: 0 8px 0 10px;
+  border: none; border-radius: 12px; background: var(--fc-c-button-surface); color: #FFFFFF; }
+.fcsdk-c-ssfr-btn-label { flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcsdk-c-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcsdk-c-clamp2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.fcsdk-c-feederror { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 0 16px; }
+.fcsdk-c-feederror-icon { width: 64px; height: 64px; border-radius: 50%; background: #E5533D; display: flex; align-items: center; justify-content: center; }
+.fcsdk-c-retry { display: inline-flex; align-items: center; gap: 8px; height: 48px; margin: 0; padding: 0 16px; border: none;
+  border-radius: 12px; background: var(--fc-c-surface-tertiary); color: var(--fc-c-fg-primary); }
+.fcsdk-c-feedfooter { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 16px 40px; text-align: center;
+  animation: fcsdk-c-fadein 900ms cubic-bezier(.4, 0, .2, 1); }
+.fcsdk-c-feedfooter-wave { display: inline-block; font-size: 40px; line-height: 1.17; transform-origin: 50% 100%;
+  animation: fcsdk-c-wave 1180ms cubic-bezier(.4, 0, .2, 1) 200ms 1 both; }
+@keyframes fcsdk-c-wave { 0% { transform: rotate(0); } 13.6% { transform: rotate(16deg); } 28.8% { transform: rotate(-12deg); }
+  42.4% { transform: rotate(16deg); } 57.6% { transform: rotate(-12deg); } 71.2% { transform: rotate(16deg); } 86.4% { transform: rotate(-12deg); } 100% { transform: rotate(0); } }
+.fcsdk-c-feedfooter-text { white-space: pre-line; color: var(--fc-c-fg-primary); }
+/* LogoSpinnerVertical: the mark spins every 3s (600ms EaseOut). */
+.fcsdk-c-logospinner-logo > svg { display: block; }
+.fcsdk-c-logospinner-logo--spin { animation: fcsdk-c-splash-spin 3600ms infinite; }
 `;
+
+/**
+ * SectionHeader.kt LeafDivider tile: `fc_leaf` (11×11) beside its mirror image, so a repeating
+ * 8×4 mask reproduces the alternating 4dp leaves Compose draws on a Canvas.
+ */
+function leafMaskRule(): string {
+  const d = ICONS.leaf.paths.map((p) => p.d).join(' ');
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 11"><path d="${d}"/>` +
+    `<g transform="translate(22 0) scale(-1 1)"><path d="${d}"/></g></svg>`;
+  return `.fcsdk-root{--fc-leaf-mask:url("data:image/svg+xml,${encodeURIComponent(svg)}");}\n`;
+}
 
 /** Injects the stylesheet once per document. */
 export function ensureStylesInjected(doc: Document = document): void {
   if (doc.getElementById(STYLE_ELEMENT_ID)) return;
   const style = doc.createElement('style');
   style.id = STYLE_ELEMENT_ID;
-  style.textContent = robotoFontFaces() + css;
+  style.textContent = robotoFontFaces() + leafMaskRule() + css;
   doc.head.appendChild(style);
 }
 

@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from './common';
+import { FcIcon } from './FcIcon';
 import {
   COMPOSER_ANCHORED_RADIUS,
   COMPOSER_FIELD_MAX_HEIGHT,
@@ -210,7 +210,7 @@ export function InputComposer(props: InputComposerProps) {
                 onPhotoClick?.();
               }}
             >
-              <span aria-hidden>{Icon.camera}</span>
+              <FcIcon name="icon_camera" size={metrics.actionIcon} tint="#00C950" />
             </button>
           ) : null}
 
@@ -245,7 +245,7 @@ export function InputComposer(props: InputComposerProps) {
                         onRemoveAttachment?.(index);
                       }}
                     >
-                      <span aria-hidden>{Icon.close}</span>
+                      <FcIcon name="m_close" size={14} tint="var(--fc-c-fg-primary)" />
                     </button>
                   </div>
                 ))}
@@ -290,6 +290,7 @@ export function InputComposer(props: InputComposerProps) {
             </div>
           </div>
 
+          {hasContent || enableVoice ? (
           <button
             type="button"
             className="fcsdk-composer-btn"
@@ -312,8 +313,14 @@ export function InputComposer(props: InputComposerProps) {
               if (enableVoice) onVoiceClick?.();
             }}
           >
-            <span aria-hidden>{action === 'send' ? Icon.send : enableVoice ? Icon.mic : Icon.send}</span>
+            <FcIcon
+              name={action === 'send' || !enableVoice ? 'icon_send' : 'icon_mic'}
+              width={action === 'send' || !enableVoice ? metrics.actionIcon : undefined}
+              size={action === 'send' || !enableVoice ? undefined : metrics.voiceIcon}
+              tint="#00C950"
+            />
           </button>
+          ) : null}
         </div>
       </div>
     </div>

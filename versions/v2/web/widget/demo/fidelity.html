@@ -6,10 +6,12 @@
   <title>FarmerChat Fidelity</title>
   <style>
     /* Phone-frame harness for pixel comparison with Android (rs_qa: 1080x2400 @420dpi).
-       Pads by Android's status bar (128px = 48.76dp) and nav bar (63px = 24dp) so the SDK
-       occupies the same rectangle it does on the device. */
+       Pads by Android's status bar (128px = 48.76dp); the nav bar (63px = 24dp) is passed
+       as an inset, as Android passes WindowInsets. */
     html, body { margin: 0; height: 100%; background: #fff; }
-    #fc { position: fixed; left: 0; right: 0; top: 48.76px; bottom: 24px; }
+    /* The nav bar is NOT padded out: Compose draws under it and insets its own content, so the
+       harness hands the SDK the same inset through --farmerchat-inset-bottom instead. */
+    #fc { position: fixed; left: 0; right: 0; top: 48.76px; bottom: 0; --farmerchat-inset-bottom: 24px; }
   </style>
 </head>
 <body>

@@ -15,6 +15,8 @@ const browser = await puppeteer.launch({
   args: ['--lang=en-IN', '--hide-scrollbars', '--font-render-hinting=none'],
 });
 const page = await browser.newPage();
+await page.setCacheEnabled(false);
+page.on('console', (m) => { if (/^(WICON|DBG)/.test(m.text())) console.log(m.text()); });
 await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
 await page.setViewport({ width: 411, height: 914, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));

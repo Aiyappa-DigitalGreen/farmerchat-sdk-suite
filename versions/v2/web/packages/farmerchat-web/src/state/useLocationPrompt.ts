@@ -615,6 +615,9 @@ export function useLocationPrompt(services: SdkServices): [LocationPromptState, 
           if (res.data.country) store.setString(PrefKeys.USER_COUNTRY_NAME, res.data.country);
           if (res.data.state) store.setString(PrefKeys.USER_STATE, res.data.state);
           if (res.data.district) store.setString(PrefKeys.USER_DISTRICT, res.data.district);
+          // LocationPromptManager.kt: best readable place name for the pill — district > state > country.
+          const place = [res.data.district, res.data.state, res.data.country].find((v) => (v ?? '').trim().length > 0);
+          if (place) store.setString(PrefKeys.APPROX_LOCATION_NAME, place);
           saveLocation(fix);
           if (source !== 'weather') finishWithLocation(source);
         } else if (source !== 'weather') {

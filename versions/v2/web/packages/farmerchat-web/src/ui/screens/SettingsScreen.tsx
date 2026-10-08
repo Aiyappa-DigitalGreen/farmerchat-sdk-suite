@@ -11,7 +11,7 @@ import { DefaultAppBar, ListCard, ListItem, PrimaryButton, SecondaryButton, Text
 import { FcIcon, type IconName } from '../components/FcIcon';
 import { useEnterName } from '../../state/useEnterName';
 import { useUserProfile } from '../../state/useUserProfile';
-import { normalizeNameInput, sanitizeName } from '../../state/helpers';
+import { approxPlaceName, normalizeNameInput, sanitizeName } from '../../state/helpers';
 import { PrefKeys } from '../../core/storage';
 import { Events, Screens } from '../../core/analytics';
 import type { AppearanceMode } from '../../core/config';
@@ -74,10 +74,7 @@ export function SettingsScreen(props: {
       locationState.kind === 'RequestEnableGps' ||
       locationState.kind === 'FetchingLocation');
   const hasExactLocation = locationActions.hasKnownLocation() && locationActions.hasLocationPermission();
-  const locationPlaceName =
-    [PrefKeys.USER_DISTRICT, PrefKeys.USER_STATE, PrefKeys.USER_COUNTRY_NAME]
-      .map((key) => (services.store.getString(key) ?? '').trim())
-      .find((value) => value.length > 0) ?? '';
+  const locationPlaceName = approxPlaceName(services.store, PrefKeys);
   const locationRowValue = isSettingsLocationFlowActive
     ? label('fc_v2_app_label_getting_your_location', 'Getting your location')
     : locationPlaceName.length === 0

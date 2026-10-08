@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './common';
+import { FcIcon } from './FcIcon';
 import { useLabel, useSdk } from '../context';
 import { useVoiceRecorder, VoiceRecording } from '../../state/useVoiceRecorder';
 import { Events } from '../../core/analytics';
@@ -21,40 +22,43 @@ export function PrimaryInputButtons(props: { onSelect: (kind: InputKind) => void
   const voiceSupported =
     props.enableVoice && typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
   return (
-    <div className="fcsdk-inputbtns">
+    <div className="fcsdk-c-tilerow">
       {props.enableImages ? (
         <button
           type="button"
-          className="fcsdk-inputbtn"
+          className="fcsdk-c-tile"
           onClick={() => {
             services.analytics.track(Events.IMAGE_OPTION_DIALOG_CLICK_EVENT, {});
             props.onSelect('photo');
           }}
         >
-          <span aria-hidden>{Icon.camera}</span> {label('fc_v2_app_label_photo', 'Photo')}
+          <FcIcon name="icon_camera" size={28} />
+          <span className="fcsdk-c-tile-label">{label('fc_v2_app_label_photo', 'Photo')}</span>
         </button>
       ) : null}
       {voiceSupported ? (
         <button
           type="button"
-          className="fcsdk-inputbtn"
+          className="fcsdk-c-tile"
           onClick={() => {
             services.analytics.track(Events.MICROPHONE_CLICK_EVENT, {});
             props.onSelect('speak');
           }}
         >
-          <span aria-hidden>{Icon.mic}</span> {label('fc_v2_app_label_speak', 'Speak')}
+          <FcIcon name="icon_mic" size={28} />
+          <span className="fcsdk-c-tile-label">{label('fc_v2_app_label_speak', 'Speak')}</span>
         </button>
       ) : null}
       <button
         type="button"
-        className="fcsdk-inputbtn"
+        className="fcsdk-c-tile"
         onClick={() => {
           services.analytics.track(Events.CHAT_ICON_CLICKED, {});
           props.onSelect('type');
         }}
       >
-        <span aria-hidden>{Icon.keyboard}</span> {label('fc_v2_app_label_type', 'Type')}
+        <FcIcon name="icon_keyboard" size={28} />
+          <span className="fcsdk-c-tile-label">{label('fc_v2_app_label_type', 'Type')}</span>
       </button>
     </div>
   );
@@ -216,8 +220,9 @@ export function PhotoInputOverlay(props: {
         />
         {!file ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="fcsdk-inputbtn" onClick={() => cameraRef.current?.click()}>
-              <span aria-hidden>{Icon.camera}</span> {label('photo_take', 'Take photo')}
+            <button type="button" className="fcsdk-c-tile" onClick={() => cameraRef.current?.click()}>
+              <FcIcon name="icon_camera" size={28} />
+          <span className="fcsdk-c-tile-label">{label('photo_take', 'Take photo')}</span>
             </button>
             <button type="button" className="fcsdk-inputbtn" onClick={() => galleryRef.current?.click()}>
               <span aria-hidden>🖼️</span> {label('photo_gallery', 'Choose from gallery')}

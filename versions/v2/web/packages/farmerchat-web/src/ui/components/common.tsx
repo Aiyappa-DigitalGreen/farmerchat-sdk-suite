@@ -242,7 +242,16 @@ export function TextButton(props: { label: string; onClick: () => void; disabled
  * labelMedium caption. With several `labels` the caption cycles every 3000ms, crossfading
  * over 400ms.
  */
-export function LogoSpinner(props: { message?: string; labels?: string[]; horizontal?: boolean; labelColor?: string }) {
+export function LogoSpinner(props: {
+  message?: string;
+  labels?: string[];
+  horizontal?: boolean;
+  labelColor?: string;
+  /** LogoSpinnerVertical: the mark spins 360° every 3s (600ms EaseOut). */
+  rotating?: boolean;
+  /** Label type style (default labelMedium; Home's feed spinner uses labelLarge). */
+  labelStyle?: 'labelMedium' | 'labelLarge';
+}) {
   const labels = props.labels ?? (props.message ? [props.message] : []);
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -267,10 +276,12 @@ export function LogoSpinner(props: { message?: string; labels?: string[]; horizo
     <div className="fcsdk-c-logospinner" role="status">
       <div className="fcsdk-c-logospinner-mark">
         <CircularProgress size={55} stroke={3} color="#00C950" />
-        <FcIcon name="logo_mark" size={32} tint="#00C950" className="fcsdk-c-logospinner-logo" />
+        <span className={`fcsdk-c-logospinner-logo${props.rotating ? ' fcsdk-c-logospinner-logo--spin' : ''}`}>
+          <FcIcon name="logo_mark" size={32} tint="#00C950" />
+        </span>
       </div>
       {text ? (
-        <span key={index} className="fcsdk-c-logospinner-label fc-t-labelMedium" style={props.labelColor ? { color: props.labelColor } : undefined}>
+        <span key={index} className={`fcsdk-c-logospinner-label fc-t-${props.labelStyle ?? 'labelMedium'}`} style={props.labelColor ? { color: props.labelColor } : undefined}>
           {text}
         </span>
       ) : null}

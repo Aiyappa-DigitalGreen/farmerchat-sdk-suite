@@ -55,3 +55,21 @@ export function nextLocalId(prefix: string): string {
   idCounter += 1;
   return `${prefix}_${Date.now()}_${idCounter}`;
 }
+
+/**
+ * The place name the Home location pill and the Settings "Location" row show — Android reads
+ * `APPROX_LOCATION_NAME` (written by the GPS flow and back-filled from the profile on Home
+ * entry). The district/state/country prefs remain a fallback for installs that predate the key.
+ */
+export function approxPlaceName(store: { getString(key: string): string | null | undefined }, keys: {
+  APPROX_LOCATION_NAME: string;
+  USER_DISTRICT: string;
+  USER_STATE: string;
+  USER_COUNTRY_NAME: string;
+}): string {
+  return (
+    [keys.APPROX_LOCATION_NAME, keys.USER_DISTRICT, keys.USER_STATE, keys.USER_COUNTRY_NAME]
+      .map((k) => (store.getString(k) ?? '').trim())
+      .find((v) => v.length > 0) ?? ''
+  );
+}
