@@ -35,10 +35,10 @@ import {
   type UserMessage,
 } from '../../state/useChat';
 import { PrimaryButton, ScrollToBottomButton } from '../components/Buttons';
-import { SuggestedCard } from '../components/Cards';
-import { AiAnswerBlock, ThinkingIndicator } from '../components/AiAnswer';
+import { AiAnswerBlock } from '../components/AiAnswer';
 import {
   AlignmentSurface,
+  NumberedChip,
   StreamErrorCard,
   StreamStallHint,
 } from '../components/AgenticSurfaces';
@@ -72,7 +72,7 @@ import { useShareCard } from '../components/ShareCard';
 import { stopAllVoiceClips, VoiceClip } from '../components/VoiceClip';
 import { FcIcon } from '../components/Icon';
 import type { ChatRouteParams } from '../navigation/types';
-import { radius, spacing, typography } from '../theme';
+import { Green500, radius, spacing, typography } from '../theme';
 
 export function ChatScreen(props: {
   params: ChatRouteParams;
@@ -531,9 +531,12 @@ export function ChatScreen(props: {
             isPlayingTts={state.isAudioPlaying}
             onListen={toggleListen}
             onShare={() => void shareCard.handle.share(sdk)}
-            onDownload={() => void shareCard.handle.download(sdk)}
+            // App parity (ChatThreadContent.kt): offered only on a pre-generated answer with a
+            // non-blank question, and not once read-full-advice was already requested for it.
             onReadFullAdvice={
-              item.isPreGenerated
+              item.isPreGenerated &&
+              (firstUser?.text ?? '').trim().length > 0 &&
+              state.readFullAdviceRequestedForMessageId !== item.id
                 ? () =>
                     onAction({
                       type: 'ReplacePreGeneratedWithQuestion',
@@ -551,8 +554,11 @@ export function ChatScreen(props: {
       }
       case 'loading':
         return (
-          <View style={styles.loadingBubble}>
-            <ThinkingIndicator label={label('chat_thinking', 'Finding the best advice…')} />
+          // ChatThreadContent.kt LoadingPlaceholder: LogoSpinnerHorizontal + "Getting your
+          // answer…" — the same spinner the streaming status uses (no shimmer on RN; see
+          // LogoSpinner).
+          <View style={styles.loadingBubble} accessibilityLiveRegion="polite">
+            <LogoSpinner message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')} />
           </View>
         );
       default:
@@ -590,7 +596,9 @@ export function ChatScreen(props: {
               }}
             />
           ) : null}
-          <ThinkingIndicator label={label('chat_loading', 'Finding the best advice…')} />
+          <View accessibilityLiveRegion="polite">
+            <LogoSpinner message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')} />
+          </View>
         </View>
       ) : uiState.kind === 'error' ? (
         <View style={styles.centerBody}>
@@ -649,14 +657,15 @@ export function ChatScreen(props: {
                 // only the small breathing gap is reserved here.
                 bottomPadding={isComposerUi ? spacing.xl : 96}
                 suggestedQuestions={state.suggestedQuestions}
-                clarificationRequired={state.clarificationRequired}
+                // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
+                // clarification treatment.
+                clarificationRequired={state.clarificationRequired && lastAi?.isPreGenerated !== true}
                 // An interrupted agentic stream renders its own inline StreamErrorCard (with
                 // kind- and partial-aware copy) on the answer bubble; showing the footer error
                 // too would give the farmer two retry buttons for one failure.
                 errorMessage={lastAi?.isInterrupted === true ? null : state.errorMessage}
                 isLoading={state.isLoading}
                 revealed={lastAi == null || revealedIds.has(lastAi.id)}
-                askLabel={label('fc_v2_app_label_ask', 'Ask')}
                 onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
                 onRetry={() => onAction({ type: 'RetryLastRequest' })}
               />
@@ -858,7 +867,6 @@ function AiBubble(props: {
   isPlayingTts: boolean;
   onListen: () => void;
   onShare: () => void;
-  onDownload: () => void;
   onReadFullAdvice?: () => void;
   onFollowUp: (question: string) => void;
   // ---- agentic (2.0.0) ----
@@ -976,70 +984,112 @@ function AiBubble(props: {
       ) : null}
       {showActions ? (
         <FadeIn style={styles.aiActions}>
+          {/* ChatResponseActions.kt (app dev/v2.5): the branches are EXCLUSIVE. A pre-generated
+              answer with "Read full advice" available shows ONLY that button; every other
+              answer (agentic, legacy, pre-generated after the tap) gets the agentic row —
+              ChatThreadContent.kt passes `useChips = true` for all of them. */}
           {message.isPreGenerated && props.onReadFullAdvice ? (
             <PrimaryButton
-              label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
+              label={label(Labels.READ_FULL_ADVICE, 'Read full advice')}
               onPress={props.onReadFullAdvice}
-              style={{ alignSelf: 'flex-start' }}
             />
-          ) : null}
-          <View style={styles.actionRow}>
-            {message.hideShareIcon !== true ? (
-              <>
-                <ActionChip
-                  icon="share"
-                  text={label('fc_v2_app_label_share', 'Share')}
-                  onPress={props.onShare}
-                />
-                <ActionChip
-                  icon="save"
-                  text={label('fc_v2_app_label_save', 'Save')}
-                  onPress={props.onDownload}
-                />
-              </>
-            ) : null}
-            {props.isTtsEnabled && message.hideTtsSpeaker !== true ? (
-              <ActionChip
-                icon={props.isPlayingTts ? 'pause' : 'speaker'}
-                text={label('fc_v2_app_label_listen', 'Listen')}
-                isLoading={props.isLoadingTts}
-                onPress={props.onListen}
-              />
-            ) : null}
-          </View>
+          ) : (
+            <>
+              <View style={styles.aiWarning}>
+                <FcIcon name="info" size={18} tint={theme.content.buttonPrimaryAccent} />
+                <Text
+                  style={[
+                    typography.labelSmall,
+                    { color: theme.content.foregroundSecondary, flexShrink: 1 },
+                  ]}
+                >
+                  {label(
+                    Labels.AI_MAY_BE_WRONG_PLEASE_DOUBLE_CHECK,
+                    'AI may be wrong. Please double-check.',
+                  )}
+                </Text>
+              </View>
+              <View style={styles.actionRow}>
+                {message.hideShareIcon !== true ? (
+                  <ActionChip
+                    icon="share"
+                    text={label(Labels.SHARE_DOWNLOAD, 'Share')}
+                    accentBorder
+                    onPress={props.onShare}
+                  />
+                ) : null}
+                {props.isTtsEnabled && message.hideTtsSpeaker !== true ? (
+                  <ActionChip
+                    icon={props.isPlayingTts ? 'pause' : 'speaker'}
+                    text={label(Labels.LISTEN, 'Listen')}
+                    isLoading={props.isLoadingTts}
+                    onPress={props.onListen}
+                  />
+                ) : null}
+              </View>
+            </>
+          )}
         </FadeIn>
       ) : null}
     </View>
   );
 }
 
-/** Pill-shaped action button (Share / Save / Listen) under the last answer. */
+/**
+ * `ChatResponseActions.kt` sweep border (`brand.accentSweepBorder`): right = cyan, bottom = green,
+ * left = yellow, top = green (Compose ColorPrimitives Cyan400 / Green500 / Yellow300).
+ */
+const ACCENT_SWEEP_GREEN = Green500;
+const ACCENT_SWEEP_CYAN = '#22D3EE';
+const ACCENT_SWEEP_YELLOW = '#FFF947';
+
+/**
+ * Light (agentic) action pill under the last answer — Compose `ActionButton(radius = Rounded,
+ * background = surfaceReadingSecondary)` for Share and `ListenButton(light = true)` for Listen:
+ * 42dp tall, foregroundPrimary 23dp icon + labelMedium.
+ *
+ * SDK deviation (deliberate): Share's `accentSweepBorder` is a `Brush.sweepGradient`. This
+ * package has no gradient primitive (no react-native-svg / expo-linear-gradient — the same
+ * constraint documented in InputComposer's header), so the 3dp border is drawn with RN's
+ * per-side border colours at the brush's four cardinal stops instead of a continuous blend.
+ */
 function ActionChip(props: {
   icon: React.ComponentProps<typeof FcIcon>['name'];
   text: string;
   isLoading?: boolean;
+  /** Share only: the 3dp accent sweep border. */
+  accentBorder?: boolean;
   onPress: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   const c = theme.content;
-  const accent = theme.brand.foregroundSecondary;
+  const border: ViewStyle = props.accentBorder
+    ? {
+        borderWidth: 3,
+        borderTopColor: ACCENT_SWEEP_GREEN,
+        borderRightColor: ACCENT_SWEEP_CYAN,
+        borderBottomColor: ACCENT_SWEEP_GREEN,
+        borderLeftColor: ACCENT_SWEEP_YELLOW,
+        paddingLeft: 12 - 3,
+        paddingRight: 16 - 3,
+        gap: 10,
+      }
+    : { paddingHorizontal: 12, gap: 6 };
   return (
     <Pressable
       onPress={props.onPress}
+      disabled={props.isLoading === true}
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.actionChip,
-        {
-          backgroundColor: c.surfaceSecondary,
-          borderColor: withChipAlpha(accent, 0.28),
-          opacity: pressed ? 0.75 : 1,
-        },
+        border,
+        { backgroundColor: c.surfaceReadingSecondary, opacity: pressed ? 0.75 : 1 },
       ]}
     >
       {props.isLoading ? (
-        <ActivityIndicator size="small" color={accent} />
+        <ActivityIndicator size="small" color={c.foregroundPrimary} />
       ) : (
-        <FcIcon name={props.icon} size={16} tint={accent} />
+        <FcIcon name={props.icon} size={23} tint={c.foregroundPrimary} />
       )}
       <Text style={[typography.labelMedium, { color: c.foregroundPrimary }]}>{props.text}</Text>
     </Pressable>
@@ -1085,22 +1135,12 @@ function FadeIn(props: {
   );
 }
 
-function withChipAlpha(color: string, alpha: number): string {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(color.trim());
-  if (!m) return color;
-  const r = parseInt(m[1].slice(0, 2), 16);
-  const g = parseInt(m[1].slice(2, 4), 16);
-  const b = parseInt(m[1].slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 function ThreadFooter(props: {
   suggestedQuestions: string[] | null;
   clarificationRequired: boolean;
   errorMessage: string | null;
   isLoading: boolean;
   revealed: boolean;
-  askLabel: string;
   /** Space kept below the thread so the input surface never covers the last bubble. */
   bottomPadding: number;
   onFollowUp: (question: string) => void;
@@ -1139,11 +1179,14 @@ function ThreadFooter(props: {
                 : label('fc_v2_app_label_related_questions', 'You can also ask')}
             </Text>
           </View>
+          {/* ChatResponseActions.kt `useChips = true` for every answer: numbered chips, the
+              green Agentic accent for a clarify moment, the neutral Suggested one otherwise. */}
           {(props.suggestedQuestions ?? []).map((q, index) => (
-            <SuggestedCard
+            <NumberedChip
               key={`${index}-${q}`}
-              question={q}
-              askLabel={props.askLabel}
+              label={q}
+              number={index + 1}
+              visual={props.clarificationRequired ? 'agentic' : 'suggested'}
               onPress={() => props.onFollowUp(q)}
             />
           ))}
@@ -1181,18 +1224,17 @@ const styles = StyleSheet.create({
   // match the redesign; markdown + optional source note only.
   aiBubble: { width: '100%', paddingRight: spacing.xs },
   aiActions: { gap: spacing.md, width: '100%' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  actionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   streamStatus: { marginTop: spacing.sm },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    minHeight: 40,
+    height: 42,
     borderRadius: radius.rounded,
-    borderWidth: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 9,
   },
+  // ChatResponseActions.kt: info icon + "AI may be wrong" note, 6dp apart; the 12dp gap above the
+  // pills is aiActions' own gap.
+  aiWarning: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   clarification: {
     borderRadius: radius.md,
     borderWidth: 1,

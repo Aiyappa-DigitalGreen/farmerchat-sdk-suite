@@ -11,7 +11,7 @@ import { useLabel, useSdk } from '../context';
 import { LogoSpinner, PrimaryButton, Toast } from '../components/common';
 import { ActionButton } from '../components/common';
 import { ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
-import { AiAnswerBlock, ThinkingIndicator } from '../components/AiAnswerBlock';
+import { AiAnswerBlock } from '../components/AiAnswerBlock';
 import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
 import { capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
 import type { AlignmentKind } from '../../core/alignment';
@@ -440,7 +440,11 @@ export function ChatScreen(props: {
             if (msg.kind === 'loading') {
               return (
                 <div key={msg.id} ref={setRowRef(msg.id)} style={isFinal ? reserveStyle : undefined}>
-                  <ThinkingIndicator label={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />
+                  {/* ChatThreadContent.kt LoadingPlaceholder: LogoSpinnerHorizontal with the shimmering
+                      primary-colour label — the same component the streaming status uses. */}
+                  <div role="status" aria-live="polite">
+                    <LogoSpinner horizontal message={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />
+                  </div>
                 </div>
               );
             }
@@ -500,14 +504,17 @@ export function ChatScreen(props: {
                 ) : null}
                 {settled ? (
                   <div className="fcsdk-c-settle">
+                    {/* ChatResponseActions.kt (app dev/v2.5): "Read full advice" REPLACES the action
+                        row on a pre-generated answer; every other answer uses the agentic row
+                        (`useChips = true` for agentic, legacy and pre-generated alike). */}
                     {ai.isPreGenerated && chat.readFullAdviceRequestedForMessageId !== ai.id ? (
                       <PrimaryButton
                         label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
                         onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
                       />
-                    ) : null}
+                    ) : (
                     <ChatResponseActions
-                      agentic={!!ai.isAgentic && !ai.isPreGenerated}
+                      agentic
                       showShare={!ai.hideShareIcon}
                       tts={
                         chat.isTtsEnabled && !ai.hideTtsSpeaker && ai.messageId
@@ -523,6 +530,7 @@ export function ChatScreen(props: {
                       onShare={() => void share(ai)}
                       onSave={() => void download(ai)}
                     />
+                    )}
                   </div>
                 ) : null}
                 {alignmentKind && isAdditiveAlignment(alignmentKind) ? (
@@ -551,7 +559,7 @@ export function ChatScreen(props: {
                     : label('fc_v2_app_label_related_questions', 'You can also ask')
                 }
                 questions={followUps}
-                useChips={!!lastAi?.isAgentic && !lastAi.isPreGenerated}
+                useChips
                 clarificationRequired={chat.clarificationRequired}
                 onClick={(_, q) => void actions.sendFollowUpQuestion(q)}
               />

@@ -15,7 +15,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownText } from './markdown';
-import { LogoSpinner } from './common';
 
 function prefersReducedMotion(): boolean {
   return (
@@ -107,27 +106,6 @@ export function AiAnswerBlock(props: {
       onClick={finished ? undefined : skip}
     >
       <MarkdownText text={display} />
-    </div>
-  );
-}
-
-/**
- * ThinkingIndicator — refined "thinking" state shown before a fresh answer
- * arrives: brand spinner + a pulsing "Getting your answer…" label with three
- * pulsing dots. Mirrors the Android ThinkingIndicator.
- */
-export function ThinkingIndicator(props: { label: string }) {
-  // AiAnswer.kt: a horizontal LogoSpinner with no label, then a plain (not shimmering) muted
-  // labelMedium and three 6dp green dots pulsing 0.25↔1 in turn.
-  return (
-    <div className="fcsdk-c-thinking" role="status" aria-live="polite">
-      <LogoSpinner horizontal />
-      <span className="fcsdk-c-thinking-label fc-t-labelMedium">{props.label}</span>
-      <span className="fcsdk-c-thinking-dots" aria-hidden>
-        <span />
-        <span />
-        <span />
-      </span>
     </div>
   );
 }

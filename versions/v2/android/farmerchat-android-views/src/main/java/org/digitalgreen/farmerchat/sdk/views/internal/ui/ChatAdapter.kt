@@ -568,48 +568,43 @@ internal class ChatAdapter(
             )
         }
 
-        b.fcAiReadFull.isVisible = row.showReadFullAdvice
+        // App parity (ChatResponseActions.kt:89): the branches are EXCLUSIVE. A pre-generated
+        // answer whose full advice was not yet requested shows ONLY "Read full advice" — no note,
+        // no Share/Listen. The app renders the whole block only under the latest settled answer
+        // (ChatThreadContent.kt:566 `isLastResponse && !isLoading`), hence the showActions gate.
+        val readFull = row.showActions && row.showReadFullAdvice
+        b.fcAiReadFull.isVisible = readFull
         b.fcAiReadFull.text = callbacks.labelFor(Labels.READ_FULL_ADVICE, "Read full advice")
         b.fcAiReadFull.setOnClickListener { callbacks.onReadFullAdvice(row.message.text) }
 
-        // App parity (ChatResponseActions.kt:85 + ChatThreadContent.kt:515): an AGENTIC answer
-        // gets the compact row — accuracy note above, then Share then Listen, and NO Save. The
-        // legacy (#27) answer keeps Share/Save/Listen. Same predicate the Compose flavour uses.
-        val agenticActions = row.message.isAgentic && !row.message.isPreGenerated
+        // App parity (ChatThreadContent.kt:584 `useChips = true`): EVERY answer — agentic, legacy
+        // #27 and pre-generated — gets the agentic row: accuracy note above, then Share (accent
+        // sweep border) then Listen, and NO Save.
+        val showActionRow = row.showActions && !readFull
 
-        b.fcAiWarning.isVisible = row.showActions && agenticActions
-        if (b.fcAiWarning.isVisible) {
+        b.fcAiWarning.isVisible = showActionRow
+        if (showActionRow) {
             b.fcAiWarningText.text = callbacks.labelFor(
                 Labels.AI_MAY_BE_WRONG_PLEASE_DOUBLE_CHECK,
                 "AI may be wrong. Please double-check."
             )
         }
 
-        b.fcAiActions.isVisible = row.showActions
-        if (row.showActions) {
+        b.fcAiActions.isVisible = showActionRow
+        if (showActionRow) {
             b.fcActionShare.text = callbacks.labelFor(Labels.SHARE_DOWNLOAD, "Share")
             b.fcActionShare.setOnClickListener { callbacks.onShare(row.message) }
-            // App parity (ChatResponseActions.kt @ bda80659): only the AGENTIC Share pill carries
-            // the accent sweep border; the legacy row at ChatResponseActions.kt:159 stays plain.
-            // Reset on the legacy path too — onBindViewHolder re-runs on recycle.
             val shareCtx = b.fcActionShare.context
-            if (agenticActions) {
-                b.fcActionShare.background = SweepBorderDrawable(
-                    fillColor = FcTokens.color(shareCtx, R.color.fc_surface_reading_secondary),
-                    green = FcTokens.accent(shareCtx),
-                    cyan = FcTokens.color(shareCtx, R.color.fc_cyan400),
-                    yellow = FcTokens.color(shareCtx, R.color.fc_yellow300),
-                    strokeWidthPx = 3f * shareCtx.resources.displayMetrics.density,
-                    cornerRadiusPx = 100f * shareCtx.resources.displayMetrics.density,
-                )
-            } else {
-                b.fcActionShare.setBackgroundResource(R.drawable.fc_bg_chat_action)
-            }
-            // Save is absent from the agentic row in the app; showing it here was the visible
-            // "three buttons instead of two" difference against the app's chat screen.
-            b.fcActionDownload.isVisible = !agenticActions
-            b.fcActionDownload.text = callbacks.labelFor(Labels.SAVE, "Save")
-            b.fcActionDownload.setOnClickListener { callbacks.onDownload(row.message) }
+            b.fcActionShare.background = SweepBorderDrawable(
+                fillColor = FcTokens.color(shareCtx, R.color.fc_surface_reading_secondary),
+                green = FcTokens.accent(shareCtx),
+                cyan = FcTokens.color(shareCtx, R.color.fc_cyan400),
+                yellow = FcTokens.color(shareCtx, R.color.fc_yellow300),
+                strokeWidthPx = 3f * shareCtx.resources.displayMetrics.density,
+                cornerRadiusPx = 100f * shareCtx.resources.displayMetrics.density,
+            )
+            // Save is absent from the agentic row in the app.
+            b.fcActionDownload.isVisible = false
             b.fcActionListen.isVisible = row.isTtsEnabled
             ListenPill.bind(
                 pill = b.fcActionListen,
@@ -623,7 +618,6 @@ internal class ChatAdapter(
             )
             // App ActionButton.kt: 23dp icons (the drawables are 24dp intrinsically).
             b.fcActionShare.setCompoundDrawablesRelative(ListenPill.icon(b.fcActionShare, R.drawable.fc_icon_share), null, null, null)
-            b.fcActionDownload.setCompoundDrawablesRelative(ListenPill.icon(b.fcActionDownload, R.drawable.fc_icon_save), null, null, null)
         }
 
         // App ChatThreadContent.kt:587: an additive nudge WITH chips below the answer replaces the
@@ -643,54 +637,34 @@ internal class ChatAdapter(
             } else {
                 callbacks.labelFor(Labels.RELATED_QUESTIONS, "You can also ask")
             }
-            val inflater = LayoutInflater.from(b.root.context)
             val density = b.root.resources.displayMetrics.density
             row.followUps.forEachIndexed { index, question ->
                 val onPick = { callbacks.onFollowUpClick(question, row.followUpIds.getOrNull(index)) }
-                if (agenticActions) {
-                    // App ChatResponseActions.kt:228-265: numbered chips (Suggested; Agentic when
-                    // clarification is required), 8dp apart — no "Ask" pill.
-                    val chip = AgenticChipView(b.root.context)
-                    chip.bind(
-                        text = question,
-                        number = index + 1,
-                        type = if (row.clarificationRequired) AgenticChipView.Type.AGENTIC
-                        else AgenticChipView.Type.SUGGESTED,
-                        enabled = true,
-                        selected = false,
-                        onClick = onPick
-                    )
-                    chip.layoutParams = android.widget.LinearLayout.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply { if (index > 0) topMargin = (8 * density).toInt() }
-                    b.fcAiFollowUps.addView(chip)
-                } else {
-                    val suggested = org.digitalgreen.farmerchat.sdk.views.databinding
-                        .FcItemSuggestedQuestionBinding.inflate(inflater, b.fcAiFollowUps, false)
-                    suggested.fcSuggestedText.text = question
-                    suggested.fcSuggestedAsk.text = callbacks.labelFor(Labels.ASK, "Ask")
-                    suggested.root.setOnClickListener { onPick() }
-                    b.fcAiFollowUps.addView(suggested.root)
-                }
+                // App ChatResponseActions.kt:228-265: numbered chips for every answer (Suggested;
+                // Agentic when clarification is required), 8dp apart — never SuggestedCards.
+                val chip = AgenticChipView(b.root.context)
+                chip.bind(
+                    text = question,
+                    number = index + 1,
+                    type = if (row.clarificationRequired) AgenticChipView.Type.AGENTIC
+                    else AgenticChipView.Type.SUGGESTED,
+                    enabled = true,
+                    selected = false,
+                    onClick = onPick
+                )
+                chip.layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { if (index > 0) topMargin = (8 * density).toInt() }
+                b.fcAiFollowUps.addView(chip)
             }
-            // Agentic header: titleMedium 18sp bold, foregroundPrimary; 10dp to the list.
-            if (agenticActions) {
-                b.fcAiFollowUpLabel.textSize = 18f
-                b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_primary))
-                (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (16 * density).toInt()
-                (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
-                    topMargin = (10 * density).toInt()
-                    bottomMargin = (40 * density).toInt() // app: 28dp + 12dp spacers after the list
-                }
-            } else {
-                b.fcAiFollowUpLabel.textSize = 15f
-                b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_secondary))
-                (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (20 * density).toInt()
-                (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
-                    topMargin = (4 * density).toInt()
-                    bottomMargin = 0
-                }
+            // Header: titleMedium 18sp bold, foregroundPrimary; 10dp to the list.
+            b.fcAiFollowUpLabel.textSize = 18f
+            b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_primary))
+            (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (16 * density).toInt()
+            (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
+                topMargin = (10 * density).toInt()
+                bottomMargin = (40 * density).toInt() // app: 28dp + 12dp spacers after the list
             }
             // App parity (ChatResponseActions.kt 0456f364): ease the whole related-questions
             // block in over 300ms the first time it appears, instead of snapping in. Alpha only —

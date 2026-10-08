@@ -106,7 +106,6 @@ import org.digitalgreen.farmerchat.sdk.compose.components.Tips
 import org.digitalgreen.farmerchat.sdk.compose.components.answerGenerationTips
 import org.digitalgreen.farmerchat.sdk.compose.components.composerBarHeight
 import org.digitalgreen.farmerchat.sdk.compose.components.TextInputOverlay
-import org.digitalgreen.farmerchat.sdk.compose.components.ThinkingIndicator
 import org.digitalgreen.farmerchat.sdk.compose.components.Toast
 import org.digitalgreen.farmerchat.sdk.compose.components.ToastState
 import org.digitalgreen.farmerchat.sdk.compose.components.UserChatBubble
@@ -946,7 +945,10 @@ fun ChatScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(24.dp))
-                            ThinkingIndicator(
+                            // App parity (ChatLoadingContent.kt:92): LogoSpinnerHorizontal with a
+                            // shimmering foregroundPrimary label — no dots.
+                            LogoSpinner(
+                                type = LogoSpinnerType.Horizontal,
                                 label = label(Labels.GETTING_YOUR_ANSWER, "Getting your answer…")
                             )
                         }
@@ -1210,7 +1212,11 @@ fun ChatScreen(
                                                         Column(
                                                             verticalArrangement = Arrangement.spacedBy(12.dp)
                                                         ) {
-                                                            // Read full advice (pre-generated only)
+                                                            // App parity (ChatResponseActions.kt:89):
+                                                            // the branches are EXCLUSIVE. A pre-generated
+                                                            // answer whose full advice was not yet asked
+                                                            // for shows ONLY "Read full advice"; every
+                                                            // other answer gets the Share/Listen row.
                                                             if (message.isPreGenerated &&
                                                                 state.readFullAdviceRequestedForMessageId == null
                                                             ) {
@@ -1229,30 +1235,31 @@ fun ChatScreen(
                                                                     },
                                                                     modifier = Modifier.fillMaxWidth()
                                                                 )
+                                                            } else {
+                                                                ChatResponseActions(
+                                                                    isTtsEnabled = state.isTtsEnabled,
+                                                                    isLoadingAudio = state.isLoadingSynthesiseAudio,
+                                                                    hasAudioUrl = state.audioPlaybackUrl != null,
+                                                                    isAudioPlaying = state.isAudioPlaying &&
+                                                                        state.audioPlaybackUrl != null,
+                                                                    onShare = { shareImage() },
+                                                                    onDownload = { downloadImage() },
+                                                                    onListen = {
+                                                                        if (state.audioPlaybackUrl != null) {
+                                                                            vm.onAction(
+                                                                                ChatAction.SetAudioPlaying(!state.isAudioPlaying)
+                                                                            )
+                                                                        } else {
+                                                                            vm.onAction(ChatAction.SynthesiseAudio)
+                                                                        }
+                                                                    },
+                                                                    // App parity (ChatThreadContent.kt:584):
+                                                                    // the agentic action UI for EVERY
+                                                                    // answer — agentic, legacy #27 and
+                                                                    // pre-generated alike.
+                                                                    useChips = true
+                                                                )
                                                             }
-
-                                                            ChatResponseActions(
-                                                                isTtsEnabled = state.isTtsEnabled,
-                                                                isLoadingAudio = state.isLoadingSynthesiseAudio,
-                                                                hasAudioUrl = state.audioPlaybackUrl != null,
-                                                                isAudioPlaying = state.isAudioPlaying &&
-                                                                    state.audioPlaybackUrl != null,
-                                                                onShare = { shareImage() },
-                                                                onDownload = { downloadImage() },
-                                                                onListen = {
-                                                                    if (state.audioPlaybackUrl != null) {
-                                                                        vm.onAction(
-                                                                            ChatAction.SetAudioPlaying(!state.isAudioPlaying)
-                                                                        )
-                                                                    } else {
-                                                                        vm.onAction(ChatAction.SynthesiseAudio)
-                                                                    }
-                                                                },
-                                                                // App parity
-                                                                // (ChatThreadContent.kt:515).
-                                                                useChips = message.isAgentic &&
-                                                                    !message.isPreGenerated
-                                                            )
                                                         }
                                                     }
                                                 }
@@ -1311,7 +1318,13 @@ fun ChatScreen(
                                                     .fillMaxWidth()
                                                     .then(placeholderReserve)
                                             ) {
-                                                ThinkingIndicator(
+                                                // App parity (ChatThreadContent.kt:619
+                                                // `is ChatMessage.LoadingPlaceholder`): the same
+                                                // horizontal spinner + shimmering label the stream
+                                                // status uses. The SDK's former ThinkingIndicator
+                                                // (muted label + three pulsing dots) was invented.
+                                                LogoSpinner(
+                                                    type = LogoSpinnerType.Horizontal,
                                                     label = label(
                                                         Labels.GETTING_YOUR_ANSWER,
                                                         "Getting your answer…"
@@ -1372,8 +1385,12 @@ fun ChatScreen(
                                             enter = fadeIn(animationSpec = tween(durationMillis = 300)),
                                             exit = ExitTransition.None
                                         ) {
+                                            // App parity (ChatThreadContent.kt:582): a
+                                            // pre-generated answer never asks a clarification.
+                                            val clarify = state.clarificationRequired &&
+                                                lastAiMessage?.isPreGenerated != true
                                             FollowUpSection(
-                                                title = if (state.clarificationRequired)
+                                                title = if (clarify)
                                                     label(
                                                         Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW,
                                                         "Choose an option from the below"
@@ -1387,9 +1404,10 @@ fun ChatScreen(
                                                 onQuestionClick = { qIndex, question ->
                                                     onFollowUpClicked(question, qIndex)
                                                 },
-                                                useChips = lastAiMessage?.isAgentic == true &&
-                                                    lastAiMessage.isPreGenerated != true,
-                                                clarificationRequired = state.clarificationRequired
+                                                // App parity (ChatThreadContent.kt:584):
+                                                // follow-ups are numbered chips for EVERY answer.
+                                                useChips = true,
+                                                clarificationRequired = clarify
                                             )
                                         }
                                     }

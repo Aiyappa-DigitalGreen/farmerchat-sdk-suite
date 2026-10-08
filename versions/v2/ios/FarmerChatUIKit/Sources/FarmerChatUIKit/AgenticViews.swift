@@ -4,26 +4,23 @@ import FarmerChatCore
 
 // MARK: - Streaming status (tool progress / stall hint)
 
-/// Spinner + short status label — the UIKit analogue of SwiftUI's `FCThinkingIndicator`.
+/// UIKit port of the app's `LogoSpinnerHorizontal` (SwiftUI: `FCLogoSpinner(vertical: false)`):
+/// a 40pt Green500 progress ring around the static Green500 logo mark, then a `labelMedium`
+/// label in `foregroundPrimary` that shimmers (`ShimmerText.kt`).
 ///
-/// Used for both agentic states that need a "still working" affordance: the tool-progress line
-/// (`streamingStatus`, e.g. "Checking weather forecast") and the transient stall hint.
+/// Used for every inline "still working" state in the thread, exactly where the app uses
+/// `LogoSpinnerHorizontal`: the loading placeholder ("Getting your answer…"), the tool-progress
+/// line (`streamingStatus`, e.g. "Checking weather forecast") and the transient stall hint.
 final class FCUIStreamStatusView: UIView {
-    private let spinner = UIActivityIndicatorView(style: .medium)
-    private let label = UILabel()
+    private let logo = FCUILogoSpinnerView()
+    private let label = FCUIShimmerLabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        spinner.color = FCUITheme.brandAccent
-        spinner.hidesWhenStopped = false
-
-        label.font = FCUITypography.current.labelLarge.font
-        label.textColor = FCUITheme.foregroundSecondary
-        label.numberOfLines = 0
-
-        let stack = UIStackView(arrangedSubviews: [spinner, label])
+        let stack = UIStackView(arrangedSubviews: [logo, label])
         stack.axis = .horizontal
-        stack.spacing = 10
+        // LogoSpinnerHorizontal.kt:97 — 12dp between the spinner and the label.
+        stack.spacing = 12
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -33,8 +30,6 @@ final class FCUIStreamStatusView: UIView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor)
         ])
-        // Matches the default `isHidden == false`; the observer below keeps the two in step.
-        spinner.startAnimating()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -43,12 +38,272 @@ final class FCUIStreamStatusView: UIView {
         label.text = text
     }
 
-    /// Spinning costs a display link, so it is tied to visibility.
+    /// The ring spin and the shimmer cost a display link, so both are tied to visibility.
     override var isHidden: Bool {
         didSet {
             guard isHidden != oldValue else { return }
-            if isHidden { spinner.stopAnimating() } else { spinner.startAnimating() }
+            logo.isAnimating = !isHidden
+            label.isAnimating = !isHidden
         }
+    }
+}
+
+/// The FarmerChat logo mark — the 6-petal flower from the app's `logo_mark.xml` (12 petal paths
+/// on a 130×130 viewBox), the same data SwiftUI's `FCLogoMarkShape` draws. UIKit cannot import
+/// the SwiftUI package, so the path data is duplicated here.
+private enum FCUILogoMark {
+    static let pathData: [String] = [
+        "M32.56,0C50.54,0 65.12,14.59 65.12,32.59C47.14,32.59 32.56,18 32.56,0Z",
+        "M97.56,0C79.58,0 65,14.59 65,32.59C82.98,32.59 97.56,18 97.56,0Z",
+        "M32.68,65.06C14.7,65.06 0.12,50.47 0.12,32.47C18.1,32.47 32.68,47.06 32.68,65.06Z",
+        "M65.12,32.47C47.14,32.47 32.56,47.06 32.56,65.06C50.54,65.06 65.12,50.47 65.12,32.47Z",
+        "M65,32.47C82.98,32.47 97.56,47.06 97.56,65.06C79.58,65.06 65,50.47 65,32.47Z",
+        "M97.44,65.06C115.42,65.06 130,50.47 130,32.47C112.02,32.47 97.44,47.06 97.44,65.06Z",
+        "M32.56,64.94C14.58,64.94 0,79.53 0,97.53C17.98,97.53 32.56,82.94 32.56,64.94Z",
+        "M32.56,64.94C50.54,64.94 65.12,79.53 65.12,97.53C47.14,97.53 32.56,82.94 32.56,64.94Z",
+        "M97.56,64.94C79.58,64.94 65,79.53 65,97.53C82.98,97.53 97.56,82.94 97.56,64.94Z",
+        "M97.44,64.94C115.42,64.94 130,79.53 130,97.53C112.02,97.53 97.44,82.94 97.44,64.94Z",
+        "M65.12,97.41C47.14,97.41 32.56,112 32.56,130C50.54,130 65.12,115.41 65.12,97.41Z",
+        "M65,97.41C82.98,97.41 97.56,112 97.56,130C79.58,130 65,115.41 65,97.41Z"
+    ]
+
+    /// The mark scaled to a `size`×`size` square. Only absolute M / C / Z occur in the data.
+    static func path(size: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        for data in pathData {
+            var numbers: [CGFloat] = []
+            var current = ""
+            var command: Character?
+            func flush() {
+                if !current.isEmpty, let value = Double(current) { numbers.append(CGFloat(value)) }
+                current = ""
+            }
+            func run() {
+                switch command {
+                case "M":
+                    if numbers.count >= 2 { path.move(to: CGPoint(x: numbers[0], y: numbers[1])) }
+                case "C":
+                    var i = 0
+                    while i + 5 < numbers.count {
+                        path.addCurve(
+                            to: CGPoint(x: numbers[i + 4], y: numbers[i + 5]),
+                            control1: CGPoint(x: numbers[i], y: numbers[i + 1]),
+                            control2: CGPoint(x: numbers[i + 2], y: numbers[i + 3])
+                        )
+                        i += 6
+                    }
+                case "Z":
+                    path.closeSubpath()
+                default:
+                    break
+                }
+                numbers.removeAll(keepingCapacity: true)
+            }
+            for ch in data {
+                if ch.isLetter {
+                    flush(); run(); command = ch
+                } else if ch == "," || ch == " " {
+                    flush()
+                } else if ch == "-" {
+                    flush(); current.append(ch)
+                } else {
+                    current.append(ch)
+                }
+            }
+            flush(); run()
+        }
+        var transform = CGAffineTransform(scaleX: size / 130, y: size / 130)
+        return path.copy(using: &transform) ?? path
+    }
+}
+
+/// Port of `LogoSpinner.kt` `LogoWithSpinner` at the horizontal geometry (LogoSpinner.kt:90/101):
+/// a 40pt ring (2.5pt stroke, 3/4 arc, round caps) spinning once a second around a static 23pt
+/// mark, both Green500 — the app hard-codes Green500 here rather than following the host accent.
+final class FCUILogoSpinnerView: UIView {
+    private static let ringSize: CGFloat = 40
+    private static let markSize: CGFloat = 23
+    private static let spinKey = "fc.spin"
+
+    private let ring = CAShapeLayer()
+    private let mark = CAShapeLayer()
+
+    /// Driven by the owner's visibility; the animation is also re-added on window changes,
+    /// because Core Animation strips it when the view leaves the window.
+    var isAnimating = true {
+        didSet { updateAnimation() }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        let size = Self.ringSize
+        ring.frame = CGRect(x: 0, y: 0, width: size, height: size)
+        let inset: CGFloat = 1.25
+        ring.path = UIBezierPath(
+            arcCenter: CGPoint(x: size / 2, y: size / 2),
+            radius: size / 2 - inset,
+            startAngle: -.pi / 2,
+            endAngle: -.pi / 2 + 1.5 * .pi,
+            clockwise: true
+        ).cgPath
+        ring.fillColor = UIColor.clear.cgColor
+        ring.strokeColor = FCUITheme.green500.cgColor
+        ring.lineWidth = 2.5
+        ring.lineCap = .round
+        layer.addSublayer(ring)
+
+        let markOrigin = (size - Self.markSize) / 2
+        mark.frame = CGRect(x: markOrigin, y: markOrigin, width: Self.markSize, height: Self.markSize)
+        mark.path = FCUILogoMark.path(size: Self.markSize)
+        mark.fillColor = FCUITheme.green500.cgColor
+        layer.addSublayer(mark)
+
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: size),
+            heightAnchor.constraint(equalToConstant: size)
+        ])
+        isAccessibilityElement = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateAnimation()
+    }
+
+    private func updateAnimation() {
+        if isAnimating && window != nil {
+            guard ring.animation(forKey: Self.spinKey) == nil else { return }
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            spin.fromValue = 0
+            spin.toValue = 2 * Double.pi
+            spin.duration = 1.0
+            spin.repeatCount = .infinity
+            ring.add(spin, forKey: Self.spinKey)
+        } else {
+            ring.removeAnimation(forKey: Self.spinKey)
+        }
+    }
+}
+
+/// Port of `components/ShimmerText.kt` (SwiftUI: `FCShimmerText`): the label fills with a slow
+/// horizontal highlight sweep — base `foregroundPrimary`, highlight the accent — a band 1.2× the
+/// text width travelling from just off the leading edge to just past the trailing one every 1.2 s.
+///
+/// Built as a highlight-coloured copy of the label masked by a moving gradient band, so the text
+/// itself never changes colour mid-layout. Reduce Motion drops the sweep (the app drops it on
+/// low-RAM devices; iOS has no equivalent signal, and Reduce Motion is the one that asks for it).
+final class FCUIShimmerLabel: UIView {
+    private static let sweepKey = "fc.shimmer"
+    private static let duration: CFTimeInterval = 1.2
+
+    private let base = UILabel()
+    private let highlight = UILabel()
+    private let band = CAGradientLayer()
+    /// Width the running sweep was built for.
+    private var sweptWidth: CGFloat = -1
+
+    var text: String? {
+        get { base.text }
+        set {
+            guard newValue != base.text else { return }
+            base.text = newValue
+            highlight.text = newValue
+            setNeedsLayout()
+        }
+    }
+
+    var isAnimating = true {
+        didSet { updateAnimation() }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        for label in [base, highlight] {
+            label.font = FCUITypography.current.labelMedium.font
+            label.numberOfLines = 0
+            label.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(label)
+            NSLayoutConstraint.activate([
+                label.topAnchor.constraint(equalTo: topAnchor),
+                label.bottomAnchor.constraint(equalTo: bottomAnchor),
+                label.leadingAnchor.constraint(equalTo: leadingAnchor),
+                label.trailingAnchor.constraint(equalTo: trailingAnchor)
+            ])
+        }
+        base.textColor = FCUITheme.foregroundPrimary
+        highlight.textColor = FCUITheme.brandAccent
+        highlight.isAccessibilityElement = false
+
+        band.startPoint = CGPoint(x: 0, y: 0.5)
+        band.endPoint = CGPoint(x: 1, y: 0.5)
+        band.colors = [
+            UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor
+        ]
+        band.locations = [0, 0.35, 0.65, 1]
+        highlight.layer.mask = band
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reduceMotionChanged),
+            name: UIAccessibility.reduceMotionStatusDidChangeNotification,
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = highlight.bounds.width
+        let bandWidth = max(width * 1.2, 1)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        band.frame = CGRect(x: 0, y: 0, width: bandWidth, height: highlight.bounds.height)
+        CATransaction.commit()
+        // The sweep's travel depends on the width, so only a NEW width restarts it — a cell
+        // reconfigure on every streamed delta must not reset the sweep mid-pass.
+        if width != sweptWidth {
+            sweptWidth = width
+            band.removeAnimation(forKey: Self.sweepKey)
+        }
+        updateAnimation()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateAnimation()
+    }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        base.textColor = FCUITheme.foregroundPrimary
+        highlight.textColor = FCUITheme.brandAccent
+    }
+
+    @objc private func reduceMotionChanged() {
+        updateAnimation()
+    }
+
+    private func updateAnimation() {
+        let animate = isAnimating && window != nil && !UIAccessibility.isReduceMotionEnabled
+            && highlight.bounds.width > 0
+        highlight.isHidden = !animate
+        guard animate else {
+            band.removeAnimation(forKey: Self.sweepKey)
+            return
+        }
+        guard band.animation(forKey: Self.sweepKey) == nil else { return }
+        let width = highlight.bounds.width
+        // Band centre travels -0.6w → 1.6w (FCShimmerText's unit-space -0.6 → 1.6).
+        let sweep = CABasicAnimation(keyPath: "position.x")
+        sweep.fromValue = -0.6 * width
+        sweep.toValue = 1.6 * width
+        sweep.duration = Self.duration
+        sweep.repeatCount = .infinity
+        band.add(sweep, forKey: Self.sweepKey)
     }
 }
 

@@ -1292,15 +1292,6 @@ const css = `
 .fcsdk-c-user-banner { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 16px; }
 .fcsdk-c-user-thumb { display: block; width: 80px; height: 80px; object-fit: cover; border-radius: 8px; }
 .fcsdk-c-userimg { display: block; width: 220px; height: 160px; object-fit: cover; border-radius: 16px; }
-/* ThinkingIndicator (AiAnswer.kt) */
-.fcsdk-c-thinking { display: flex; align-items: center; gap: 12px; }
-.fcsdk-c-thinking-label { color: var(--fc-c-fg-secondary); }
-.fcsdk-c-thinking-dots { display: inline-flex; gap: 4px; margin-left: -4px; }
-.fcsdk-c-thinking-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--fc-c-brand-fg-secondary);
-  animation: fcsdk-c-dot 600ms linear infinite alternate; }
-.fcsdk-c-thinking-dots span:nth-child(2) { animation-delay: 180ms; }
-.fcsdk-c-thinking-dots span:nth-child(3) { animation-delay: 360ms; }
-@keyframes fcsdk-c-dot { from { opacity: 0.25; } to { opacity: 1; } }
 /* ChatResponseActions */
 .fcsdk-c-aiwarn { display: flex; align-items: center; gap: 6px; color: var(--fc-c-fg-secondary); }
 .fcsdk-c-actions { display: flex; flex-wrap: wrap; align-items: center; }

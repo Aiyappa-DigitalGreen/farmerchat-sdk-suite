@@ -143,9 +143,58 @@ export function StreamErrorCard(props: {
 // Alignment surface
 // ---------------------------------------------------------------------------
 
-type ChipVisual = 'agentic' | 'suggested' | 'escalate';
+export type ChipVisual = 'agentic' | 'suggested' | 'escalate';
 
-/** Numbered quick-reply chip. Locks (and stays highlighted) once picked. */
+/**
+ * Numbered quick-reply chip (Compose `Chip(number = …, type = ChipType.…)`). Shared by the
+ * alignment surfaces and the related-questions list under every answer
+ * (`ChatResponseActions.kt` `useChips = true`). Locks (and stays highlighted) once picked.
+ */
+export function NumberedChip(props: {
+  label: string;
+  number: number;
+  visual: ChipVisual;
+  selected?: boolean;
+  enabled?: boolean;
+  onPress: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const c = theme.content;
+  const selected = props.selected === true;
+  const enabled = props.enabled !== false;
+  const accent =
+    props.visual === 'escalate' ? theme.brand.feedbackFail : c.buttonPrimaryAccent;
+  const isMuted = props.visual === 'suggested';
+  const background = selected ? withAlpha(accent, 0.16) : c.surfaceSecondary;
+  const border = isMuted ? c.borderDefault : withAlpha(accent, selected ? 0.55 : 0.32);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !enabled, selected }}
+      accessibilityLabel={props.label.length > 0 ? props.label : undefined}
+      disabled={!enabled}
+      onPress={props.onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: background,
+          borderColor: border,
+          opacity: enabled ? (pressed ? 0.8 : 1) : selected ? 1 : 0.55,
+        },
+      ]}
+    >
+      <View style={[styles.chipNumber, { backgroundColor: withAlpha(accent, 0.16) }]}>
+        <Text style={[typography.labelMedium, { color: accent }]}>{props.number}</Text>
+      </View>
+      <Text style={[typography.bodyMedium, { color: c.foregroundPrimary, flex: 1 }]}>
+        {props.label}
+      </Text>
+      {selected ? <FcIcon name="check" size={16} tint={accent} /> : null}
+    </Pressable>
+  );
+}
+
+/** An alignment chip rendered as a {@link NumberedChip}. */
 function AlignmentChipRow(props: {
   chip: AlignmentChip;
   number: number;
@@ -154,37 +203,15 @@ function AlignmentChipRow(props: {
   enabled: boolean;
   onPress: () => void;
 }): React.ReactElement {
-  const theme = useTheme();
-  const c = theme.content;
-  const accent =
-    props.visual === 'escalate' ? theme.brand.feedbackFail : c.buttonPrimaryAccent;
-  const isMuted = props.visual === 'suggested';
-  const background = props.selected ? withAlpha(accent, 0.16) : c.surfaceSecondary;
-  const border = isMuted ? c.borderDefault : withAlpha(accent, props.selected ? 0.55 : 0.32);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !props.enabled, selected: props.selected }}
-      accessibilityLabel={props.chip.label ?? undefined}
-      disabled={!props.enabled}
+    <NumberedChip
+      label={props.chip.label ?? ''}
+      number={props.number}
+      visual={props.visual}
+      selected={props.selected}
+      enabled={props.enabled}
       onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        {
-          backgroundColor: background,
-          borderColor: border,
-          opacity: props.enabled ? (pressed ? 0.8 : 1) : props.selected ? 1 : 0.55,
-        },
-      ]}
-    >
-      <View style={[styles.chipNumber, { backgroundColor: withAlpha(accent, 0.16) }]}>
-        <Text style={[typography.labelMedium, { color: accent }]}>{props.number}</Text>
-      </View>
-      <Text style={[typography.bodyMedium, { color: c.foregroundPrimary, flex: 1 }]}>
-        {props.chip.label ?? ''}
-      </Text>
-      {props.selected ? <FcIcon name="check" size={16} tint={accent} /> : null}
-    </Pressable>
+    />
   );
 }
 

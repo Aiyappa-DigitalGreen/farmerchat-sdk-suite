@@ -1768,7 +1768,7 @@ simulator** — build- and test-verified only, like the rest of 2.0.0.
   - **Home feed / pre-generated content** (app `HomeScreen.kt`):
     - **[HIGH] `#26 ImageStatementResponse.follow_up_questions`** typed `string[]` but the wire sends **objects** `{follow_up_question_id, sequence, question}` (sort by sequence, map to strings) — breaks decode (iOS) / renders `[object Object]` (RN/web). ⬜ **iOS, react-native, web** (`HomeModels.swift:~188`, rn `types.ts:~622`, web `types.ts:~549`). (Same class as the #29/#32 fix already applied — mirror it.)
     - **[HIGH] iOS SwiftUI select cards never render** — `HomeView.swift:~231-253` switches `type` on `"single_select"`/`"multi_select"`; real cards are `type=="question"` + `selection_type` `"single"`/`"multiple"` (UIKit `HomeCells.swift` is correct). ⬜ **ios-swiftui**.
-    - **[HIGH] iOS UIKit "Read full advice" swap missing entirely** — no read_full_advice affordance in the UIKit package. ⬜ **ios-uikit**.
+    - **[HIGH] iOS UIKit "Read full advice" swap missing entirely** — no read_full_advice affordance in the UIKit package. ⬜ **ios-uikit**. **Closed in versions/v2 on 2026-10-08** (see "Chat screen re-sync with app dev/v2.5"); v1 still ⬜.
     - **[MED] Content-card tap `triggered_input_type`** `"card"` → **`"image_card"`/`"text_card"`** by section type. ✅ android-compose; ⬜ **ios-swiftui/uikit, react-native, web** (android-views already correct).
     - **[MED] Nav question order** `title ?: question_text` → **`question_text ?: title`**. ✅ android-compose; ⬜ **react-native** (`HomeScreen.tsx:~363`). (iOS/web already correct.)
     - **[MED] Weather CTA label** wrong key `"weather_advice_question"` → **`WHAT_IS_THE_PRESENT_WEATHER`**. ⬜ **ios-swiftui/uikit, web**. (android, RN correct.)
@@ -7936,3 +7936,31 @@ label, because `sendFollowUpQuestion` has no bubble-text override. Web / RN / An
 Chips on stage now also carry `submit: {kind, text, surface_type}` (docs/02 §#27a). On a decline
 chip `submit.text` differs from the label ("No, do not save tomatoes to my farmer profile" vs
 "Not now"). The app does not read `submit`, so no SDK reads it either.
+
+## Chat screen re-sync with app dev/v2.5 @393c5bb0 — all v2 platforms (2026-10-08)
+
+Reported from the widget: the chat loader "doesn't change text as per the API" and the UI is "not gradient".
+
+**Live streaming on the backend.** The stage proxy now logs every agentic stream event as it arrives. A widget question on `mobile-app-stage` received NOTHING for 7.2 s, then `done` + `metadata` together. Five curl variants (topics, India/Kenya guests, `Build-Version`, direct dev and stage) gave the same result, with `trace` showing one `llm` step and no tools. **The backend is not streaming today**, so no client can change the loader text on it; the app on this host would also sit on "Getting your answer…". The SDK path was verified instead by replaying `docs/captures/agentic_stream_prose_20260903.sse` (`REPLAY_SSE=… PORT=8896 node demo/stage-proxy.mjs`). Web walked "Getting your answer…" → "Loading your farms" → "Farms loaded" → streamed text. The handling already matched the app (`status_text` aliases, 700 ms dwell, 4 s "Paused, resuming…", tips hidden once text flows).
+
+**Two real drifts from the app, fixed on every v2 platform:**
+
+| App source | Was in the SDK | Now |
+|---|---|---|
+| `ChatThreadContent.kt` ~583: `useChips = true` for EVERY answer (new upstream). `ChatResponseActions.kt`: Read full advice XOR action row | agentic row (note + Share with accent sweep border + Listen) and numbered chips only for agentic answers; legacy #27 and pre-generated answers got flat Share/Save/Listen and question cards; web/compose showed Read full advice AND the row | agentic row and chips for every answer; Read full advice replaces the row |
+| `LoadingPlaceholder` → `LogoSpinnerHorizontal` with a `ShimmerText` primary-colour label | an invented `ThinkingIndicator` (muted plain label + 3 pulsing dots) on web, compose, SwiftUI, UIKit, RN; the app never had it | horizontal logo spinner + shimmering label (the component the stream status uses); `ThinkingIndicator` deleted |
+
+| Platform | Verified |
+|---|---|
+| web v2 | tsc, tests, vite build; headless: replay (shimmer placeholder, tool labels) and a mock #27 answer (gradient Share + Listen + numbered chips) |
+| Android v2 compose + views | `compileDebugKotlin` core/compose/views/samples; `testDebugUnitTest` core 226, compose 8, views 13 — 0 failures. Not run on a device |
+| iOS v2 SwiftUI + UIKit | `swift build` + `swift test` (122) + simulator `xcodebuild` for both, exit 0. Not run on a simulator. UIKit gained Read full advice (closes the HIGH gap above for v2) and a conic sweep border |
+| RN v2 | tsc + tests. Not run on a device |
+
+**Gaps left (UNVERIFIED on device everywhere except web):**
+- RN: no shimmer on the loading label and the Share border is 4 solid sides, because RN has no gradient primitive (no svg/linear-gradient peer).
+- All platforms: no attention wobble on Read full advice. Listen is hidden when TTS is off; the app shows it disabled. The placeholder is not hidden while a voice question is still transcribing (app `isTranscribing`).
+- Compose: the follow-up header keeps the accent dot + `titleSmall` secondary; the app uses `titleMedium` primary. The Read-full predicate is `== null` vs the app's `!= message.id`.
+- Views: the pre-thread loader is still centred rather than under the question; `fc_item_suggested_question.xml` is now unused.
+- SwiftUI: chat no longer offers Save (no Save in the agentic row); `FCThinkingIndicator` was removed from the public surface. iOS Listen now needs a server `messageId`, the same rule as web.
+- UIKit still has no follow-up title row or fade.

@@ -12,9 +12,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../context';
-import { spacing, typography } from '../theme';
+import { typography } from '../theme';
 import { MarkdownText } from './Markdown';
-import { LogoSpinner } from './Chrome';
 
 /** Splits into "word + trailing whitespace" chunks so newlines / markdown survive a prefix cut. */
 function revealChunks(text: string): string[] {
@@ -117,52 +116,6 @@ function BlinkingCaret(props: { color?: string }): React.ReactElement {
   );
 }
 
-// ---------------------------------------------------------------------------
-// ThinkingIndicator — branded "thinking" state shown before the answer arrives.
-// Reuses the LogoSpinner mark + a pulsing three-dot affordance.
-// ---------------------------------------------------------------------------
-
-export function ThinkingIndicator(props: { label: string }): React.ReactElement {
-  return (
-    <View style={styles.thinkingRow}>
-      <LogoSpinner message={props.label} />
-      <ThreeDotPulse />
-    </View>
-  );
-}
-
-function ThreeDotPulse(): React.ReactElement {
-  const theme = useTheme();
-  const dots = [useRef(new Animated.Value(0.25)).current, useRef(new Animated.Value(0.25)).current, useRef(new Animated.Value(0.25)).current];
-  useEffect(() => {
-    const loops = dots.map((v, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 180),
-          Animated.timing(v, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0.25, duration: 600, useNativeDriver: true }),
-        ]),
-      ),
-    );
-    loops.forEach((l) => l.start());
-    return () => loops.forEach((l) => l.stop());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return (
-    <View style={styles.dotsRow}>
-      {dots.map((v, i) => (
-        <Animated.View
-          key={i}
-          style={[styles.dot, { backgroundColor: theme.brand.foregroundSecondary, opacity: v }]}
-        />
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   answerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  thinkingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
 });

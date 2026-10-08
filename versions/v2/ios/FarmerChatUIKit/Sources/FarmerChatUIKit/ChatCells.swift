@@ -10,6 +10,8 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     var onListen: (() -> Void)?
     var onShare: ((String) -> Void)?
     var onPlayClip: ((URL, String) -> Void)?
+    /// "Read full advice" on a pre-generated answer (`.replacePreGeneratedWithQuestion`).
+    var onReadFullAdvice: (() -> Void)?
     // ---- agentic streaming (2.0.0) ----
     /// Retry for an interrupted stream (`.retryLastRequest`).
     var onRetryStream: (() -> Void)?
@@ -67,8 +69,11 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         failedLabel.textColor = FCUITheme.red500
         failedLabel.isHidden = true
 
-        actionsRow.axis = .horizontal
-        actionsRow.spacing = 18
+        // Vertical: either the lone "Read full advice" button, or the "AI may be wrong" note
+        // above the Share / Listen pills (ChatResponseActions.kt, app dev/v2.5).
+        actionsRow.axis = .vertical
+        actionsRow.alignment = .fill
+        actionsRow.spacing = 12
         actionsRow.isHidden = true
 
         spinner.hidesWhenStopped = true
@@ -126,12 +131,15 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     ///   - isLatest: true for the newest AI message in the thread — gates the stream error card's
     ///     retry and an alignment surface's escape hatch (2.0.0).
     ///   - isBusy: thread-level busy flag; locks alignment chips while a send is in flight.
+    ///   - readFullAdviceAvailable: the latest pre-generated answer can still be expanded — it
+    ///     then shows ONLY the "Read full advice" button in place of the action row.
     func configure(
         message: ChatMessage,
         isTtsEnabled: Bool,
         playback: AudioPlaybackService,
         isLatest: Bool = false,
-        isBusy: Bool = false
+        isBusy: Bool = false,
+        readFullAdviceAvailable: Bool = false
     ) {
         switch message {
         case .user(let user):
@@ -218,12 +226,18 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
                 )
             }
 
-            if ai.isStreaming || ai.isInterrupted {
-                // No Share/Save/Listen on an in-flight or broken answer.
+            if ai.isStreaming || ai.isInterrupted || !isLatest {
+                // No actions on an in-flight or broken answer, and — app parity
+                // (ChatThreadContent.kt `isLastResponse`) — only the latest answer carries them.
                 actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
                 actionsRow.isHidden = true
             } else {
-                buildActions(isTtsEnabled: isTtsEnabled && !ai.isPreGenerated)
+                // Listen needs a server message id to synthesise (core's synthesiseAudio no-ops
+                // without one, e.g. on a pre-generated answer) — same gate as SwiftUI and web.
+                buildActions(
+                    isTtsEnabled: isTtsEnabled && ai.messageId != nil,
+                    readFullAdvice: readFullAdviceAvailable
+                )
             }
 
         // 2.0.0: a location message is routed to `FCUILocationBubbleCell` by
@@ -245,18 +259,22 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             hideAgenticViews()
 
         case .loadingPlaceholder:
+            // App parity (ChatThreadContent.kt LoadingPlaceholder): a bare LogoSpinnerHorizontal
+            // with the shimmering primary-colour label — no bubble, no muted text, no dots.
             currentText = ""
             alignRight(false)
-            bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
-            textLabel.text = fcuiLabel(FCLabels.gettingYourAnswer, "Getting your answer…")
-            textLabel.textColor = FCUITheme.foregroundSecondary
-            textLabel.isHidden = false
-            spinner.startAnimating()
+            bubble.backgroundColor = .clear
+            textLabel.text = nil
+            textLabel.isHidden = true
+            spinner.stopAnimating()
             failedLabel.isHidden = true
             imageView.isHidden = true
             clipButton.isHidden = true
             actionsRow.isHidden = true
             hideAgenticViews()
+            // After hideAgenticViews(), which hides the status view.
+            streamStatusView.configure(text: fcuiLabel(FCLabels.gettingYourAnswer, "Getting your answer…"))
+            streamStatusView.isHidden = false
         }
     }
 
@@ -297,29 +315,71 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         }
     }
 
-    private func buildActions(isTtsEnabled: Bool) {
+    /// App parity (ChatResponseActions.kt, app dev/v2.5): EXCLUSIVE branches. A pre-generated
+    /// answer whose "Read full advice" is available shows ONLY that primary button; every other
+    /// answer — agentic, legacy and pre-generated alike (`useChips = true` everywhere) — shows the
+    /// "AI may be wrong" note above compact Share (accent sweep ring) + Listen pills. No Save.
+    private func buildActions(isTtsEnabled: Bool, readFullAdvice: Bool) {
         actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         actionsRow.isHidden = false
-        if isTtsEnabled {
-            actionsRow.addArrangedSubview(makeActionChip(
-                systemImage: "speaker.wave.2.fill",
-                title: fcuiLabel(FCLabels.listen, "Listen"),
-                action: { [weak self] in self?.onListen?() }
-            ))
+
+        if readFullAdvice {
+            let button = FCUIPrimaryButton(title: fcuiLabel(FCLabels.readFullAdvice, "Read full advice"))
+            button.addAction(UIAction { [weak self] _ in self?.onReadFullAdvice?() }, for: .touchUpInside)
+            actionsRow.addArrangedSubview(button)
+            return
         }
-        actionsRow.addArrangedSubview(makeActionChip(
+
+        let infoIcon = UIImageView(image: UIImage(
+            systemName: "info.circle",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        ))
+        infoIcon.tintColor = FCUITheme.brandAccent
+        infoIcon.setContentHuggingPriority(.required, for: .horizontal)
+        let warning = UILabel()
+        warning.font = FCUITypography.current.labelSmall.font
+        warning.textColor = FCUITheme.foregroundSecondary
+        warning.numberOfLines = 0
+        warning.text = fcuiLabel(FCLabels.aiMayBeWrongPleaseDoubleCheck, "AI may be wrong. Please double-check.")
+        let warningRow = UIStackView(arrangedSubviews: [infoIcon, warning])
+        warningRow.axis = .horizontal
+        warningRow.spacing = 6
+        warningRow.alignment = .center
+        actionsRow.addArrangedSubview(warningRow)
+
+        let pills = UIStackView()
+        pills.axis = .horizontal
+        pills.spacing = 8
+        pills.alignment = .center
+        pills.addArrangedSubview(makeActionChip(
             systemImage: "square.and.arrow.up",
             title: fcuiLabel(FCLabels.shareDownload, "Share"),
+            sweepBorder: true,
             action: { [weak self] in
                 guard let self else { return }
                 self.onShare?(self.currentText)
             }
         ))
-        actionsRow.addArrangedSubview(UIView())
+        if isTtsEnabled {
+            pills.addArrangedSubview(makeActionChip(
+                systemImage: "speaker.wave.2.fill",
+                title: fcuiLabel(FCLabels.listen, "Listen"),
+                action: { [weak self] in self?.onListen?() }
+            ))
+        }
+        pills.addArrangedSubview(UIView())
+        actionsRow.addArrangedSubview(pills)
     }
 
-    /// Cleaner bordered brand-accent action chip (Share / Listen).
-    private func makeActionChip(systemImage: String, title: String, action: @escaping () -> Void) -> UIButton {
+    /// Bordered brand-accent action pill (Share / Listen). `sweepBorder` is the Share pill's
+    /// accent ring — the UIKit equivalent of Compose's `ActionButton(borderBrush =
+    /// brand.accentSweepBorder)`; Listen keeps the plain 1pt accent hairline.
+    private func makeActionChip(
+        systemImage: String,
+        title: String,
+        sweepBorder: Bool = false,
+        action: @escaping () -> Void
+    ) -> UIButton {
         let accent = FCUITheme.brandAccent
         var config = UIButton.Configuration.plain()
         config.image = UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
@@ -328,14 +388,77 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         config.baseForegroundColor = FCUITheme.foregroundSecondary
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in accent }
         config.background.backgroundColor = FCUITheme.surfaceSecondary
-        config.background.cornerRadius = 20
-        config.background.strokeColor = accent.withAlphaComponent(0.28)
-        config.background.strokeWidth = 1
+        config.cornerStyle = .capsule
+        if sweepBorder {
+            config.background.strokeWidth = 0
+        } else {
+            config.background.strokeColor = accent.withAlphaComponent(0.28)
+            config.background.strokeWidth = 1
+        }
         config.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
         let button = UIButton(configuration: config)
         button.titleLabel?.font = FCUITypography.current.labelSmall.font
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+        if sweepBorder {
+            let ring = FCUISweepBorderView(cornerRadius: .greatestFiniteMagnitude)
+            ring.translatesAutoresizingMaskIntoConstraints = false
+            button.addSubview(ring)
+            NSLayoutConstraint.activate([
+                ring.topAnchor.constraint(equalTo: button.topAnchor),
+                ring.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+                ring.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+                ring.trailingAnchor.constraint(equalTo: button.trailingAnchor)
+            ])
+        }
         return button
+    }
+}
+
+/// The Share pill's accent ring: a conic gradient — green at 12 o'clock, cyan at 3, green at 6,
+/// yellow at 9 (SwiftUI `FCBrandColors.accentSweepBorder`, app `ColorBrandSemantic.kt`) —
+/// stroked 3pt INSIDE the pill's rounded outline, as Compose's `Modifier.border` does.
+final class FCUISweepBorderView: UIView {
+    private static let lineWidth: CGFloat = 3
+    // Fixed design primitives, exactly as SwiftUI's FCPrimitive.green500 / cyan400 / yellow300.
+    private static let green = FCUITheme.green500
+    private static let cyan = UIColor(rgb: 0x22D3EE)
+    private static let yellow = UIColor(rgb: 0xFFF947)
+
+    private let cornerRadius: CGFloat
+    private let gradient = CAGradientLayer()
+    private let ringMask = CAShapeLayer()
+
+    init(cornerRadius: CGFloat) {
+        self.cornerRadius = cornerRadius
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        gradient.type = .conic
+        gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        gradient.endPoint = CGPoint(x: 0.5, y: 0)
+        gradient.colors = [Self.green, Self.cyan, Self.green, Self.yellow, Self.green].map(\.cgColor)
+        gradient.locations = [0, 0.25, 0.5, 0.75, 1]
+        ringMask.fillColor = UIColor.clear.cgColor
+        ringMask.strokeColor = UIColor.black.cgColor
+        ringMask.lineWidth = Self.lineWidth
+        gradient.mask = ringMask
+        layer.addSublayer(gradient)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.frame = bounds
+        ringMask.frame = bounds
+        let inset = Self.lineWidth / 2
+        let rect = bounds.insetBy(dx: inset, dy: inset)
+        // The stroke runs along `rect` (already inset by half the line), so its radius is the
+        // pill's own radius less that half-width — subtracting from rect's height would inset twice.
+        let radius = min(cornerRadius, bounds.height / 2) - inset
+        ringMask.path = UIBezierPath(roundedRect: rect, cornerRadius: max(radius, 0)).cgPath
+        CATransaction.commit()
     }
 }
 
@@ -343,82 +466,41 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
 
 final class FCUIFollowUpChipCell: UICollectionViewCell {
     var onTap: (() -> Void)?
-    private let card = UIView()
-    private let label = UILabel()
-    private let affordance = UIView()
-    private let arrow = UIImageView()
+    private let chip = FCUIAlignmentChipView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // Modern tappable suggestion card: card surface, brand-accent hairline
-        // border, comfortable ≥44pt touch target, trailing accent "ask"
-        // affordance. Recolors with host theme (accent = brandAccent token).
-        let accent = FCUITheme.brandAccent
-
-        card.backgroundColor = FCUITheme.surfaceSecondary
-        card.layer.cornerRadius = 16
-        card.layer.cornerCurve = .continuous
-        card.layer.borderWidth = 1
-        card.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
-        card.translatesAutoresizingMaskIntoConstraints = false
-
-        label.font = FCUITypography.current.bodyMedium.font
-        label.textColor = FCUITheme.foregroundPrimary
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        affordance.backgroundColor = accent.withAlphaComponent(0.16)
-        affordance.layer.cornerRadius = 15
-        affordance.translatesAutoresizingMaskIntoConstraints = false
-        arrow.image = UIImage(systemName: "arrow.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
-        arrow.tintColor = accent
-        arrow.contentMode = .center
-        arrow.translatesAutoresizingMaskIntoConstraints = false
-        affordance.addSubview(arrow)
-
-        card.addSubview(label)
-        card.addSubview(affordance)
-        contentView.addSubview(card)
-
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        card.addGestureRecognizer(tap)
-        card.isUserInteractionEnabled = true
-
+        // App parity (ChatResponseActions.kt, app dev/v2.5 — `useChips = true` for every answer):
+        // follow-ups are ALWAYS numbered chips, never the legacy suggestion cards.
+        chip.translatesAutoresizingMaskIntoConstraints = false
+        chip.addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
+        contentView.addSubview(chip)
         NSLayoutConstraint.activate([
-            card.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
-            card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
-            card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
-
-            label.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            label.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
-            label.centerYAnchor.constraint(equalTo: card.centerYAnchor),
-
-            affordance.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 12),
-            affordance.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
-            affordance.centerYAnchor.constraint(equalTo: card.centerYAnchor),
-            affordance.widthAnchor.constraint(equalToConstant: 30),
-            affordance.heightAnchor.constraint(equalToConstant: 30),
-
-            arrow.centerXAnchor.constraint(equalTo: affordance.centerXAnchor),
-            arrow.centerYAnchor.constraint(equalTo: affordance.centerYAnchor)
+            chip.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            chip.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+            chip.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            chip.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            chip.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-        super.traitCollectionDidChange(previous)
-        // Keep the accent border correct across light/dark.
-        card.layer.borderColor = FCUITheme.brandAccent.withAlphaComponent(0.35).cgColor
-    }
-
-    @objc private func handleTap() { onTap?() }
-
-    func configure(question: String) {
-        label.text = question
+    /// - Parameters:
+    ///   - number: 1-based position in the follow-up list (the chip's badge).
+    ///   - clarificationRequired: clarify moment → green Agentic accent, else neutral Suggested.
+    func configure(question: String, number: Int, clarificationRequired: Bool) {
+        chip.configure(
+            label: question,
+            number: number,
+            type: clarificationRequired ? .agentic : .suggested,
+            selected: false,
+            enabled: true
+        )
+        chip.accessibilityLabel = question
+        chip.accessibilityHint = fcuiLabel(FCLabels.ask, "Ask")
+        chip.isAccessibilityElement = true
+        chip.accessibilityTraits = .button
     }
 }
 

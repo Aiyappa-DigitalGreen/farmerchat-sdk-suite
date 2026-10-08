@@ -113,6 +113,9 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FcFragmentChatBinding.bind(view)
+        // App parity (ChatLoadingContent.kt:92): the pre-thread "Getting your answer…" loader is
+        // LogoSpinnerHorizontal — compact ring + shimmering label — not the vertical stack.
+        binding.fcChatLoading.horizontal = true
 
         observeLocationOutcomes()
 
@@ -614,7 +617,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                                     state.suggestedQuestionIds
                                         ?: List(state.suggestedQuestions.orEmpty().size) { null }
                                 } else emptyList(),
-                                clarificationRequired = state.clarificationRequired,
+                                // App ChatThreadContent.kt:582: a pre-generated answer
+                                // never asks a clarification.
+                                clarificationRequired = state.clarificationRequired &&
+                                    !message.isPreGenerated,
                                 showReadFullAdvice = message.isPreGenerated &&
                                     state.readFullAdviceRequestedForMessageId != message.id,
                                 showActions = isLast && !state.isLoading && settled,

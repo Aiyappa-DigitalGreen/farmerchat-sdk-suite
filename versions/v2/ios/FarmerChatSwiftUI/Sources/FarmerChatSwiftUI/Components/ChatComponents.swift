@@ -764,12 +764,14 @@ public struct FCAiResponseBubble: View {
             // Tool progress, or the initial "getting your answer" state before any text arrived.
             if message.isStreaming,
                message.text.isEmpty || !(message.streamingStatus ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
-                FCThinkingIndicator(
-                    label: message.streamingStatus
+                // App parity (ChatThreadContent.kt): tool progress is a LogoSpinnerHorizontal.
+                FCLogoSpinner(
+                    message: message.streamingStatus
                         ?? fcLabel(
                             AgenticLabels.gettingYourAnswer,
                             AgenticLabels.gettingYourAnswerFallback
-                        )
+                        ),
+                    vertical: false
                 )
             }
 
@@ -806,41 +808,55 @@ public struct FCAiResponseBubble: View {
                 )
             }
 
-            if revealFinished, message.isPreGenerated, let onReadFullAdvice {
-                Button(action: onReadFullAdvice) {
-                    HStack(spacing: 4) {
-                        Text(fcLabel(FCLabels.readFullAdvice, "Read full advice"))
-                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
-                    }
-                    .fcTextStyle(theme.typography.labelMedium)
-                    .foregroundColor(theme.brand.surfacePrimary)
-                }
-                .buttonStyle(.plain)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
             if revealFinished, showActions, !message.isStreaming, !message.isInterrupted {
-                // Cleaner Share / Save / Listen row — bordered brand-accent
-                // chips that recolor with the host theme; fade/slide in only
-                // after the reveal completes.
-                HStack(spacing: 10) {
-                    actionChip(
-                        icon: "square.and.arrow.up",
-                        title: fcLabel(FCLabels.shareDownload, "Share"),
-                        loading: false,
-                        sweepBorder: message.isAgentic && !message.isPreGenerated,
-                        action: onShare
-                    )
-                    actionChip(icon: "arrow.down.to.line", title: fcLabel(FCLabels.save, "Save"), loading: false, action: onDownload)
-                    if isTtsEnabled {
-                        actionChip(
-                            icon: isAudioPlaying ? "pause.fill" : "speaker.wave.2.fill",
-                            title: fcLabel(FCLabels.listen, "Listen"),
-                            loading: isSynthesising,
-                            action: onListen
+                // App parity (ChatResponseActions.kt, app dev/v2.5): the branches are EXCLUSIVE.
+                // A pre-generated answer whose "Read full advice" is available shows ONLY that
+                // primary button; every other answer — agentic, legacy and pre-generated alike
+                // (`useChips = true` everywhere) — gets the "AI may be wrong" note above compact
+                // Share (accent sweep ring) + Listen pills. No Save. Fades/slides in only after
+                // the reveal completes.
+                Group {
+                    if let onReadFullAdvice {
+                        FCPrimaryButton(
+                            title: fcLabel(FCLabels.readFullAdvice, "Read full advice"),
+                            action: onReadFullAdvice
                         )
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(theme.content.buttonPrimaryAccent)
+                                Text(fcLabel(
+                                    FCLabels.aiMayBeWrongPleaseDoubleCheck,
+                                    "AI may be wrong. Please double-check."
+                                ))
+                                .fcTextStyle(theme.typography.labelSmall)
+                                .foregroundColor(theme.content.foregroundSecondary)
+                            }
+                            HStack(spacing: 8) {
+                                actionChip(
+                                    icon: "square.and.arrow.up",
+                                    title: fcLabel(FCLabels.shareDownload, "Share"),
+                                    loading: false,
+                                    sweepBorder: true,
+                                    action: onShare
+                                )
+                                // Listen needs a server message id to synthesise (core's
+                                // synthesiseAudio no-ops without one, e.g. on a pre-generated
+                                // answer) — same gate as the web SDK.
+                                if isTtsEnabled, message.messageId != nil {
+                                    actionChip(
+                                        icon: isAudioPlaying ? "pause.fill" : "speaker.wave.2.fill",
+                                        title: fcLabel(FCLabels.listen, "Listen"),
+                                        loading: isSynthesising,
+                                        action: onListen
+                                    )
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
-                    Spacer(minLength: 0)
                 }
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
@@ -851,9 +867,10 @@ public struct FCAiResponseBubble: View {
         .clipShape(RoundedRectangle(cornerRadius: FarmerChat.shared.config.bubbleCornerRadius ?? min(theme.shapes.card, 22), style: .continuous))
     }
 
-    /// `sweepBorder` is the agentic Share chip's accent ring — SwiftUI's equivalent of the
-    /// Compose `ActionButton(borderBrush = brand.accentSweepBorder)` (app @ bda80659). The legacy
-    /// Share chip and every other action keep the plain 1pt accent hairline.
+    /// `sweepBorder` is the Share chip's accent ring — SwiftUI's equivalent of the Compose
+    /// `ActionButton(borderBrush = brand.accentSweepBorder)` (app @ bda80659). Since app dev/v2.5
+    /// every answer uses the agentic row, so Share always carries it; Listen keeps the plain 1pt
+    /// accent hairline.
     private func actionChip(
         icon: String,
         title: String,
@@ -900,12 +917,15 @@ public struct FCFollowUpChips: View {
     @Environment(\.fcTheme) private var theme
     let title: String
     let questions: [String]
+    /// Clarify moment: chips take the green Agentic accent; otherwise the neutral Suggested one.
+    var clarificationRequired: Bool = false
     let onTap: (String) -> Void
 
     public var body: some View {
-        // Titled "Related questions" section (accent dot + title) then modern
-        // tappable suggestion cards. The dot, border and trailing affordance use
-        // the brand accent so host theming recolors them automatically.
+        // Titled section (accent dot + title) then the follow-ups. App parity
+        // (ChatResponseActions.kt, app dev/v2.5 — `useChips = true` for every answer): follow-ups
+        // are ALWAYS numbered chips — `ChipType.Agentic` on a clarify moment, `ChipType.Suggested`
+        // otherwise — never the legacy suggestion cards.
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Circle()
@@ -917,8 +937,19 @@ public struct FCFollowUpChips: View {
             }
             .padding(.leading, 2)
 
-            ForEach(questions, id: \.self) { question in
-                FCSuggestedCard(text: question, onTap: { onTap(question) })
+            VStack(alignment: .leading, spacing: 8) {
+                // Keyed by offset: two identical questions must not collide.
+                ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                    FCAlignmentChipView(
+                        label: question,
+                        number: index + 1,
+                        type: clarificationRequired ? .agentic : .suggested,
+                        selected: false,
+                        enabled: true,
+                        onTap: { onTap(question) }
+                    )
+                    .accessibilityHint(fcLabel(FCLabels.ask, "Ask"))
+                }
             }
         }
     }
@@ -967,71 +998,14 @@ public struct FCSuggestedCard: View {
     }
 }
 
-// MARK: - Thinking indicator (port of AiAnswer.kt ThinkingIndicator)
-
-/// Branded "thinking" state shown before the answer arrives: a small spinning
-/// logo mark + a pulsing "Getting your answer…" label with three animated dots.
-public struct FCThinkingIndicator: View {
-    @Environment(\.fcTheme) private var theme
-    var label: String
-    @State private var spin = false
-
-    public init(label: String) { self.label = label }
-
-    public var body: some View {
-        let accent = theme.content.borderActive
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .trim(from: 0, to: 0.75)
-                    .stroke(accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .frame(width: 26, height: 26)
-                    .rotationEffect(.degrees(spin ? 360 : 0))
-                FCLogoMark(size: 15, tint: accent)
-            }
-            .onAppear {
-                withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) { spin = true }
-            }
-            HStack(spacing: 8) {
-                Text(label)
-                    .fcTextStyle(theme.typography.labelMedium)
-                    .foregroundColor(theme.content.foregroundSecondary)
-                FCThreeDotPulse()
-            }
-        }
-    }
-}
-
-private struct FCThreeDotPulse: View {
-    @Environment(\.fcTheme) private var theme
-    @State private var animating = false
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { i in
-                Circle()
-                    .fill(theme.content.borderActive)
-                    .frame(width: 6, height: 6)
-                    .opacity(animating ? 1 : 0.25)
-                    .animation(
-                        .easeInOut(duration: 0.6)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.18),
-                        value: animating
-                    )
-            }
-        }
-        .onAppear { animating = true }
-    }
-}
-
 // MARK: - Loading placeholder bubble (refined "thinking" state)
 
+/// Port of `ChatThreadContent.kt` `ChatMessage.LoadingPlaceholder`: a `LogoSpinnerHorizontal`
+/// with the shimmering primary-colour "Getting your answer…" label — no dots, no muted label.
 public struct FCChatLoadingBubble: View {
     public init() {}
     public var body: some View {
-        FCThinkingIndicator(label: fcLabel(FCLabels.gettingYourAnswer, "Getting your answer…"))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        FCLogoSpinner(message: fcLabel(FCLabels.gettingYourAnswer, "Getting your answer…"), vertical: false)
     }
 }
 

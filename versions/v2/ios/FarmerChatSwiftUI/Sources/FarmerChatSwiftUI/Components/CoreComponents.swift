@@ -272,15 +272,17 @@ public struct FCLogoSpinner: View {
     var vertical: Bool = true
 
     public var body: some View {
-        Group {
-            if vertical {
-                // App parity (LogoSpinner.kt:88): 12dp, not 16.
-                VStack(spacing: 12) { spinnerContent }
-            } else {
-                HStack(spacing: 12) { spinnerContent }
-            }
+        if vertical {
+            // App parity (LogoSpinner.kt:88): 12dp, not 16.
+            VStack(spacing: 12) { spinnerContent }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            // App parity (LogoSpinnerHorizontal.kt:94): a plain leading Row with no fill — it is
+            // an inline chat status line (loading placeholder, tool progress, stall hint), not a
+            // full-screen loader, so it must neither centre itself nor claim the height.
+            HStack(spacing: 12) { spinnerContent }
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @State private var spin = false

@@ -19,11 +19,13 @@ struct FCStreamStallHint: View {
     var body: some View {
         Group {
             if stalled {
-                FCThinkingIndicator(
-                    label: fcLabel(
+                // App parity (ChatThreadContent.kt): the stall hint is a LogoSpinnerHorizontal.
+                FCLogoSpinner(
+                    message: fcLabel(
                         AgenticLabels.responsePausedResuming,
                         AgenticLabels.responsePausedResumingFallback
-                    )
+                    ),
+                    vertical: false
                 )
             }
         }

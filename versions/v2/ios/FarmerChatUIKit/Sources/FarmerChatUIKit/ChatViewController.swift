@@ -31,7 +31,10 @@ final class FCUIChatViewController: UIViewController {
         case alignment(String) // ChatMessage.id
         /// The farmer's shared location (2.0.0) — a fixed-size card, so its own cell class.
         case location(String) // ChatMessage.id
-        case followUp(String)
+        /// A numbered follow-up chip. Keyed by position as well as text (two identical questions
+        /// must not collide in the snapshot) and carrying the clarify flag, so a flip of the
+        /// chips' accent re-renders them.
+        case followUp(index: Int, question: String, clarify: Bool)
         case inlineError(String)
 
         var messageId: String? {
@@ -202,8 +205,16 @@ final class FCUIChatViewController: UIViewController {
                 isTtsEnabled: self.viewModel.state.isTtsEnabled,
                 playback: self.playback,
                 isLatest: messageId == self.lastAiRowId,
-                isBusy: self.viewModel.state.isLoading
+                isBusy: self.viewModel.state.isLoading,
+                readFullAdviceAvailable: self.readFullAdviceAvailable(messageId: messageId)
             )
+            cell.onReadFullAdvice = { [weak self] in
+                guard let self else { return }
+                self.viewModel.onAction(.replacePreGeneratedWithQuestion(
+                    question: self.args.question ?? "",
+                    triggerInputType: "card"
+                ))
+            }
             cell.onRetry = { self.viewModel.onAction(.retryLastRequest) }
             cell.onListen = { self.listenTapped() }
             cell.onShare = { text in self.share(text: text) }
@@ -243,8 +254,9 @@ final class FCUIChatViewController: UIViewController {
             guard let self, case .location(let location)? = self.messagesById[messageId] else { return }
             cell.configure(message: location)
         }
-        let chipCell = UICollectionView.CellRegistration<FCUIFollowUpChipCell, String> { [weak self] cell, _, question in
-            cell.configure(question: question)
+        let chipCell = UICollectionView.CellRegistration<FCUIFollowUpChipCell, (index: Int, question: String, clarify: Bool)> { [weak self] cell, _, item in
+            let question = item.question
+            cell.configure(question: question, number: item.index + 1, clarificationRequired: item.clarify)
             cell.onTap = {
                 self?.viewModel.onAction(.sendFollowUpQuestion(
                     question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil
@@ -276,8 +288,10 @@ final class FCUIChatViewController: UIViewController {
                 return collectionView.dequeueConfiguredReusableCell(using: alignmentCell, for: indexPath, item: id)
             case .location(let id):
                 return collectionView.dequeueConfiguredReusableCell(using: locationCell, for: indexPath, item: id)
-            case .followUp(let question):
-                return collectionView.dequeueConfiguredReusableCell(using: chipCell, for: indexPath, item: question)
+            case .followUp(let index, let question, let clarify):
+                return collectionView.dequeueConfiguredReusableCell(
+                    using: chipCell, for: indexPath, item: (index: index, question: question, clarify: clarify)
+                )
             case .inlineError(let message):
                 return collectionView.dequeueConfiguredReusableCell(using: errorCell, for: indexPath, item: message)
             }
@@ -363,7 +377,11 @@ final class FCUIChatViewController: UIViewController {
         // never marking such a surface "revealed", which gates its follow-up section.)
         if let suggestions = state.suggestedQuestions, !suggestions.isEmpty, !state.isLoading,
            !lastAiIsExclusiveSurface() {
-            rows.append(contentsOf: suggestions.map { Row.followUp($0) })
+            // App: a pre-generated answer's follow-ups never take the clarify accent.
+            let clarify = state.clarificationRequired && !lastAiIsPreGenerated()
+            rows.append(contentsOf: suggestions.enumerated().map {
+                Row.followUp(index: $0.offset, question: $0.element, clarify: clarify)
+            })
         }
 
         var snapshot = NSDiffableDataSourceSnapshot<Int, Row>()
@@ -437,6 +455,23 @@ final class FCUIChatViewController: UIViewController {
             if case .aiResponse = message { return message.id }
         }
         return nil
+    }
+
+    private func lastAiIsPreGenerated() -> Bool {
+        guard let id = lastAiRowId, case .aiResponse(let ai)? = messagesById[id] else { return false }
+        return ai.isPreGenerated
+    }
+
+    /// App parity (ChatThreadContent.kt `onReadFullAdviceClick`): only the latest pre-generated
+    /// answer with a non-blank question that has not already been expanded offers
+    /// "Read full advice" — and then in place of the Share / Listen row.
+    private func readFullAdviceAvailable(messageId: String) -> Bool {
+        guard messageId == lastAiRowId, case .aiResponse(let ai)? = messagesById[messageId] else {
+            return false
+        }
+        return ai.isPreGenerated
+            && !(args.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && viewModel.state.readFullAdviceRequestedForMessageId != ai.id
     }
 
     private func lastAiIsExclusiveSurface() -> Bool {

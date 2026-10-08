@@ -213,7 +213,9 @@ struct ChatView: View {
                         playback: playback
                     )
                 }
-                FCThinkingIndicator(label: fcLabel(FCLabels.gettingYourAnswer, "Getting your answer…"))
+                // App parity (ChatThreadContent.kt LoadingPlaceholder): LogoSpinnerHorizontal with
+                // the shimmering primary-colour label.
+                FCLogoSpinner(message: fcLabel(FCLabels.gettingYourAnswer, "Getting your answer…"), vertical: false)
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,6 +269,9 @@ struct ChatView: View {
                                 ? fcLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
                                 : fcLabel(FCLabels.relatedQuestions, "You can also ask"),
                             questions: suggestions,
+                            // App: a pre-generated answer's follow-ups never use the clarify accent.
+                            clarificationRequired: viewModel.state.clarificationRequired
+                                && lastAiMessage?.isPreGenerated != true,
                             onTap: { question in
                                 viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil))
                             }
@@ -423,7 +428,10 @@ struct ChatView: View {
                     && !ai.isAgentic && !revealedIds.contains(ai.id)
                 FCAiResponseBubble(
                     message: ai,
-                    showActions: isLastAi && !ai.isPreGenerated,
+                    // App parity (ChatThreadContent.kt, app dev/v2.5): the latest answer always
+                    // gets the response actions — pre-generated included. Whether that is the
+                    // "Read full advice" button or the Share/Listen row is decided in the bubble.
+                    showActions: isLastAi,
                     isTtsEnabled: viewModel.state.isTtsEnabled,
                     isSynthesising: viewModel.state.isLoadingSynthesiseAudio,
                     isAudioPlaying: viewModel.state.isAudioPlaying,
@@ -431,7 +439,10 @@ struct ChatView: View {
                     onListen: listenTapped,
                     onShare: { share(ai) },
                     onDownload: { download(ai) },
-                    onReadFullAdvice: ai.isPreGenerated ? {
+                    // "Read full advice" is available only on the latest pre-generated answer with
+                    // a non-blank question that has not already been expanded (app:
+                    // `isPreGenerated && questionForReadFull.isNotBlank() && id != requested`).
+                    onReadFullAdvice: readFullAdviceAvailable(for: ai, isLastAi: isLastAi) ? {
                         viewModel.onAction(.replacePreGeneratedWithQuestion(question: args.question ?? "", triggerInputType: "card"))
                     } : nil,
                     onRevealComplete: { revealedIds.insert(ai.id) },
@@ -456,6 +467,15 @@ struct ChatView: View {
         case .loadingPlaceholder:
             FCChatLoadingBubble()
         }
+    }
+
+    /// App parity (ChatThreadContent.kt `onReadFullAdviceClick`): non-nil only for the latest
+    /// pre-generated answer with a non-blank question that has not already been expanded.
+    private func readFullAdviceAvailable(for ai: ChatMessage.AiResponse, isLastAi: Bool) -> Bool {
+        ai.isPreGenerated
+            && isLastAi
+            && !(args.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && viewModel.state.readFullAdviceRequestedForMessageId != ai.id
     }
 
     // MARK: - Alignment chips (2.0.0)
