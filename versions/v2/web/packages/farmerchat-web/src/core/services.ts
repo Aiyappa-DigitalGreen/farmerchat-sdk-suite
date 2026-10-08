@@ -23,11 +23,13 @@ export interface SdkServices {
 export function createServices(config: FarmerChatConfig): SdkServices {
   const resolved = resolveConfig(config);
   const store = new SessionStore();
-  // Env-scoped cache invalidation: a conversation id is only valid on the
-  // backend that created it — drop it if the base URL changed since last init.
+  // FarmerChatGraph.kt parity: everything the SDK stores — tokens, user id, labels, conversation,
+  // location — belongs to the backend that issued it. When the base URL changes since the last
+  // init, wipe it all (keeping only the appearance choice), or the new backend receives another
+  // backend's token, rejects it, and the guest-token fallback fails too.
   const lastBase = store.getString(PrefKeys.LAST_BASE_URL);
   if (lastBase && lastBase !== resolved.baseUrl) {
-    store.remove(PrefKeys.NEW_CONVERSATION_ID);
+    store.clearAll([PrefKeys.APPEARANCE_MODE]);
   }
   store.setString(PrefKeys.LAST_BASE_URL, resolved.baseUrl);
   const labels = new LabelManager(store, {

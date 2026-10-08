@@ -96,8 +96,11 @@ export class FarmerChatSdk {
         // backend that created it — drop it if the base URL changed since last init.
         const currentBase = this.config.baseUrl;
         const lastBase = this.store.getString(StorageKeys.LAST_BASE_URL);
+        // FarmerChatGraph.kt parity: everything stored belongs to the backend that issued it — on a
+        // base-URL change wipe it (keeping appearance), or the foreign token 401s and the guest
+        // fallback 400s on the foreign user_id, leaving the SDK unable to recover.
         if (lastBase && lastBase !== currentBase) {
-          this.store.remove(StorageKeys.NEW_CONVERSATION_ID);
+          await this.store.clearAllPreservingAppearance();
         }
         this.store.set(StorageKeys.LAST_BASE_URL, currentBase);
 

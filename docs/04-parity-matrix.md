@@ -7798,3 +7798,18 @@ surfaces (Home band, drawer) by 49 dp — a web widget has no status bar.
 
 **Not verified:** OTP send/verify (would text a real number), voice/camera permission flows,
 Safari/Firefox, the widget inside a native WebView.
+
+## Switching backend wipes the stored session — v2 iOS / RN / web (2026-10-08)
+
+Reported from the widget demo: Home stuck on "Can't load right now". Both demo pages share one
+origin, so a guest session issued by the mock backend was sent to the stage backend: every call
+401'd, `get_new_access_token` failed, and the guest fallback (`send_tokens` with the foreign
+`user_id`) 400'd — the SDK could never recover. Android v2 already handled this in
+`FarmerChatGraph` (`prefs.clearAll(preserveAppearance = true)` when `LAST_BASE_URL` changes); v2
+iOS, react-native and web only dropped the conversation id.
+
+| | android v2 | ios v2 | react-native v2 | web v2 | v1 line (all platforms) |
+|---|---|---|---|---|---|
+| Base-URL change clears tokens / user / labels / conversation (keeps appearance) | ✅ (already) | ✅ `prefs.clearAll(preservingAppearance:)` — `swift build` + 110 core tests | ✅ `store.clearAllPreservingAppearance()` — `tsc --noEmit` | ✅ `store.clearAll([APPEARANCE_MODE])` — reproduced mock→stage in Chrome before/after | ⛔ NOT fixed: still drops only the conversation id |
+
+Matters to any host that changes `environment` / `customBaseUrl` on an existing install.

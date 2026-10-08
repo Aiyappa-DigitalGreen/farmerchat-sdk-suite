@@ -97,8 +97,12 @@ public final class FarmerChat: @unchecked Sendable {
         // backend that created it — drop the stored id if the base URL changed
         // since last init (else the answer endpoint 500s on a stale/foreign id).
         let currentBase = config.resolvedBaseURL.absoluteString
+        // FarmerChatGraph.kt parity: tokens, user id, labels and conversation all belong to the
+        // backend that issued them. On a base-URL change wipe them (keeping appearance), or the new
+        // backend 401s the foreign token and the guest fallback (send_tokens with the foreign
+        // user_id) 400s, so the SDK can never recover.
         if let last = prefs.string(.lastBaseURL), !last.isEmpty, last != currentBase {
-            prefs.remove(.newConversationId)
+            prefs.clearAll(preservingAppearance: true)
         }
         prefs.setString(currentBase, .lastBaseURL)
 
