@@ -276,7 +276,9 @@ const css = `
   box-sizing: border-box;
 }
 /* Inline embedding (docs/07 C1): fill the host container flush, no rounded frame. */
-.fcsdk-root--inline { border-radius: 0; height: 100%; }
+/* Inline: the host container owns the height (a widget panel on a landscape phone is ~350 px), so
+   the standalone 480 px floor would push the bottom of every screen out of reach. */
+.fcsdk-root--inline { border-radius: 0; height: 100%; min-height: 0; }
 .fcsdk-root *, .fcsdk-root *::before, .fcsdk-root *::after { box-sizing: border-box; }
 .fcsdk-root button { font-family: inherit; cursor: pointer; }
 .fcsdk-root input, .fcsdk-root textarea { font-family: inherit; }
@@ -1532,6 +1534,18 @@ const css = `
 .fcsdk-c-locbubble-map { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: rgba(0, 201, 80, 0.16); }
 .fcsdk-c-locbubble-footer { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; }
+/* Short viewports (landscape phone, on-screen keyboard, widget fullscreen sheet): the pinned
+   welcome panel would take the whole height and hide every language. Scroll the screen as one page
+   instead, so the list comes first and the panel follows it. */
+@media (max-height: 520px) {
+  .fcsdk-c-lang-screen { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .fcsdk-c-lang-screen > .fcsdk-c-lang-scroll { flex: none; overflow: visible; }
+  .fcsdk-c-lang-screen > .fcsdk-c-lang-panel { flex: none; }
+  /* The drawer's rows + sign-up / recent-chats block exceed ~350 px: scroll the drawer as a whole. */
+  .fcsdk-c-drawer { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .fcsdk-c-drawer > * { flex-shrink: 0; }
+  .fcsdk-c-drawer-historyscroll { flex: none; overflow: visible; }
+}
 /* @@END-OF-STYLESHEET@@ */
 `;
 

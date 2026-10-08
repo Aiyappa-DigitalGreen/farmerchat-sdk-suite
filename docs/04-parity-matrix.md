@@ -7895,3 +7895,21 @@ Not changed: a React host passing an inline `config={{…}}` rebuilds the sessio
 (documented in the widget README). iOS Safari can still scroll the page behind a fullscreen panel
 when the touch starts on a non-scrolling area — fixing that needs host-page styling, which the
 web rules forbid. Verified: `tsc --noEmit` + builds for the SDK and the widget; auth tests 6/6.
+
+### Mobile pass on the widget (same day)
+
+Emulated phone (390×844 @3x, touch, iPhone UA, fresh profile, stage via proxy), plus 844×390
+landscape and 390×508 (on-screen keyboard stand-in). Walked launcher → language → name → Home →
+drawer → chat answer → close → reopen. No horizontal overflow at any size; the fullscreen sheet
+covers the viewport with the 40 px close bar above the SDK; the launcher hides while open and
+returns on close; chat state survives close/reopen; the composer stays pinned with the
+list scrolling above it on Home and Chat at every height. Fixed:
+
+| Issue | Fix |
+|---|---|
+| Inline root kept the standalone `min-height: 480px`, so in a 350 px landscape panel the bottom of every screen was cut off | `.fcsdk-root--inline { min-height: 0 }` — the host container owns the height (web v1 + v2) |
+| Landscape language screen: the pinned welcome panel took the whole height, no language visible | `@media (max-height: 520px)`: the language screen scrolls as one page (list first, panel after) — v2 |
+| Landscape drawer: content 504 px in a 350 px drawer, "Sign up" off-screen and unscrollable | same media query: the drawer scrolls as a whole — v2 |
+
+Not verified: a real device (iOS Safari's visual-viewport behaviour with the real keyboard, safe
+areas / notch), Firefox. v1 web has no widget; its language screen / drawer were not re-laid out.

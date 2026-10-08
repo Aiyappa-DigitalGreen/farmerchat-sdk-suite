@@ -78,7 +78,9 @@ const css = `
   box-sizing: border-box;
 }
 /* Inline embedding (docs/07 C1): fill the host container flush, no rounded frame. */
-.fcsdk-root--inline { border-radius: 0; height: 100%; }
+/* Inline: the host container owns the height (a widget panel on a landscape phone is ~350 px), so
+   the standalone 480 px floor would push the bottom of every screen out of reach. */
+.fcsdk-root--inline { border-radius: 0; height: 100%; min-height: 0; }
 .fcsdk-root *, .fcsdk-root *::before, .fcsdk-root *::after { box-sizing: border-box; }
 .fcsdk-root button { font-family: inherit; cursor: pointer; }
 .fcsdk-root input, .fcsdk-root textarea { font-family: inherit; }

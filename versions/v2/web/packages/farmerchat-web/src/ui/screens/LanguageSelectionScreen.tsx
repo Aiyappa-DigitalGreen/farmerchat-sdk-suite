@@ -75,7 +75,7 @@ export function LanguageSelectionScreen(props: {
   const { rows, hasMore } = languageRows(languageGroups, state.expandedLanguages, state.selectedLanguageId);
 
   return (
-    <div className="fcsdk-screen fcsdk-c-screen">
+    <div className="fcsdk-screen fcsdk-c-screen fcsdk-c-lang-screen">
       <div className="fcsdk-scroll fcsdk-c-lang-scroll">
         <FcIcon name="logo_mark" size={32} tint="var(--fc-c-border-active)" title="FarmerChat" />
         <h2 className="fcsdk-c-title fc-t-titleLarge" style={{ marginTop: 14 }}>
