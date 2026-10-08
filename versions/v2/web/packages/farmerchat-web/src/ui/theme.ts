@@ -902,8 +902,10 @@ const css = `
   left: 50%; top: 50%; width: 260%; aspect-ratio: 1; border-radius: 50%;
   background: conic-gradient(from 0turn, #00C950, #22D3EE, #00C950, #FFF947, #00C950);
   animation: fcsdk-aura-spin 7s linear infinite, fcsdk-aura-breathe 15s ease-in-out infinite; }
-.fcsdk-composer-field--aura::after { content: ''; position: absolute; z-index: 1; inset: 2.4px;
-  border-radius: 14px; background: inherit; }
+/* The panel's edge is blurred so the ring fades inward, standing in for the Kotlin bloom
+   (a crisp 2.4dp core over wider 3.6dp / 5.4dp strokes at 0.30 / 0.16 alpha). */
+.fcsdk-composer-field--aura::after { content: ''; position: absolute; z-index: 1; inset: 3.4px;
+  border-radius: 13px; background: inherit; filter: blur(1.6px); }
 @keyframes fcsdk-aura-spin {
   from { transform: translate(-50%, -50%) rotate(0turn); }
   to { transform: translate(-50%, -50%) rotate(1turn); } }
