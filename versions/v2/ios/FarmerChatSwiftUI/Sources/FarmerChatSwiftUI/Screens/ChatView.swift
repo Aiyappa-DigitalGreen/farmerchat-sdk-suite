@@ -483,14 +483,14 @@ struct ChatView: View {
         case .chooseFromGallery:
             showGallery = true
         case .none:
-            sendAlignmentChip(chip)
+            sendAlignmentChip(chip, kind: kind)
         }
     }
 
-    /// A non-capability alignment chip sends the chip's `value` (falling back to its label) as a
-    /// follow-up — the same action a related-question tap uses, exactly as Compose does.
-    private func sendAlignmentChip(_ chip: AlignmentChip) {
-        let question = chip.submittedQuery
+    /// A non-capability alignment chip sends its label (gender-select: its value) as a follow-up,
+    /// the same action a related-question tap uses. See ``AlignmentChip/submittedQuery(for:)``.
+    private func sendAlignmentChip(_ chip: AlignmentChip, kind: AlignmentKind?) {
+        let question = chip.submittedQuery(for: kind)
         guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         viewModel.onAction(.sendFollowUpQuestion(
             question: question,

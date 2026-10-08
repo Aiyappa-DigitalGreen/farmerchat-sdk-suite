@@ -196,3 +196,38 @@ export function capabilityChipRoute(
   if (isPhoto && chip.value === CapabilityChip.VALUE_CHOOSE_FROM_GALLERY) return 'GALLERY';
   return 'TEXT';
 }
+
+/** What a plain-text alignment chip tap sends, shows, and marks. See {@link alignmentChipSend}. */
+export interface AlignmentChipSend {
+  /** Sent to the API as the next query. */
+  query: string;
+  /** Recorded on the surface to highlight/lock the tapped chip; never sent. */
+  selectionValue: string;
+  /** The user-bubble text. */
+  displayText: string;
+}
+
+/**
+ * The text a non-capability chip tap sends. Port of the app's `onAlignmentChipClick` else-branches
+ * (fc-compose-agentic `ui/chat/ChatScreen.kt:1639-1663`) and Android's `routeAlignmentChip`:
+ *
+ * - **Every kind except gender-select:** the chip LABEL is shown in the bubble AND sent as the
+ *   query; the VALUE only marks the chosen chip. Sending the value instead puts machine strings
+ *   such as `written_plan` in the farmer's bubble and asks the backend a question nobody typed.
+ * - **gender-select:** the VALUE is sent (the backend expects the raw gender value) while the
+ *   LABEL is shown.
+ *
+ * Each side falls back to the other when blank. Null when the chip carries neither.
+ */
+export function alignmentChipSend(
+  kind: AlignmentKind | null | undefined,
+  chip: { label?: string | null; value?: string | null },
+): AlignmentChipSend | null {
+  const label = chip.label && chip.label.trim().length > 0 ? chip.label : null;
+  const value = chip.value && chip.value.trim().length > 0 ? chip.value : null;
+  const shown = label ?? value;
+  const marked = value ?? label;
+  if (shown === null || marked === null) return null;
+  if (kind === 'GENDER_SELECT') return { query: marked, selectionValue: marked, displayText: shown };
+  return { query: shown, selectionValue: marked, displayText: shown };
+}

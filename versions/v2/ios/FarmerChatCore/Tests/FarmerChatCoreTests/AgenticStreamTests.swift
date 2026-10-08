@@ -386,12 +386,26 @@ final class AgenticStreamTests: XCTestCase {
         XCTAssertEqual(response?.response, "")
         XCTAssertEqual(AlignmentKind.fromType(response?.alignments?.type), .clarify)
         XCTAssertEqual(response?.alignments?.message, "Which crop?")
-        XCTAssertEqual(response?.alignments?.chips?.first?.submittedQuery, "tomato")
+        XCTAssertEqual(response?.alignments?.chips?.first?.submittedQuery(for: .clarify), "Tomato")
         XCTAssertEqual(response?.alignments?.originalQuery, "pest problem")
     }
 
     func testAChipWithoutAValueSubmitsItsLabel() {
-        XCTAssertEqual(AlignmentChip(label: "Tomato", value: "  ").submittedQuery, "Tomato")
+        XCTAssertEqual(AlignmentChip(label: "Tomato", value: "  ").submittedQuery(for: .clarify), "Tomato")
+    }
+
+    /// The bug: a confirm chip sent its VALUE, so the farmer's bubble read "written_plan".
+    func testAConfirmChipSubmitsItsLabelNotItsValue() {
+        let chip = AlignmentChip(label: "Step-by-step plan", value: "written_plan")
+        XCTAssertEqual(chip.submittedQuery(for: .confirm), "Step-by-step plan")
+    }
+
+    func testAChipWithoutALabelSubmitsItsValue() {
+        XCTAssertEqual(AlignmentChip(label: nil, value: "yes").submittedQuery(for: .confirm), "yes")
+    }
+
+    func testGenderSelectSubmitsItsValue() {
+        XCTAssertEqual(AlignmentChip(label: "Female", value: "female").submittedQuery(for: .genderSelect), "female")
     }
 
     // MARK: - Transport

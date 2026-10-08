@@ -7913,3 +7913,26 @@ list scrolling above it on Home and Chat at every height. Fixed:
 
 Not verified: a real device (iOS Safari's visual-viewport behaviour with the real keyboard, safe
 areas / notch), Firefox. v1 web has no widget; its language screen / drawer were not re-laid out.
+
+## Alignment chips sent their machine value instead of their label — v2 web / RN / iOS (2026-10-08)
+
+Seen in the widget: tapping "Step-by-step plan" on a "Please confirm" surface put `written_plan`
+in the farmer's bubble and sent it as the question. The app
+(fc-compose-agentic `ui/chat/ChatScreen.kt:1639-1663`) shows AND sends the chip **label**, and
+uses the **value** only to mark the chosen chip; `gender-select` alone sends the value (the
+backend expects it) under its label. Android v2 (`routeAlignmentChip`) already did this; web, RN
+and iOS v2 sent `value ?? label`.
+
+| Platform | Fix | Verified |
+|---|---|---|
+| Android v2 | — (already correct) | — |
+| web v2 | `alignmentChipSend()` in `core/alignment.ts`; `selectAlignmentChip` sends `query`, marks `selectionValue`, bubble shows `displayText` | tsc + vite build; `alignmentPick` test (6 new assertions); headless on stage: commodity-confirm chip sent "Yes, save tomatoes", bubble matches, stage answered |
+| RN v2 | same helper in `core/types.ts`; `SelectAlignmentChip` uses it; `sendTextQuery` gains `displayText` | tsc |
+| iOS v2 | `AlignmentChip.submittedQuery(for:)` — label first, value first for `genderSelect` | `swift test` (122 pass, 3 new) + simulator builds of SwiftUI and UIKit |
+
+**Gap (iOS v2):** a `gender-select` bubble shows the sent value (e.g. `female`) rather than the
+label, because `sendFollowUpQuestion` has no bubble-text override. Web / RN / Android show the label.
+
+Chips on stage now also carry `submit: {kind, text, surface_type}` (docs/02 §#27a). On a decline
+chip `submit.text` differs from the label ("No, do not save tomatoes to my farmer profile" vs
+"Not now"). The app does not read `submit`, so no SDK reads it either.

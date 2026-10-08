@@ -658,14 +658,23 @@ public struct AlignmentChip: Codable, Sendable, Equatable, Identifiable {
     /// Stable-enough identity for SwiftUI lists (chips are short, fixed sets).
     public var id: String { "\(label ?? "")|\(value ?? "")|\(action ?? "")" }
 
-    /// What a tap sends: the chip's `value`, falling back to its visible `label`.
+    /// What a tap sends. Port of the app's `onAlignmentChipClick` else-branches
+    /// (fc-compose-agentic `ui/chat/ChatScreen.kt:1639-1663`) and Android's `routeAlignmentChip`:
     ///
-    /// Only meaningful for a NON-capability chip. A capability chip (see ``actionSelect``) must
-    /// never send this — it invokes a device capability and only the OUTCOME is sent, otherwise
-    /// the farmer asks the backend the literal question "share_precise_location".
-    public var submittedQuery: String {
-        if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return value }
-        return label ?? ""
+    /// - Every kind except gender-select: the visible `label` is sent (and shown in the user
+    ///   bubble); the `value` only marks the chosen chip. Sending the value put machine strings
+    ///   such as `written_plan` in the farmer's bubble.
+    /// - `genderSelect`: the `value` is sent — the backend expects the raw gender value. The app
+    ///   shows the label in the bubble; this SDK shows the sent text (docs/04).
+    ///
+    /// Each side falls back to the other when blank. Only meaningful for a NON-capability chip. A
+    /// capability chip (see ``actionSelect``) must never send this — it invokes a device
+    /// capability and only the OUTCOME is sent.
+    public func submittedQuery(for kind: AlignmentKind?) -> String {
+        let label = self.label.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let value = self.value.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        if kind == .genderSelect { return value ?? label ?? "" }
+        return label ?? value ?? ""
     }
 
     // MARK: - Capability chip wire values

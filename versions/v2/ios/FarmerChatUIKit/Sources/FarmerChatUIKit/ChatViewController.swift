@@ -478,7 +478,7 @@ final class FCUIChatViewController: UIViewController {
         case .chooseFromGallery:
             launchPicker(sourceType: .photoLibrary)
         case .none:
-            sendAlignmentChip(chip)
+            sendAlignmentChip(chip, kind: kind)
         }
     }
 
@@ -568,8 +568,8 @@ final class FCUIChatViewController: UIViewController {
 
     /// A non-capability alignment chip sends the chip's `value` (falling back to its label) as a
     /// follow-up — the same action a related-question tap uses, exactly as SwiftUI and Compose do.
-    private func sendAlignmentChip(_ chip: AlignmentChip) {
-        let question = chip.submittedQuery
+    private func sendAlignmentChip(_ chip: AlignmentChip, kind: AlignmentKind?) {
+        let question = chip.submittedQuery(for: kind)
         guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         viewModel.onAction(.sendFollowUpQuestion(
             question: question,

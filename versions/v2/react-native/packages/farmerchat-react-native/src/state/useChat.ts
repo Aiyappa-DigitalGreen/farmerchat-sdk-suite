@@ -19,6 +19,7 @@ import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
 import {
   alignmentAnalyticsType,
+  alignmentChipSend,
   AlignmentChipWire,
   alignmentKindFromType,
   isAdditiveAlignment,
@@ -852,6 +853,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
        * placeholder id it prepared itself.
        */
       staged?: { placeholderId: string; anchorId: string } | null;
+      /** User-bubble text when it differs from the sent [question] (gender-select chips). */
+      displayText?: string | null;
     }) => {
       const question = params.question.trim();
       if (question.length === 0) return;
@@ -869,7 +872,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         const userMessage: UserMessage = {
           kind: 'user',
           id: userMessageId,
-          text: question,
+          text: params.displayText ?? question,
           imageUri: params.imageUri ?? null,
           audioUri: params.audioUri ?? null,
           userBubbleImageWideBanner: false,
@@ -1491,11 +1494,11 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           });
           break;
         case 'SelectAlignmentChip': {
-          // Lock/highlight the tapped chip on its surface, then send it as a follow-up. The
-          // chip's `value` is what the backend expects; `label` is the display text and only a
-          // fallback.
-          const picked = action.chip.value ?? action.chip.label ?? '';
-          if (picked.trim().length === 0) break;
+          // App rule (alignmentChipSend): the LABEL is shown and sent, the VALUE only marks the
+          // chip; gender-select sends the value under its label.
+          const send = alignmentChipSend(action.kind, action.chip);
+          if (!send) break;
+          const picked = send.selectionValue;
           const surfaceId = action.messageId;
           mutate((prev) => ({
             ...prev,
@@ -1510,9 +1513,10 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
                 : m,
             ),
           }));
-          void sdk.api.trackFollowUpClick({ follow_up_question: picked });
+          void sdk.api.trackFollowUpClick({ follow_up_question: send.query });
           void sendTextQuery({
-            question: picked,
+            question: send.query,
+            displayText: send.displayText === send.query ? null : send.displayText,
             triggeredInputType: 'follow_up',
             sendQueryProperties: {
               // Segments the funnel by which alignment surface was tapped. Same property name

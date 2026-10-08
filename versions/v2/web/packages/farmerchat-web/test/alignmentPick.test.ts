@@ -12,7 +12,7 @@
  *     node --import ./test/ts-extension-hook.mjs test/alignmentPick.test.ts
  */
 
-import { recordAlignmentPick } from '../src/core/alignment.ts';
+import { alignmentChipSend, recordAlignmentPick } from '../src/core/alignment.ts';
 
 let passed = 0;
 const failures: string[] = [];
@@ -99,6 +99,35 @@ check(
     .alignmentSelectedValues,
   [' wheat ', 'wheat'],
 );
+
+// --- what a chip tap sends (alignmentChipSend, app ChatScreen.kt:1639-1663) -------------------
+// The bug this pins: a confirm chip sent its VALUE, so the bubble read "written_plan".
+check(
+  'confirm: the LABEL is shown and sent, the VALUE only marks the chip',
+  alignmentChipSend('CONFIRM', { label: 'Step-by-step plan', value: 'written_plan' }),
+  { query: 'Step-by-step plan', selectionValue: 'written_plan', displayText: 'Step-by-step plan' },
+);
+check(
+  'clarify behaves the same',
+  alignmentChipSend('CLARIFY', { label: 'Wheat', value: 'crop_wheat' }),
+  { query: 'Wheat', selectionValue: 'crop_wheat', displayText: 'Wheat' },
+);
+check(
+  'gender-select sends the VALUE under its LABEL',
+  alignmentChipSend('GENDER_SELECT', { label: 'Female', value: 'female' }),
+  { query: 'female', selectionValue: 'female', displayText: 'Female' },
+);
+check(
+  'a blank label falls back to the value',
+  alignmentChipSend('CONFIRM', { label: '  ', value: 'yes' }),
+  { query: 'yes', selectionValue: 'yes', displayText: 'yes' },
+);
+check(
+  'a missing value falls back to the label for the selection',
+  alignmentChipSend('CONFIRM', { label: 'Yes' }),
+  { query: 'Yes', selectionValue: 'Yes', displayText: 'Yes' },
+);
+check('a chip with neither sends nothing', alignmentChipSend('CONFIRM', { label: '', value: null }), null);
 
 // ---------------------------------------------------------------------------
 

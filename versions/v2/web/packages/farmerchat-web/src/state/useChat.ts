@@ -26,6 +26,7 @@ import { isAbortError } from '../core/agenticStream';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
 import {
   alignmentAnalyticsType,
+  alignmentChipSend,
   alignmentKindFromType,
   CapabilityChip,
   isAdditiveAlignment,
@@ -215,6 +216,8 @@ export interface ChatActions {
       audioUri?: string | null;
       /** 2.0.0: set when the question came from an alignment chip (see [selectAlignmentChip]). */
       agenticChipType?: string | null;
+      /** User-bubble text when it differs from the sent [question] (gender-select chips). */
+      displayText?: string | null;
     },
   ) => Promise<void>;
   /**
@@ -719,6 +722,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
          * picture shown as a 16:9 banner. Never sent — the query stays a text query.
          */
         contentCardImageUrl?: string | null;
+        /** User-bubble text when it differs from the sent [question] (gender-select chips). */
+        displayText?: string | null;
       },
     ) => {
       const userMsgId = opts.reuseUserMessageId ?? nextLocalId('user');
@@ -737,7 +742,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
           const userMsg: UserMessage = {
             kind: 'user',
             id: userMsgId,
-            text: question,
+            text: opts.displayText ?? question,
             audioUri: opts.audioUri ?? undefined,
             imageUri: opts.contentCardImageUrl ?? undefined,
             userBubbleImageWideBanner: !!opts.contentCardImageUrl,
@@ -908,6 +913,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       await runTextQuery(question, {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
+        displayText: opts.displayText ?? null,
         properties: {
           triggeredInputType: opts.audioUri ? 'mic' : 'card',
           agenticChipType: opts.agenticChipType ?? null,
@@ -919,19 +925,20 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
   const selectAlignmentChip = useCallback<ChatActions['selectAlignmentChip']>(
     async (messageId, kind, chip) => {
-      // The chip's `value` is what the backend expects; `label` is the display text and only a
-      // fallback. Stored verbatim (never trimmed) so it still matches the untrimmed comparison
-      // `AlignmentSurface` makes against chip.value / chip.label.
-      const picked = chip.value ?? chip.label ?? '';
-      if (picked.trim().length === 0) return;
+      // App rule (alignmentChipSend): the LABEL is shown and sent, the VALUE only marks the chip;
+      // gender-select sends the value under its label. The selection is stored verbatim (never
+      // trimmed) so it still matches the untrimmed comparison `AlignmentSurface` makes.
+      const send = alignmentChipSend(kind, chip);
+      if (!send) return;
       setState((s) => {
-        const messages = recordAlignmentPick(s.messages, messageId, picked);
+        const messages = recordAlignmentPick(s.messages, messageId, send.selectionValue);
         return messages === s.messages ? s : { ...s, messages: messages as ChatMessage[] };
       });
-      await sendFollowUpQuestion(picked, {
+      await sendFollowUpQuestion(send.query, {
         // Segments the funnel by which alignment surface was tapped. Existing event, existing
         // property name (`AlignmentKind.analyticsType` on Android) — no new event is introduced.
         agenticChipType: alignmentAnalyticsType(kind),
+        displayText: send.displayText === send.query ? null : send.displayText,
       });
     },
     [sendFollowUpQuestion],
