@@ -135,3 +135,11 @@ curl -s "http://localhost:8899/api/images/v2/daily/?user_device_time=x&user_id=u
 # thread history
 curl -s "http://localhost:8899/api/chat/conversation_chat_history/?conversation_id=conv-001&page=1"
 ```
+
+## Labels
+
+English labels come from `served-labels-en.json`, which is stage's endpoint #3 response (language 1)
+captured on 2026-10-08. Keys stage does not serve fall back to `LABEL_OVERRIDES`, then to text built
+from the key name. Before this file existed, 136 of the 233 mock labels were invented text that
+the real backend never serves (e.g. "Share download" where stage serves "Share"). Refresh the file
+from stage whenever the labels change.

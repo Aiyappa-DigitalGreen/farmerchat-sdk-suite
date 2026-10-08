@@ -377,7 +377,15 @@ const LABEL_OVERRIDES = {
   'fc_v2_app_label_ssfr_maize_question': 'How much fertilizer should I apply to my maize?',
 };
 
+// English labels as the real stage backend serves them (endpoint #3, language 1, captured
+// 2026-10-08). They win over everything below: the SDK renders the SERVED string, so a mock that
+// invents text (e.g. "Share download" for `share_download`, which stage serves as "Share") makes
+// the UI look wrong in ways the real backend never does. Refresh this file from stage when labels
+// change; keys stage does not serve fall back to the overrides, then to text built from the key.
+const SERVED_EN = require('./served-labels-en.json');
+
 function deriveEnglish(key) {
+  if (SERVED_EN[`${key}_en`] !== undefined) return SERVED_EN[`${key}_en`];
   if (LABEL_OVERRIDES[key]) return LABEL_OVERRIDES[key];
   let s = key
     .replace(/^fc_v2_app_label_/, '')
@@ -393,6 +401,10 @@ function buildLabelMap() {
   const map = {};
   for (const key of LABEL_KEYS) {
     map[`${key}_en`] = deriveEnglish(key);
+  }
+  // Served keys the list above does not name yet, so the mock never lags the real backend.
+  for (const [fullKey, value] of Object.entries(SERVED_EN)) {
+    if (!(fullKey in map)) map[fullKey] = value;
   }
   return map;
 }
