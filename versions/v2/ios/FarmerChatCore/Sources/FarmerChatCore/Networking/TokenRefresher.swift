@@ -9,6 +9,15 @@ import Foundation
 ///   attempts gives up.
 /// - Step 1: refresh via `get_new_access_token` with the stored refresh token.
 /// - Step 2 fallback: `send_tokens(device_id, user_id)` with the guest API key.
+/// - Step 3 guest re-initialisation (SDK addition, doc 02): only when not
+///   `HOST_TOKEN`, Step 2 produced no token, the session is a guest
+///   (`OTP_VERIFIED` not set) and Step 2 failed because the identity was
+///   rejected (`send_tokens` 400/401/403/404, or no `user_id`/`device_id` to
+///   send — never a network error, timeout or 5xx): `initialize_user` with the
+///   guest API key and `{device_id, lat?, long?}` (existing device id; lat/long
+///   from `FARMER_APP_LATITUDE/LONGITUDE` when stored). On an `access_token`:
+///   save access + refresh tokens and `user_id`, remove `NEW_CONVERSATION_ID`,
+///   keep everything else, and retry. Otherwise the session is expired.
 /// - Concurrent 401s share one in-flight refresh (actor serialization).
 /// - Never runs on the main thread (actors hop off it by construction).
 actor TokenRefresher {
@@ -35,6 +44,21 @@ actor TokenRefresher {
     private let authMode: FarmerChatAuthMode
     private let tokenProvider: FarmerChatTokenProvider?
     private let onSessionExpired: (@Sendable () -> Void)?
+    /// Needed by Step 3 (guest detection, stored lat/long, conversation id).
+    /// `nil` disables Step 3.
+    private let prefs: PreferenceStore?
+
+    /// `send_tokens` statuses meaning "the backend does not know this identity".
+    static let identityRejectedStatuses: Set<Int> = [400, 401, 403, 404]
+
+    /// Result of one raw POST to a token endpoint.
+    private enum CallResult<Response> {
+        case ok(Response)
+        /// Non-2xx HTTP answer.
+        case http(status: Int)
+        /// Network error, timeout, non-HTTP response, or undecodable 2xx body.
+        case failed
+    }
 
     /// Token value that was current when the last successful refresh finished.
     /// Lets a queued waiter reuse a refresh that already happened.
@@ -49,7 +73,8 @@ actor TokenRefresher {
         deviceInfo: DeviceInfoProvider,
         authMode: FarmerChatAuthMode = .sdkOtp,
         tokenProvider: FarmerChatTokenProvider? = nil,
-        onSessionExpired: (@Sendable () -> Void)? = nil
+        onSessionExpired: (@Sendable () -> Void)? = nil,
+        prefs: PreferenceStore? = nil
     ) {
         self.tokenStore = tokenStore
         self.baseURL = baseURL
@@ -59,6 +84,7 @@ actor TokenRefresher {
         self.authMode = authMode
         self.tokenProvider = tokenProvider
         self.onSessionExpired = onSessionExpired
+        self.prefs = prefs
     }
 
     static func shouldSkip(url: URL?) -> Bool {
@@ -102,10 +128,11 @@ actor TokenRefresher {
 
         // Step 1 — refresh token.
         if let refreshToken = tokenStore.refreshToken, !refreshToken.isEmpty {
-            if let tokens = await callTokenEndpoint(
+            if case .ok(let tokens) = await post(
                 path: "api/user/get_new_access_token/",
                 body: RefreshTokenRequest(refreshToken: refreshToken),
-                includeApiKey: false
+                includeApiKey: false,
+                as: RefreshTokenResponse.self
             ), let access = tokens.accessToken, !access.isEmpty {
                 tokenStore.saveTokens(access: access, refresh: tokens.refreshToken)
                 lastRefreshedToken = access
@@ -114,27 +141,61 @@ actor TokenRefresher {
         }
 
         // Step 2 — guest-token fallback with API key.
-        let fallbackBody = SendNewTokenRequest(deviceId: tokenStore.deviceId, userId: tokenStore.userId)
-        if let tokens = await callTokenEndpoint(
+        let deviceId = tokenStore.deviceId
+        let userId = tokenStore.userId
+        let fallbackBody = SendNewTokenRequest(deviceId: deviceId, userId: userId)
+        let fallback = await post(
             path: "api/user/send_tokens/",
             body: fallbackBody,
-            includeApiKey: true
-        ), let access = tokens.accessToken, !access.isEmpty {
+            includeApiKey: true,
+            as: RefreshTokenResponse.self
+        )
+        if case .ok(let tokens) = fallback, let access = tokens.accessToken, !access.isEmpty {
             tokenStore.saveTokens(access: access, refresh: tokens.refreshToken)
             lastRefreshedToken = access
             return .refreshed(accessToken: access)
+        }
+
+        // Step 3 — guest re-initialisation (identity rejected, guest only).
+        let identityMissing = deviceId.isEmpty || (userId ?? "").isEmpty
+        var identityRejected = identityMissing
+        if case .http(let status) = fallback, Self.identityRejectedStatuses.contains(status) {
+            identityRejected = true
+        }
+        if identityRejected, let prefs, !prefs.bool(.otpVerified) {
+            let request = InitializeGuestUserRequest(
+                deviceId: deviceId,
+                lat: prefs.double(.latitude),
+                long: prefs.double(.longitude)
+            )
+            if case .ok(let response) = await post(
+                path: "api/user/initialize_user/",
+                body: request,
+                includeApiKey: true,
+                as: InitializeGuestUserResponse.self
+            ), let access = response.accessToken, !access.isEmpty {
+                tokenStore.saveTokens(access: access, refresh: response.refreshToken)
+                if let newUserId = response.userId?.stringValue, !newUserId.isEmpty {
+                    tokenStore.userId = newUserId
+                }
+                // The conversation belonged to the old user; everything else is kept.
+                prefs.remove(.newConversationId)
+                lastRefreshedToken = access
+                return .refreshed(accessToken: access)
+            }
         }
 
         onSessionExpired?()
         return .sessionExpired
     }
 
-    private func callTokenEndpoint<Body: Encodable>(
+    private func post<Body: Encodable, Response: Decodable>(
         path: String,
         body: Body,
-        includeApiKey: Bool
-    ) async -> RefreshTokenResponse? {
-        guard let url = URL(string: path, relativeTo: baseURL) else { return nil }
+        includeApiKey: Bool,
+        as type: Response.Type
+    ) async -> CallResult<Response> {
+        guard let url = URL(string: path, relativeTo: baseURL) else { return .failed }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = ApiPriority.p2.timeoutSeconds
@@ -147,12 +208,11 @@ actor TokenRefresher {
         request.httpBody = try? JSONEncoder().encode(body)
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                return nil
-            }
-            return try JSONDecoder().decode(RefreshTokenResponse.self, from: data)
+            guard let http = response as? HTTPURLResponse else { return .failed }
+            guard (200..<300).contains(http.statusCode) else { return .http(status: http.statusCode) }
+            return .ok(try JSONDecoder().decode(Response.self, from: data))
         } catch {
-            return nil
+            return .failed
         }
     }
 }

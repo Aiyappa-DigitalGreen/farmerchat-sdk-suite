@@ -13,10 +13,13 @@ final class KeychainTokenStore: @unchecked Sendable {
         case deviceId = "your_android_device_id" // kept verbatim for cross-platform key parity
     }
 
-    private let service = "org.digitalgreen.farmerchat.sdk"
+    private let service: String
     private let lock = NSLock()
 
-    public init() {}
+    /// `service` is overridable only so unit tests use an isolated Keychain namespace.
+    init(service: String = "org.digitalgreen.farmerchat.sdk") {
+        self.service = service
+    }
 
     // MARK: - Public accessors
 

@@ -258,6 +258,19 @@ in the JSON. Tracked in docs/05.
 - Loop guard: ≥2 prior responses → give up.
 - Step 1: refresh via `get_new_access_token`; save tokens; retry with new Bearer.
 - Step 2 fallback: `send_tokens(device_id, user_id)` with guest API key; save; retry.
+- **Step 3 — guest re-initialisation (SDK addition, 2026-10-08, all platforms).** Runs only when
+  (a) the auth mode is not `HOST_TOKEN`, (b) Step 2 produced no token, (c) the session is a **guest**
+  (`OTP_VERIFIED` not set — a phone-verified identity is never replaced; it still ends in
+  `onSessionExpired`), and (d) Step 2 failed because the identity was **rejected** — `send_tokens`
+  answered 400/401/403/404 (stage: 400 `{"detail":"User not found or inactive."}`), or there was no
+  `user_id`/`device_id` to send. A network error, timeout or 5xx never triggers it.
+  Action: `initialize_user` with the guest API key and `{device_id, lat?, long?}` (the existing
+  device id; lat/long from `FARMER_APP_LATITUDE/LONGITUDE` when stored). On a response with an
+  `access_token`: save access + refresh tokens and `user_id`, remove `NEW_CONVERSATION_ID` (it belonged
+  to the old user), keep everything else (language, labels, onboarding flags, appearance, location),
+  and retry the original request. Otherwise `onSessionExpired`. No analytics event is added.
+  Why: without it a guest the backend no longer knows (a session from another backend, a deleted
+  guest) loops 401 → `send_tokens` 400 forever and every screen fails.
 - Never run on main thread.
 
 ## Session & persistence

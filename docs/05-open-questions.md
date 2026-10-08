@@ -779,7 +779,11 @@ the bytes itself, so it renders; a browser `<img>` refuses an SVG with that type
 read it cross-origin. Web v2 falls back to the app's `fc_weather_sunclouds` drawable. Ask: serve the
 icons as `image/svg+xml` (and ideally with CORS) so web shows the real condition icon.
 
-## A guest the backend no longer recognises never recovers (2026-10-08)
+## A guest the backend no longer recognises never recovers (2026-10-08) — RESOLVED same day
+
+**Decision (user, 2026-10-08): "implement auto new guest everywhere."** Implemented as docs/02
+TokenAuthenticator Step 3 on all platforms, both trees — see docs/04 "Guest re-initialisation".
+Original question kept below for the record.
 
 When the stored guest's tokens are rejected and the guest fallback `send_tokens` answers
 **400 "User not found or inactive."** (seen when a session from another backend survives, or a guest

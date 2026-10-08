@@ -40,6 +40,14 @@ android {
             withSourcesJar()
         }
     }
+
+    testOptions {
+        unitTests {
+            // TokenAuthenticatorTest drives the error path, which calls android.util.Log;
+            // without this every Log call throws "not mocked" on the JVM (same as v2).
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

@@ -7,6 +7,8 @@ interface TokenStore {
     fun getRefreshToken(): String?
     fun saveTokens(accessToken: String?, refreshToken: String?)
     fun getUserId(): String?
+    /** Persists the user id (canonical key `logged_user_id_key`, the one [getUserId] reads). */
+    fun saveUserId(userId: String)
     fun getDeviceId(): String?
     /** Removes only tokens (keys mirror the app: access/refresh). */
     fun clear()
@@ -34,6 +36,10 @@ class PreferenceTokenStore(
 
     override fun getUserId(): String? =
         prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
+
+    override fun saveUserId(userId: String) {
+        prefs.putString(SdkPreferences.Keys.PREF_USER_ID, userId)
+    }
 
     override fun getDeviceId(): String? =
         prefs.getString(SdkPreferences.Keys.ANDROID_DEVICE_ID, "")

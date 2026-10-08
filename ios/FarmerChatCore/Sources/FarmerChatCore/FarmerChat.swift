@@ -123,7 +123,8 @@ public final class FarmerChat: @unchecked Sendable {
             deviceInfo: deviceInfo,
             authMode: config.authMode,
             tokenProvider: config.tokenProvider,
-            onSessionExpired: config.onSessionExpired
+            onSessionExpired: config.onSessionExpired,
+            prefs: prefs
         )
         let client = APIClient(
             baseURL: config.resolvedBaseURL,

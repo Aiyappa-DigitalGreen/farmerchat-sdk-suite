@@ -142,7 +142,15 @@ class FarmerChatGraph internal constructor(
         guestApiKey = guestApiKey,
         onSessionExpired = { config.onSessionExpired?.invoke() },
         hostTokenMode = config.authMode == org.digitalgreen.farmerchat.sdk.FarmerChatAuthMode.HOST_TOKEN,
-        hostTokenProvider = config.tokenProvider
+        hostTokenProvider = config.tokenProvider,
+        // Step 3 (guest re-initialisation) inputs — read from prefs at 401 time.
+        isPhoneVerified = { prefs.getBoolean(SdkPreferences.Keys.OTP_VERIFIED, false) },
+        deviceIdSupplier = { deviceIdProvider.getDeviceId() },
+        storedLatLong = {
+            prefs.getString(SdkPreferences.Keys.FARMER_APP_LATITUDE, "").toDoubleOrNull() to
+                prefs.getString(SdkPreferences.Keys.FARMER_APP_LONGITUDE, "").toDoubleOrNull()
+        },
+        onGuestReinitialized = { prefs.remove(SdkPreferences.Keys.NEW_CONVERSATION_ID) }
     )
 
     /**

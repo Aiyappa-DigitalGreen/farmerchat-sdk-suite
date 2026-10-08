@@ -9,6 +9,7 @@ import okhttp3.Route
 import org.digitalgreen.farmerchat.sdk.core.auth.AuthApi
 import org.digitalgreen.farmerchat.sdk.core.auth.TokenStore
 import org.digitalgreen.farmerchat.sdk.core.remote.ApiConstants
+import org.digitalgreen.farmerchat.sdk.core.model.InitializeGuestUserRequest
 import org.digitalgreen.farmerchat.sdk.core.model.RefreshTokenRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SendNewTokenRequest
 
@@ -19,10 +20,20 @@ import org.digitalgreen.farmerchat.sdk.core.model.SendNewTokenRequest
  * 2. Loop guard: gives up after 2 prior responses.
  * 3. Step 1 — refresh via get_new_access_token; save tokens; retry with new Bearer.
  * 4. Step 2 — fallback: send_tokens(device_id, user_id) with the guest API key.
- * 5. Never runs on the main thread; refresh is single-flight (concurrent 401s wait
+ * 5. Step 3 — guest re-initialisation (docs/02 "TokenAuthenticator (401 refresh)"). Runs only
+ *    when NOT [hostTokenMode], Step 2 produced no token, the session is a guest
+ *    ([isPhoneVerified] false — a phone-verified identity is never replaced), AND Step 2 failed
+ *    because the identity was rejected: send_tokens answered 400/401/403/404, or there was no
+ *    user_id/device_id to send. A network error, timeout or 5xx never triggers it.
+ *    Action: initialize_user with the guest API key and {device_id, lat?, long?} (existing
+ *    device id via [deviceIdSupplier]; lat/long from [storedLatLong]). On a response with an
+ *    access_token: save access + refresh tokens and user_id, call [onGuestReinitialized]
+ *    (removes NEW_CONVERSATION_ID — it belonged to the old user; every other pref is kept),
+ *    and retry the original request. Otherwise [onSessionExpired]. No analytics event.
+ * 6. Never runs on the main thread; refresh is single-flight (concurrent 401s wait
  *    on a lock, then reuse the token the winning thread saved).
  *
- * When both steps fail, [onSessionExpired] fires so the host can react.
+ * When every applicable step fails, [onSessionExpired] fires so the host can react.
  */
 class TokenAuthenticator(
     private val tokenStore: TokenStore,
@@ -32,14 +43,24 @@ class TokenAuthenticator(
     /** C2: when true, refresh delegates to [hostTokenProvider] instead of the OTP/guest flow. */
     private val hostTokenMode: Boolean = false,
     /** C2: HOST_TOKEN refresh source — returns a fresh access token or null (session expired). */
-    private val hostTokenProvider: (() -> String?)? = null
+    private val hostTokenProvider: (() -> String?)? = null,
+    /** Step 3 gate: true once phone OTP is verified (prefs `OTP_VERIFIED`). Default keeps Step 3 off. */
+    private val isPhoneVerified: () -> Boolean = { true },
+    /** Step 3: the install's device id (creates + persists one when none is stored). */
+    private val deviceIdSupplier: () -> String? = { tokenStore.getDeviceId() },
+    /** Step 3: stored `FARMER_APP_LATITUDE` / `FARMER_APP_LONGITUDE`, null when absent. */
+    private val storedLatLong: () -> Pair<Double?, Double?> = { null to null },
+    /** Step 3 success hook: drop session state that belonged to the old user (NEW_CONVERSATION_ID). */
+    private val onGuestReinitialized: () -> Unit = {},
+    /** ANR guard; injectable only so JVM tests (where Looper is a stub) can exercise the flow. */
+    private val isMainThread: () -> Boolean = { Looper.myLooper() == Looper.getMainLooper() }
 ) : Authenticator {
 
     private val refreshLock = Any()
 
     override fun authenticate(route: Route?, response: Response): Request? {
         // Guard against ANR
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        if (isMainThread()) {
             return null
         }
 
@@ -113,32 +134,74 @@ class TokenAuthenticator(
             // ---------- STEP 2: fallback → send_tokens (guest token) ----------
             val deviceId = tokenStore.getDeviceId()
             val userId = tokenStore.getUserId()
+            val identityRejected: Boolean
             if (deviceId.isNullOrBlank() || userId.isNullOrBlank()) {
-                onSessionExpired?.invoke()
-                return null
+                identityRejected = true
+            } else {
+                val sendTokenRes = authApi.sendUserTokens(
+                    guestApiKey,
+                    SendNewTokenRequest(device_id = deviceId, user_id = userId)
+                ).execute()
+
+                if (sendTokenRes.isSuccessful) {
+                    val body = sendTokenRes.body()
+                    val newAccess = body?.access_token
+                    val newRefresh = body?.refresh_token
+                    if (!newAccess.isNullOrBlank()) {
+                        tokenStore.saveTokens(newAccess, newRefresh)
+                        return response.request.newBuilder()
+                            .header("Authorization", "Bearer $newAccess")
+                            .build()
+                    }
+                }
+                identityRejected = sendTokenRes.code() in IDENTITY_REJECTED_CODES
             }
 
-            val sendTokenRes = authApi.sendUserTokens(
-                guestApiKey,
-                SendNewTokenRequest(device_id = deviceId, user_id = userId)
-            ).execute()
-
-            if (sendTokenRes.isSuccessful) {
-                val body = sendTokenRes.body()
-                val newAccess = body?.access_token
-                val newRefresh = body?.refresh_token
-                if (!newAccess.isNullOrBlank()) {
-                    tokenStore.saveTokens(newAccess, newRefresh)
-                    return response.request.newBuilder()
-                        .header("Authorization", "Bearer $newAccess")
-                        .build()
-                }
+            // ---------- STEP 3: guest re-initialisation (rejected guest identity only) ----------
+            if (identityRejected && !isPhoneVerified()) {
+                return reinitializeGuest(authApi, response)
             }
 
             onSessionExpired?.invoke()
             null
         } catch (e: Exception) {
             Log.e("TokenAuthenticator", "Auth failed: ${e.localizedMessage}")
+            null
+        }
+    }
+
+    /**
+     * Step 3: initialize_user with the guest API key. Success → tokens + user_id saved,
+     * [onGuestReinitialized], original request retried. Anything else (including a network
+     * failure) → [onSessionExpired] + null.
+     */
+    private fun reinitializeGuest(authApi: AuthApi, response: Response): Request? {
+        return try {
+            val (lat, long) = storedLatLong()
+            val deviceId = deviceIdSupplier()
+            if (deviceId.isNullOrBlank()) {
+                onSessionExpired?.invoke()
+                return null
+            }
+            val initRes = authApi.initializeGuestUser(
+                guestApiKey,
+                InitializeGuestUserRequest(device_id = deviceId, lat = lat, long = long)
+            ).execute()
+            val body = if (initRes.isSuccessful) initRes.body() else null
+            val newAccess: String? = body?.access_token
+            if (newAccess.isNullOrBlank()) {
+                onSessionExpired?.invoke()
+                return null
+            }
+            tokenStore.saveTokens(newAccess, body?.refresh_token)
+            body?.user_id?.takeIf { it.isNotBlank() }?.let { tokenStore.saveUserId(it) }
+            onGuestReinitialized()
+            response.request.newBuilder()
+                .header("Authorization", "Bearer $newAccess")
+                .build()
+        } catch (e: Exception) {
+            Log.e("TokenAuthenticator", "Guest re-init failed: ${e.localizedMessage}")
+            onSessionExpired?.invoke()
             null
         }
     }
@@ -159,5 +222,10 @@ class TokenAuthenticator(
             url.contains(ApiConstants.AUTH_REFRESH) ||
             url.contains(ApiConstants.SEND_USER_TOKENS) ||
             url.contains(ApiConstants.INITIALIZE_GUEST_USER)
+    }
+
+    private companion object {
+        /** send_tokens codes meaning "this identity is unknown/inactive" (stage: 400 User not found). */
+        val IDENTITY_REJECTED_CODES = setOf(400, 401, 403, 404)
     }
 }

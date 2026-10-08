@@ -35,7 +35,7 @@ fc-compose Android app source (/Users/Aiyappa/AndroidStudioProjects/fc-compose �
   - ApiPriority: P1 = 5 s / 1 retry, P2 = 10 s / 2, P3 = 30 s / 3.
   - Retryable HTTP: 408, 500, 502, 503, 504, 404. Never retry 400, 429, 401.
   - Backoff: `min(500 * 2^attempt, 3000)` ms.
-  - 401 refresh: skip-list (`generate_otp`, `verify_otp`, `get_new_access_token`, `send_tokens`, `initialize_user`), loop guard at 2, refresh → guest `send_tokens` fallback, never on main thread, single-flight.
+  - 401 refresh: skip-list (`generate_otp`, `verify_otp`, `get_new_access_token`, `send_tokens`, `initialize_user`), loop guard at 2, refresh → guest `send_tokens` fallback → (guest whose identity is rejected only) `initialize_user` re-init (docs/02 Step 3), never on main thread, single-flight.
   - Headers: `Build-Version: v2`, `Device-Info` (URL-encoded JSON), `Authorization: Bearer` when present, `X-Request-ID`, `X-Timeout`.
   - Voice transcription accepted only if `!error && confidence_score > 0.7 && text not blank`.
   - OTP: 4 digits, 180 s resend timer, WhatsApp/SMS channels per country (endpoint #20).

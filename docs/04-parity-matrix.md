@@ -7813,3 +7813,29 @@ iOS, react-native and web only dropped the conversation id.
 | Base-URL change clears tokens / user / labels / conversation (keeps appearance) | ✅ (already) | ✅ `prefs.clearAll(preservingAppearance:)` — `swift build` + 110 core tests | ✅ `store.clearAllPreservingAppearance()` — `tsc --noEmit` | ✅ `store.clearAll([APPEARANCE_MODE])` — reproduced mock→stage in Chrome before/after | ⛔ NOT fixed: still drops only the conversation id |
 
 Matters to any host that changes `environment` / `customBaseUrl` on an existing install.
+
+## Guest re-initialisation on a rejected guest identity — docs/02 Step 3, all platforms (2026-10-08)
+
+Follow-up to the entry above. A browser (or device) that still holds a guest the backend no longer
+knows — a session from another backend before the wipe existed, or a deactivated guest — 401'd on
+every call, `get_new_access_token` failed and `send_tokens` returned 400 "User not found or
+inactive.", so the SDK could only end in session-expired and Home showed "Can't load right now".
+User decision (docs/05, resolved same day): "yes implement auto new guest everywhere".
+
+Step 3 (docs/02 TokenAuthenticator) runs only when **all** hold: the session is a guest
+(`OTP_VERIFIED` false), the mode is not HOST_TOKEN, and the identity was rejected — `send_tokens`
+answered 400/401/403/404, or there is no user/device id to send. It never runs on a network error,
+timeout or 5xx (a guest is never discarded for a flaky network) and never for a phone-verified
+user. Action: `initialize_user` (endpoint #1, guest API key, `{device_id, lat?, long?}`) → save
+access/refresh + `user_id`, drop `NEW_CONVERSATION_ID`, retry the original request. Still
+single-flight and inside the loop guard of 2.
+
+| | android v1 | android v2 | ios v1 | ios v2 | react-native v1 | react-native v2 | web v1 | web v2 |
+|---|---|---|---|---|---|---|---|---|
+| Step 3 guest re-init | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Verified by | compile + `TokenAuthenticatorTest` (6 cases; module 21 tests pass) | compile + `TokenAuthenticatorTest` (6 cases; module 218 tests pass) | `swift build` + `TokenRefresherGuestReinitTests` (5; 26 total pass) | `swift build` + `TokenRefresherGuestReinitTests` (5; 115 total pass) | `tsc --noEmit` only — ⚠️ UNVERIFIED at runtime (package has no HTTP-client tests) | `tsc --noEmit` only — ⚠️ UNVERIFIED at runtime | `tsc --noEmit` + `test/authRecovery.test.ts` 4/4 | `tsc --noEmit` + `test/authRecovery.test.ts` 4/4 + Chrome repro against stage: `send_tokens` 400 → `initialize_user` 201 → feed 200, Home loads |
+
+Known difference: Android's token calls (Steps 1–3) go through `authClient`, which has no
+`AuthHeaderInterceptor`, so its `initialize_user` carries no `Build-Version` / `Device-Info`
+(pre-existing for refresh / `send_tokens`). Stage accepts it (201) but records the guest with
+`build_version: "v1"`; iOS / RN / web send both headers. Not changed here.

@@ -193,7 +193,11 @@ export class HttpClient {
    * Single-flight 401 recovery:
    *  Step 1 — POST get_new_access_token with the refresh token; save tokens.
    *  Step 2 — fallback: POST send_tokens (device_id, user_id) with guest API key.
-   * Both failing → tokens cleared + onSessionExpired.
+   *  Step 3 — guest re-init (docs/02): a GUEST whose identity the backend rejected (send_tokens
+   *           400/401/403/404, or no user/device id) gets a fresh `initialize_user` with the
+   *           same device id; the new tokens + user id are saved and the old conversation id
+   *           dropped. Never for a phone-verified user, never on a network error / timeout / 5xx.
+   * All failing → tokens cleared + onSessionExpired.
    */
   private authenticate(): Promise<boolean> {
     if (!this.refreshInFlight) {
@@ -243,16 +247,42 @@ export class HttpClient {
 
     // Step 2: guest-token fallback with the guest API key.
     const userId = store.getString(PrefKeys.USER_ID);
-    if (userId) {
-      const deviceId = getOrCreateDeviceId(store);
-      const fallback = await this.tokenCall(
+    const deviceId = getOrCreateDeviceId(store);
+    // True when the backend said who we are is not valid (vs. a transport problem).
+    let identityRejected = !userId || !deviceId;
+    if (userId && deviceId) {
+      const fallback = await this.tokenCallWithStatus(
         'api/user/send_tokens/',
         { device_id: deviceId, user_id: userId },
         this.deps.guestApiKey,
       );
-      if (fallback?.access_token) {
-        store.setString(PrefKeys.ACCESS_TOKEN, fallback.access_token);
-        if (fallback.refresh_token) store.setString(PrefKeys.REFRESH_TOKEN, fallback.refresh_token);
+      if (fallback?.data?.access_token) {
+        store.setString(PrefKeys.ACCESS_TOKEN, fallback.data.access_token);
+        if (fallback.data.refresh_token) store.setString(PrefKeys.REFRESH_TOKEN, fallback.data.refresh_token);
+        return true;
+      }
+      identityRejected = !!fallback && [400, 401, 403, 404].includes(fallback.status);
+    }
+
+    // Step 3: guest re-initialisation (docs/02). Only a guest — a phone-verified identity is never
+    // silently replaced — and only when the identity was rejected, never on a transport failure.
+    const isGuest = !store.getBool(PrefKeys.OTP_VERIFIED, false);
+    if (isGuest && identityRejected && deviceId) {
+      const lat = Number(store.getString(PrefKeys.FARMER_APP_LATITUDE));
+      const lng = Number(store.getString(PrefKeys.FARMER_APP_LONGITUDE));
+      const body: Record<string, unknown> = { device_id: deviceId };
+      if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+        body.lat = lat;
+        body.long = lng;
+      }
+      const reinit = await this.tokenCallWithStatus('api/user/initialize_user/', body, this.deps.guestApiKey);
+      const data = reinit?.data as (RefreshTokenResponse & { user_id?: string | null }) | undefined;
+      if (data?.access_token) {
+        store.setString(PrefKeys.ACCESS_TOKEN, data.access_token);
+        if (data.refresh_token) store.setString(PrefKeys.REFRESH_TOKEN, data.refresh_token);
+        if (data.user_id) store.setString(PrefKeys.USER_ID, data.user_id);
+        // The conversation belonged to the rejected user.
+        store.remove(PrefKeys.NEW_CONVERSATION_ID);
         return true;
       }
     }
@@ -278,6 +308,18 @@ export class HttpClient {
 
   /** Plain token call — no retry loop, no authenticator (mirrors non-suspend AuthApi). */
   private async tokenCall(path: string, body: unknown, apiKey?: string): Promise<RefreshTokenResponse | null> {
+    return (await this.tokenCallWithStatus(path, body, apiKey))?.data ?? null;
+  }
+
+  /**
+   * Token call that also reports the HTTP status. Resolves `null` only on a transport failure
+   * (network error, timeout); an HTTP error resolves `{ status, data: null }`.
+   */
+  private async tokenCallWithStatus(
+    path: string,
+    body: unknown,
+    apiKey?: string,
+  ): Promise<{ status: number; data: RefreshTokenResponse | null } | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PRIORITY_CONFIG.P2.timeoutMs);
     try {
@@ -294,8 +336,14 @@ export class HttpClient {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      if (!res.ok) return null;
-      return (await res.json()) as RefreshTokenResponse;
+      if (!res.ok) return { status: res.status, data: null };
+      let data: RefreshTokenResponse | null = null;
+      try {
+        data = (await res.json()) as RefreshTokenResponse;
+      } catch {
+        data = null;
+      }
+      return { status: res.status, data };
     } catch {
       return null;
     } finally {
