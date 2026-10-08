@@ -294,7 +294,6 @@ export function Tips() {
 
 /** 40dp circle, bottom-centre; appears 1.5s after an answer settles, bounces 3×, then hides. */
 export function ScrollIndicator(props: { triggerKey: string | null; hasContentBelow: () => boolean; onClick: () => void }) {
-  const label = useLabel();
   const [show, setShow] = useState(false);
   useEffect(() => {
     setShow(false);
@@ -314,7 +313,7 @@ export function ScrollIndicator(props: { triggerKey: string | null; hasContentBe
     <button
       type="button"
       className="fcsdk-c-scrollind"
-      aria-label={label('fc_v2_app_label_scroll_down', 'Scroll down')}
+      aria-label="Scroll for more"
       onClick={() => {
         setShow(false);
         props.onClick();

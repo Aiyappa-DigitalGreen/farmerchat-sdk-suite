@@ -1497,6 +1497,41 @@ const css = `
 .fcsdk-c-recovery-image { position: relative; height: 382px; max-height: 50vh; border-radius: 24px; overflow: hidden; background: #E4E4E7; }
 .fcsdk-c-recovery-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; margin: 0; padding: 0; border: none;
   border-radius: 14px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; }
+/* ---------------------------------------------------------------- UserInput.kt sheets */
+.fcsdk-c-inputsheet-host { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.25); animation: fcsdk-c-fadein 300ms ease both; }
+.fcsdk-c-inputsheet { box-sizing: border-box; width: 100%; border-radius: 16px 16px 0 0; background: var(--fc-c-surface-secondary);
+  animation: fcsdk-c-sheetin 300ms ease-out both; }
+.fcsdk-c-actioncircle { flex: 0 0 48px; width: 48px; height: 48px; margin: 0; padding: 0; border: none; border-radius: 50%;
+  background: #08361B; display: flex; align-items: center; justify-content: center; }
+.fcsdk-c-actioncircle:disabled { cursor: default; }
+.fcsdk-c-textsheet-row { display: flex; align-items: flex-end; gap: 6px; }
+.fcsdk-c-textsheet-field { flex: 1; min-width: 0; min-height: 48px; max-height: 105px; box-sizing: border-box; margin: 0; padding: 12px 14px;
+  border: none; outline: none; resize: none; border-radius: 999px; background: var(--fc-c-surface-primary); color: var(--fc-c-fg-primary);
+  caret-color: var(--fc-c-fg-primary); transition: border-radius 200ms ease; }
+.fcsdk-c-textsheet-field--active, .fcsdk-c-textsheet-field:focus { border-radius: 16px; }
+.fcsdk-c-textsheet-field::placeholder { color: var(--fc-c-placeholder); }
+.fcsdk-c-voicesheet { display: flex; flex-direction: column; justify-content: center; min-height: 320px; }
+.fcsdk-c-voicesheet-row { display: flex; align-items: center; gap: 12px; }
+.fcsdk-c-livewave { flex: 1; min-width: 0; height: 36px; display: flex; align-items: center; justify-content: space-between; }
+.fcsdk-c-livewave span { width: 3px; border-radius: 8px; background: var(--fc-c-button-accent); transition: height 120ms ease; }
+.fcsdk-c-voicesheet-tip { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.fcsdk-c-photosheet-row { display: flex; gap: 12px; height: 168px; padding: 0 8px; }
+.fcsdk-c-photosheet-tile { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin: 0;
+  border: none; border-radius: 16px; background: var(--fc-c-surface-tertiary); }
+/* VoiceClip */
+.fcsdk-c-voiceclip { display: flex; align-items: center; gap: 8px; height: 50px; box-sizing: border-box; padding: 6px 16px 6px 8px;
+  border-radius: 999px; background: var(--fc-c-surface-secondary); }
+.fcsdk-c-voiceclip-btn { flex: 0 0 38px; width: 38px; height: 38px; margin: 0; padding: 0; border: none; border-radius: 50%; background: #08361B;
+  display: flex; align-items: center; justify-content: center; }
+.fcsdk-c-voiceclip-wave { flex: 1; min-width: 0; height: 38px; display: flex; align-items: center; justify-content: space-between; }
+.fcsdk-c-voiceclip-wave span { width: 3px; border-radius: 8px; }
+/* LocationChatBubble.kt */
+.fcsdk-c-locbubble { width: 290px; max-width: 100%; height: 184px; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 20px 20px 0 20px; background: var(--fc-c-reading-secondary); }
+.fcsdk-c-locbubble-map { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0, 201, 80, 0.16); }
+.fcsdk-c-locbubble-footer { flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; }
 /* @@END-OF-STYLESHEET@@ */
 `;
 

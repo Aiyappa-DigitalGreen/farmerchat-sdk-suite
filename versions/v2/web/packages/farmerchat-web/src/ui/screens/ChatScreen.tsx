@@ -326,7 +326,12 @@ export function ChatScreen(props: {
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SHARE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
-      const result = await shareAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
+      const result = await shareAnswerCard(
+        question,
+        ai.text,
+        label('fc_v2_app_label_farmerchat', 'FarmerChat'),
+        label('fc_v2_app_label_share_app_message', 'Answered by FarmerChat'),
+      );
       if (result === 'failed') toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
     },
     [chat.messages, label, services.analytics, toast],
@@ -336,7 +341,12 @@ export function ChatScreen(props: {
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SAVE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
-      const ok = await downloadAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
+      const ok = await downloadAnswerCard(
+        question,
+        ai.text,
+        label('fc_v2_app_label_farmerchat', 'FarmerChat'),
+        label('fc_v2_app_label_share_app_message', 'Answered by FarmerChat'),
+      );
       if (!ok) toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
       else toast.show(label('fc_v2_app_label_saved_to_gallery', 'Saved to gallery'));
     },
@@ -601,6 +611,8 @@ export function ChatScreen(props: {
       {!isComposerUi && overlay === 'type' ? (
         <TextInputOverlay
           onClose={() => setOverlay(null)}
+          onPhoto={services.config.enableImages ? () => setOverlay('photo') : undefined}
+          onVoice={services.config.enableVoice ? () => setOverlay('speak') : undefined}
           onSend={(text) => {
             setOverlay(null);
             void actions.sendFollowUpQuestion(text);

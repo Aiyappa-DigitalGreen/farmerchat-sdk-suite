@@ -606,6 +606,8 @@ export function HomeScreen(props: {
       {!isComposerUi && overlay === 'type' ? (
         <TextInputOverlay
           onClose={() => setOverlay(null)}
+          onPhoto={services.config.enableImages ? () => setOverlay('photo') : undefined}
+          onVoice={services.config.enableVoice ? () => setOverlay('speak') : undefined}
           onSend={(text) => {
             setOverlay(null);
             props.onOpenChat({ source: 'home', question: text });

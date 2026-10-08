@@ -66,8 +66,8 @@ test('the allowlist has not silently grown', () => {
   // A ratchet, not a ceiling: lowering it as keys get mapped is the point. Raising it means a
   // new invented key was accepted, which is exactly what this file exists to prevent.
   assert.ok(
-    allowlist.length <= 64,
-    `allowlist grew to ${allowlist.length} (was 64). Map the new key to a served one instead.`
+    allowlist.length <= 7,
+    `allowlist grew to ${allowlist.length} (was 7). Map the new key to a served one instead.`
   );
 });
 
