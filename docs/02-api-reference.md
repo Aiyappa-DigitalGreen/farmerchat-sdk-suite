@@ -265,10 +265,29 @@ in the JSON. Tracked in docs/05.
   answered 400/401/403/404 (stage: 400 `{"detail":"User not found or inactive."}`), or there was no
   `user_id`/`device_id` to send. A network error, timeout or 5xx never triggers it.
   Action: `initialize_user` with the guest API key and `{device_id, lat?, long?}` (the existing
-  device id; lat/long from `FARMER_APP_LATITUDE/LONGITUDE` when stored). On a response with an
-  `access_token`: save access + refresh tokens and `user_id`, remove `NEW_CONVERSATION_ID` (it belonged
-  to the old user), keep everything else (language, labels, onboarding flags, appearance, location),
-  and retry the original request. Otherwise `onSessionExpired`. No analytics event is added.
+  device id; lat/long from the stored GPS fix `FARMER_APP_LATITUDE/LONGITUDE`, else the onboarding
+  geo-failure fallback — host `defaultLatitude/defaultLongitude`, then the device-locale country
+  centroid; (0, 0) counts as unresolved and sends no coordinates). The coordinates matter: a guest
+  created without them has no location server-side and endpoint #12 returns `{"sections":[]}` until
+  one is set (verified on stage 2026-10-08; the onboarding seed is never stored locally, so a stored
+  fix alone was not enough). On a response with an `access_token`: save access + refresh tokens and
+  `user_id`; remove `NEW_CONVERSATION_ID` and the old user's place (web v2 / Android:
+  `APPROX_LOCATION_NAME`; plus `USER_DISTRICT`, `USER_STATE`, `USER_COUNTRY_NAME` — Android has no
+  district key and keeps the state in `USER_SELECTED_STATE_CODE`; iOS / RN / web v1 have no
+  approx-name key), then persist `country_code` / `country` /
+  `state` from the response exactly as the first guest init does; keep everything else (language,
+  labels, onboarding flags, appearance, GPS fix); emit a **guest-replaced** signal; retry the
+  original request. Otherwise `onSessionExpired`. No analytics event is added.
+  Guest-replaced: requests already built (the retried one and any concurrent ones) still carry the
+  old `user_id` in their body/query and fail (`new_conversation` 400 "Invalid user", weather/profile
+  404), and can finish AFTER the reload. So: (1) a **guest generation** counter is bumped before
+  listeners run, and Home's feed / weather / new-conversation / profile loads drop their result
+  when the generation changed while they were in flight; (2) Home re-runs its entry loads on the
+  signal (new conversation, feed and weather — both bypassing the "already loading" guard, since
+  the stale in-flight result is now dropped — and profile/place name); (3) Chat drops its cached
+  conversation id. Web / iOS / RN chat create a conversation on the next send when none is stored;
+  Android chat never does, so there Home recreates it (FULL_JOURNEY) or the chat ViewModel does
+  (CHAT_ONLY).
   Why: without it a guest the backend no longer knows (a session from another backend, a deleted
   guest) loops 401 → `send_tokens` 400 forever and every screen fails.
 - Never run on main thread.

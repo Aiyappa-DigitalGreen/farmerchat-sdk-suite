@@ -139,10 +139,19 @@ public final class ChatViewModel: ObservableObject {
     /// Retry closure for the last failed request (RetryLastRequest).
     private var lastRequest: (@MainActor () async -> Void)?
     private var didAskFirstQuery = false
+    private var cancellables = Set<AnyCancellable>()
 
     public init(env: FarmerChat = .shared) {
         self.env = env
         state.isTtsEnabled = true
+        // docs/02 Step 3: the conversation belonged to the replaced guest; the next send uses the
+        // one Home creates for the new guest (NEW_CONVERSATION_ID) or creates one.
+        env.session.guestReplaced
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                Task { @MainActor [weak self] in self?.conversationId = nil }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Action dispatch

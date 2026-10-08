@@ -83,6 +83,7 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
     private var session: URLSession!
     private var expiredCount = 0
     private let expiredLock = NSLock()
+    private var replacedCount = 0
 
     override func setUp() {
         super.setUp()
@@ -95,6 +96,7 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         configuration.protocolClasses = [StubURLProtocol.self]
         session = URLSession(configuration: configuration)
         expiredCount = 0
+        replacedCount = 0
     }
 
     override func tearDown() {
@@ -104,7 +106,9 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeClient() -> APIClient {
+    private func makeClient(
+        fallbackCoordinates: (@Sendable () -> (lat: Double, lng: Double))? = nil
+    ) -> APIClient {
         let deviceInfo = DeviceInfoProvider(deviceId: tokenStore.deviceId)
         let refresher = TokenRefresher(
             tokenStore: tokenStore,
@@ -116,7 +120,12 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
                 guard let self else { return }
                 self.expiredLock.lock(); self.expiredCount += 1; self.expiredLock.unlock()
             },
-            prefs: prefs
+            prefs: prefs,
+            fallbackCoordinates: fallbackCoordinates,
+            onGuestReplaced: { [weak self] in
+                guard let self else { return }
+                self.expiredLock.lock(); self.replacedCount += 1; self.expiredLock.unlock()
+            }
         )
         return APIClient(baseURL: baseURL, tokenStore: tokenStore, refresher: refresher, deviceInfo: deviceInfo, session: session)
     }
@@ -158,7 +167,8 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
             return (500, Data())
         }
 
-        let result = await callProfile(makeClient())
+        // The stored fix must win over the onboarding fallback.
+        let result = await callProfile(makeClient(fallbackCoordinates: { (54.0, -2.0) }))
 
         guard case .success = result else { return XCTFail("expected the original request to succeed after re-init, got \(result)") }
         XCTAssertEqual(StubURLProtocol.calls(to: "initialize_user"), 1)
@@ -168,9 +178,10 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         XCTAssertEqual(tokenStore.refreshToken, "new-refresh")
         XCTAssertEqual(tokenStore.userId, "4242")
         XCTAssertNil(prefs.string(.newConversationId))
-        XCTAssertEqual(prefs.string(.selectedLanguageCode), "hi", "everything except the conversation id is kept")
+        XCTAssertEqual(prefs.string(.selectedLanguageCode), "hi", "everything except the conversation id and place names is kept")
         XCTAssertEqual(prefs.double(.latitude), 12.5)
         XCTAssertEqual(expiredCount, 0)
+        XCTAssertEqual(replacedCount, 1)
 
         let initCall = try XCTUnwrap(StubURLProtocol.log.first { $0.path.contains("initialize_user") })
         XCTAssertEqual(initCall.apiKey, "guest-key")
@@ -203,6 +214,7 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         XCTAssertEqual(tokenStore.userId, "old-user")
         XCTAssertEqual(prefs.string(.newConversationId), "old-conversation")
         XCTAssertEqual(expiredCount, 1)
+        XCTAssertEqual(replacedCount, 0)
     }
 
     func testNetworkFailureOfSendTokensDoesNotReinitialise() async {
@@ -226,6 +238,7 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         XCTAssertEqual(tokenStore.accessToken, "old-access")
         XCTAssertEqual(prefs.string(.newConversationId), "old-conversation")
         XCTAssertEqual(expiredCount, 1)
+        XCTAssertEqual(replacedCount, 0)
     }
 
     func testServerErrorOfSendTokensDoesNotReinitialise() async {
@@ -246,6 +259,100 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         guard case .error = result else { return XCTFail("expected session expiry") }
         XCTAssertEqual(StubURLProtocol.calls(to: "initialize_user"), 0)
         XCTAssertEqual(expiredCount, 1)
+        XCTAssertEqual(replacedCount, 0)
+    }
+
+    // MARK: - Step 3 coordinates, place rewrite, "guest replaced" signal
+
+    /// Answers the probe with 200 only for the re-initialised token; `send_tokens` rejects.
+    private func installRejectedGuestHandler(initResponse: String) {
+        StubURLProtocol.handler = { request, _ in
+            let path = request.url?.path ?? ""
+            if path.contains("view_user_profile") {
+                return request.value(forHTTPHeaderField: "Authorization") == "Bearer new-access"
+                    ? (200, Data(#"{"ok":true}"#.utf8))
+                    : (401, Data("{}".utf8))
+            }
+            if path.contains("get_new_access_token") { return (401, Data("{}".utf8)) }
+            if path.contains("send_tokens") { return (400, Data(#"{"detail":"User not found or inactive."}"#.utf8)) }
+            if path.contains("initialize_user") { return (201, Data(initResponse.utf8)) }
+            return (500, Data())
+        }
+    }
+
+    private func initBodyJSON() throws -> [String: Any] {
+        let initCall = try XCTUnwrap(StubURLProtocol.log.first { $0.path.contains("initialize_user") })
+        let body = try XCTUnwrap(initCall.body)
+        return try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    }
+
+    func testNoStoredFixSendsFallbackCoordinatesRewritesPlaceAndSignals() async throws {
+        seedGuestSession()
+        prefs.remove(.latitude)
+        prefs.remove(.longitude)
+        prefs.setString("Bengaluru Urban", .userDistrict)
+        prefs.setString("Karnataka", .userState)
+        prefs.setString("India", .userCountryName)
+        prefs.setString("IN", .userCountryCode)
+        installRejectedGuestHandler(initResponse:
+            #"{"access_token":"new-access","refresh_token":"r","user_id":"new-user","country_code":"GB","country":"United Kingdom","state":null}"#
+        )
+
+        let result = await callProfile(makeClient(fallbackCoordinates: { (54.0, -2.0) }))
+
+        guard case .success = result else { return XCTFail("expected success after re-init, got \(result)") }
+        let json = try initBodyJSON()
+        XCTAssertEqual(json["lat"] as? Double, 54.0)
+        XCTAssertEqual(json["long"] as? Double, -2.0)
+        XCTAssertNil(prefs.double(.latitude), "the fallback is never persisted as a GPS fix")
+        XCTAssertNil(prefs.string(.userDistrict), "the old user's district is dropped")
+        XCTAssertNil(prefs.string(.userState), "the old user's state is dropped and the response had none")
+        XCTAssertEqual(prefs.string(.userCountryName), "United Kingdom")
+        XCTAssertEqual(prefs.string(.userCountryCode), "GB")
+        XCTAssertEqual(tokenStore.userId, "new-user")
+        XCTAssertEqual(replacedCount, 1)
+        XCTAssertEqual(expiredCount, 0)
+    }
+
+    func testNoStoredFixAndUnresolvedFallbackSendsNoCoordinates() async throws {
+        seedGuestSession()
+        prefs.remove(.latitude)
+        prefs.remove(.longitude)
+        installRejectedGuestHandler(initResponse: #"{"access_token":"new-access","user_id":"n"}"#)
+
+        // (0, 0) is what `resolvedFallbackCoordinates` returns when nothing resolves.
+        let result = await callProfile(makeClient(fallbackCoordinates: { (0.0, 0.0) }))
+
+        guard case .success = result else { return XCTFail("expected success after re-init, got \(result)") }
+        let json = try initBodyJSON()
+        XCTAssertNil(json["lat"])
+        XCTAssertNil(json["long"])
+        XCTAssertNotNil(json["device_id"])
+        XCTAssertEqual(replacedCount, 1)
+    }
+
+    func testZeroStoredFixFallsThroughToFallback() async throws {
+        seedGuestSession()
+        prefs.setDouble(0.0, .latitude)
+        prefs.setDouble(0.0, .longitude)
+        installRejectedGuestHandler(initResponse: #"{"access_token":"new-access","user_id":"n"}"#)
+
+        _ = await callProfile(makeClient(fallbackCoordinates: { (-1.29, 36.82) }))
+
+        let json = try initBodyJSON()
+        XCTAssertEqual(json["lat"] as? Double, -1.29)
+        XCTAssertEqual(json["long"] as? Double, 36.82)
+    }
+
+    func testFirstInitAndReinitShareThePlaceWrites() throws {
+        let response = try JSONDecoder().decode(
+            InitializeGuestUserResponse.self,
+            from: Data(#"{"access_token":"a","country_code":"KE","country":"Kenya","state":"Nairobi"}"#.utf8)
+        )
+        SessionManager.storePlace(from: response, in: prefs)
+        XCTAssertEqual(prefs.string(.userCountryCode), "KE")
+        XCTAssertEqual(prefs.string(.userCountryName), "Kenya")
+        XCTAssertEqual(prefs.string(.userState), "Nairobi")
     }
 }
 

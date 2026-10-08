@@ -242,6 +242,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
 
   // --- conversation id --------------------------------------------------------
 
+  // docs/02 Step 3: the conversation belonged to the replaced guest; the next send creates one.
+  useEffect(
+    () =>
+      sdk.session.addGuestReplacedListener(() => {
+        conversationIdRef.current = null;
+      }),
+    [sdk],
+  );
+
   const ensureConversationId = useCallback(async (): Promise<string | null> => {
     if (conversationIdRef.current) return conversationIdRef.current;
     const stored = sdk.store.getString(StorageKeys.NEW_CONVERSATION_ID);

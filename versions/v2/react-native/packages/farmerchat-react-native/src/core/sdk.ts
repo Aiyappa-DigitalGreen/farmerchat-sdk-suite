@@ -78,6 +78,9 @@ export class FarmerChatSdk {
       (code, message) => {
         this.analytics.fireCallback('onError', code, message);
       },
+      // docs/02 Step 3 guest replaced. `session` is created below; this only runs on a 401,
+      // long after construction.
+      () => this.session.notifyGuestReplaced(),
     );
     this.api = new FarmerChatApi(this.http, this.config);
     this.session = new SessionManager(this.api, this.store, this.analytics, this.config);

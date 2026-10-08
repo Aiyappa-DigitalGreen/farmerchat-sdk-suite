@@ -121,6 +121,9 @@ public final class FarmerChat: @unchecked Sendable {
             enabled: config.enableAnalytics
         )
 
+        // docs/02 Step 3 "guest replaced" signal: built before the refresher (which fires it)
+        // and handed to the SessionManager (which exposes it to the view models).
+        let guestReplaced = PassthroughSubject<Void, Never>()
         let refresher = TokenRefresher(
             tokenStore: tokenStore,
             baseURL: config.resolvedBaseURL,
@@ -129,7 +132,10 @@ public final class FarmerChat: @unchecked Sendable {
             authMode: config.authMode,
             tokenProvider: config.tokenProvider,
             onSessionExpired: config.onSessionExpired,
-            prefs: prefs
+            prefs: prefs,
+            // The SAME fallback onboarding uses when IP geolocation fails.
+            fallbackCoordinates: { [config] in config.resolvedFallbackCoordinates },
+            onGuestReplaced: { DispatchQueue.main.async { guestReplaced.send() } }
         )
         let client = APIClient(
             baseURL: config.resolvedBaseURL,
@@ -138,7 +144,7 @@ public final class FarmerChat: @unchecked Sendable {
             deviceInfo: deviceInfo
         )
         self.api = FarmerChatAPI(client: client, guestApiKey: config.resolvedGuestApiKey, geoApiKey: config.geoApiKey)
-        self.session = SessionManager(tokenStore: tokenStore, prefs: prefs, api: api, analytics: analytics)
+        self.session = SessionManager(tokenStore: tokenStore, prefs: prefs, api: api, analytics: analytics, guestReplaced: guestReplaced)
 
         // C5: host string overrides + forced locale.
         self.labels.configure(overrides: config.stringOverrides, forcedLocale: config.locale)

@@ -59,6 +59,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -209,7 +210,12 @@ fun HomeScreen(
     val feedDensity = LocalDensity.current
     var headerContentPx by rememberSaveable { mutableFloatStateOf(0f) }
 
-    val userId = remember { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
+    // docs/02 Step 3: re-read when a rejected guest is replaced mid-session, so actions dispatched
+    // after the replacement carry the new user_id (the ViewModel already re-ran its entry loads).
+    val guestGeneration by remember {
+        graph.guestReplacedSignal.events.map { graph.guestReplacedSignal.generation }
+    }.collectAsState(initial = graph.guestReplacedSignal.generation)
+    val userId = remember(guestGeneration) { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
     val isAuthenticated = remember {
         graph.prefs.getBoolean(SdkPreferences.Keys.OTP_VERIFIED, false)
     }

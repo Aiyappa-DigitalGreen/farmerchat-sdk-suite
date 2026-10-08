@@ -1,5 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.core.ui.home
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -21,6 +22,9 @@ import org.digitalgreen.farmerchat.sdk.core.ui.CoreViewModel
 import org.digitalgreen.farmerchat.sdk.core.usecase.ChatUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.GetUserProfileUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.HomeUseCase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Home (dashboard) state machine. Port of the app's HomeViewModel over
@@ -32,17 +36,66 @@ class HomeViewModel(
     private val chatUseCase: ChatUseCase,
     private val getUserProfileUseCase: GetUserProfileUseCase,
     private val prefs: SdkPreferences,
-    private val analytics: FarmerChatAnalytics
+    private val analytics: FarmerChatAnalytics,
+    /** docs/02 Step 3 guest-replaced signal + guest generation. Null = no reload (tests). */
+    private val guestReplacedSignal: org.digitalgreen.farmerchat.sdk.core.auth.GuestReplacedSignal? = null
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state
 
+    // ---- docs/02 Step 3: which entry loads this screen ran, so a guest replacement can re-run
+    // them for the new user_id. Jobs are kept so the stale calls (built with the OLD user_id and
+    // possibly still retrying) are cancelled and cannot overwrite the fresh results.
+    private var feedRequested = false
+    private var feedHadUserId = false
+    private var weatherRequested = false
+    private var profileRequested = false
+    private var conversationRequested = false
+    private var conversationContentProviderId: String? = null
+    private var feedJob: Job? = null
+    private var weatherJob: Job? = null
+    private var profileJob: Job? = null
+    private var conversationJob: Job? = null
+
+    init {
+        guestReplacedSignal?.let { signal -> scope.launch { signal.events.collect { onGuestReplaced() } } }
+    }
+
+    /** Current guest generation; a load whose captured value no longer matches drops its result. */
+    private fun generation(): Int = guestReplacedSignal?.generation ?: 0
+
+    /**
+     * docs/02 Step 3: the 401 authenticator replaced a rejected guest with a new one. Everything
+     * this screen loaded (and the conversation it created) was for the old user_id, so re-run the
+     * entry loads with the new one — bypassing the "already loading" guards, since the stale call
+     * may still be in flight — and clear the old place name so the profile backfill re-fills it.
+     */
+    private fun onGuestReplaced() {
+        val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
+        listOf(feedJob, weatherJob, profileJob, conversationJob).forEach { it?.cancel() }
+        if (conversationRequested && userId.isNotBlank()) {
+            newConversation(userId, conversationContentProviderId)
+        }
+        if (profileRequested && userId.isNotBlank()) fetchUserProfile(userId)
+        if (feedRequested) {
+            loadHome(
+                userDeviceTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date()),
+                userId = if (feedHadUserId && userId.isNotBlank()) userId else null,
+                skipLoadingCheck = true
+            )
+        }
+        if (weatherRequested && userId.isNotBlank()) loadWeather(userId, skipLoadingCheck = true)
+    }
+
     fun onAction(action: HomeAction) {
         when (action) {
             is HomeAction.LoadHome -> loadHome(action)
             is HomeAction.LoadWeather -> loadWeather(action)
-            is HomeAction.FetchUserProfile -> fetchUserProfile(action.userId)
+            is HomeAction.FetchUserProfile -> {
+                profileRequested = true
+                fetchUserProfile(action.userId)
+            }
             is HomeAction.UpdateCultivatedCrops -> updateCultivatedCrops(action)
             is HomeAction.NewConversation -> newConversation(action)
             is HomeAction.TranscribeAudio -> transcribeAudio(action)
@@ -69,11 +122,19 @@ class HomeViewModel(
     // ------------------------------------------------------------------ feed
 
     private fun loadHome(action: HomeAction.LoadHome) {
-        if (!action.skipLoadingCheck && _state.value.homeFeedState is UiState.Loading) return
+        feedRequested = true
+        feedHadUserId = action.userId != null
+        loadHome(action.userDeviceTime, action.userId, action.skipLoadingCheck)
+    }
+
+    private fun loadHome(userDeviceTime: String, userId: String?, skipLoadingCheck: Boolean) {
+        if (!skipLoadingCheck && _state.value.homeFeedState is UiState.Loading) return
         _state.update { it.copy(homeFeedState = UiState.Loading) }
-        scope.launch {
-            homeUseCase.getDailyHomeSections(action.userDeviceTime, action.userId)
+        val gen = generation()
+        feedJob = scope.launch {
+            homeUseCase.getDailyHomeSections(userDeviceTime, userId)
                 .collect { result ->
+                    if (gen != generation()) return@collect  // stale: built for a replaced guest
                     when (result) {
                         is ApiResult.Success -> {
                             _state.update { it.copy(homeFeedState = UiState.Success(result.data)) }
@@ -105,10 +166,17 @@ class HomeViewModel(
     }
 
     private fun loadWeather(action: HomeAction.LoadWeather) {
-        if (!action.skipLoadingCheck && _state.value.weatherState is UiState.Loading) return
+        weatherRequested = true
+        loadWeather(action.userId, action.skipLoadingCheck)
+    }
+
+    private fun loadWeather(userId: String, skipLoadingCheck: Boolean) {
+        if (!skipLoadingCheck && _state.value.weatherState is UiState.Loading) return
         _state.update { it.copy(weatherState = UiState.Loading) }
-        scope.launch {
-            homeUseCase.getWeatherForecast(action.userId).collect { result ->
+        val gen = generation()
+        weatherJob = scope.launch {
+            homeUseCase.getWeatherForecast(userId).collect { result ->
+                if (gen != generation()) return@collect  // stale: built for a replaced guest
                 when (result) {
                     is ApiResult.Success -> {
                         _state.update { it.copy(weatherState = UiState.Success(result.data)) }
@@ -126,8 +194,10 @@ class HomeViewModel(
 
     private fun fetchUserProfile(userId: String) {
         if (userId.isBlank()) return
-        scope.launch {
+        val gen = generation()
+        profileJob = scope.launch {
             getUserProfileUseCase.fetchUserProfile(userId).collect { result ->
+                if (gen != generation()) return@collect  // stale: built for a replaced guest
                 if (result is ApiResult.Success) {
                     val name = result.data.userProfile.displayName()
                     if (name.isNotBlank()) {
@@ -165,14 +235,22 @@ class HomeViewModel(
     // ------------------------------------------------------------------ conversation / voice
 
     private fun newConversation(action: HomeAction.NewConversation) {
+        conversationRequested = true
+        conversationContentProviderId = action.contentProviderId
+        newConversation(action.userId, action.contentProviderId)
+    }
+
+    private fun newConversation(userId: String, contentProviderId: String?) {
         _state.update { it.copy(newConversationState = UiState.Loading) }
-        scope.launch {
+        val gen = generation()
+        conversationJob = scope.launch {
             chatUseCase.newConversation(
                 NewConversationRequest(
-                    user_id = action.userId,
-                    content_provider_id = action.contentProviderId
+                    user_id = userId,
+                    content_provider_id = contentProviderId
                 )
             ).collect { result ->
+                if (gen != generation()) return@collect  // stale: built for a replaced guest
                 when (result) {
                     is ApiResult.Success -> {
                         prefs.putString(

@@ -10,13 +10,18 @@
  *    a guest (`OTP_VERIFIED` not set) and Step 2 failed because the identity
  *    was rejected (send_tokens 400/401/403/404, or no user_id/device_id to
  *    send) — never on a network error, timeout or 5xx. initialize_user with
- *    the guest API key and {device_id, lat?, long?}; on an access_token, save
- *    tokens + user_id, drop NEW_CONVERSATION_ID (it belonged to the old user),
- *    keep everything else, and retry. Otherwise session expired.
+ *    the guest API key and {device_id, lat?, long?} — the stored GPS fix, else
+ *    the onboarding fallback (host default lat/long → device-locale centroid);
+ *    (0, 0) is unresolved and sent as nothing. On an access_token, save tokens +
+ *    user_id, drop NEW_CONVERSATION_ID and the old place names (district /
+ *    state / country name), persist country_code/country/state from the
+ *    response (as the first guest init does), signal `onGuestReplaced` so
+ *    screens re-run their entry loads, and retry. Otherwise session expired.
  *  - Single-flight: concurrent 401s share one refresh (mutex).
  */
 import type { ResolvedFarmerChatConfig } from './config';
-import { BUILD_VERSION_HEADER_VALUE } from './config';
+import { BUILD_VERSION_HEADER_VALUE, resolveFallbackCoordinates } from './config';
+import { isResolved } from './countryLatLng';
 import { getDeviceInfoHeader } from './deviceInfo';
 import { SessionStore, StorageKeys } from './sessionStore';
 import type { InitializeGuestUserResponse, RefreshTokenResponse } from './types';
@@ -52,6 +57,12 @@ export class TokenAuthenticator {
     private readonly config: ResolvedFarmerChatConfig,
     private readonly store: SessionStore,
     private readonly onSessionExpired: () => void,
+    /**
+     * Step 3 succeeded: a NEW guest replaced the rejected one. The request that 401'd is retried,
+     * but it (and any concurrent one) was built with the old `user_id`, so screens must re-run
+     * their entry loads (new conversation, feed, weather, profile).
+     */
+    private readonly onGuestReplaced?: () => void,
   ) {}
 
   /**
@@ -131,10 +142,25 @@ export class TokenAuthenticator {
     const isGuest = !this.store.getBoolean(StorageKeys.OTP_VERIFIED);
     if (isGuest && identityRejected) {
       const body: Record<string, string | number> = { device_id: deviceId };
-      const lat = this.store.getDouble(StorageKeys.FARMER_APP_LATITUDE);
-      const long = this.store.getDouble(StorageKeys.FARMER_APP_LONGITUDE);
-      if (lat !== null) body.lat = lat;
-      if (long !== null) body.long = long;
+      // Stored GPS fix first, then the onboarding fallback; (0, 0) counts as unresolved. A guest
+      // re-initialised with no coordinates has no location server-side, and endpoint #12 then
+      // returns an empty feed.
+      const fixLat = this.store.getDouble(StorageKeys.FARMER_APP_LATITUDE);
+      const fixLng = this.store.getDouble(StorageKeys.FARMER_APP_LONGITUDE);
+      let coords: [number, number] | null =
+        fixLat !== null && fixLng !== null && isResolved(fixLat, fixLng) ? [fixLat, fixLng] : null;
+      if (!coords) {
+        try {
+          const [fbLat, fbLng] = resolveFallbackCoordinates(this.config);
+          if (isResolved(fbLat, fbLng)) coords = [fbLat, fbLng];
+        } catch {
+          // a failing fallback just means no coordinates
+        }
+      }
+      if (coords) {
+        body.lat = coords[0];
+        body.long = coords[1];
+      }
       const init = await this.postTokenEndpoint<InitializeGuestUserResponse>(
         'api/user/initialize_user/',
         body,
@@ -144,7 +170,24 @@ export class TokenAuthenticator {
       if (init.ok && typeof accessToken === 'string' && accessToken.trim() !== '') {
         this.store.saveTokens(accessToken, init.data.refresh_token || null);
         if (init.data.user_id) this.store.saveUserId(init.data.user_id);
+        // The conversation and the place names belonged to the rejected user; the new guest's
+        // location is whatever this response says (same writes as the first guest init).
         this.store.remove(StorageKeys.NEW_CONVERSATION_ID);
+        for (const k of [
+          StorageKeys.USER_DISTRICT,
+          StorageKeys.USER_STATE,
+          StorageKeys.USER_COUNTRY_NAME,
+        ]) {
+          this.store.remove(k);
+        }
+        if (init.data.country_code) this.store.set(StorageKeys.USER_COUNTRY_CODE, init.data.country_code);
+        if (init.data.country) this.store.set(StorageKeys.USER_COUNTRY_NAME, init.data.country);
+        if (init.data.state) this.store.set(StorageKeys.USER_STATE, init.data.state);
+        try {
+          this.onGuestReplaced?.();
+        } catch {
+          // listener errors never break the retry
+        }
         return accessToken;
       }
     }

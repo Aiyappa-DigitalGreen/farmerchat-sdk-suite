@@ -324,6 +324,15 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
     };
   }, []);
 
+  // docs/02 Step 3: the conversation belonged to the replaced guest; the next send creates one.
+  useEffect(
+    () =>
+      session.onGuestReplaced(() => {
+        conversationIdRef.current = null;
+      }),
+    [session],
+  );
+
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (conversationIdRef.current) return conversationIdRef.current;
     const saved = store.getString(PrefKeys.NEW_CONVERSATION_ID);

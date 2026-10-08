@@ -49,9 +49,34 @@ public final class HomeViewModel: ObservableObject {
 
     private let env: FarmerChat
     private var markedViewedIds = Set<String>()
+    private var cancellables = Set<AnyCancellable>()
+    /// Bumped when docs/02 Step 3 replaces the guest. A load started for the old `user_id` (the
+    /// request that 401'd is retried with it) drops its result instead of overwriting the reload.
+    private var guestGeneration = 0
 
     public init(env: FarmerChat = .shared) {
         self.env = env
+        env.session.guestReplaced
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                Task { @MainActor [weak self] in self?.reloadForReplacedGuest() }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// docs/02 Step 3: a rejected guest was replaced by a new one mid-session. Everything Home
+    /// loaded (and the conversation it created) was for the old `user_id`, so re-run the entry
+    /// loads with the new one. `skipLoadingCheck`: the stale feed/weather call may still be in
+    /// flight (404 is retryable) and would otherwise make this reload a no-op.
+    private func reloadForReplacedGuest() {
+        guestGeneration += 1
+        let userId = env.session.userId
+        if let userId {
+            Task { await newConversation(userId: userId, contentProviderId: nil) }
+            Task { await fetchUserProfile(userId: userId) }
+        }
+        Task { await loadHome(userDeviceTime: Self.currentDeviceTime(), userId: userId, skipLoadingCheck: true) }
+        Task { await loadWeather(userId: userId, skipLoadingCheck: true) }
     }
 
     public var conversationId: String? {
@@ -107,7 +132,9 @@ public final class HomeViewModel: ObservableObject {
     private func loadHome(userDeviceTime: String, userId: String?, skipLoadingCheck: Bool) async {
         if state.homeFeedState.isLoading && !skipLoadingCheck { return }
         state.homeFeedState = .loading
+        let generation = guestGeneration
         let result = await env.api.dailyFeed(userDeviceTime: userDeviceTime, userId: userId)
+        guard generation == guestGeneration else { return }
         switch result {
         case .success(let feed):
             state.homeFeedState = .success(feed)
@@ -155,7 +182,9 @@ public final class HomeViewModel: ObservableObject {
         guard env.config.enableWeather else { return }
         if state.weatherState.isLoading && !skipLoadingCheck { return }
         state.weatherState = .loading
+        let generation = guestGeneration
         let result = await env.api.weatherForecastLite(userId: userId)
+        guard generation == guestGeneration else { return }
         state.weatherState = UiState.from(result, fallbackMessage: env.labels.label("weather_error", fallback: "Weather unavailable"))
     }
 
@@ -163,7 +192,9 @@ public final class HomeViewModel: ObservableObject {
 
     private func fetchUserProfile(userId: String) async {
         state.userProfileState = .loading
+        let generation = guestGeneration
         let result = await env.api.viewUserProfile(id: userId)
+        guard generation == guestGeneration else { return }
         if case .success(let profile) = result {
             if let name = profile.userProfile?.displayName {
                 env.prefs.setString(name, .userName)
@@ -188,7 +219,9 @@ public final class HomeViewModel: ObservableObject {
 
     private func newConversation(userId: String, contentProviderId: Int?) async {
         state.newConversationState = .loading
+        let generation = guestGeneration
         let result = await env.api.newConversation(NewConversationRequest(userId: userId, contentProviderId: contentProviderId))
+        guard generation == guestGeneration else { return }
         state.newConversationState = UiState.from(result, fallbackMessage: env.labels.label("error_generic", fallback: "Something went wrong. Please try again."))
         if case .success(let response) = result, let conversationId = response.conversationId?.stringValue {
             env.prefs.setString(conversationId, .newConversationId)

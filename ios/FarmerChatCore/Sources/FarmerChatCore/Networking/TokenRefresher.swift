@@ -15,9 +15,18 @@ import Foundation
 ///   rejected (`send_tokens` 400/401/403/404, or no `user_id`/`device_id` to
 ///   send — never a network error, timeout or 5xx): `initialize_user` with the
 ///   guest API key and `{device_id, lat?, long?}` (existing device id; lat/long
-///   from `FARMER_APP_LATITUDE/LONGITUDE` when stored). On an `access_token`:
-///   save access + refresh tokens and `user_id`, remove `NEW_CONVERSATION_ID`,
-///   keep everything else, and retry. Otherwise the session is expired.
+///   from the stored GPS fix `FARMER_APP_LATITUDE/LONGITUDE`, else the SAME
+///   fallback onboarding uses — host `defaultLatitude/Longitude`, then the
+///   device-locale country centroid; (0, 0)/unresolved sends no coordinates. A
+///   guest re-initialised without coordinates has no server-side location, and
+///   endpoint #12 then returns an empty feed forever). On an `access_token`:
+///   save access + refresh tokens and `user_id`, remove `NEW_CONVERSATION_ID`
+///   and the old user's place (`USER_DISTRICT`, `USER_STATE`,
+///   `USER_COUNTRY_NAME`), store `country_code`/`country`/`state` from the
+///   response exactly as the first guest init does, fire `onGuestReplaced`
+///   (screens re-run their entry loads — the retried request still carries the
+///   old `user_id`), keep everything else, and retry. Otherwise the session is
+///   expired.
 /// - Concurrent 401s share one in-flight refresh (actor serialization).
 /// - Never runs on the main thread (actors hop off it by construction).
 actor TokenRefresher {
@@ -47,6 +56,12 @@ actor TokenRefresher {
     /// Needed by Step 3 (guest detection, stored lat/long, conversation id).
     /// `nil` disables Step 3.
     private let prefs: PreferenceStore?
+    /// Step 3 coordinates when no GPS fix is stored — the onboarding fallback
+    /// (`FarmerChatConfig.resolvedFallbackCoordinates`). Checked with
+    /// `CountryLatLngProvider.isResolved` here; `nil` means no fallback.
+    private let fallbackCoordinates: (@Sendable () -> (lat: Double, lng: Double))?
+    /// Step 3 succeeded: a NEW guest replaced the rejected one.
+    private let onGuestReplaced: (@Sendable () -> Void)?
 
     /// `send_tokens` statuses meaning "the backend does not know this identity".
     static let identityRejectedStatuses: Set<Int> = [400, 401, 403, 404]
@@ -74,7 +89,9 @@ actor TokenRefresher {
         authMode: FarmerChatAuthMode = .sdkOtp,
         tokenProvider: FarmerChatTokenProvider? = nil,
         onSessionExpired: (@Sendable () -> Void)? = nil,
-        prefs: PreferenceStore? = nil
+        prefs: PreferenceStore? = nil,
+        fallbackCoordinates: (@Sendable () -> (lat: Double, lng: Double))? = nil,
+        onGuestReplaced: (@Sendable () -> Void)? = nil
     ) {
         self.tokenStore = tokenStore
         self.baseURL = baseURL
@@ -85,6 +102,8 @@ actor TokenRefresher {
         self.tokenProvider = tokenProvider
         self.onSessionExpired = onSessionExpired
         self.prefs = prefs
+        self.fallbackCoordinates = fallbackCoordinates
+        self.onGuestReplaced = onGuestReplaced
     }
 
     static func shouldSkip(url: URL?) -> Bool {
@@ -163,10 +182,15 @@ actor TokenRefresher {
             identityRejected = true
         }
         if identityRejected, let prefs, !prefs.bool(.otpVerified) {
+            let coordinates = Self.reinitCoordinates(
+                storedLat: prefs.double(.latitude),
+                storedLng: prefs.double(.longitude),
+                fallback: fallbackCoordinates?()
+            )
             let request = InitializeGuestUserRequest(
                 deviceId: deviceId,
-                lat: prefs.double(.latitude),
-                long: prefs.double(.longitude)
+                lat: coordinates?.lat,
+                long: coordinates?.lng
             )
             if case .ok(let response) = await post(
                 path: "api/user/initialize_user/",
@@ -178,15 +202,38 @@ actor TokenRefresher {
                 if let newUserId = response.userId?.stringValue, !newUserId.isEmpty {
                     tokenStore.userId = newUserId
                 }
-                // The conversation belonged to the old user; everything else is kept.
+                // The conversation and the place names belonged to the old user; the new
+                // guest's place is whatever this response says (same writes as the first
+                // guest init). Everything else is kept.
                 prefs.remove(.newConversationId)
+                prefs.remove(.userDistrict)
+                prefs.remove(.userState)
+                prefs.remove(.userCountryName)
+                SessionManager.storePlace(from: response, in: prefs)
                 lastRefreshedToken = access
+                onGuestReplaced?()
                 return .refreshed(accessToken: access)
             }
         }
 
         onSessionExpired?()
         return .sessionExpired
+    }
+
+    /// Stored GPS fix first (both values present and resolved), else the onboarding fallback;
+    /// (0, 0) or a half-stored fix counts as unresolved. `nil` → send no coordinates.
+    static func reinitCoordinates(
+        storedLat: Double?,
+        storedLng: Double?,
+        fallback: (lat: Double, lng: Double)?
+    ) -> (lat: Double, lng: Double)? {
+        if let lat = storedLat, let lng = storedLng, CountryLatLngProvider.isResolved(lat: lat, lng: lng) {
+            return (lat, lng)
+        }
+        if let fallback, CountryLatLngProvider.isResolved(lat: fallback.lat, lng: fallback.lng) {
+            return fallback
+        }
+        return nil
     }
 
     private func post<Body: Encodable, Response: Decodable>(

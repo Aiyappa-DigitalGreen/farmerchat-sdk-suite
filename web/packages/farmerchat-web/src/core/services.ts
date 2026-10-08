@@ -9,6 +9,8 @@ import { HttpClient } from './http';
 import { FarmerChatApi } from './api';
 import { SessionManager } from './session';
 import { Analytics } from './analytics';
+import { resolveFallbackCoordinates } from './fallbackLocation';
+import { isResolved } from './countryLatLng';
 
 export interface SdkServices {
   config: ResolvedConfig;
@@ -42,6 +44,12 @@ export function createServices(config: FarmerChatConfig): SdkServices {
     onSessionExpired: resolved.onSessionExpired,
     authMode: resolved.authMode,
     tokenProvider: resolved.tokenProvider,
+    fallbackCoordinates: () => {
+      const fb = resolveFallbackCoordinates(resolved);
+      return isResolved(fb.lat, fb.lng) ? { lat: fb.lat, lng: fb.lng } : null;
+    },
+    // `session` is created below; this only runs on a 401, long after construction.
+    onGuestReplaced: () => session.notifyGuestReplaced(),
   });
   const api = new FarmerChatApi(http, resolved.guestApiKey, resolved.geoApiKey);
   const analytics = new Analytics(resolved.onEvent, resolved.callbacks);

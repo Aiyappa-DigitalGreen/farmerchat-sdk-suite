@@ -115,8 +115,11 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
     async (userDeviceTime: string, userId: string | null, skipLoadingCheck: boolean) => {
       if (!skipLoadingCheck && stateRef.current.homeFeedState.kind === 'loading') return;
       patch({ homeFeedState: UiStates.loading() });
+      const gen = sdk.session.guestGeneration;
       const result = await sdk.api.getDailyFeed(userDeviceTime, userId);
       if (!mounted.current) return;
+      // Superseded by a guest replacement (docs/02 Step 3): built with the old user_id.
+      if (gen !== sdk.session.guestGeneration) return;
       if (result.ok) {
         const data: HomeUdfResponse = result.data ?? { sections: [] }; // 204 → empty
         sdk.store.setJson(StorageKeys.CACHED_HOME_FEED_RESPONSE, data);
@@ -164,8 +167,11 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
         return;
       }
       patch({ weatherState: UiStates.loading() });
+      const gen = sdk.session.guestGeneration;
       const result = await sdk.api.getWeatherForecastLite(userId);
       if (!mounted.current) return;
+      // Superseded by a guest replacement (docs/02 Step 3): built with the old user_id.
+      if (gen !== sdk.session.guestGeneration) return;
       patch({
         weatherState: UiStates.fromResult(result, 'Could not load weather'),
       });
@@ -194,11 +200,14 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
   const newConversation = useCallback(
     async (userId: string, contentProviderId?: number | null) => {
       patch({ newConversationState: UiStates.loading() });
+      const gen = sdk.session.guestGeneration;
       const result = await sdk.api.newConversation({
         user_id: userId,
         content_provider_id: contentProviderId ?? null,
       });
       if (!mounted.current) return;
+      // Superseded by a guest replacement (docs/02 Step 3): built with the old user_id.
+      if (gen !== sdk.session.guestGeneration) return;
       if (result.ok) {
         sdk.store.set(StorageKeys.NEW_CONVERSATION_ID, result.data.conversation_id);
       }
@@ -325,8 +334,11 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
 
   const fetchUserProfile = useCallback(
     async (userId: string) => {
+      const gen = sdk.session.guestGeneration;
       const result = await sdk.api.viewUserProfile(userId);
       if (!mounted.current) return;
+      // Superseded by a guest replacement (docs/02 Step 3): built with the old user_id.
+      if (gen !== sdk.session.guestGeneration) return;
       if (result.ok) {
         const first = result.data.userProfile?.first_name ?? '';
         const last = result.data.userProfile?.last_name ?? '';

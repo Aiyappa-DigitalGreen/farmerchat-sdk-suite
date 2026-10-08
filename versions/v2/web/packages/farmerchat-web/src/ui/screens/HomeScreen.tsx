@@ -153,6 +153,22 @@ export function HomeScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // docs/02 Step 3: a rejected guest was replaced by a new one mid-session. Everything Home loaded
+  // (and the conversation it created) was for the old user_id, so re-run the entry loads.
+  useEffect(
+    () =>
+      services.session.onGuestReplaced(() => {
+        void homeActions.newConversation();
+        // `true`: the stale calls may still be in flight (404 is retryable); their results are now
+        // dropped by the generation check, so a guarded reload would leave the state loading.
+        void homeActions.loadHome(true);
+        if (services.config.enableWeather) void homeActions.loadWeather(true);
+        void profileActions.fetchProfile('home').then(() => setPlaceTick((t) => t + 1));
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // ------------------------------------------------------------------ terms-of-use dialog
   const [showTermsOfUseDialog, setShowTermsOfUseDialog] = useState(false);
   const termsUrl = home.farmerchatTermsOfUse;

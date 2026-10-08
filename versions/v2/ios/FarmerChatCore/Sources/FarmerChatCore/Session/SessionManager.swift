@@ -13,11 +13,25 @@ public final class SessionManager: ObservableObject, @unchecked Sendable {
     /// not "authenticated" in the app's sense.
     @Published public private(set) var isAuthenticated: Bool
 
-    init(tokenStore: KeychainTokenStore, prefs: PreferenceStore, api: FarmerChatAPI, analytics: AnalyticsDispatcher) {
+    /// docs/02 Step 3: the 401 authenticator (`TokenRefresher`) replaced a rejected guest with a
+    /// NEW guest mid-session. Everything a screen loaded for the old `user_id` is stale — and the
+    /// request that 401'd (and any concurrent one) is retried with the old id in its query/body —
+    /// so Home re-runs its entry loads and Chat drops its cached conversation id. Delivered on
+    /// the main queue, after the new tokens, user id and place prefs are stored.
+    public let guestReplaced: PassthroughSubject<Void, Never>
+
+    init(
+        tokenStore: KeychainTokenStore,
+        prefs: PreferenceStore,
+        api: FarmerChatAPI,
+        analytics: AnalyticsDispatcher,
+        guestReplaced: PassthroughSubject<Void, Never> = PassthroughSubject()
+    ) {
         self.tokenStore = tokenStore
         self.prefs = prefs
         self.api = api
         self.analytics = analytics
+        self.guestReplaced = guestReplaced
         self.isAuthenticated = prefs.bool(.otpVerified)
     }
 
@@ -49,17 +63,23 @@ public final class SessionManager: ObservableObject, @unchecked Sendable {
             if let userId = response.userId?.stringValue {
                 tokenStore.userId = userId
             }
-            if let countryCode = response.countryCode {
-                prefs.setString(countryCode, .userCountryCode)
-            }
-            if let country = response.country {
-                prefs.setString(country, .userCountryName)
-            }
-            if let state = response.state {
-                prefs.setString(state, .userState)
-            }
+            Self.storePlace(from: response, in: prefs)
         }
         return result
+    }
+
+    /// The place writes of a successful `initialize_user` (endpoint #1). Shared by the first guest
+    /// init above and the 401 authenticator's Step 3 re-init so the two cannot drift.
+    static func storePlace(from response: InitializeGuestUserResponse, in prefs: PreferenceStore) {
+        if let countryCode = response.countryCode {
+            prefs.setString(countryCode, .userCountryCode)
+        }
+        if let country = response.country {
+            prefs.setString(country, .userCountryName)
+        }
+        if let state = response.state {
+            prefs.setString(state, .userState)
+        }
     }
 
     // MARK: - OTP login

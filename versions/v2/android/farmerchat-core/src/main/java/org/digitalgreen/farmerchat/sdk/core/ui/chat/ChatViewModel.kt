@@ -113,7 +113,11 @@ class ChatViewModel(
     private val analytics: FarmerChatAnalytics,
     private val config: org.digitalgreen.farmerchat.sdk.FarmerChatConfig,
     /** #27a streaming source. Only touched when [config].enableAgenticChat is true. */
-    private val agenticChatDataSource: org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource
+    private val agenticChatDataSource: org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource,
+    /** docs/02 Step 3 guest-replaced signal ([org.digitalgreen.farmerchat.sdk.core.auth.GuestReplacedSignal]). */
+    private val guestReplaced: kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.emptyFlow(),
+    /** True in CHAT_ONLY, where no Home exists to create the replaced guest's conversation. */
+    private val createConversationOnGuestReplaced: Boolean = false
 ) : CoreViewModel() {
 
     private val _state = MutableStateFlow(
@@ -122,6 +126,32 @@ class ChatViewModel(
     val state: StateFlow<ChatState> = _state
 
     private var currentConversationId: String? = null
+
+    init {
+        // docs/02 Step 3: a rejected guest was replaced by a new one. The conversation this
+        // screen cached belonged to the old user_id; drop it so the next send reads the one Home
+        // re-creates (NEW_CONVERSATION_ID). CHAT_ONLY has no Home, so create it here.
+        scope.launch {
+            guestReplaced.collect {
+                currentConversationId = null
+                if (createConversationOnGuestReplaced) createConversationForReplacedGuest()
+            }
+        }
+    }
+
+    private suspend fun createConversationForReplacedGuest() {
+        if (prefs.getString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "").isNotBlank()) return
+        val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()
+        if (userId.isBlank()) return
+        val result = runCatching {
+            chatUseCase.newConversation(
+                NewConversationRequest(user_id = userId, content_provider_id = null)
+            ).first()
+        }.getOrNull()
+        if (result is ApiResult.Success) {
+            prefs.putString(SdkPreferences.Keys.NEW_CONVERSATION_ID, result.data.conversation_id)
+        }
+    }
 
     // Pre-generated content bookkeeping
     private var preGeneratedQuestion: String? = null

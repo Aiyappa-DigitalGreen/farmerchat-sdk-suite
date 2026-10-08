@@ -61,7 +61,9 @@ export function useUserProfile(services: SdkServices): [UserProfileState, UserPr
       const userId = session.userId;
       if (!userId) return null;
       setState({ profileState: loading() });
+      const gen = session.guestGeneration;
       const res = await api.viewUserProfile(userId);
+      if (gen !== session.guestGeneration) return null; // superseded by a guest replacement (docs/02 Step 3)
       setState({ profileState: toUiState(res) });
       if (res.ok) {
         const serverName = sanitizeName(res.data.userProfile?.first_name);

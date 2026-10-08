@@ -8,8 +8,10 @@ import okhttp3.Response
 import okhttp3.Route
 import org.digitalgreen.farmerchat.sdk.core.auth.AuthApi
 import org.digitalgreen.farmerchat.sdk.core.auth.TokenStore
+import org.digitalgreen.farmerchat.sdk.core.location.CountryLatLngProvider
 import org.digitalgreen.farmerchat.sdk.core.remote.ApiConstants
 import org.digitalgreen.farmerchat.sdk.core.model.InitializeGuestUserRequest
+import org.digitalgreen.farmerchat.sdk.core.model.InitializeGuestUserResponse
 import org.digitalgreen.farmerchat.sdk.core.model.RefreshTokenRequest
 import org.digitalgreen.farmerchat.sdk.core.model.SendNewTokenRequest
 
@@ -26,10 +28,13 @@ import org.digitalgreen.farmerchat.sdk.core.model.SendNewTokenRequest
  *    because the identity was rejected: send_tokens answered 400/401/403/404, or there was no
  *    user_id/device_id to send. A network error, timeout or 5xx never triggers it.
  *    Action: initialize_user with the guest API key and {device_id, lat?, long?} (existing
- *    device id via [deviceIdSupplier]; lat/long from [storedLatLong]). On a response with an
- *    access_token: save access + refresh tokens and user_id, call [onGuestReinitialized]
- *    (removes NEW_CONVERSATION_ID — it belonged to the old user; every other pref is kept),
- *    and retry the original request. Otherwise [onSessionExpired]. No analytics event.
+ *    device id via [deviceIdSupplier]; lat/long from the stored GPS fix [storedLatLong], else
+ *    the onboarding fallback [fallbackLatLong]; (0, 0) / unresolved → no coordinates, see
+ *    [step3Coordinates]). On a response with an access_token: save access + refresh tokens and
+ *    user_id, call [onGuestReinitialized] with the response (the graph drops
+ *    NEW_CONVERSATION_ID + the old place names, persists the response's country/state, then
+ *    emits the guest-replaced signal), and retry the original request. Otherwise
+ *    [onSessionExpired]. No analytics event.
  * 6. Never runs on the main thread; refresh is single-flight (concurrent 401s wait
  *    on a lock, then reuse the token the winning thread saved).
  *
@@ -50,8 +55,19 @@ class TokenAuthenticator(
     private val deviceIdSupplier: () -> String? = { tokenStore.getDeviceId() },
     /** Step 3: stored `FARMER_APP_LATITUDE` / `FARMER_APP_LONGITUDE`, null when absent. */
     private val storedLatLong: () -> Pair<Double?, Double?> = { null to null },
-    /** Step 3 success hook: drop session state that belonged to the old user (NEW_CONVERSATION_ID). */
-    private val onGuestReinitialized: () -> Unit = {},
+    /**
+     * Step 3, when no GPS fix is stored: the SAME fallback onboarding seeds the server with on a
+     * geo failure (host `defaultLatitude/defaultLongitude`, else the device-locale country
+     * centroid — `FarmerChatConfig.resolvedFallbackCoordinates`). Null or (0, 0) = unresolved.
+     * Called on an OkHttp thread; a throw counts as unresolved.
+     */
+    private val fallbackLatLong: () -> Pair<Double, Double>? = { null },
+    /**
+     * Step 3 success hook, after tokens + user_id are saved: drop session state that belonged to
+     * the old user, persist the new guest's location from [InitializeGuestUserResponse], and emit
+     * the guest-replaced signal. Must not block (it runs inside the refresh lock).
+     */
+    private val onGuestReinitialized: (InitializeGuestUserResponse) -> Unit = {},
     /** ANR guard; injectable only so JVM tests (where Looper is a stub) can exercise the flow. */
     private val isMainThread: () -> Boolean = { Looper.myLooper() == Looper.getMainLooper() }
 ) : Authenticator {
@@ -177,7 +193,7 @@ class TokenAuthenticator(
      */
     private fun reinitializeGuest(authApi: AuthApi, response: Response): Request? {
         return try {
-            val (lat, long) = storedLatLong()
+            val (lat, long) = step3Coordinates()
             val deviceId = deviceIdSupplier()
             if (deviceId.isNullOrBlank()) {
                 onSessionExpired?.invoke()
@@ -188,14 +204,20 @@ class TokenAuthenticator(
                 InitializeGuestUserRequest(device_id = deviceId, lat = lat, long = long)
             ).execute()
             val body = if (initRes.isSuccessful) initRes.body() else null
+            // access_token is non-null in the model, but Gson can still leave it null.
             val newAccess: String? = body?.access_token
-            if (newAccess.isNullOrBlank()) {
+            if (body == null || newAccess.isNullOrBlank()) {
                 onSessionExpired?.invoke()
                 return null
             }
-            tokenStore.saveTokens(newAccess, body?.refresh_token)
-            body?.user_id?.takeIf { it.isNotBlank() }?.let { tokenStore.saveUserId(it) }
-            onGuestReinitialized()
+            tokenStore.saveTokens(newAccess, body.refresh_token)
+            body.user_id?.takeIf { it.isNotBlank() }?.let { tokenStore.saveUserId(it) }
+            // A failing hook must not lose the retry: the new tokens are already saved.
+            try {
+                onGuestReinitialized(body)
+            } catch (e: Exception) {
+                Log.e("TokenAuthenticator", "Guest re-init hook failed: ${e.localizedMessage}")
+            }
             response.request.newBuilder()
                 .header("Authorization", "Bearer $newAccess")
                 .build()
@@ -204,6 +226,29 @@ class TokenAuthenticator(
             onSessionExpired?.invoke()
             null
         }
+    }
+
+    /**
+     * Step 3 coordinates (docs/02): the stored GPS fix when both values are present and resolved,
+     * else the onboarding fallback, else none. A guest created without coordinates has no
+     * location server-side and endpoint #12 returns an empty feed until one is set.
+     */
+    private fun step3Coordinates(): Pair<Double?, Double?> {
+        val (storedLat, storedLong) = storedLatLong()
+        if (storedLat != null && storedLong != null &&
+            CountryLatLngProvider.isResolved(storedLat, storedLong)
+        ) {
+            return storedLat to storedLong
+        }
+        val fallback = try {
+            fallbackLatLong()
+        } catch (e: Exception) {
+            null
+        }
+        if (fallback != null && CountryLatLngProvider.isResolved(fallback.first, fallback.second)) {
+            return fallback.first to fallback.second
+        }
+        return null to null
     }
 
     private fun responseCount(response: Response): Int {

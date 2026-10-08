@@ -77,6 +77,18 @@ export interface HttpClientDeps {
   /** C2 — auth mode; HOST_TOKEN recovers 401s via `tokenProvider` instead of OTP/refresh. */
   authMode?: AuthMode;
   tokenProvider?: TokenProvider;
+  /**
+   * Step 3 coordinates when no GPS fix is stored: the onboarding fallback (host default lat/long →
+   * device-locale centroid), or null when nothing resolves. A guest re-initialised with no
+   * coordinates has no location server-side, and endpoint #12 then returns an empty feed.
+   */
+  fallbackCoordinates?: () => { lat: number; lng: number } | null;
+  /**
+   * Step 3 succeeded: a NEW guest replaced the rejected one. The request that 401'd is retried, but
+   * it (and any concurrent one) was built with the old `user_id`, so screens must re-run their
+   * entry loads (new conversation, feed, weather).
+   */
+  onGuestReplaced?: () => void;
 }
 
 const backoffDelay = (attempt: number): number => Math.min(500 * 2 ** attempt, 3000);
@@ -268,21 +280,50 @@ export class HttpClient {
     // silently replaced — and only when the identity was rejected, never on a transport failure.
     const isGuest = !store.getBool(PrefKeys.OTP_VERIFIED, false);
     if (isGuest && identityRejected && deviceId) {
-      const lat = Number(store.getString(PrefKeys.FARMER_APP_LATITUDE));
-      const lng = Number(store.getString(PrefKeys.FARMER_APP_LONGITUDE));
+      // Stored GPS fix first, then the onboarding fallback; (0, 0) counts as unresolved.
+      const fixLat = Number(store.getString(PrefKeys.FARMER_APP_LATITUDE) || NaN);
+      const fixLng = Number(store.getString(PrefKeys.FARMER_APP_LONGITUDE) || NaN);
+      let coords: { lat: number; lng: number } | null =
+        Number.isFinite(fixLat) && Number.isFinite(fixLng) && fixLat !== 0 && fixLng !== 0 ? { lat: fixLat, lng: fixLng } : null;
+      if (!coords) {
+        try {
+          const fb = this.deps.fallbackCoordinates?.() ?? null;
+          if (fb && fb.lat !== 0 && fb.lng !== 0) coords = fb;
+        } catch {
+          // a failing fallback just means no coordinates
+        }
+      }
       const body: Record<string, unknown> = { device_id: deviceId };
-      if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
-        body.lat = lat;
-        body.long = lng;
+      if (coords) {
+        body.lat = coords.lat;
+        body.long = coords.lng;
       }
       const reinit = await this.tokenCallWithStatus('api/user/initialize_user/', body, this.deps.guestApiKey);
-      const data = reinit?.data as (RefreshTokenResponse & { user_id?: string | null }) | undefined;
+      const data = reinit?.data as
+        | (RefreshTokenResponse & {
+            user_id?: string | null;
+            country_code?: string | null;
+            country?: string | null;
+            state?: string | null;
+          })
+        | undefined;
       if (data?.access_token) {
         store.setString(PrefKeys.ACCESS_TOKEN, data.access_token);
         if (data.refresh_token) store.setString(PrefKeys.REFRESH_TOKEN, data.refresh_token);
         if (data.user_id) store.setString(PrefKeys.USER_ID, data.user_id);
-        // The conversation belonged to the rejected user.
+        // The conversation and the place names belonged to the rejected user; the new guest's
+        // location is whatever this response says (same writes as the first guest init).
+        // (v1 web keeps no approx-place-name key, so district/state/country name are the place.)
         store.remove(PrefKeys.NEW_CONVERSATION_ID);
+        for (const k of [PrefKeys.USER_DISTRICT, PrefKeys.USER_STATE, PrefKeys.USER_COUNTRY_NAME]) store.remove(k);
+        if (data.country_code) store.setString(PrefKeys.USER_COUNTRY_CODE, data.country_code);
+        if (data.country) store.setString(PrefKeys.USER_COUNTRY_NAME, data.country);
+        if (data.state) store.setString(PrefKeys.USER_STATE, data.state);
+        try {
+          this.deps.onGuestReplaced?.();
+        } catch {
+          // listener errors never break the retry
+        }
         return true;
       }
     }

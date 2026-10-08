@@ -66,9 +66,11 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
     async (skipLoadingCheck = false) => {
       if (!skipLoadingCheck && stateRef.current.homeFeedState.status === 'loading') return;
       patch({ homeFeedState: loading() });
+      const gen = session.guestGeneration;
       // Guests pass userId=null (docs/01 §3.7 lifecycle).
       const userId = session.isAuthenticated() ? session.userId : null;
       const res = await api.getDailyFeed(userDeviceTime(), userId);
+      if (gen !== session.guestGeneration) return; // superseded by a guest replacement (docs/02 Step 3)
       if (res.ok) {
         const data: HomeUdfResponse = res.data ?? { greeting: null, sections: [], ssfr_enable: false };
         store.setJson(PrefKeys.CACHED_HOME_FEED_RESPONSE, data);
@@ -86,7 +88,9 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
     async (skipLoadingCheck = false) => {
       if (!skipLoadingCheck && stateRef.current.weatherState.status === 'loading') return;
       patch({ weatherState: loading() });
+      const gen = session.guestGeneration;
       const res = await api.getWeather(session.userId ?? '');
+      if (gen !== session.guestGeneration) return; // superseded by a guest replacement
       patch({ weatherState: toUiState(res) });
     },
     [api, patch, session],
@@ -95,10 +99,12 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
   const newConversation = useCallback(
     async (contentProviderId?: number | string | null): Promise<string | null> => {
       patch({ newConversationState: loading() });
+      const gen = session.guestGeneration;
       const res = await api.newConversation({
         user_id: session.userId ?? '',
         content_provider_id: contentProviderId ?? null,
       });
+      if (gen !== session.guestGeneration) return null; // superseded by a guest replacement
       patch({ newConversationState: toUiState(res) });
       if (res.ok && res.data.conversation_id) {
         store.setString(PrefKeys.NEW_CONVERSATION_ID, res.data.conversation_id);

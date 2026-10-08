@@ -7839,3 +7839,39 @@ Known difference: Android's token calls (Steps 1–3) go through `authClient`, w
 `AuthHeaderInterceptor`, so its `initialize_user` carries no `Build-Version` / `Device-Info`
 (pre-existing for refresh / `send_tokens`). Stage accepts it (201) but records the guest with
 `build_version: "v1"`; iOS / RN / web send both headers. Not changed here.
+
+### Follow-up the same day: the new guest had no location, and stale requests overwrote the reload
+
+Reported from the widget ("why nothing loads"): after Step 3, Home showed only "Have a great day,
+come back tomorrow". The calls were 200, but the new guest had **no location server-side**, so
+endpoint #12 returned `{"sections":[]}`, and the pill still showed the OLD user's state. Cause:
+onboarding seeds the server location with fallback coordinates that are never stored, so Step 3's
+"stored GPS fix only" sent none (verified on stage: `initialize_user` without lat/long gives an empty
+feed; with lat/long the feed returns sections). Also, requests built before the replacement (the
+retried one and concurrent ones) still carried the old `user_id`: `new_conversation` 400 "Invalid
+user", weather/profile 404 (retryable, so they repeat), and they could land after the reload.
+
+Fix (docs/02 Step 3, all eight trees): coordinates = stored fix → onboarding fallback (host default
+→ device-locale centroid) → none; old place keys removed and the response's country/state
+persisted; a guest-replaced signal + guest-generation counter; Home reloads (bypassing the loading
+guard) and drops superseded results; Chat drops its cached conversation id.
+
+| | android v1 | android v2 | ios v1 | ios v2 | react-native v1 | react-native v2 | web v1 | web v2 |
+|---|---|---|---|---|---|---|---|---|
+| Fallback coordinates + place rewrite + signal + generation guard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Verified by | core compile + 29 unit tests (`TokenAuthenticatorTest` 14/14) + compose & views compile | core compile + 226 unit tests (`TokenAuthenticatorTest` 14/14) + compose & views compile | `swift build` + 30 tests (`TokenRefresherGuestReinitTests` 9) + `xcodebuild` SwiftUI & UIKit (iOS Simulator) | `swift build` + 119 tests (9 re-init) + `xcodebuild` SwiftUI & UIKit | `tsc --noEmit` only — ⚠️ UNVERIFIED at runtime | `tsc --noEmit` only — ⚠️ UNVERIFIED at runtime | `tsc` + `vite build` + `authRecovery.test.ts` 6/6 | `tsc` + build + `authRecovery.test.ts` 6/6 + Chrome on stage, 3 runs: stale guest → `send_tokens` 400 → `initialize_user` 201 → `new_conversation` / feed / weather / profile 200, 21 feed sections, stale 404s dropped |
+
+Per-platform differences (honest ledger):
+- Place keys: Android clears `APPROX_LOCATION_NAME` + `USER_SELECTED_STATE_CODE` + `USER_COUNTRY_NAME`
+  (no district key); iOS / RN / web v1 have no approx-name key and clear district/state/country name.
+- Web v1 Home does not fetch the profile on entry, so its reload is three calls, not four.
+- Android chat never creates a conversation on send: FULL_JOURNEY relies on Home's reload (a Home
+  ViewModel that is not alive when the signal fires runs its normal entry loads when next created);
+  CHAT_ONLY's chat ViewModel creates one.
+- Android compose Home re-reads `user_id` on each guest generation (it was `remember`ed once); the
+  Views screens already read it fresh.
+- iOS has no Home place pill; an already-open Settings shows the old place until it reloads.
+- Only country/state are rewritten; the first init's `SHOW_CROPS_LIVESTOCKS` / `DASHBOARD` writes are
+  not repeated. The v2 terms-of-use check is not re-run for the new guest.
+- Delivery-path tests (signal → Home reload / Chat reset) exist only as the web Chrome run; native
+  platforms are unit-tested at the authenticator and build-verified above it.

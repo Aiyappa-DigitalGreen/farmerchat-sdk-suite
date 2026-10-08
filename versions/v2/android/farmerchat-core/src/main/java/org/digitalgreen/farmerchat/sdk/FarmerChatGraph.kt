@@ -8,6 +8,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.digitalgreen.farmerchat.sdk.core.analytics.DeviceUserAttributes
 import org.digitalgreen.farmerchat.sdk.core.analytics.FarmerChatAnalytics
 import org.digitalgreen.farmerchat.sdk.core.auth.AuthApi
+import org.digitalgreen.farmerchat.sdk.core.auth.GuestReplacedSignal
+import org.digitalgreen.farmerchat.sdk.core.auth.GuestReplacement
 import org.digitalgreen.farmerchat.sdk.core.auth.PreferenceTokenStore
 import org.digitalgreen.farmerchat.sdk.core.auth.SessionManager
 import org.digitalgreen.farmerchat.sdk.core.auth.TokenStore
@@ -136,6 +138,12 @@ class FarmerChatGraph internal constructor(
 
     private val authHeaderInterceptor = AuthHeaderInterceptor(tokenStore, appContext, prefs)
 
+    /**
+     * docs/02 Step 3 guest-replaced signal. Declared before [tokenAuthenticator], which fires it;
+     * Home and Chat ViewModels collect it.
+     */
+    val guestReplacedSignal = GuestReplacedSignal()
+
     private val tokenAuthenticator = TokenAuthenticator(
         tokenStore = tokenStore,
         authApiProvider = { authApi },
@@ -150,7 +158,22 @@ class FarmerChatGraph internal constructor(
             prefs.getString(SdkPreferences.Keys.FARMER_APP_LATITUDE, "").toDoubleOrNull() to
                 prefs.getString(SdkPreferences.Keys.FARMER_APP_LONGITUDE, "").toDoubleOrNull()
         },
-        onGuestReinitialized = { prefs.remove(SdkPreferences.Keys.NEW_CONVERSATION_ID) }
+        // No stored fix → the same fallback onboarding seeds the server with on a geo failure
+        // (host default lat/long, else the device-locale centroid). Pure config + locale reads,
+        // safe on the OkHttp thread this runs on.
+        fallbackLatLong = {
+            config.resolvedFallbackCoordinates(appContext)
+                .takeIf { (lat, lng) -> CountryLatLngProvider.isResolved(lat, lng) }
+        },
+        // Prefs first, signal last: collectors read the new PREF_USER_ID / place prefs.
+        onGuestReinitialized = { response ->
+            GuestReplacement.rewritePrefs(
+                response,
+                remove = { prefs.remove(it) },
+                put = { key, value -> prefs.putString(key, value) }
+            )
+            guestReplacedSignal.notifyGuestReplaced()
+        }
     )
 
     /**
@@ -371,10 +394,16 @@ class FarmerChatGraph internal constructor(
         phoneAuthUseCases, getSupportedLanguagesUseCase, sessionManager, prefs, labelManager, analytics
     )
 
-    fun homeViewModel() = HomeViewModel(homeUseCase, chatUseCase, getUserProfileUseCase, prefs, analytics, getSupportedLanguagesUseCase)
+    fun homeViewModel() = HomeViewModel(
+        homeUseCase, chatUseCase, getUserProfileUseCase, prefs, analytics, getSupportedLanguagesUseCase,
+        guestReplacedSignal = guestReplacedSignal
+    )
 
     fun chatViewModel() = ChatViewModel(
-        appContext, chatUseCase, prefs, labelManager, analytics, config, agenticChatDataSource
+        appContext, chatUseCase, prefs, labelManager, analytics, config, agenticChatDataSource,
+        guestReplaced = guestReplacedSignal.events,
+        // CHAT_ONLY has no Home to recreate the conversation after a guest replacement.
+        createConversationOnGuestReplaced = config.mode == FarmerChatMode.CHAT_ONLY
     )
 
     fun chatHistoryViewModel() = ChatHistoryViewModel(historyUseCase, prefs)

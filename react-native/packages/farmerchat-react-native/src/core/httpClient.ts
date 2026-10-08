@@ -69,8 +69,9 @@ export class HttpClient {
     private readonly store: SessionStore,
     onSessionExpired: () => void,
     onError?: (code: number, message: string) => void,
+    onGuestReplaced?: () => void,
   ) {
-    this.authenticator = new TokenAuthenticator(config, store, onSessionExpired);
+    this.authenticator = new TokenAuthenticator(config, store, onSessionExpired, onGuestReplaced);
     this.onError = onError ?? null;
   }
 

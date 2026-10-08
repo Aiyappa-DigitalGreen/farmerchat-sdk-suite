@@ -17,6 +17,8 @@ export type AuthStateListener = (isAuthenticated: boolean) => void;
 
 export class SessionManager {
   private authListeners = new Set<AuthStateListener>();
+  private guestReplacedListeners = new Set<() => void>();
+  private guestGen = 0;
   private guestInitInFlight: Promise<ApiResult<InitializeGuestUserResponse>> | null =
     null;
   private sessionStarted = false;
@@ -101,6 +103,37 @@ export class SessionManager {
     return () => {
       this.authListeners.delete(listener);
     };
+  }
+
+  /**
+   * docs/02 Step 3: the 401 authenticator replaced a rejected guest with a new one. Screens that
+   * loaded data for the old `user_id` (Home: conversation, feed, weather, profile) reload on this.
+   */
+  addGuestReplacedListener(listener: () => void): () => void {
+    this.guestReplacedListeners.add(listener);
+    return () => {
+      this.guestReplacedListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Bumped on every guest replacement, before listeners run. A load that started under an older
+   * generation was built with the old `user_id` (or is its stale retry) and must drop its result,
+   * or it can land after — and overwrite — the reload.
+   */
+  get guestGeneration(): number {
+    return this.guestGen;
+  }
+
+  notifyGuestReplaced(): void {
+    this.guestGen += 1;
+    for (const l of Array.from(this.guestReplacedListeners)) {
+      try {
+        l();
+      } catch {
+        // listener errors never break the SDK
+      }
+    }
   }
 
   private notifyAuthState(): void {

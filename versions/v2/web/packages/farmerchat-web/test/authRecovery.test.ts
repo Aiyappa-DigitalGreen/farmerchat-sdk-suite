@@ -20,7 +20,7 @@ import { LabelManager } from '../src/core/labels';
 
 type Route = (body: Record<string, unknown>, headers: Record<string, string>) => { status: number; json?: unknown } | 'network';
 
-function setup(routes: Record<string, Route>, seed: (s: SessionStore) => void) {
+function setup(routes: Record<string, Route>, seed: (s: SessionStore) => void, extra: Partial<ConstructorParameters<typeof HttpClient>[0]> = {}) {
   const store = new SessionStore();
   for (const k of [PrefKeys.ACCESS_TOKEN, PrefKeys.REFRESH_TOKEN, PrefKeys.USER_ID, PrefKeys.OTP_VERIFIED, PrefKeys.NEW_CONVERSATION_ID]) store.remove(k);
   seed(store);
@@ -44,6 +44,7 @@ function setup(routes: Record<string, Route>, seed: (s: SessionStore) => void) {
     onSessionExpired: () => {
       expired += 1;
     },
+    ...extra,
   });
   return { http, store, calls, bearers, expired: () => expired };
 }
@@ -141,4 +142,60 @@ test('the refresh token still wins first: Step 3 does not run when Step 1 succee
   assert.equal(res.ok, true);
   assert.deepEqual(t.calls, ['api/images/v2/daily/', 'api/user/get_new_access_token/', 'api/images/v2/daily/']);
   assert.equal(t.store.getString(PrefKeys.USER_ID), 'guest-1');
+});
+
+test('no stored GPS fix: Step 3 sends the fallback coordinates, rewrites the place, signals replacement', async () => {
+  let initBody: Record<string, unknown> = {};
+  let replaced = 0;
+  const t = setup(
+    {
+      'api/images/v2/daily/': feed,
+      'api/user/send_tokens/': () => ({ status: 400, json: { detail: 'User not found or inactive.' } }),
+      'api/user/initialize_user/': (b) => {
+        initBody = b;
+        return { status: 201, json: { access_token: 'new-access', refresh_token: 'r', user_id: 'new-user', country_code: 'GB', country: 'United Kingdom', state: null } };
+      },
+    },
+    (s) => {
+      s.setString(PrefKeys.ACCESS_TOKEN, 'stale');
+      s.setString(PrefKeys.USER_ID, 'old-guest');
+      s.remove(PrefKeys.FARMER_APP_LATITUDE);
+      s.remove(PrefKeys.FARMER_APP_LONGITUDE);
+      s.setString(PrefKeys.USER_STATE, 'Karnataka');
+      s.setString(PrefKeys.APPROX_LOCATION_NAME, 'Bengaluru');
+    },
+    { fallbackCoordinates: () => ({ lat: 54.0, lng: -2.0 }), onGuestReplaced: () => { replaced += 1; } },
+  );
+  const res = await t.http.request({ method: 'GET', path: 'api/images/v2/daily/' });
+  assert.equal(res.ok, true);
+  assert.equal(initBody.lat, 54.0);
+  assert.equal(initBody.long, -2.0);
+  assert.equal(t.store.getString(PrefKeys.USER_STATE), null);
+  assert.equal(t.store.getString(PrefKeys.APPROX_LOCATION_NAME), null);
+  assert.equal(t.store.getString(PrefKeys.USER_COUNTRY_NAME), 'United Kingdom');
+  assert.equal(t.store.getString(PrefKeys.USER_COUNTRY_CODE), 'GB');
+  assert.equal(replaced, 1);
+});
+
+test('no fix and no resolvable fallback: initialize_user carries no coordinates', async () => {
+  let initBody: Record<string, unknown> = {};
+  const t = setup(
+    {
+      'api/images/v2/daily/': feed,
+      'api/user/send_tokens/': () => ({ status: 400, json: {} }),
+      'api/user/initialize_user/': (b) => {
+        initBody = b;
+        return { status: 201, json: { access_token: 'new-access', user_id: 'n' } };
+      },
+    },
+    (s) => {
+      s.setString(PrefKeys.ACCESS_TOKEN, 'stale');
+      s.setString(PrefKeys.USER_ID, 'old');
+      s.remove(PrefKeys.FARMER_APP_LATITUDE);
+      s.remove(PrefKeys.FARMER_APP_LONGITUDE);
+    },
+    { fallbackCoordinates: () => null },
+  );
+  await t.http.request({ method: 'GET', path: 'api/images/v2/daily/' });
+  assert.ok(!('lat' in initBody) && !('long' in initBody));
 });

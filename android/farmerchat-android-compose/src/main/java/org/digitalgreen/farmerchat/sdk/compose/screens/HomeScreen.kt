@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -109,7 +110,12 @@ fun HomeScreen(
     val homeState by vm.state.collectAsState()
     val locationState by graph.locationPromptManager.state.collectAsState()
 
-    val userId = remember { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
+    // docs/02 Step 3: re-read when a rejected guest is replaced mid-session, so actions dispatched
+    // after the replacement carry the new user_id (the ViewModel already re-ran its entry loads).
+    val guestGeneration by remember {
+        graph.guestReplacedSignal.events.map { graph.guestReplacedSignal.generation }
+    }.collectAsState(initial = graph.guestReplacedSignal.generation)
+    val userId = remember(guestGeneration) { graph.prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "") }
     val isAuthenticated = remember {
         graph.prefs.getBoolean(SdkPreferences.Keys.OTP_VERIFIED, false)
     }
