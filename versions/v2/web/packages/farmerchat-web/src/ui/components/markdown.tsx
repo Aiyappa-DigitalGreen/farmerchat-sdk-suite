@@ -174,9 +174,10 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
       return <div key={key} className="fcsdk-md-divider" role="separator" />;
     case 'header': {
       const content = inline(block.text, `h${index}`);
-      if (block.level === 1) return <h1 key={key}>{content}</h1>;
-      if (block.level === 2) return <h2 key={key}>{content}</h2>;
-      return <h3 key={key}>{content}</h3>;
+      // MarkdownText.kt: H1 titleLarge, H2 titleMedium, H3+ titleSmall.
+      if (block.level === 1) return <h1 key={key} className="fc-t-titleLarge">{content}</h1>;
+      if (block.level === 2) return <h2 key={key} className="fc-t-titleMedium">{content}</h2>;
+      return <h3 key={key} className="fc-t-titleSmall">{content}</h3>;
     }
     case 'table':
       return <MarkdownTable key={key} block={block} keyPrefix={`t${index}`} />;
@@ -188,17 +189,18 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
       );
     case 'quote':
       return (
-        <blockquote key={key}>
+        // One row per `>` line: a 3dp pill bar in borderDefault, 12dp, normal-colour text; 5dp apart.
+        <blockquote key={key} className="fcsdk-c-md-quote">
           {block.lines.map((line, j) => (
-            <Fragment key={j}>
-              {j > 0 ? <br /> : null}
-              {inline(line, `q${index}-${j}`)}
-            </Fragment>
+            <div key={j} className="fcsdk-c-md-quoteline">
+              <span className="fcsdk-c-md-quotebar" aria-hidden />
+              <span className="fc-t-bodyMedium">{inline(line, `q${index}-${j}`)}</span>
+            </div>
           ))}
         </blockquote>
       );
     case 'paragraph':
-      return <p key={key}>{inline(block.text, `p${index}`)}</p>;
+      return <p key={key} className="fc-t-bodyMedium">{inline(block.text, `p${index}`)}</p>;
     // Handled by the list grouping in MarkdownText; unreachable here.
     case 'bullet':
     case 'numbered':
@@ -227,9 +229,20 @@ export function MarkdownText(props: { text: string }) {
         items.push(blocks[i]!);
         i++;
       }
+      // MarkdownText.kt draws its own rows: a bullet is a 5dp dot (10dp down, 10dp gap); a numbered
+      // item prints "N." verbatim with a 4dp gap. Consecutive items sit 5dp apart.
       const children = items.map((item, j) => (
-        <li key={j}>
-          {inline(item.type === 'bullet' || item.type === 'numbered' ? item.text : '', `li${start}-${j}`)}
+        <li key={j} className={kind === 'bullet' ? 'fcsdk-c-md-bullet' : 'fcsdk-c-md-numbered'}>
+          {kind === 'bullet' ? (
+            <span className="fcsdk-c-md-dot" aria-hidden />
+          ) : (
+            <span className="fc-t-bodyMedium" aria-hidden>
+              {(item as Extract<MarkdownBlock, { type: 'numbered' }>).number}.
+            </span>
+          )}
+          <span className="fc-t-bodyMedium fcsdk-c-md-litext">
+            {inline(item.type === 'bullet' || item.type === 'numbered' ? item.text : '', `li${start}-${j}`)}
+          </span>
         </li>
       ));
       out.push(

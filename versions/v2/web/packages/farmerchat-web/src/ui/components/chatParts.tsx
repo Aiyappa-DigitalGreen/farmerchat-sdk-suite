@@ -1,0 +1,350 @@
+/**
+ * Chat building blocks ported from the compose module: Chip.kt, ChatScreen.kt's SuggestedCard /
+ * FollowUpSection / ChatResponseActions / ChatActionChip, ListenButton.kt, Tips.kt, the Feed.kt
+ * ScrollIndicator and AppBars.kt LogoAppBar. Values are cited in the stylesheet (`.fcsdk-c-chat*`).
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { FcIcon, type IconName } from './FcIcon';
+import { ActionButton, CircularProgress } from './common';
+import { Assets } from '../assets';
+import { useLabel, useSdk } from '../context';
+import { answerGenerationTips, type TipData } from '../../core/tips';
+
+// ------------------------------------------------------------------------------------- Chip.kt
+
+export type ChipType = 'suggested' | 'agentic' | 'escalate';
+
+/**
+ * Chip.kt: a full-width 12-radius row — numbered 24dp badge, bold labelMedium label, 24dp chevron.
+ * Suggested = reading-secondary; Agentic = surfaceActive; Escalate = solid red. Selected adds a
+ * 1.5dp accent ring and a check badge; disabled greys out.
+ */
+export function Chip(props: {
+  label: string;
+  number?: number;
+  type: ChipType;
+  selected?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  const clickable = !!props.onClick && !props.disabled && !props.selected;
+  const cls = [
+    'fcsdk-c-chip',
+    `fcsdk-c-chip--${props.type}`,
+    props.selected ? 'fcsdk-c-chip--selected' : '',
+    props.disabled && !props.selected ? 'fcsdk-c-chip--disabled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <button type="button" className={cls} disabled={!clickable} onClick={clickable ? props.onClick : undefined}>
+      {props.selected ? (
+        <span className="fcsdk-c-chip-badge fcsdk-c-chip-badge--check">
+          <FcIcon name="m_check" size={16} tint="#FFFFFF" />
+        </span>
+      ) : props.number != null ? (
+        <span className="fcsdk-c-chip-badge fc-t-labelMedium">{props.number}</span>
+      ) : null}
+      <span className="fcsdk-c-chip-label fc-t-labelMedium">{props.label}</span>
+      {clickable ? <FcIcon name="m_keyboard_arrow_right" size={24} className="fcsdk-c-chip-chevron" tint="currentColor" /> : null}
+    </button>
+  );
+}
+
+/** ChatScreen.kt SuggestedCard: a white 16-radius card with a 35% accent border and an arrow disc. */
+export function SuggestedCard(props: { text: string; onClick: () => void }) {
+  return (
+    <button type="button" className="fcsdk-c-suggested fcsdk-c-press" onClick={props.onClick}>
+      <span className="fc-t-bodyMedium fcsdk-c-suggested-text">{props.text}</span>
+      <span className="fcsdk-c-suggested-arrow">
+        <FcIcon name="m_arrow_forward" size={16} tint="#00C950" />
+      </span>
+    </button>
+  );
+}
+
+/** ChatScreen.kt FollowUpSection: green dot + titleSmall(600) muted title, then chips or cards. */
+export function FollowUpSection(props: {
+  title: string;
+  questions: string[];
+  useChips: boolean;
+  clarificationRequired: boolean;
+  onClick: (index: number, question: string) => void;
+}) {
+  return (
+    <div className="fcsdk-c-followups">
+      <div className="fcsdk-c-followups-title">
+        <span className="fcsdk-c-followups-dot" aria-hidden />
+        <span className="fc-t-titleSmall" style={{ fontWeight: 600 }}>
+          {props.title}
+        </span>
+      </div>
+      {props.questions.map((q, i) =>
+        props.useChips ? (
+          <Chip
+            key={i}
+            label={q}
+            number={i + 1}
+            type={props.clarificationRequired ? 'agentic' : 'suggested'}
+            onClick={() => props.onClick(i, q)}
+          />
+        ) : (
+          <SuggestedCard key={i} text={q} onClick={() => props.onClick(i, q)} />
+        ),
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- action row
+
+/** ChatActionChip: 42dp pill on reading-secondary, 23dp tinted icon + labelMedium; optional sweep. */
+export function ChatActionChip(props: { icon: IconName; label: string; onClick: () => void; accent?: boolean }) {
+  return (
+    <button type="button" className={`fcsdk-c-action${props.accent ? ' fcsdk-c-action--accent' : ''}`} onClick={props.onClick}>
+      <span className="fcsdk-c-action-inner">
+        <FcIcon name={props.icon} size={23} tint="var(--fc-c-fg-primary)" />
+        <span className="fc-t-labelMedium">{props.label}</span>
+      </span>
+    </button>
+  );
+}
+
+const STATIC_WAVE = [0.15, 0.23, 0.31, 0.5, 0.31, 0.54, 0.73, 0.5, 0.73, 0.38, 0.5, 0.5, 0.31, 0.15];
+
+/** ListenButton.kt SoundWave: 14 green 2dp bars over 54×26; random jitter while playing. */
+function SoundWave(props: { playing: boolean }) {
+  const [heights, setHeights] = useState(STATIC_WAVE);
+  useEffect(() => {
+    if (!props.playing) {
+      setHeights(STATIC_WAVE);
+      return;
+    }
+    let t: number;
+    const tick = () => {
+      setHeights((cur) =>
+        cur.map((c, i) => Math.min(0.85, Math.max(0.15, STATIC_WAVE[i] * 0.5 + (c * 0.5 + Math.random() * 0.5) * 0.5))),
+      );
+      t = window.setTimeout(tick, 100 + Math.random() * 50);
+    };
+    tick();
+    return () => window.clearTimeout(t);
+  }, [props.playing]);
+  return (
+    <span className="fcsdk-c-wave" aria-hidden>
+      {heights.map((h, i) => (
+        <span key={i} style={{ height: `${h * 26}px`, transitionDuration: props.playing ? '120ms' : '200ms' }} />
+      ))}
+    </span>
+  );
+}
+
+/** ListenButton.kt (light): Default / Loading / Playing (animated wave) / Paused (static wave). */
+export function ListenButton(props: { loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void }) {
+  const label = useLabel();
+  return (
+    <button type="button" className="fcsdk-c-listen" onClick={props.onClick} disabled={props.loading}>
+      {props.loading ? (
+        <>
+          <CircularProgress size={20} stroke={2} color="var(--fc-c-fg-primary)" />
+          <span className="fc-t-labelMedium fcsdk-c-ellipsis" style={{ marginLeft: 8 }}>
+            {label('fc_v2_app_label_loading', 'Loading...')}
+          </span>
+        </>
+      ) : props.playing ? (
+        <>
+          <FcIcon name="m_pause" size={23} tint="var(--fc-c-fg-primary)" />
+          <span style={{ width: 6 }} />
+          <SoundWave playing />
+        </>
+      ) : props.hasAudio ? (
+        <>
+          <FcIcon name="m_play_arrow" size={23} tint="var(--fc-c-fg-primary)" />
+          <span style={{ width: 6 }} />
+          <SoundWave playing={false} />
+        </>
+      ) : (
+        <>
+          <FcIcon name="m_volume_up" size={23} tint="var(--fc-c-fg-primary)" />
+          <span className="fc-t-labelMedium" style={{ marginLeft: 6 }}>
+            {label('fc_v2_app_label_listen', 'Listen')}
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/**
+ * ChatResponseActions. Agentic: an "AI may be wrong" note, 12dp, then Share (accent sweep) +
+ * Listen. Legacy: Share · Save · Listen, 10dp apart.
+ */
+export function ChatResponseActions(props: {
+  agentic: boolean;
+  showShare: boolean;
+  tts: { enabled: boolean; loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void } | null;
+  onShare: () => void;
+  onSave: () => void;
+}) {
+  const label = useLabel();
+  const listen = props.tts?.enabled ? (
+    <ListenButton loading={props.tts.loading} playing={props.tts.playing} hasAudio={props.tts.hasAudio} onClick={props.tts.onClick} />
+  ) : null;
+  if (props.agentic) {
+    return (
+      <div>
+        <div className="fcsdk-c-aiwarn">
+          <FcIcon name="icon_info" size={18} tint="#00C950" />
+          <span className="fc-t-labelSmall">
+            {label('fc_v2_app_label_tips_ai_may_be_wrong_please_double_check', 'AI may be wrong. Please double-check.')}
+          </span>
+        </div>
+        <div className="fcsdk-c-actions" style={{ marginTop: 12, gap: 8 }}>
+          {props.showShare ? (
+            <ChatActionChip accent icon="icon_share" label={label('fc_v2_app_label_share_download', 'Share')} onClick={props.onShare} />
+          ) : null}
+          {listen}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fcsdk-c-actions" style={{ gap: 10 }}>
+      {props.showShare ? (
+        <>
+          <ChatActionChip icon="icon_share" label={label('fc_v2_app_label_share_download', 'Share')} onClick={props.onShare} />
+          <ChatActionChip icon="icon_save" label={label('fc_v2_app_label_save', 'Save')} onClick={props.onSave} />
+        </>
+      ) : null}
+      {listen}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------- Tips.kt
+
+/**
+ * Tips.kt: bottom-anchored carousel shown while an answer is generated. 24dp fade, then 104dp
+ * #08361B tip cards (side cards peek 24dp, 8dp apart), advancing every 8s with a 400ms slide and
+ * an icon wobble; pagination dots with the active one filling over the 8s.
+ */
+export function Tips() {
+  const { services } = useSdk();
+  const tips = useMemo<TipData[]>(() => {
+    const list = answerGenerationTips(services.labels);
+    // Shuffled once per mount, as the app does.
+    return list
+      .map((t) => ({ t, r: Math.random() }))
+      .sort((a, b) => a.r - b.r)
+      .map((x) => x.t);
+  }, [services.labels]);
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (tips.length < 2) return;
+    const id = window.setInterval(() => setIndex((i) => i + 1), 8000);
+    return () => window.clearInterval(id);
+  }, [tips.length]);
+  const active = index % Math.max(1, tips.length);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  return (
+    <div className="fcsdk-c-tips" aria-live="polite">
+      <div className="fcsdk-c-tips-fade" />
+      <div className="fcsdk-c-tips-body">
+        <div className="fcsdk-c-tips-viewport">
+          <div ref={trackRef} className="fcsdk-c-tips-track" style={{ transform: `translateX(calc(${-index} * (100% + 8px)))` }}>
+            {Array.from({ length: index + 2 }, (_, i) => {
+              const tip = tips[i % tips.length];
+              return (
+                <div key={i} className="fcsdk-c-tip">
+                  <span key={i === index ? `w${index}` : undefined} className={`fcsdk-c-tip-icon${i === index ? ' fcsdk-c-tip-icon--wobble' : ''}`}>
+                    <FcIcon name="m_lightbulb_outlined" size={18} tint="#FFFFFF" />
+                  </span>
+                  <div className="fcsdk-c-tip-text">
+                    <div className="fc-t-labelLarge">{tip.title}</div>
+                    <div className="fc-t-bodySmall" style={{ marginTop: 6 }}>
+                      {tip.body}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {tips.length > 1 ? (
+          <div className="fcsdk-c-tips-dots">
+            {tips.map((_, i) =>
+              i === active ? (
+                <span key={`a${index}`} className="fcsdk-c-tips-dot fcsdk-c-tips-dot--active">
+                  <span />
+                </span>
+              ) : (
+                <span key={i} className="fcsdk-c-tips-dot" />
+              ),
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- ScrollIndicator (Feed.kt)
+
+/** 40dp circle, bottom-centre; appears 1.5s after an answer settles, bounces 3×, then hides. */
+export function ScrollIndicator(props: { triggerKey: string | null; hasContentBelow: () => boolean; onClick: () => void }) {
+  const label = useLabel();
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    setShow(false);
+    if (!props.triggerKey) return;
+    const t1 = window.setTimeout(() => {
+      if (props.hasContentBelow()) setShow(true);
+    }, 1500);
+    const t2 = window.setTimeout(() => setShow(false), 1500 + 200 + 300 + 3 * 750 + 400 + 300);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.triggerKey]);
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      className="fcsdk-c-scrollind"
+      aria-label={label('fc_v2_app_label_scroll_down', 'Scroll down')}
+      onClick={() => {
+        setShow(false);
+        props.onClick();
+      }}
+    >
+      <FcIcon name="icon_arrow_down" size={20} tint="var(--fc-c-fg-primary)" />
+    </button>
+  );
+}
+
+// --------------------------------------------------------------------- LogoAppBar (AppBars.kt)
+
+/**
+ * LogoAppBar: 64dp #008236 with the 80dp yellow glow; a 42dp ActionButton on the left, the 36dp
+ * white mark centred (fading in once the thread settles), and on the right either a 42dp spacer
+ * or — with the drawer off — History and Language buttons.
+ */
+export function LogoAppBar(props: {
+  leading: { icon: IconName; radius: 'rounded' | 'md'; onClick: () => void; ariaLabel: string };
+  showLogo: boolean;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div className="fcsdk-c-appbar">
+      <img className="fcsdk-c-appbar-glow" src={Assets.glowYellow} alt="" aria-hidden />
+      <ActionButton icon={props.leading.icon} radius={props.leading.radius} ariaLabel={props.leading.ariaLabel} onClick={props.leading.onClick} />
+      <div className="fcsdk-c-appbar-logo" style={{ opacity: props.showLogo ? 1 : 0 }}>
+        <FcIcon name="logo_mark" size={36} tint="#FFFFFF" />
+      </div>
+      {props.trailing ?? <span className="fcsdk-c-appbar-spacer" aria-hidden />}
+    </div>
+  );
+}

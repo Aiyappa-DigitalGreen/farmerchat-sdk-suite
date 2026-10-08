@@ -83,8 +83,13 @@ export interface InputComposerProps {
   compact?: boolean;
   /** When false the bar slides off-screen (Chat hides it while an answer generates). */
   visible?: boolean;
-  /** Decorative flowing gradient ring around the idle field. Home only. */
+  /** Decorative flowing gradient ring around the idle field. */
   showAura?: boolean;
+  /**
+   * The opaque band painted behind a floating sheet, from its top edge to the bottom (Compose
+   * `fadeColor`): surfacePrimary on Home, surfaceReadingPrimary in Chat.
+   */
+  fadeColor?: string;
   /** aria-label for the camera button. */
   photoLabel?: string;
   /** aria-label for the mic button. */
@@ -183,7 +188,7 @@ export function InputComposer(props: InputComposerProps) {
     (visible ? '' : ' fcsdk-composer--hidden');
 
   return (
-    <div className={rootClass}>
+    <div className={rootClass} style={floating && props.fadeColor ? { background: props.fadeColor } : undefined}>
       <div
         className="fcsdk-composer-sheet"
         style={{

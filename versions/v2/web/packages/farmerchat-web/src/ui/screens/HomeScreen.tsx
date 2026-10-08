@@ -249,17 +249,13 @@ export function HomeScreen(props: {
       // answer API (#13 fetchImageStatement) and sends the card question into chat as a normal
       // text query, for both image and statement cards.
       //
-      // SDK deviation, same as the Compose port: the app also forwards the card image url so chat
-      // can show it as a display-only banner on the user bubble. ChatRouteParams has no
-      // display-only image field — its `imageUri`/`imageBlob` route the query through image
-      // analysis, which is exactly what this path must avoid — so the banner is dropped.
+      // The card image is forwarded as `contentCardImageUrl`, a display-only banner on the
+      // question bubble (not `imageUri`/`imageBlob`, which would route through image analysis).
       if (isComposerUi) {
         if (question.trim().length > 0) {
-          props.onOpenChat({
-            source: 'home',
-            question,
-            homeStatementId: section.statement_id != null ? String(section.statement_id) : undefined,
-          });
+          // HomeScreen.kt:1027-1051: the card image rides along display-only, and no
+          // homeStatementId is sent on the agentic path.
+          props.onOpenChat({ source: 'home', question, contentCardImageUrl: section.image_url ?? undefined });
         }
         return;
       }

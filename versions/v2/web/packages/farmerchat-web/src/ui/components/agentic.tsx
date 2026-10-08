@@ -14,7 +14,9 @@
 
 import { useEffect, useState } from 'react';
 import { useLabel } from '../context';
-import { Icon } from './common';
+import { LogoSpinner, PrimaryButton } from './common';
+import { FcIcon } from './FcIcon';
+import { Chip } from './chatParts';
 import type { AlignmentChip } from '../../core/types';
 import type { AlignmentKind } from '../../core/alignment';
 import { isAdditiveAlignment } from '../../core/alignment';
@@ -29,10 +31,10 @@ const PAUSE_HINT_DELAY_MS = 4000;
 
 /** Inline spinner + label, the web equivalent of Compose's horizontal `LogoSpinner`. */
 function InlineProgress(props: { label: string }) {
+  // LogoSpinner.kt Horizontal: 40dp ring + 23dp mark, shimmering labelMedium label.
   return (
-    <div className="fcsdk-stream-progress" role="status" aria-live="polite">
-      <span className="fcsdk-spinner fcsdk-stream-progress-spinner" aria-hidden />
-      <span className="fcsdk-stream-progress-label">{props.label}</span>
+    <div role="status" aria-live="polite">
+      <LogoSpinner horizontal message={props.label} />
     </div>
   );
 }
@@ -93,17 +95,15 @@ export function StreamErrorCard(props: {
       ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
       : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
 
+  // StreamErrorCard.kt: 16dp above, a 12-radius red-tinted card (8% fill, 16% border), icon + title,
+  // then a full-width "Try again" PrimaryButton.
   return (
-    <div className="fcsdk-stream-error" role="alert">
-      <div className="fcsdk-stream-error-head">
-        <span className="fcsdk-stream-error-icon" aria-hidden>
-          {props.errorKind === 'NETWORK' ? Icon.wifiOff : Icon.warning}
-        </span>
-        <span>{title}</span>
+    <div className="fcsdk-c-streamerror" role="alert">
+      <div className="fcsdk-c-streamerror-head">
+        <FcIcon name={props.errorKind === 'NETWORK' ? 'm_wifi_off' : 'm_warning'} size={20} tint="#E5533D" />
+        <span className="fc-t-bodyMedium">{title}</span>
       </div>
-      <button type="button" className="fcsdk-btn-primary fcsdk-stream-error-retry" onClick={props.onRetry}>
-        {label('fc_v2_app_label_try_again', 'Try again')}
-      </button>
+      <PrimaryButton label={label('fc_v2_app_label_try_again', 'Try again')} onClick={props.onRetry} />
     </div>
   );
 }
@@ -145,58 +145,58 @@ export function AlignmentSurface(props: {
 
   const heading =
     kind === 'GPS_PROMPT'
-      ? label('fc_v2_app_label_share_location', 'Share location')
+      ? label('fc_v2_app_label_share_location_title', 'Share location')
       : kind === 'UPLOAD_PHOTO'
         ? label('fc_v2_app_label_add_one_clear_photo', 'Add one clear photo')
         : kind === 'CONFIRM'
-          ? label('fc_v2_app_label_please_confirm', 'Please Confirm')
+          ? label('fc_v2_app_label_please_confirm', 'Please confirm')
           : label('fc_v2_app_label_choose_one', 'Choose one');
+  const hasMessage = props.message.trim().length > 0;
+  const showHeading = !isEscalate && !additive;
 
+  // AlignmentSurface.kt: bodyLarge message, titleMedium heading, full-width numbered Chips 8 apart,
+  // and the "Don't see your option? Type or say it." escape hatch. Only escalate gets a card.
   return (
-    <div className={`fcsdk-alignment${isEscalate ? ' fcsdk-alignment--escalate' : ''}`}>
-      {props.message.trim().length > 0 ? <div className="fcsdk-alignment-message">{props.message}</div> : null}
-      {!isEscalate && !additive ? <div className="fcsdk-alignment-heading">{heading}</div> : null}
-
+    <div className={`fcsdk-c-align${isEscalate ? ' fcsdk-c-align--escalate' : ''}`}>
+      {hasMessage ? (
+        <div className="fc-t-bodyLarge" style={{ color: 'var(--fc-c-fg-primary)', marginBottom: isEscalate || additive ? 12 : 16 }}>
+          {props.message}
+        </div>
+      ) : null}
+      {showHeading ? (
+        <div className="fc-t-titleMedium" style={{ color: 'var(--fc-c-fg-primary)', marginBottom: 16 }}>
+          {heading}
+        </div>
+      ) : null}
       {chips.length > 0 ? (
-        <div className="fcsdk-alignment-chips">
+        <div className="fcsdk-c-align-chips">
           {chips.map((chip, index) => {
             const isSelected =
-              (!!chip.value && selectedValues.includes(chip.value)) ||
-              (!!chip.label && selectedValues.includes(chip.label));
+              (!!chip.value && selectedValues.includes(chip.value)) || (!!chip.label && selectedValues.includes(chip.label));
             const tappable = !isSelected && !isLoading && !chipsLocked;
-            // Once a pick exists the unpicked chips fade back, so the chosen one reads as the
-            // answer rather than one of several live options.
             const accented = !hasPick || isSelected;
+            const type = isEscalate ? (accented ? 'escalate' : 'suggested') : accented ? 'agentic' : 'suggested';
             return (
-              <button
+              <Chip
                 key={`${chip.value ?? chip.label ?? 'chip'}_${index}`}
-                type="button"
-                className={
-                  'fcsdk-alignment-chip' +
-                  (accented ? ' fcsdk-alignment-chip--accent' : '') +
-                  (isEscalate && accented ? ' fcsdk-alignment-chip--escalate' : '') +
-                  (isSelected ? ' fcsdk-alignment-chip--selected' : '')
-                }
-                disabled={!tappable}
-                onClick={() => props.onChipClick(chip)}
-              >
-                <span className="fcsdk-alignment-chip-index" aria-hidden>
-                  {index + 1}
-                </span>
-                <span>{chip.label ?? ''}</span>
-              </button>
+                label={chip.label ?? ''}
+                number={index + 1}
+                type={type}
+                selected={isSelected}
+                disabled={!tappable && !isSelected}
+                onClick={tappable ? () => props.onChipClick(chip) : undefined}
+              />
             );
           })}
         </div>
       ) : null}
-
-      {/* Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
-          Without it a farmer whose answer is not among the chips has no way forward. */}
       {chips.length > 0 && !isEscalate && !isCapabilityPrompt && !additive && !hasPick && isLatest && !isLoading ? (
-        <div className="fcsdk-alignment-hatch">
-          <span aria-hidden>{Icon.info}</span>
-          <span>{label('chat_align_no_option', "Don't see your option?")}</span>
-          <button type="button" className="fcsdk-alignment-hatch-action" onClick={props.onTypeInstead}>
+        <div className="fcsdk-c-align-hatch">
+          <FcIcon name="m_info" size={16} tint="#00C950" />
+          <span className="fc-t-bodySmall" style={{ color: 'var(--fc-c-fg-secondary)' }}>
+            {label('fc_v2_app_label_dont_see_your_option', "Don't see your option?")}
+          </span>
+          <button type="button" className="fc-t-bodySmall fcsdk-c-align-hatch-action" onClick={props.onTypeInstead}>
             {label('fc_v2_app_label_type_or_say_it', 'Type or say it.')}
           </button>
         </div>

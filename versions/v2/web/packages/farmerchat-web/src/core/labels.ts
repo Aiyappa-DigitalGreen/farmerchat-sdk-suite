@@ -55,6 +55,16 @@ export class LabelManager {
     this.emit();
   }
 
+  /** Every served label key (`${key}_${lang}`), for convention-based discovery (tips). */
+  labelKeys(): string[] {
+    return Object.keys(this.labels);
+  }
+
+  /** The raw served value for an exact `${key}_${lang}` key, or undefined. */
+  rawLabel(fullKey: string): string | undefined {
+    return this.labels[fullKey];
+  }
+
   hasLabels(): boolean {
     return Object.keys(this.labels).length > 0;
   }

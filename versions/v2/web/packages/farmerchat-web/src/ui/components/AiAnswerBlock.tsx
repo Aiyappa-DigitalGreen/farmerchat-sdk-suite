@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownText } from './markdown';
+import { LogoSpinner } from './common';
 
 function prefersReducedMotion(): boolean {
   return (
@@ -63,8 +64,8 @@ export function AiAnswerBlock(props: {
     }
     setRevealed(0);
     setFinished(false);
-    // ~40 ms / word, bounded so long answers never crawl (words-per-tick scales up).
-    const intervalMs = 40;
+    // AiAnswer.kt: 35 ms / word, bounded so long answers never crawl (words-per-tick scales up).
+    const intervalMs = 35;
     const maxDurationMs = 6000;
     const perTick = Math.max(1, Math.ceil((total * intervalMs) / maxDurationMs));
     let current = 0;
@@ -85,7 +86,7 @@ export function AiAnswerBlock(props: {
   // the growing markdown prefix so it always trails the last revealed word).
   useEffect(() => {
     if (finished) return;
-    const id = window.setInterval(() => setCaretOn((c) => !c), 500);
+    const id = window.setInterval(() => setCaretOn((c) => !c), 450);
     return () => window.clearInterval(id);
   }, [finished]);
 
@@ -98,7 +99,7 @@ export function AiAnswerBlock(props: {
 
   const display = finished
     ? text
-    : chunks.slice(0, revealed).join('').replace(/\s+$/, '') + (caretOn ? ' ▍' : '');
+    : chunks.slice(0, revealed).join('').replace(/\s+$/, '') + (caretOn ? ' \u258C' : '');
 
   return (
     <div
@@ -116,14 +117,16 @@ export function AiAnswerBlock(props: {
  * pulsing dots. Mirrors the Android ThinkingIndicator.
  */
 export function ThinkingIndicator(props: { label: string }) {
+  // AiAnswer.kt: a horizontal LogoSpinner with no label, then a plain (not shimmering) muted
+  // labelMedium and three 6dp green dots pulsing 0.25↔1 in turn.
   return (
-    <div className="fcsdk-thinking" role="status" aria-live="polite">
-      <span className="fcsdk-spinner fcsdk-thinking-spinner" aria-hidden />
-      <span className="fcsdk-thinking-label">{props.label}</span>
-      <span className="fcsdk-thinking-dots" aria-hidden>
-        <span className="fcsdk-thinking-dot" />
-        <span className="fcsdk-thinking-dot" />
-        <span className="fcsdk-thinking-dot" />
+    <div className="fcsdk-c-thinking" role="status" aria-live="polite">
+      <LogoSpinner horizontal />
+      <span className="fcsdk-c-thinking-label fc-t-labelMedium">{props.label}</span>
+      <span className="fcsdk-c-thinking-dots" aria-hidden>
+        <span />
+        <span />
+        <span />
       </span>
     </div>
   );

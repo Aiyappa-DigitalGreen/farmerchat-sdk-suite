@@ -194,6 +194,8 @@ export interface ChatActions {
       ssfrCrop?: string | null;
       channel?: string | null;
       triggeredInputType?: string;
+      /** Display-only Home card image for the question bubble (compose `contentCardImageUrl`). */
+      contentCardImageUrl?: string | null;
     },
   ) => Promise<void>;
   initializeWithPreGeneratedContent: (
@@ -702,6 +704,11 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
          * suddenly grow the bubble the first attempt suppressed.
          */
         suppressUserMessage?: boolean;
+        /**
+         * Display-only image for the question bubble (compose `contentCardImageUrl`): a Home card's
+         * picture shown as a 16:9 banner. Never sent — the query stays a text query.
+         */
+        contentCardImageUrl?: string | null;
       },
     ) => {
       const userMsgId = opts.reuseUserMessageId ?? nextLocalId('user');
@@ -722,6 +729,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
             id: userMsgId,
             text: question,
             audioUri: opts.audioUri ?? undefined,
+            imageUri: opts.contentCardImageUrl ?? undefined,
+            userBubbleImageWideBanner: !!opts.contentCardImageUrl,
             isFailed: false,
           };
           messages = [...messages, userMsg];
@@ -796,6 +805,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       await runTextQuery(question, {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
+        contentCardImageUrl: opts.contentCardImageUrl ?? null,
         properties: {
           triggeredInputType: opts.triggeredInputType ?? (opts.audioUri ? 'voice' : 'text'),
           isWeatherAdviceCTA: opts.isWeatherAdviceCTA ?? false,

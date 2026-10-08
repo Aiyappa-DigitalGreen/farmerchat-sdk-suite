@@ -8,7 +8,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabel, useSdk } from '../context';
-import { Icon, LogoSpinner, Toast } from '../components/common';
+import { LogoSpinner, PrimaryButton, Toast } from '../components/common';
+import { ActionButton } from '../components/common';
+import { ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
 import { AiAnswerBlock, ThinkingIndicator } from '../components/AiAnswerBlock';
 import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
 import { capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
@@ -36,11 +38,10 @@ export function ChatScreen(props: {
    */
   locationActions: LocationPromptActions;
 }) {
-  const { services, toast } = useSdk();
+  const { services, toast, navigator } = useSdk();
   const label = useLabel();
   const [chat, actions] = useChat(services);
   const [overlay, setOverlay] = useState<InputKind | null>(null);
-  const [showScrollDown, setShowScrollDown] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initRef = useRef(false);
   const prevHeightRef = useRef(0);
@@ -199,15 +200,6 @@ export function ChatScreen(props: {
     });
   }, []);
 
-  // While a fresh answer reveals, keep its growing tail (and blinking caret) in
-  // view — but never yank the viewport if the user has scrolled up to read.
-  const revealScrollToBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 220) el.scrollTop = el.scrollHeight;
-  }, []);
-
   // Initialization — exactly one path (docs/01 §3.8 initialization LaunchedEffect).
   useEffect(() => {
     services.analytics.screenView(Screens.CHAT);
@@ -245,6 +237,7 @@ export function ChatScreen(props: {
           isSSFR: params.isSSFR ?? false,
           ssfrCrop: params.ssfrCrop ?? null,
           channel: params.channel ?? null,
+          contentCardImageUrl: params.contentCardImageUrl ?? null,
         });
       }
     }
@@ -255,45 +248,74 @@ export function ChatScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll-to-bottom on new messages; position restore after history prepend.
+  // ------------------------------------------------------------------ reserve + pinning
+  // ChatScreen.kt: the last response holds a min-height equal to the scroller's viewport, and the
+  // farmer's question is scrolled to the TOP (16dp content padding) so the answer grows into the
+  // reserve below it — the screen never follows the stream's tail. Keyed on the last message id,
+  // isLoading and the first history load, exactly like Compose's LaunchedEffect.
+  const [viewportHeight, setViewportHeight] = useState(0);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const measure = () => setViewportHeight(el.clientHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const setRowRef = (id: string) => (el: HTMLDivElement | null) => {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  };
+  const lastMessage = chat.messages[chat.messages.length - 1];
+  const historyScrolledRef = useRef(false);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !lastMessage) return;
     if (loadingOlderRef.current) {
-      // Restore position after older page prepended.
+      // Older page prepended: keep the reading position.
       el.scrollTop = el.scrollHeight - prevHeightRef.current;
       loadingOlderRef.current = false;
-    } else {
-      el.scrollTop = el.scrollHeight;
+      return;
     }
-  }, [chat.messages.length, chat.isInitialHistoryLoaded]);
+    if (isHistoryEntry && chat.isInitialHistoryLoaded && !historyScrolledRef.current) {
+      // History entry: the first question sits at the top.
+      historyScrolledRef.current = true;
+      el.scrollTop = 0;
+      return;
+    }
+    const msgs = chat.messages;
+    const finalIdx = msgs.length - 1;
+    const final = msgs[finalIdx];
+    const finalHoldsReserve = final.kind === 'ai' && holdsReserve(final, true);
+    let anchorIdx = finalIdx;
+    if (finalHoldsReserve || final.kind === 'loading') {
+      for (let i = finalIdx - 1; i >= 0; i--) {
+        if (msgs[i].kind === 'user' || msgs[i].kind === 'location') {
+          anchorIdx = i;
+          break;
+        }
+      }
+    }
+    const anchor = rowRefs.current.get(msgs[anchorIdx].id);
+    if (anchor) el.scrollTo({ top: Math.max(0, anchor.offsetTop - 16), behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessage?.id, chat.isLoading, chat.isInitialHistoryLoaded]);
 
-  // When a reveal finishes, the action row + follow-ups fade in below the answer
-  // (message count is unchanged, so the effect above does not fire). Bring them
-  // into view — but only if the user is already near the bottom.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 320) el.scrollTop = el.scrollHeight;
-  }, [revealedIds]);
-
-  // While an agentic answer streams, its bubble grows without the message COUNT changing, so the
-  // effect above never fires. Track the streamed text length and keep the tail in view (still
-  // respecting a user who has scrolled up to read).
-  let streamingTextLength = -1;
-  for (const m of chat.messages) if (m.kind === 'ai' && m.isStreaming) streamingTextLength = m.text.length;
-  useEffect(() => {
-    if (streamingTextLength >= 0) revealScrollToBottom();
-  }, [streamingTextLength, revealScrollToBottom]);
+  /** core ChatReserve.kt holdsChatReserve. */
+  function holdsReserve(ai: AiResponse, isLastAi: boolean): boolean {
+    if (!isLastAi) return false;
+    const pendingAlignment = !!ai.alignmentKind && (ai.alignmentSelectedValues ?? []).length === 0;
+    return !!ai.isStreaming || !!ai.isInterrupted || !chat.isLoading || pendingAlignment;
+  }
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollDown(distanceFromBottom > 260);
     // Load older pages near the top (docs/01 §3.8 history pagination).
-    if (el.scrollTop < 60 && chat.historyNextPage != null && !chat.isLoadingMoreHistory && params.conversationId) {
+    if (el.scrollTop <= 0 && chat.historyNextPage != null && !chat.isLoadingMoreHistory && params.conversationId) {
       prevHeightRef.current = el.scrollHeight;
       loadingOlderRef.current = true;
       void actions.loadChatHistory(params.conversationId, chat.historyNextPage);
@@ -305,7 +327,7 @@ export function ChatScreen(props: {
       services.analytics.track(Events.ANSWER_SHARE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
       const result = await shareAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
-      if (result === 'failed') toast.show(label('chat_share_failed', 'Could not share the answer.'));
+      if (result === 'failed') toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
     },
     [chat.messages, label, services.analytics, toast],
   );
@@ -315,91 +337,128 @@ export function ChatScreen(props: {
       services.analytics.track(Events.ANSWER_SAVE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
       const question = lastUserQuestionBefore(chat.messages, ai.id);
       const ok = await downloadAnswerCard(question, ai.text, label('fc_v2_app_label_farmerchat', 'FarmerChat'));
-      if (!ok) toast.show(label('chat_download_failed', 'Could not download the answer.'));
-      else toast.show(label('chat_download_done', 'Answer saved.'));
+      if (!ok) toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
+      else toast.show(label('fc_v2_app_label_saved_to_gallery', 'Saved to gallery'));
     },
     [chat.messages, label, services.analytics, toast],
   );
 
-  const isInitialLoading = chat.isLoading && chat.messages.filter((m) => m.kind !== 'loading').length <= 1;
-  const hasThread = chat.messages.length > 0;
-
+  const hasThread = chat.messages.some((m) => m.kind === 'ai' || m.kind === 'loading');
   // Id of the newest AI answer — the only message eligible for the reveal.
-  let lastAiId: string | null = null;
-  for (const m of chat.messages) if (m.kind === 'ai') lastAiId = m.id;
+  let lastAi: AiResponse | null = null;
+  for (const m of chat.messages) if (m.kind === 'ai') lastAi = m;
+  const lastAiId = lastAi?.id ?? null;
+  const lastAnswerRevealed = !lastAi || isHistoryEntry || !!lastAi.isPreGenerated || !!lastAi.isStreaming || revealedIds.has(lastAi.id) || !!lastAi.isAgentic;
+  const followUps = chat.suggestedQuestions ?? [];
+  const additiveSurfaceOpen = !!lastAi?.alignmentKind && isAdditiveAlignment(lastAi.alignmentKind) && (lastAi.alignmentChips ?? []).length > 0;
+  const showFollowUps =
+    followUps.length > 0 && !chat.isLoading && !chat.errorMessage && lastAnswerRevealed && !additiveSurfaceOpen && !lastAi?.hideFollowUpQuestion;
+  const showTips = chat.isLoading && !(lastAi?.isStreaming && lastAi.text.trim().length > 0);
+  const reserveStyle = viewportHeight > 0 ? { minHeight: viewportHeight } : undefined;
+  const isChatOnly = services.config.mode === 'CHAT_ONLY';
+  const drawerOn = services.config.showDrawer;
+
+  // LogoAppBar's left button: Home entry → ArrowBack circle (CHAT_ONLY: Close, 12dp radius);
+  // History entry → Menu (drawer on) or ArrowBack (drawer off), 12dp radius.
+  const leading = isHistoryEntry
+    ? drawerOn
+      ? { icon: 'm_menu' as const, radius: 'md' as const, ariaLabel: 'menu', onClick: props.onOpenDrawer }
+      : { icon: 'm_arrow_back' as const, radius: 'md' as const, ariaLabel: 'back', onClick: props.onClose }
+    : isChatOnly
+      ? { icon: 'm_close' as const, radius: 'md' as const, ariaLabel: 'close', onClick: props.onClose }
+      : { icon: 'm_arrow_back' as const, radius: 'rounded' as const, ariaLabel: 'back', onClick: props.onClose };
+
+  const inlineError = (
+    <div className="fcsdk-c-inlineerror" role="alert">
+      <div className="fc-t-bodyMedium" style={{ color: 'var(--fc-c-feedback-fail)' }}>
+        {chat.errorMessage}
+      </div>
+      <button
+        type="button"
+        className="fcsdk-c-btn-secondary fcsdk-c-btn-secondary--reading"
+        onClick={() => {
+          actions.clearError();
+          void actions.retryLastRequest();
+        }}
+      >
+        <span className="fc-t-labelLarge">{label('fc_v2_app_label_try_again', 'Try again')}</span>
+      </button>
+    </div>
+  );
 
   return (
-    <div className={'fcsdk-screen fcsdk-chat-surface' + (isComposerUi ? ' fcsdk-screen--composer' : '')}>
-      {/* LogoAppBar: Close for Home entry / Menu for History entry */}
-      <div className="fcsdk-appbar">
-        <button
-          type="button"
-          className="fcsdk-iconbtn"
-          aria-label={isHistoryEntry ? 'menu' : 'close'}
-          onClick={() => {
+    <div className={'fcsdk-screen fcsdk-c-chat' + (isComposerUi ? ' fcsdk-screen--composer' : '')}>
+      <LogoAppBar
+        leading={{
+          ...leading,
+          onClick: () => {
             services.analytics.track(Events.CHAT_SCREEN_BACK_BUTTON_CLICK, {});
-            if (isHistoryEntry) props.onOpenDrawer();
-            else props.onClose();
+            leading.onClick();
+          },
+        }}
+        showLogo={hasThread && !chat.isLoading}
+        trailing={
+          !drawerOn ? (
+            <span style={{ display: 'flex', gap: 8 }}>
+              {services.config.showHistory ? (
+                <ActionButton icon="icon_timer" radius="md" ariaLabel="history" onClick={() => navigator.push({ name: 'chatHistory' })} />
+              ) : null}
+              <ActionButton icon="icon_language" radius="md" ariaLabel="language" onClick={() => navigator.push({ name: 'settingsLanguage' })} />
+            </span>
+          ) : undefined
+        }
+      />
+
+      <div className="fcsdk-c-chat-body">
+        <div
+          className="fcsdk-scroll fcsdk-c-chat-scroll"
+          ref={scrollRef}
+          onScroll={onScroll}
+          style={{
+            paddingBottom: isComposerUi
+              ? `calc(${composerBarHeight({ floating: true }) - 20 + (attachments.length > 0 ? 74 : 0)}px + max(var(--fc-inset-bottom), 20px))`
+              : 24,
           }}
         >
-          {isHistoryEntry ? Icon.menu : Icon.close}
-        </button>
-        <div className="fcsdk-appbar-title">
-          {hasThread && !chat.isLoading ? `${Icon.logo} ${label('fc_v2_app_label_farmerchat', 'FarmerChat')}` : ''}
-        </div>
-      </div>
+          {chat.isLoadingMoreHistory ? (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <LogoSpinner horizontal message={label('fc_v2_app_label_loading_more', 'Loading more...')} />
+            </div>
+          ) : null}
 
-      <div
-        className="fcsdk-scroll"
-        ref={scrollRef}
-        onScroll={onScroll}
-        // Reserve the floating composer's height so the last bubble is not hidden behind it
-        // (Compose: `contentPadding = composerBarHeight(floating = true)`).
-        style={isComposerUi ? { paddingBottom: composerBarHeight({ floating: true, compact: true }) } : undefined}
-      >
-        {chat.isLoadingMoreHistory ? (
-          <div className="fcsdk-loadmore">
-            <LogoSpinner message={label('fc_v2_app_label_loading_more', 'Loading more…')} />
-          </div>
-        ) : null}
-
-        <div className="fcsdk-thread">
-          {chat.messages.map((msg) => {
+          {chat.messages.map((msg, idx) => {
+            const isFinal = idx === chat.messages.length - 1;
             if (msg.kind === 'loading') {
-              return <ThinkingIndicator key={msg.id} label={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />;
+              return (
+                <div key={msg.id} ref={setRowRef(msg.id)} style={isFinal ? reserveStyle : undefined}>
+                  <ThinkingIndicator label={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />
+                </div>
+              );
             }
             if (msg.kind === 'user') {
-              return <UserBubble key={msg.id} message={msg} onRetry={chat.failedMessageId === msg.id ? () => void actions.retryLastRequest() : undefined} />;
+              return (
+                <div key={msg.id} ref={setRowRef(msg.id)} className="fcsdk-c-row-end">
+                  <UserBubble message={msg} />
+                </div>
+              );
             }
-            // 2.0.0: the farmer's resolved location, standing in for the text bubble they would
-            // otherwise have sent. Right-aligned because it is their own message — Compose wraps
-            // it in a `contentAlignment = Alignment.CenterEnd` Box (ChatScreen.kt:699).
             if (msg.kind === 'location') {
               return (
-                <div key={msg.id} className="fcsdk-bubble-location-row">
+                <div key={msg.id} ref={setRowRef(msg.id)} className="fcsdk-c-row-end">
                   <LocationChatBubble address={msg.address} label={label('fc_v2_app_label_your_location', 'Your location:')} />
                 </div>
               );
             }
             const ai = msg;
             const isLastAi = ai.id === lastAiId;
-            // Only the newest, fresh answer animates: not history, not
-            // pre-generated, and only until it has revealed once. Everything
-            // else short-circuits `revealed` to true and shows at once.
-            // An AGENTIC answer never animates: the text already arrived a token at a time, and
-            // animating it again would re-type an answer the user just watched appear.
             const shouldAnimate =
-              isLastAi && !isHistoryEntry && !ai.isPreGenerated && !ai.isAgentic && !revealedIds.has(ai.id);
+              isLastAi && !isHistoryEntry && !ai.isPreGenerated && !ai.isStreaming && !ai.isAgentic && !revealedIds.has(ai.id);
             const revealed = !shouldAnimate || revealedIds.has(ai.id);
-            const followUps = ai.followUpQuestions ?? [];
-
-            // 2.0.0 alignment surfaces. An EXCLUSIVE surface owns the message area: it replaces
-            // the answer, its action row and its related-questions section. An ADDITIVE one falls
-            // through to the normal answer branch and renders below it as a nudge.
+            const reserve = holdsReserve(ai, isLastAi) ? reserveStyle : undefined;
             const alignmentKind = ai.alignmentKind ?? null;
             if (alignmentKind && !isAdditiveAlignment(alignmentKind)) {
               return (
-                <div key={ai.id} className="fcsdk-bubble-ai">
+                <div key={ai.id} ref={setRowRef(ai.id)} style={reserve}>
                   <AlignmentSurface
                     kind={alignmentKind}
                     message={ai.text}
@@ -413,19 +472,50 @@ export function ChatScreen(props: {
                 </div>
               );
             }
-
+            const streamingNoText = ai.isStreaming;
+            const settled = isLastAi && !chat.isLoading && !ai.isInterrupted && revealed && !ai.isStreaming;
             return (
-              <div key={ai.id} className="fcsdk-bubble-ai">
-                <AiAnswerBlock
-                  text={ai.text}
-                  animate={shouldAnimate}
-                  onRevealComplete={() => markRevealed(ai.id)}
-                  onRevealProgress={revealScrollToBottom}
-                />
-                {/* Tool progress / "getting your answer" / 4 s stall hint while streaming. */}
-                {ai.isStreaming ? <StreamProgress text={ai.text} status={ai.streamingStatus} /> : null}
-                {/* ADDITIVE surface: a nudge below the real answer (gender-select /
-                    commodity-confirm). The answer above keeps its own action row. */}
+              <div key={ai.id} ref={setRowRef(ai.id)} className="fcsdk-c-ai" style={reserve}>
+                {/* AiAnswer.kt: bare markdown at full width — no bubble, card or background. */}
+                <AiAnswerBlock text={ai.text} animate={shouldAnimate} onRevealComplete={() => markRevealed(ai.id)} />
+                {streamingNoText ? <StreamProgress text={ai.text} status={ai.streamingStatus} /> : null}
+                {ai.isInterrupted && isLastAi ? (
+                  <StreamErrorCard
+                    errorKind={ai.streamErrorKind ?? 'UNKNOWN'}
+                    hasPartial={ai.text.trim().length > 0}
+                    onRetry={() => {
+                      actions.clearError();
+                      void actions.retryLastRequest();
+                    }}
+                  />
+                ) : null}
+                {settled ? (
+                  <div className="fcsdk-c-settle">
+                    {ai.isPreGenerated && chat.readFullAdviceRequestedForMessageId !== ai.id ? (
+                      <PrimaryButton
+                        label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
+                        onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
+                      />
+                    ) : null}
+                    <ChatResponseActions
+                      agentic={!!ai.isAgentic && !ai.isPreGenerated}
+                      showShare={!ai.hideShareIcon}
+                      tts={
+                        chat.isTtsEnabled && !ai.hideTtsSpeaker && ai.messageId
+                          ? {
+                              enabled: true,
+                              loading: chat.isLoadingSynthesiseAudio,
+                              playing: chat.isAudioPlaying,
+                              hasAudio: !!chat.audioPlaybackUrl,
+                              onClick: () => void actions.synthesiseAudio(ai.messageId!, ai.text),
+                            }
+                          : null
+                      }
+                      onShare={() => void share(ai)}
+                      onSave={() => void download(ai)}
+                    />
+                  </div>
+                ) : null}
                 {alignmentKind && isAdditiveAlignment(alignmentKind) ? (
                   <AlignmentSurface
                     kind={alignmentKind}
@@ -437,137 +527,43 @@ export function ChatScreen(props: {
                     onChipClick={(chip) => handleAlignmentChip(ai.id, alignmentKind, chip)}
                   />
                 ) : null}
-                {/* Interrupted terminal state: keep any partial answer above and offer retry.
-                    Only the latest answer shows the card — an older failed question keeps its
-                    partial text but drops the retry action. */}
-                {ai.isInterrupted && isLastAi ? (
-                  <StreamErrorCard
-                    errorKind={ai.streamErrorKind ?? 'UNKNOWN'}
-                    hasPartial={ai.text.trim().length > 0}
-                    onRetry={() => {
-                      actions.clearError();
-                      void actions.retryLastRequest();
-                    }}
-                  />
-                ) : null}
-                {ai.clarificationRequired ? (
-                  <div className="fcsdk-clarification">{label('chat_clarification', 'I need a bit more detail to answer well.')}</div>
-                ) : null}
-                {/* Action row + follow-ups fade in only AFTER the reveal completes — and never
-                    while the answer is still streaming or was interrupted. */}
-                {revealed && !ai.isStreaming && !ai.isInterrupted ? (
-                  ai.isPreGenerated ? (
-                    <div className="fcsdk-response-actions fcsdk-fade-in">
-                      <button
-                        type="button"
-                        className="fcsdk-action-chip"
-                        onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
-                      >
-                        {Icon.chat} {label('fc_v2_app_label_read_full_advice', 'Read full advice')}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="fcsdk-response-actions fcsdk-fade-in">
-                      {chat.isTtsEnabled && !ai.hideTtsSpeaker && ai.messageId ? (
-                        <button
-                          type="button"
-                          className="fcsdk-action-chip"
-                          onClick={() => void actions.synthesiseAudio(ai.messageId!, ai.text)}
-                          disabled={chat.isLoadingSynthesiseAudio}
-                        >
-                          {chat.isAudioPlaying ? Icon.pause : Icon.speaker}{' '}
-                          {chat.isLoadingSynthesiseAudio
-                            ? label('chat_listen_loading', 'Preparing…')
-                            : chat.isAudioPlaying
-                              ? label('chat_listen_pause', 'Pause')
-                              : label('fc_v2_app_label_listen', 'Listen')}
-                        </button>
-                      ) : null}
-                      {!ai.hideShareIcon ? (
-                        <>
-                          {/* App parity (ChatResponseActions.kt @ bda80659): only the AGENTIC
-                              Share carries the accent sweep border; the legacy one stays plain. */}
-                          <button
-                            type="button"
-                            className={
-                              ai.isAgentic && !ai.isPreGenerated
-                                ? 'fcsdk-action-chip fcsdk-action-chip--accent'
-                                : 'fcsdk-action-chip'
-                            }
-                            onClick={() => void share(ai)}
-                          >
-                            {Icon.share} {label('fc_v2_app_label_share_download', 'Share')}
-                          </button>
-                          <button type="button" className="fcsdk-action-chip" onClick={() => void download(ai)}>
-                            {Icon.download} {label('chat_download', 'Download')}
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  )
-                ) : null}
-                {revealed && !ai.isStreaming && followUps.length > 0 && !ai.hideFollowUpQuestion ? (
-                  <div className="fcsdk-followups fcsdk-fade-in-only">
-                    <div className="fcsdk-followups-title">
-                      <span className="fcsdk-followups-dot" aria-hidden />
-                      {chat.clarificationRequired
-                        ? label('chat_clarify_options', 'Did you mean:')
-                        : label('fc_v2_app_label_related_questions', 'You can also ask')}
-                    </div>
-                    <div className="fcsdk-followups-list">
-                      {followUps.map((q, i) => (
-                        <button key={i} type="button" className="fcsdk-followup-chip" onClick={() => void actions.sendFollowUpQuestion(q)}>
-                          <span className="fcsdk-followup-chip-text">{q}</span>
-                          <span className="fcsdk-followup-chip-arrow" aria-hidden>
-                            {Icon.chevronRight}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             );
           })}
 
-          {/* ChatErrorContent (inline) */}
-          {chat.errorMessage && !chat.isLoading ? (
-            <div className="fcsdk-bubble-ai" role="alert">
-              <div className="fcsdk-error-inline" style={{ marginBottom: 8 }}>
-                {chat.errorMessage}
-              </div>
-              <div className="fcsdk-response-actions">
-                <button
-                  type="button"
-                  className="fcsdk-action-chip"
-                  onClick={() => {
-                    actions.clearError();
-                    void actions.retryLastRequest();
-                  }}
-                >
-                  {Icon.retry} {label('fc_v2_app_label_try_again', 'Try again')}
-                </button>
-              </div>
+          {chat.errorMessage && !chat.isLoading ? inlineError : null}
+
+          {showFollowUps ? (
+            <div className="fcsdk-c-fadein300">
+              <FollowUpSection
+                title={
+                  chat.clarificationRequired
+                    ? label('fc_v2_app_label_choose_a_followup_option_below', 'Choose an option from the below')
+                    : label('fc_v2_app_label_related_questions', 'You can also ask')
+                }
+                questions={followUps}
+                useChips={!!lastAi?.isAgentic && !lastAi.isPreGenerated}
+                clarificationRequired={chat.clarificationRequired}
+                onClick={(_, q) => void actions.sendFollowUpQuestion(q)}
+              />
             </div>
           ) : null}
-
-          {isInitialLoading && chat.messages.length === 0 ? <LogoSpinner message={label('fc_v2_app_label_loading', 'Loading…')} /> : null}
         </div>
-      </div>
 
-      {showScrollDown ? (
-        <button
-          type="button"
-          className="fcsdk-scrolldown"
-          aria-label={label('chat_scroll_to_bottom', 'Scroll to bottom')}
+        <ScrollIndicator
+          triggerKey={lastAi && !chat.isLoading ? lastAi.id : null}
+          hasContentBelow={() => {
+            const el = scrollRef.current;
+            return !!el && el.scrollHeight - el.scrollTop - el.clientHeight >= 48 + (isComposerUi ? 92 : 24);
+          }}
           onClick={() => {
             const el = scrollRef.current;
             if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
           }}
-        >
-          ↓
-        </button>
-      ) : null}
+        />
+
+        {showTips ? <Tips /> : null}
+      </div>
 
       {/* 2.0.0 composer, or the v1 Photo/Speak/Type row. The row is hidden while an input overlay
           is open; the composer instead slides off-screen (`visible`), keeping the same rhythm
@@ -576,7 +572,8 @@ export function ChatScreen(props: {
         <InputComposer
           floating
           compact
-          showAura={false}
+          showAura
+          fadeColor="var(--fc-c-reading-primary)"
           visible={!chat.isLoading && overlay === null}
           placeholder={label('fc_v2_app_label_ask_about_your_farm', 'Ask about your farm...')}
           attachments={attachments}
@@ -615,7 +612,7 @@ export function ChatScreen(props: {
           onClose={() => setOverlay(null)}
           onPermissionDenied={() => {
             setOverlay(null);
-            toast.show(label('mic_permission_denied', 'Microphone permission is needed to ask by voice.'));
+            toast.show(label('mic_permission_denied', 'Microphone permission is needed to ask by voice.'), { kind: 'error' });
           }}
           onRecorded={(recording) => {
             setOverlay(null);
@@ -670,19 +667,26 @@ export function ChatScreen(props: {
   );
 }
 
-function UserBubble(props: { message: UserMessage; onRetry?: () => void }) {
-  const label = useLabel();
+/**
+ * UserChatBubble.kt: max 290dp, 20/20/0/20 corners (bottom-end sharp), reading-secondary, 16dp
+ * padding, 10dp gaps; a caption-less photo is a bare 220×160 radius-16 image.
+ */
+function UserBubble(props: { message: UserMessage }) {
   const m = props.message;
+  if (m.imageUri && !m.text && !m.audioUri) {
+    return <img className="fcsdk-c-userimg" src={m.imageUri} alt="" />;
+  }
   return (
-    <div className={`fcsdk-bubble-user${m.isFailed ? ' fcsdk-bubble-user--failed' : ''}`}>
-      {m.imageUri ? <img src={m.imageUri} alt="" style={{ width: m.userBubbleImageWideBanner ? '100%' : 140 }} /> : null}
+    <div className="fcsdk-c-user">
       {m.audioUri ? <VoiceClip src={m.audioUri} /> : null}
-      {m.text ? <span>{m.text}</span> : null}
-      {m.isFailed && props.onRetry ? (
-        <button type="button" className="fcsdk-action-chip" onClick={props.onRetry} style={{ alignSelf: 'flex-end' }}>
-          {Icon.retry} {label('fc_v2_app_label_try_again', 'Try again')}
-        </button>
+      {m.imageUri ? (
+        <img
+          src={m.imageUri}
+          alt=""
+          className={m.userBubbleImageWideBanner ? 'fcsdk-c-user-banner' : 'fcsdk-c-user-thumb'}
+        />
       ) : null}
+      {m.text ? <span className="fc-t-bodyMedium fcsdk-c-user-text">{m.text.trim()}</span> : null}
     </div>
   );
 }

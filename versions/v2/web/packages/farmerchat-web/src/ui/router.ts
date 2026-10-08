@@ -25,6 +25,8 @@ export interface ChatRouteParams {
   isSSFR?: boolean;
   ssfrCrop?: string;
   channel?: string;
+  /** Display-only Home card image shown on the question bubble (compose `contentCardImageUrl`). */
+  contentCardImageUrl?: string;
   /** Web addition: pending voice recording for the voice-prototype entry. */
   voiceBase64?: string;
   voiceFormat?: string;
