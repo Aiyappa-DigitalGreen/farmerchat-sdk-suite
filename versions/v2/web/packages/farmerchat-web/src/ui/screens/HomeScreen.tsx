@@ -429,7 +429,7 @@ export function HomeScreen(props: {
                 <span className="fc-t-labelMedium" style={{ marginLeft: 8 }}>
                   {weather?.current_temp ?? ''}
                 </span>
-                <FcIcon name="m_keyboard_arrow_right" size={22} tint="#00C950" style={{ marginLeft: 2 }} />
+                <FcIcon name="m_keyboard_arrow_right" size={22} tint="var(--fc-c-brand-fg-secondary)" style={{ marginLeft: 2 }} />
               </>
             )}
           </button>
@@ -466,7 +466,7 @@ export function HomeScreen(props: {
                   {pillKind === 'searching' ? (
                     <CircularProgress size={18} stroke={2} color="#00C950" />
                   ) : (
-                    <FcIcon name={pillIcon[pillKind]} size={22} tint="#00C950" />
+                    <FcIcon name={pillIcon[pillKind]} size={22} tint="var(--fc-c-brand-fg-secondary)" />
                   )}
                   <span className="fc-t-labelMedium fcsdk-c-pill-text" style={{ marginLeft: pillGap }}>
                     {pillKind === 'blocked'
@@ -478,7 +478,7 @@ export function HomeScreen(props: {
                           : pillKind === 'located'
                             ? (
                                 <>
-                                  {place} - <span style={{ color: '#00C950' }}>{label('fc_v2_app_label_change', 'Change')}</span>
+                                  {place} - <span style={{ color: 'var(--fc-c-brand-fg-secondary)' }}>{label('fc_v2_app_label_change', 'Change')}</span>
                                 </>
                               )
                             : label('fc_v2_app_label_set_your_location', 'Set your location')}

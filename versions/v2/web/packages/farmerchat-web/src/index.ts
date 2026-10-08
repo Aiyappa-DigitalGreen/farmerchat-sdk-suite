@@ -17,6 +17,7 @@ import { createRoot, Root } from 'react-dom/client';
 import type { FarmerChatConfig, FarmerChatEventListener } from './core/config';
 import { createServices, SdkServices } from './core/services';
 import { FarmerChatRoot, FarmerChatController } from './ui/FarmerChatRoot';
+import { ICONS } from './ui/icons';
 
 export type {
   FarmerChatConfig,
@@ -131,7 +132,8 @@ function fabBrandColors(props: FarmerChatFabProps): { bg: string; fg: string } {
   const colors = config?.theme?.colors;
   // Precedence: per-instance prop → config default → theme brand → built-in.
   return {
-    bg: props.backgroundColor ?? config?.fabBackgroundColor ?? colors?.brandPrimary ?? '#146152',
+    // compose FarmerChatFab: `hostBrandColor() ?: Green700`, content `hostOnBrandColor() ?: White`.
+    bg: props.backgroundColor ?? config?.fabBackgroundColor ?? colors?.brandPrimary ?? '#008236',
     fg: props.contentColor ?? config?.fabContentColor ?? colors?.onBrand ?? '#ffffff',
   };
 }
@@ -147,7 +149,12 @@ function fabLogo(props: FarmerChatFabProps): React.ReactNode {
     });
   }
   if (logo) return logo;
-  return '🌱';
+  // The app's fc_logo_mark (compose FarmerChatFab's default icon), 24dp in the content colour.
+  return createElement(
+    'svg',
+    { width: 24, height: 24, viewBox: `0 0 ${ICONS.logo_mark.vw} ${ICONS.logo_mark.vh}`, fill: 'currentColor', 'aria-hidden': true },
+    ...ICONS.logo_mark.paths.map((p, i) => createElement('path', { key: i, d: p.d })),
+  );
 }
 
 /** FAB label: per-instance prop → config default. */
@@ -209,15 +216,17 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
       style: {
         position: 'fixed', bottom: '20px', ...side, zIndex: 2147483000,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        gap: label ? '10px' : '0', height: '56px',
-        width: label ? 'auto' : '56px', padding: label ? '0 22px' : '0',
-        borderRadius: '999px', border: 'none', cursor: 'pointer',
+        // M3 FloatingActionButton / ExtendedFloatingActionButton geometry.
+        gap: label ? '12px' : '0', height: '56px',
+        width: label ? 'auto' : '56px', padding: label ? '0 20px 0 16px' : '0',
+        borderRadius: '16px', border: 'none', cursor: 'pointer',
         background: bg, color: fg,
-        boxShadow: '0 4px 14px rgba(0,0,0,0.25)', fontFamily: 'system-ui, -apple-system, sans-serif',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.3), 0 4px 8px 3px rgba(0,0,0,0.15)',
+        fontFamily: '"FC Roboto", Roboto, "Noto Sans", system-ui, -apple-system, sans-serif',
       },
     },
     createElement('span', { style: { display: 'inline-flex', fontSize: '24px', lineHeight: 1 } }, fabLogo(props)),
-    label ? createElement('span', { style: { fontSize: '15px', fontWeight: 600 } }, label) : null,
+    label ? createElement('span', { style: { fontSize: '14px', lineHeight: '20px', fontWeight: 500, letterSpacing: '0.1px' } }, label) : null,
   );
 }
 

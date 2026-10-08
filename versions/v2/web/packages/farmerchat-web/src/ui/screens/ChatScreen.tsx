@@ -105,14 +105,13 @@ export function ChatScreen(props: {
    * The address shown in the location bubble, assembled as the app does it: approximate location
    * name, then state, then country — blank parts dropped, de-duplicated, joined with ", ".
    *
-   * Pref mapping, same deviation `HomeScreen`'s location pill already documents: the SDK has no
-   * `APPROX_LOCATION_NAME` key on web (that one is written from `user_profile.display_address`,
-   * which web's `GetLocationResponse` does not model), so `USER_DISTRICT` — the finest-grained
-   * place the web location flow stores — stands in for it. Recorded in docs/04.
+   * `APPROX_LOCATION_NAME` (ported 2026-10-08: written by the location flow, district > state >
+   * country, and back-filled from the profile on Home entry) leads; `USER_DISTRICT` is the
+   * fallback for installs that predate the key.
    */
   const resolveLocationAddress = useCallback((): string => {
     const parts = [
-      services.store.getString(PrefKeys.USER_DISTRICT),
+      services.store.getString(PrefKeys.APPROX_LOCATION_NAME) || services.store.getString(PrefKeys.USER_DISTRICT),
       services.store.getString(PrefKeys.USER_STATE),
       services.store.getString(PrefKeys.USER_COUNTRY_NAME),
     ]

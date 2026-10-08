@@ -59,7 +59,7 @@ export function SuggestedCard(props: { text: string; onClick: () => void }) {
     <button type="button" className="fcsdk-c-suggested fcsdk-c-press" onClick={props.onClick}>
       <span className="fc-t-bodyMedium fcsdk-c-suggested-text">{props.text}</span>
       <span className="fcsdk-c-suggested-arrow">
-        <FcIcon name="m_arrow_forward" size={16} tint="#00C950" />
+        <FcIcon name="m_arrow_forward" size={16} tint="var(--fc-c-brand-fg-secondary)" />
       </span>
     </button>
   );
@@ -196,7 +196,7 @@ export function ChatResponseActions(props: {
     return (
       <div>
         <div className="fcsdk-c-aiwarn">
-          <FcIcon name="icon_info" size={18} tint="#00C950" />
+          <FcIcon name="icon_info" size={18} tint="var(--fc-c-button-accent)" />
           <span className="fc-t-labelSmall">
             {label('fc_v2_app_label_tips_ai_may_be_wrong_please_double_check', 'AI may be wrong. Please double-check.')}
           </span>

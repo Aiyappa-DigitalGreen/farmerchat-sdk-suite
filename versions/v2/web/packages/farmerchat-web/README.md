@@ -75,6 +75,7 @@ consumed by the splash router, exactly like the app's deep-link handling.
 |---|---|---|---|
 | `environment` | `'dev' \| 'stage' \| 'demo' \| 'prod' \| 'eks'` | — (required) | Selects the API base URL. |
 | `geoApiKey` | `string` | `''` | Google Geolocation key for the language auto-detect fallback. Without it, geolocate is skipped and the server infers location from IP at guest init. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
+| `assetBaseUrl` | `string` | `''` | Web only. URL of the `illustrations/` folder shipped in `dist/` (serve it beside the bundle), ending in `/`. Unset → sign-up / error / location screens render without the farmer picture. |
 | `guestApiKey` | `string` | `''` | API key for guest initialization (`initialize_user`) and the guest-token refresh fallback (`send_tokens`). Required for the SDK to work — provisioned per host. |
 | `appearance` | `'day' \| 'night' \| 'auto'` | `'auto'` | `auto` follows `prefers-color-scheme` live. |
 | `languageCode` | `string` | — | Preselects the UI language code. |
@@ -97,6 +98,12 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `onEvent` | `(name, props) => void` | — | Analytics fan-out (see below). |
 | `onSessionExpired` | `() => void` | — | Fired when 401 refresh **and** the guest-token fallback both fail. |
 | `onChatOpened` / `onMessageSent` / `onAnswerReceived` / `onScreenView` / `onError` / `onSessionStart` | callbacks | — | Semantic host callbacks (in addition to `onEvent`). |
+
+## Insets
+
+`--farmerchat-inset-top` / `--farmerchat-inset-bottom` (CSS custom properties on any ancestor)
+tell the SDK about system bars it should keep content clear of — e.g. inside a native WebView.
+Default: `env(safe-area-inset-*)`.
 
 ## Theming (host brand)
 

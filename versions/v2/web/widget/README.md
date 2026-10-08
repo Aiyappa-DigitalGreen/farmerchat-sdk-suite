@@ -24,7 +24,10 @@ Every SDK config field works unchanged, including `enableAgenticChat`.
 <script src="https://your-cdn/farmerchat-widget.iife.js"></script>
 ```
 
-`farmerchat-widget.iife.js` bundles React, ReactDOM and the SDK (≈118 kB gzip). If you'd rather
+`farmerchat-widget.iife.js` bundles React, ReactDOM, the SDK and its Roboto font (≈238 kB gzip).
+**Deploy the `illustrations/` folder from `dist/` beside it** — the full-screen messages (sign up,
+errors, location) load their farmer pictures from there (the script finds its own folder; override
+with `config.assetBaseUrl`). If you'd rather
 boot later, skip the settings object and call `FarmerChatWidget.boot({ config: {...} })` yourself.
 
 Configuration is JavaScript, not `data-*` attributes, because callbacks such as `onEvent`,
@@ -134,6 +137,25 @@ npm install && npm approve-scripts esbuild && npm rebuild esbuild   # this repo'
 npm run build          # dist/farmerchat-widget.js (ESM) + dist/farmerchat-widget.iife.js + d.ts
 npx tsc --noEmit
 ```
+
+The UI is the compose module's, ported and measured screen by screen (docs/04 "Web v2
+compose-fidelity pass"; harness in `tools/fidelity/web/`).
+
+Demo servers (they do not outlive the terminal; start them from the repo root):
+
+```bash
+python3 -m http.server 5182 --directory versions/v2/web/widget          # the demo pages
+node tools/mock-server/server.js                                          # :8899 mock backend
+FC_GUEST_API_KEY=<key> node versions/v2/web/widget/demo/stage-proxy.mjs   # :8898 real stage backend
+```
+
+- `http://localhost:5182/demo/index.html` (mock) · `…/index.html?stage=1` (stage, agentic)
+- `http://localhost:5182/demo/mobile.html` — 390×760 phone frame
+- `http://localhost:5182/demo/fidelity.html` — 411×914 harness (`?appearance=night`, `?theme=blue`, `?agentic=0`)
+
+The stage proxy is needed because the backend's CORS preflight rejects the SDK's custom headers.
+`FC_GUEST_API_KEY` is the guest key the Android SDK carries (`ApiConstants.DEFAULT_GUEST_USER_API_KEY`);
+it is injected server-side so it never lands in a page.
 
 Demo against the local mock backend:
 

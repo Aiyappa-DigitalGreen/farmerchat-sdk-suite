@@ -770,3 +770,11 @@ dependency (its ESM build keeps the SDK external). Both web lines, v1 `web/` and
 range cannot require v2. The conservative reading is implemented: peer `^1.0.0`, plus a README
 note that the widget is built and verified against v2. The IIFE bundle is unaffected because it
 embeds v2. Open: bump v2 web to `2.0.0` (as Android did) so the peer range can say `^2.0.0`?
+
+## Weather icons are served with the wrong Content-Type (2026-10-08)
+
+`weather_icon` URLs (e.g. `…/FARMER_CHAT/weather_icons/v2/mist.svg` on the dev S3 bucket) return
+`Content-Type: binary/octet-stream` and no `Access-Control-Allow-Origin`. Android's `SvgImage` parses
+the bytes itself, so it renders; a browser `<img>` refuses an SVG with that type and `fetch()` cannot
+read it cross-origin. Web v2 falls back to the app's `fc_weather_sunclouds` drawable. Ask: serve the
+icons as `image/svg+xml` (and ideally with CORS) so web shows the real condition icon.

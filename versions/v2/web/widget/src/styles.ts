@@ -6,25 +6,28 @@
 const STYLE_ELEMENT_ID = 'fcw-styles';
 
 const css = `
+/* compose FarmerChatFab = M3 FloatingActionButton: 56dp, 16dp corners, level-3 elevation,
+   24dp icon; Extended: 16/20 padding, 12dp icon gap, M3 labelLarge (14/20, 500). */
 .fcw-launcher {
   position: fixed; bottom: var(--fcw-offset-y); z-index: var(--fcw-z);
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  height: 56px; min-width: 56px; padding: 0; border: none; border-radius: 999px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  height: 56px; min-width: 56px; padding: 0; border: none; border-radius: 16px; cursor: pointer;
   background: var(--fcw-launcher-bg); color: var(--fcw-launcher-fg);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.12);
-  font: 600 15px/1 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  font: 500 14px/20px "FC Roboto", Roboto, "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.1px;
+  transition: box-shadow 160ms ease, transform 160ms ease;
   -webkit-tap-highlight-color: transparent;
 }
-.fcw-launcher:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.26); }
+.fcw-launcher:hover { box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 6px 10px 4px rgba(0, 0, 0, 0.15); }
 .fcw-launcher:focus-visible { outline: 3px solid var(--fcw-launcher-bg); outline-offset: 3px; }
-.fcw-launcher--extended { padding: 0 22px 0 18px; }
+.fcw-launcher--extended { padding: 0 20px 0 16px; }
 .fcw-launcher--right { right: var(--fcw-offset-x); }
 .fcw-launcher--left { left: var(--fcw-offset-x); }
-.fcw-launcher-icon { position: relative; display: inline-flex; width: 26px; height: 26px; }
+.fcw-launcher-icon { position: relative; display: inline-flex; width: 24px; height: 24px; }
 .fcw-launcher-icon > * { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   transition: transform 200ms ease, opacity 200ms ease; }
-.fcw-launcher-icon img { width: 26px; height: 26px; object-fit: contain; }
+.fcw-launcher-icon img { width: 24px; height: 24px; object-fit: contain; }
 .fcw-launcher-icon .fcw-icon-close { opacity: 0; transform: rotate(-90deg) scale(0.6); }
 .fcw-launcher--open .fcw-icon-open { opacity: 0; transform: rotate(90deg) scale(0.6); }
 .fcw-launcher--open .fcw-icon-close { opacity: 1; transform: none; }
@@ -33,7 +36,7 @@ const css = `
   position: fixed; bottom: calc(var(--fcw-offset-y) + 56px + 16px); z-index: var(--fcw-z);
   width: var(--fcw-panel-w); height: var(--fcw-panel-h);
   max-height: calc(100vh - var(--fcw-offset-y) - 56px - 16px - 20px);
-  border-radius: 16px; overflow: hidden; background: #fff;
+  border-radius: 24px; overflow: hidden; background: #ECECEE;
   box-shadow: 0 12px 48px rgba(0,0,0,0.24), 0 2px 8px rgba(0,0,0,0.12);
   /* Makes the panel the containing block for any fixed-position descendant, so
      nothing the SDK renders can escape onto the host page. */

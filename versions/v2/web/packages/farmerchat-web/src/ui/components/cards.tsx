@@ -256,7 +256,7 @@ export function SsfrCard(props: { onCropClick: (crop: 'wheat' | 'maize') => void
         {emoji}
       </span>
       <span className="fc-t-labelMedium fcsdk-c-ssfr-btn-label">{text}</span>
-      <FcIcon name="m_chevron_right" size={20} tint="#00C950" />
+      <FcIcon name="m_chevron_right" size={20} tint="var(--fc-c-button-accent)" />
     </button>
   );
   return (

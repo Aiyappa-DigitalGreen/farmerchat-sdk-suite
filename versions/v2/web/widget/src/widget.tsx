@@ -90,12 +90,25 @@ export function ensureSdk(config: FarmerChatConfig): number {
   return generation;
 }
 
-const DEFAULT_BRAND = '#146152';
+/** compose FarmerChatFab: `hostBrandColor() ?: Green700`. */
+const DEFAULT_BRAND = '#008236';
 
-function ChatBubbleIcon(): ReactElement {
+/** The app's `fc_logo_mark` (compose FarmerChatFab's default icon), 24dp. */
+function LogoMarkIcon(): ReactElement {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 3C6.48 3 2 6.92 2 11.75c0 2.47 1.18 4.7 3.08 6.28-.16 1.28-.7 2.5-1.6 3.47a.5.5 0 0 0 .4.84c2.05-.1 3.8-.86 5.03-1.72.98.24 2.02.38 3.09.38 5.52 0 10-3.92 10-8.75S17.52 3 12 3Zm-4.5 10a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm4.5 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm4.5 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z" />
+    <svg width="24" height="24" viewBox="0 0 130 130" fill="currentColor" aria-hidden="true">
+      <path d="M32.56,0C50.54,0 65.12,14.59 65.12,32.59C47.14,32.59 32.56,18 32.56,0Z" />
+      <path d="M97.56,0C79.58,0 65,14.59 65,32.59C82.98,32.59 97.56,18 97.56,0Z" />
+      <path d="M32.68,65.06C14.7,65.06 0.12,50.47 0.12,32.47C18.1,32.47 32.68,47.06 32.68,65.06Z" />
+      <path d="M65.12,32.47C47.14,32.47 32.56,47.06 32.56,65.06C50.54,65.06 65.12,50.47 65.12,32.47Z" />
+      <path d="M65,32.47C82.98,32.47 97.56,47.06 97.56,65.06C79.58,65.06 65,50.47 65,32.47Z" />
+      <path d="M97.44,65.06C115.42,65.06 130,50.47 130,32.47C112.02,32.47 97.44,47.06 97.44,65.06Z" />
+      <path d="M32.56,64.94C14.58,64.94 0,79.53 0,97.53C17.98,97.53 32.56,82.94 32.56,64.94Z" />
+      <path d="M32.56,64.94C50.54,64.94 65.12,79.53 65.12,97.53C47.14,97.53 32.56,82.94 32.56,64.94Z" />
+      <path d="M97.56,64.94C79.58,64.94 65,79.53 65,97.53C82.98,97.53 97.56,82.94 97.56,64.94Z" />
+      <path d="M97.44,64.94C115.42,64.94 130,79.53 130,97.53C112.02,97.53 97.44,82.94 97.44,64.94Z" />
+      <path d="M65.12,97.41C47.14,97.41 32.56,112 32.56,130C50.54,130 65.12,115.41 65.12,97.41Z" />
+      <path d="M65,97.41C82.98,97.41 97.56,112 97.56,130C79.58,130 65,115.41 65,97.41Z" />
     </svg>
   );
 }
@@ -109,11 +122,11 @@ function MinimizeIcon(): ReactElement {
   );
 }
 
+/** Material Icons.Filled.Close, 24dp. */
 function CloseIcon(): ReactElement {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
-      strokeLinecap="round" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" />
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
     </svg>
   );
 }
@@ -240,7 +253,7 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
     const logo = config.theme?.logo;
     if (typeof logo === 'string' && logo) icon = <img src={logo} alt="" />;
     else if (logo) icon = logo;
-    else icon = <ChatBubbleIcon />;
+    else icon = <LogoMarkIcon />;
   }
 
   const vars = {

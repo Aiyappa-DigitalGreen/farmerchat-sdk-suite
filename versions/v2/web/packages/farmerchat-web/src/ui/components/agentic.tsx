@@ -192,7 +192,7 @@ export function AlignmentSurface(props: {
       ) : null}
       {chips.length > 0 && !isEscalate && !isCapabilityPrompt && !additive && !hasPick && isLatest && !isLoading ? (
         <div className="fcsdk-c-align-hatch">
-          <FcIcon name="m_info" size={16} tint="#00C950" />
+          <FcIcon name="m_info" size={16} tint="var(--fc-c-button-accent)" />
           <span className="fc-t-bodySmall" style={{ color: 'var(--fc-c-fg-secondary)' }}>
             {label('fc_v2_app_label_dont_see_your_option', "Don't see your option?")}
           </span>

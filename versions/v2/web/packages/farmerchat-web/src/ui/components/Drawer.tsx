@@ -108,7 +108,7 @@ export function Drawer(props: {
                 </div>
               ) : props.historyErrorMessage ? (
                 <div className="fcsdk-c-drawer-error">
-                  <div className="fc-t-titleSmall" style={{ color: '#00C950', textAlign: 'center' }}>
+                  <div className="fc-t-titleSmall" style={{ color: 'var(--fc-c-brand-fg-secondary)', textAlign: 'center' }}>
                     {isNetwork
                       ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
                       : label('fc_v2_app_label_failed_to_load_chats', 'Failed to load chats')}
@@ -157,7 +157,7 @@ export function Drawer(props: {
             {!props.isAuthenticated ? (
               <div className="fcsdk-c-drawer-signup">
                 <div className="fcsdk-c-section" style={{ gap: 12 }}>
-                  <div className="fc-t-titleMedium" style={{ color: '#00C950', textAlign: 'center' }}>
+                  <div className="fc-t-titleMedium" style={{ color: 'var(--fc-c-brand-fg-secondary)', textAlign: 'center' }}>
                     {label('fc_v2_app_label_save_your_questions_answers', 'Save your questions and answers')}
                   </div>
                   <div className="fc-t-bodyMedium" style={{ color: '#FFFFFF', textAlign: 'center' }}>
