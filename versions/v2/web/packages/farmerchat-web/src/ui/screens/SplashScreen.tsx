@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLabel, useSdk } from '../context';
 import { LogoGlyph, Toast } from '../components/common';
+import { Assets } from '../assets';
 import { Events, Screens } from '../../core/analytics';
 
 const MIN_DURATION_MS = 200;
@@ -36,13 +37,17 @@ export function SplashScreen(props: { onReady: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // SplashScreen.kt: brand green under the full-bleed `fc_boot_bg` gradient, a bare 100dp white
+  // mark that holds 3s then spins once over 600ms, and a Loading toast from 2s. No wordmark.
   return (
-    <div className="fcsdk-screen fcsdk-splash">
-      <div className="fcsdk-logo-mark" aria-hidden>
-        <LogoGlyph />
+    <div className="fcsdk-screen fcsdk-c-splash" style={{ backgroundImage: `url(${Assets.bootBg})` }}>
+      <div className="fcsdk-c-splash-mark" aria-hidden>
+        <LogoGlyph size={100} tint="var(--fc-c-brand-fg-primary)" />
       </div>
-      <div style={{ fontWeight: 800, fontSize: 22 }}>{label('fc_v2_app_label_farmerchat', 'FarmerChat')}</div>
-      <Toast message={showToast ? label('fc_v2_app_label_farmerchat_starting', 'FarmerChat is starting…') : null} />
+      <Toast
+        message={showToast ? label('fc_v2_app_label_farmerchat_starting', 'FarmerChat is starting...') : null}
+        kind="loading"
+      />
     </div>
   );
 }

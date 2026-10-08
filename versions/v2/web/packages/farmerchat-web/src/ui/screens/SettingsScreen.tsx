@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useLabel, useSdk } from '../context';
 import { DefaultAppBar, ListCard, ListItem, PrimaryButton, SecondaryButton, TextInput, Toast } from '../components/common';
+import { FcIcon, type IconName } from '../components/FcIcon';
 import { useEnterName } from '../../state/useEnterName';
 import { useUserProfile } from '../../state/useUserProfile';
 import { normalizeNameInput, sanitizeName } from '../../state/helpers';
@@ -16,10 +17,10 @@ import { Events, Screens } from '../../core/analytics';
 import type { AppearanceMode } from '../../core/config';
 import type { LocationPromptActions, LocationPromptState } from '../../state/useLocationPrompt';
 
-const MODES: Array<{ mode: AppearanceMode; icon: string }> = [
-  { mode: 'day', icon: '☀️' },
-  { mode: 'night', icon: '🌙' },
-  { mode: 'auto', icon: '🌓' },
+const MODES: Array<{ mode: AppearanceMode; icon: IconName }> = [
+  { mode: 'day', icon: 'icon_mode_day' },
+  { mode: 'night', icon: 'icon_mode_night' },
+  { mode: 'auto', icon: 'icon_mode_auto' },
 ];
 
 export function SettingsScreen(props: {
@@ -90,7 +91,7 @@ export function SettingsScreen(props: {
     () =>
       locationActions.subscribe((event) => {
         if (event.source === 'settings' && event.kind === 'continue' && event.reason === 'location_fetched') {
-          toast.show(label('fc_v2_app_label_location_found', 'Location found'));
+          toast.show(label('fc_v2_app_label_location_found', 'Location found'), { kind: 'success' });
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,80 +101,94 @@ export function SettingsScreen(props: {
   const modeLabel = (mode: AppearanceMode): string =>
     mode === 'day' ? label('fc_v2_app_label_day', 'Day') : mode === 'night' ? label('fc_v2_app_label_night', 'Night') : label('fc_v2_app_label_auto', 'Auto');
 
+  const modeHint =
+    appearance === 'day'
+      ? label('fc_v2_app_label_farmerchat_always_light_mode', 'FarmerChat always uses light mode')
+      : appearance === 'night'
+        ? label('fc_v2_app_label_farmerchat_always_dark_mode', 'FarmerChat always uses dark mode')
+        : label('fc_v2_app_label_farmerchat_adjusts_your_phone_settings', 'FarmerChat adjusts with your phone settings');
+  const phone = (services.store.getString(PrefKeys.PHONE_NUMBER_LOGIN) ?? '').trim();
+
+  // SettingsScreen.kt: a 32/20 padded column of sections 28 apart, each a labelLarge title and
+  // its content 10 apart.
   return (
-    <div className="fcsdk-screen">
+    <div className="fcsdk-screen fcsdk-c-screen">
       <DefaultAppBar title={label('fc_v2_app_label_settings', 'Settings')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
       <div className="fcsdk-scroll">
-        <div className="fcsdk-sectionheader">{label('fc_v2_app_label_appearance', 'Appearance')}</div>
-        <div className="fcsdk-appearance-row" role="radiogroup" aria-label={label('fc_v2_app_label_appearance', 'Appearance')}>
-          {MODES.map(({ mode, icon }) => (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={appearance === mode}
-              className={`fcsdk-appearance-btn${appearance === mode ? ' fcsdk-appearance-btn--active' : ''}`}
-              onClick={() => {
-                services.analytics.track(Events.SETTINGS_OPTION_SELECTED, { option: 'appearance', value: mode });
-                setAppearance(mode);
-              }}
-            >
-              <span aria-hidden style={{ fontSize: 20 }}>
-                {icon}
-              </span>
-              {modeLabel(mode)}
-            </button>
-          ))}
-        </div>
+        <div className="fcsdk-c-page" style={{ gap: 28 }}>
+          <section className="fcsdk-c-section">
+            <h3 className="fcsdk-c-section-title fc-t-labelLarge">{label('fc_v2_app_label_appearance', 'Appearance')}</h3>
+            <div className="fcsdk-c-modes" role="radiogroup" aria-label={label('fc_v2_app_label_appearance', 'Appearance')}>
+              {MODES.map(({ mode, icon }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={appearance === mode}
+                  className={`fcsdk-c-mode${appearance === mode ? ' fcsdk-c-mode--active' : ''}`}
+                  onClick={() => {
+                    services.analytics.track(Events.SETTINGS_OPTION_SELECTED, { option: 'appearance', value: mode });
+                    setAppearance(mode);
+                  }}
+                >
+                  <FcIcon name={icon} size={18} tint="var(--fc-c-fg-primary)" />
+                  <span className="fc-t-labelSmall">{modeLabel(mode)}</span>
+                </button>
+              ))}
+            </div>
+            <p className="fcsdk-c-muted fc-t-caption" style={{ margin: 0 }}>{modeHint}</p>
+          </section>
 
-        <div className="fcsdk-sectionheader">{label('fc_v2_app_label_my_farm', 'My Farm')}</div>
-        <ListCard>
-          <ListItem
-            icon={'\u{1F4CD}'}
-            text={label('fc_v2_app_label_location', 'Location')}
-            trailing={
-              <span className="fcsdk-li-trailing-text">
-                <span>{locationRowValue}</span>
-                {isSettingsLocationFlowActive ? (
-                  <span className="fcsdk-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden />
-                ) : null}
-              </span>
-            }
-            onClick={() => {
-              if (locationState.kind === 'Idle') locationActions.triggerFromSettings();
-            }}
-          />
-        </ListCard>
-        <div className="fcsdk-settings-location-helper">
-          {hasExactLocation ? (
-            <>
-              {label('fc_v2_app_label_advice_and_weather_for_this_area', 'Advice and weather for this area.')}{' '}
-              <em>{label('fc_v2_app_label_change_anytime', 'Change anytime.')}</em>
-            </>
-          ) : (
-            <>
-              {label('fc_v2_app_label_estimated', 'Estimated')}.{' '}
-              <em>{label('fc_v2_app_label_share_your_location_for_better_advice', 'Share your location for better advice.')}</em>
-            </>
-          )}
-        </div>
+          <section className="fcsdk-c-section">
+            <h3 className="fcsdk-c-section-title fc-t-labelLarge">{label('fc_v2_app_label_my_farm', 'My Farm')}</h3>
+            <ListCard>
+              <ListItem
+                icon="icon_location"
+                text={label('fc_v2_app_label_location', 'Location')}
+                rightText={locationRowValue}
+                loading={isSettingsLocationFlowActive}
+                onClick={() => {
+                  if (locationState.kind === 'Idle') locationActions.triggerFromSettings();
+                }}
+              />
+            </ListCard>
+            <p className="fcsdk-c-muted fc-t-bodySmall" style={{ margin: 0 }}>
+              {hasExactLocation ? (
+                <>
+                  {label('fc_v2_app_label_advice_and_weather_for_this_area', 'Advice and weather for this area.')}{' '}
+                  <span className="fcsdk-c-accent">{label('fc_v2_app_label_change_anytime', 'Change anytime.')}</span>
+                </>
+              ) : (
+                <>
+                  {label('fc_v2_app_label_estimated', 'Estimated')}.{' '}
+                  <span className="fcsdk-c-accent">
+                    {label('fc_v2_app_label_share_your_location_for_better_advice', 'Share your location for better advice.')}
+                  </span>
+                </>
+              )}
+            </p>
+          </section>
 
-        <div className="fcsdk-sectionheader">{label('fc_v2_app_label_account_details', 'Account details')}</div>
-        <ListCard>
-          <ListItem
-            icon="👤"
-            text={`${label('fc_v2_app_label_your_name', 'Your name')}${userName ? ` — ${userName}` : ''}`}
-            onClick={() => {
-              services.analytics.track(Events.EDIT_PROFILE_CLICK, {});
-              props.onNameClick();
-            }}
-          />
-        </ListCard>
+          <section className="fcsdk-c-section">
+            <h3 className="fcsdk-c-section-title fc-t-labelLarge">{label('fc_v2_app_label_account_details', 'Account details')}</h3>
+            <ListCard>
+              <ListItem icon="icon_phone" text={label('fc_v2_app_label_your_phone', 'Your phone')} rightText={phone || '—'} noChevron divider />
+              <ListItem
+                icon="icon_name"
+                text={label('fc_v2_app_label_your_name', 'Your name')}
+                rightText={userName || '—'}
+                rightMaxLines={4}
+                onClick={() => {
+                  services.analytics.track(Events.EDIT_PROFILE_CLICK, {});
+                  props.onNameClick();
+                }}
+              />
+            </ListCard>
+          </section>
 
-        <div className="fcsdk-pad">
           {isAuthenticated ? (
             <SecondaryButton
-              label={label('fc_v2_app_label_logout', 'Log out')}
+              label={label('fc_v2_app_label_logout', 'Logout')}
               onClick={() => {
                 services.analytics.track(Events.LOGOUT_CLICK_EVENT, {});
                 props.onLogOutClick();
@@ -205,11 +220,17 @@ export function SettingsNameScreen(props: { onBack: () => void; onSaveComplete: 
   const save = async () => {
     const trimmed = name.trim();
     if (trimmed.length < 3) {
-      toast.show(label('name_too_short', 'Please enter at least 3 characters.'));
+      toast.show(
+        `${label('fc_v2_app_label_name_must_be_at_least', 'Name must be at least')} 3 ${label('fc_v2_app_label_characters', 'characters')}`,
+        { kind: 'error' },
+      );
       return;
     }
     if (trimmed.length > 100) {
-      toast.show(label('name_too_long', 'Name is too long.'));
+      toast.show(
+        `${label('fc_v2_app_label_name_must_be_at_most', 'Name must be at most')} 100 ${label('fc_v2_app_label_characters', 'characters')}`,
+        { kind: 'error' },
+      );
       return;
     }
     const ok = await actions.updateUserName({ user_id: services.session.userId ?? '', name: trimmed }, Screens.SETTINGS);
@@ -218,30 +239,37 @@ export function SettingsNameScreen(props: { onBack: () => void; onSaveComplete: 
       props.onSaveComplete();
     } else {
       const s = state.updateUserNameState;
-      toast.show(s.status === 'error' ? s.message : label('name_save_failed', 'Could not save your name. Please try again.'));
+      if (s.status === 'error') toast.show(s.message, { kind: 'error' });
     }
   };
 
+  const saving = state.updateUserNameState.status === 'loading';
+  // SettingsNameScreen.kt: labelled field and the Save button inline under it (16 apart), a
+  // 12dp rounded-square back button.
   return (
-    <div className="fcsdk-screen">
-      <DefaultAppBar title={label('fc_v2_app_label_name', 'Name')} leadingIcon="back" onLeadingClick={props.onBack} />
-      <div className="fcsdk-scroll fcsdk-pad">
-        <TextInput
-          value={name}
-          onChange={(v) => setName(normalizeNameInput(v))}
-          placeholder={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
-          autoFocus
-          maxLength={100}
-          onEnter={() => void save()}
-        />
-      </div>
-      <div className="fcsdk-bottombar">
-        <PrimaryButton
-          label={label('fc_v2_app_label_save_name', 'Save name')}
-          onClick={() => void save()}
-          disabled={name.trim().length < 1}
-          state={state.updateUserNameState.status === 'loading' ? 'loading' : 'default'}
-        />
+    <div className="fcsdk-screen fcsdk-c-screen">
+      <DefaultAppBar title={label('fc_v2_app_label_name', 'Name')} leadingIcon="back" leadingRadius="md" onLeadingClick={props.onBack} />
+      <div className="fcsdk-scroll">
+        <div className="fcsdk-c-page" style={{ gap: 16 }}>
+          <label className="fcsdk-c-section" style={{ gap: 8 }}>
+            <span className="fc-t-labelMedium" style={{ color: 'var(--fc-c-fg-primary)' }}>
+              {label('fc_v2_app_label_your_name', 'Your name')}
+            </span>
+            <TextInput
+              value={name}
+              onChange={(v) => setName(normalizeNameInput(v))}
+              placeholder={label('fc_v2_app_label_enter_your_name', 'Enter your name')}
+              autoFocus
+              onEnter={() => void save()}
+            />
+          </label>
+          <PrimaryButton
+            label={saving ? label('fc_v2_app_label_saving', 'Saving') : label('fc_v2_app_label_save_name', 'Save name')}
+            onClick={() => void save()}
+            disabled={name.trim().length < 1}
+            state={saving ? 'loading' : 'default'}
+          />
+        </div>
       </div>
       <Toast message={toast.message} />
     </div>

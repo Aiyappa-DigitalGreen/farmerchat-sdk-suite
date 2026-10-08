@@ -6,7 +6,8 @@
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useSdk, type ToastKind } from '../context';
-import { FcIcon } from './FcIcon';
+import { FcIcon, type IconName } from './FcIcon';
+import { Assets } from '../assets';
 
 // --- Icons (inline glyphs; no external assets allowed in the SDK bundle) ----
 
@@ -96,27 +97,73 @@ export function CircularProgress(props: { size: number; stroke: number; color: s
 
 // --- App bars -----------------------------------------------------------------
 
+/**
+ * Buttons.kt `ActionButton`: 42dp tall, `brand.surfaceSecondary` (#08361B) fill, 23dp white icon,
+ * labelMedium label. Icon-only it is a 42dp square whose `radius` makes it a circle (Rounded)
+ * or a 12dp rounded square (MD, the Compose default).
+ */
+export function ActionButton(props: {
+  icon?: IconName;
+  label?: string;
+  onClick: () => void;
+  radius?: 'rounded' | 'md';
+  ariaLabel?: string;
+  disabled?: boolean;
+}) {
+  const iconOnly = !props.label;
+  const pad = iconOnly ? '0' : props.icon ? '0 16px 0 12px' : '0 16px';
+  return (
+    <button
+      type="button"
+      className="fcsdk-c-actionbtn"
+      aria-label={props.ariaLabel ?? props.label}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      style={{
+        width: iconOnly ? 42 : undefined,
+        padding: pad,
+        borderRadius: (props.radius ?? 'md') === 'rounded' ? 999 : 12,
+      }}
+    >
+      {props.icon ? <FcIcon name={props.icon} size={23} tint="var(--fc-c-brand-fg-primary)" /> : null}
+      {props.label ? (
+        <span className="fc-t-labelMedium fcsdk-c-actionbtn-label" style={{ marginLeft: props.icon ? 10 : 0 }}>
+          {props.label}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+const LEADING_ICON: Record<'menu' | 'back' | 'close', IconName> = { menu: 'm_menu', back: 'm_arrow_back', close: 'm_close' };
+
+/**
+ * AppBars.kt `DefaultAppBar`: 64dp on `brand.surfacePrimary` (#008236 in both themes), 16dp side
+ * padding, a 42dp ActionButton at each end (an empty 42dp box when absent, so the title stays
+ * centred) and a centred titleMedium white title. `glow` lays `fc_glow_yellow` across the top
+ * 80dp — only FullScreenMessage keeps it. With the drawer disabled the menu becomes a back arrow.
+ */
 export function DefaultAppBar(props: {
   title: string;
   leadingIcon: 'menu' | 'back' | 'close';
   onLeadingClick: () => void;
+  /** Back action used when `leadingIcon` is 'menu' but the drawer is disabled (default: pop). */
+  onBack?: () => void;
+  leadingRadius?: 'rounded' | 'md';
   trailing?: ReactNode;
+  glow?: boolean;
+  background?: string;
 }) {
-  const { services } = useSdk();
-  const glyph = props.leadingIcon === 'menu' ? Icon.menu : props.leadingIcon === 'back' ? Icon.back : Icon.close;
-  // C3: when the drawer is disabled there is nowhere for the hamburger to go.
-  const hideLeading = props.leadingIcon === 'menu' && !services.config.showDrawer;
+  const { services, navigator } = useSdk();
+  const drawerOff = props.leadingIcon === 'menu' && !services.config.showDrawer;
+  const icon = drawerOff ? 'back' : props.leadingIcon;
+  const onLeading = drawerOff ? props.onBack ?? (() => void navigator.pop()) : props.onLeadingClick;
   return (
-    <div className="fcsdk-appbar">
-      {hideLeading ? (
-        <span style={{ width: 10 }} />
-      ) : (
-        <button type="button" className="fcsdk-iconbtn" aria-label={props.leadingIcon} onClick={props.onLeadingClick}>
-          {glyph}
-        </button>
-      )}
-      <div className="fcsdk-appbar-title">{props.title}</div>
-      {props.trailing}
+    <div className="fcsdk-c-appbar" style={props.background ? { background: props.background } : undefined}>
+      {props.glow ? <img className="fcsdk-c-appbar-glow" src={Assets.glowYellow} alt="" aria-hidden /> : null}
+      <ActionButton icon={LEADING_ICON[icon]} onClick={onLeading} radius={props.leadingRadius ?? 'rounded'} ariaLabel={icon} />
+      <div className="fcsdk-c-appbar-title fc-t-titleMedium">{props.title}</div>
+      {props.trailing ?? <span className="fcsdk-c-appbar-spacer" aria-hidden />}
     </div>
   );
 }
@@ -195,7 +242,7 @@ export function TextButton(props: { label: string; onClick: () => void; disabled
  * labelMedium caption. With several `labels` the caption cycles every 3000ms, crossfading
  * over 400ms.
  */
-export function LogoSpinner(props: { message?: string; labels?: string[] }) {
+export function LogoSpinner(props: { message?: string; labels?: string[]; horizontal?: boolean; labelColor?: string }) {
   const labels = props.labels ?? (props.message ? [props.message] : []);
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -204,6 +251,18 @@ export function LogoSpinner(props: { message?: string; labels?: string[] }) {
     return () => window.clearInterval(t);
   }, [labels.length]);
   const text = labels.length ? labels[index % labels.length] : null;
+  if (props.horizontal) {
+    // LogoSpinner.kt Horizontal: 40dp ring (stroke 2.5) around a 23dp mark, shimmering label.
+    return (
+      <div className="fcsdk-c-logospinner fcsdk-c-logospinner--h" role="status">
+        <div className="fcsdk-c-logospinner-mark" style={{ width: 40, height: 40 }}>
+          <CircularProgress size={40} stroke={2.5} color="#00C950" />
+          <FcIcon name="logo_mark" size={23} tint="#00C950" className="fcsdk-c-logospinner-logo" style={{ left: 8.5, top: 8.5 }} />
+        </div>
+        {text ? <span className="fcsdk-c-shimmer fc-t-labelMedium">{text}</span> : null}
+      </div>
+    );
+  }
   return (
     <div className="fcsdk-c-logospinner" role="status">
       <div className="fcsdk-c-logospinner-mark">
@@ -211,7 +270,7 @@ export function LogoSpinner(props: { message?: string; labels?: string[] }) {
         <FcIcon name="logo_mark" size={32} tint="#00C950" className="fcsdk-c-logospinner-logo" />
       </div>
       {text ? (
-        <span key={index} className="fcsdk-c-logospinner-label fc-t-labelMedium">
+        <span key={index} className="fcsdk-c-logospinner-label fc-t-labelMedium" style={props.labelColor ? { color: props.labelColor } : undefined}>
           {text}
         </span>
       ) : null}
@@ -247,6 +306,11 @@ export function Skeleton(props: { width?: number | string; height?: number | str
 
 // --- Form ------------------------------------------------------------------------------
 
+/**
+ * Form.kt `TextInput` — an M3 OutlinedTextField: 56dp min height, 16dp content padding, radius
+ * 12, `surfaceSecondary` container, a 1dp `borderDefault` outline that becomes 2dp
+ * `borderActive` on focus, bodyLarge text, a `foregroundSecondary` placeholder and a green caret.
+ */
 export function TextInput(props: {
   value: string;
   onChange: (v: string) => void;
@@ -257,10 +321,11 @@ export function TextInput(props: {
   maxLength?: number;
   onEnter?: () => void;
   ariaLabel?: string;
+  error?: boolean;
 }) {
   return (
     <input
-      className="fcsdk-input"
+      className={`fcsdk-c-input${props.error ? ' fcsdk-c-input--error' : ''}`}
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
       placeholder={props.placeholder}
@@ -419,21 +484,68 @@ export function OtpInput(props: { value: string; onChange: (v: string) => void; 
 
 // --- Lists -----------------------------------------------------------------------------------
 
+/** Lists.kt `ListCard`: radius 12, `surfaceSecondary`, padding 16 / 6 top / 4 bottom, no border. */
 export function ListCard(props: { children: ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="fcsdk-listcard" style={props.style}>
+    <div className="fcsdk-c-listcard" style={props.style}>
       {props.children}
     </div>
   );
 }
 
-export function ListItem(props: { icon?: ReactNode; text: string; onClick?: () => void; trailing?: ReactNode }) {
-  return (
-    <button type="button" className="fcsdk-listitem" onClick={props.onClick}>
-      {props.icon ? <span aria-hidden>{props.icon}</span> : null}
-      <span className="fcsdk-li-text">{props.text}</span>
-      {props.trailing ?? <span aria-hidden>{Icon.chevronRight}</span>}
+/**
+ * Lists.kt `ListItem`: a 48dp row (or 12dp vertical padding, top-aligned, when the right text
+ * may wrap) — optional 20dp icon tinted `foregroundPrimary`, bodyMedium left text at its natural
+ * width, optional right text (muted, end-aligned, weighted), then a 24dp chevron 12dp after the
+ * text, or a 16dp spinner. `divider` draws the 1dp `borderDefault` rule under the row.
+ */
+export function ListItem(props: {
+  icon?: IconName;
+  text: string;
+  rightText?: string;
+  rightMaxLines?: number;
+  onClick?: () => void;
+  /** Hide the chevron (non-tappable rows). */
+  noChevron?: boolean;
+  loading?: boolean;
+  divider?: boolean;
+}) {
+  const multi = (props.rightMaxLines ?? 1) > 1;
+  const body = (
+    <>
+      {props.icon ? <FcIcon name={props.icon} size={20} tint="var(--fc-c-fg-primary)" style={{ marginRight: 12 }} /> : null}
+      <span className="fcsdk-c-li-text fc-t-bodyMedium">{props.text}</span>
+      {props.rightText != null ? (
+        <span
+          className={`fcsdk-c-li-right fc-t-bodyMedium${multi ? ' fcsdk-c-li-right--multi' : ''}`}
+          style={multi ? { WebkitLineClamp: props.rightMaxLines } : undefined}
+        >
+          {props.rightText}
+        </span>
+      ) : null}
+      {props.loading ? (
+        <CircularProgress size={16} stroke={2} color="var(--fc-c-fg-secondary)" className="fcsdk-c-li-trailing" />
+      ) : props.noChevron ? null : (
+        <FcIcon name="m_chevron_right_outlined" size={24} tint="var(--fc-c-fg-primary)" className="fcsdk-c-li-trailing" />
+      )}
+    </>
+  );
+  const cls = `fcsdk-c-li${multi ? ' fcsdk-c-li--multi' : ''}`;
+  const row = props.onClick ? (
+    <button type="button" className={cls} onClick={props.onClick}>
+      {body}
     </button>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+  // HorizontalDivider is a real 1dp element under the row, not an overlay.
+  return props.divider ? (
+    <>
+      {row}
+      <div className="fcsdk-c-divider" />
+    </>
+  ) : (
+    row
   );
 }
 

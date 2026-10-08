@@ -153,7 +153,7 @@ export function LanguageSelectionScreen(props: {
  * priority rows show, with the selection pinned to the top when it lives only in the
  * expanded list; expanded, priority then every expanded language.
  */
-function languageRows(
+export function languageRows(
   groups: Array<{ priority_view?: SupportedLanguage[] | null; expanded_view?: SupportedLanguage[] | null }>,
   isExpanded: boolean,
   selectedId: number | null,

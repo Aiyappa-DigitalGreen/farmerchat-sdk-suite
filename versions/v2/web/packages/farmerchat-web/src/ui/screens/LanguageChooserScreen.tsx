@@ -7,7 +7,8 @@
 
 import { useEffect } from 'react';
 import { useLabel, useSdk } from '../context';
-import { DefaultAppBar, Icon, LogoSpinner, PrimaryButton, RadioRow, Toast } from '../components/common';
+import { DefaultAppBar, LogoSpinner, PrimaryButton, RadioRow, Toast } from '../components/common';
+import { languageRows } from './LanguageSelectionScreen';
 import { useSettingsLanguage } from '../../state/useSettingsLanguage';
 import { Screens } from '../../core/analytics';
 import type { SupportedLanguage } from '../../core/types';
@@ -30,7 +31,7 @@ export function LanguageChooserScreen(props: {
 
   useEffect(() => {
     if (state.submitSuccess) {
-      toast.show(label('fc_v2_app_label_language_updated', 'Language updated.'));
+      toast.show(label('fc_v2_app_label_language_updated', 'Language updated'), { kind: 'success' });
       actions.consumeLanguageResult();
       const t = window.setTimeout(() => props.onLanguageSaved(), 500);
       return () => window.clearTimeout(t);
@@ -45,7 +46,7 @@ export function LanguageChooserScreen(props: {
   }, [state.labelsFetchFailed]);
 
   useEffect(() => {
-    if (state.submitErrorMessage) toast.show(state.submitErrorMessage);
+    if (state.submitErrorMessage) toast.show(state.submitErrorMessage, { kind: 'error' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.submitErrorMessage]);
 
@@ -54,45 +55,53 @@ export function LanguageChooserScreen(props: {
   const renderRow = (lang: SupportedLanguage) => (
     <RadioRow
       key={lang.id}
-      label={lang.display_name ?? lang.name ?? String(lang.id)}
+      label={lang.display_name || lang.name || String(lang.id)}
       selected={state.selectedLanguageId === lang.id}
       loading={state.fetchingLabelsForId === lang.id}
-      disabled={state.fetchingLabelsForId !== null && state.fetchingLabelsForId !== lang.id}
       onClick={() => void actions.selectLanguage(lang)}
     />
   );
 
+  const listing = groups ? languageRows(groups, state.expandedLanguages, state.selectedLanguageId) : null;
+
+  // LanguageChooserScreen.kt: rows 6 apart in a 32/20/20 padded column, the "All languages" pill
+  // centred after a 10dp spacer, and a flat white footer (16/24/8) holding the 56dp Save button.
   return (
-    <div className="fcsdk-screen">
+    <div className="fcsdk-screen fcsdk-c-screen">
       <DefaultAppBar title={label('fc_v2_app_label_choose_your_language', 'Choose your language')} leadingIcon="menu" onLeadingClick={props.onOpenDrawer} />
-      <div className="fcsdk-scroll fcsdk-pad">
-        {!groups ? (
-          <LogoSpinner message={label('fc_v2_app_label_loading_languages', 'Loading languages…')} />
-        ) : (
-          <div role="radiogroup" aria-label={label('fc_v2_app_label_choose_your_language', 'Choose your language')}>
-            {groups.map((group, gi) => (
-              <div key={gi}>
-                {group.display_name ? <div className="fcsdk-sectionheader">{group.display_name}</div> : null}
-                {(group.priority_view ?? []).map(renderRow)}
-                {state.expandedLanguages ? (group.expanded_view ?? []).map(renderRow) : null}
-              </div>
-            ))}
-            {groups.some((g) => (g.expanded_view ?? []).length > 0) && !state.expandedLanguages ? (
-              <button type="button" className="fcsdk-btn-text" onClick={actions.toggleExpanded}>
-                {label('fc_v2_app_label_all_languages', 'All languages')} {Icon.chevronDown}
-              </button>
-            ) : null}
+      {!listing ? (
+        <div className="fcsdk-c-center">
+          <LogoSpinner message={label('fc_v2_app_label_loading_languages', 'Loading languages...')} />
+        </div>
+      ) : (
+        <>
+          <div className="fcsdk-scroll">
+            <div
+              className="fcsdk-c-section"
+              style={{ gap: 6, padding: '32px 20px 20px' }}
+              role="radiogroup"
+              aria-label={label('fc_v2_app_label_choose_your_language', 'Choose your language')}
+            >
+              {listing.rows.map(renderRow)}
+              {listing.hasMore && !state.expandedLanguages ? (
+                <button type="button" className="fcsdk-c-chip-primary" style={{ marginTop: 10, alignSelf: 'center' }} onClick={actions.toggleExpanded}>
+                  <span className="fc-t-labelLarge">{label('fc_v2_app_label_all_languages', 'All languages')}</span>
+                </button>
+              ) : null}
+              <div style={{ height: 8 }} />
+            </div>
           </div>
-        )}
-      </div>
-      <div className="fcsdk-bottombar">
-        <PrimaryButton
-          label={state.isSubmitting ? label('fc_v2_app_label_setting_language', 'Setting language') : label('fc_v2_app_label_save_language', 'Save language')}
-          onClick={() => void actions.submitLanguage()}
-          disabled={state.selectedLanguageId === null || state.languageState.status !== 'success'}
-          state={state.isSubmitting ? 'loading' : 'default'}
-        />
-      </div>
+          <div className="fcsdk-c-footer">
+            <PrimaryButton
+              height={56}
+              label={state.isSubmitting ? label('fc_v2_app_label_setting_language', 'Setting language') : label('fc_v2_app_label_save_language', 'Save language')}
+              onClick={() => void actions.submitLanguage()}
+              disabled={state.selectedLanguageId === null || state.fetchingLabelsForId !== null}
+              state={state.isSubmitting ? 'loading' : 'chevron'}
+            />
+          </div>
+        </>
+      )}
       <Toast message={toast.message} />
     </div>
   );
