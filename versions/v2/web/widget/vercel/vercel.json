@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [{ "source": "/stage/:path(.*)", "destination": "/api/stage?p=:path" }],
+  "redirects": [{ "source": "/", "destination": "/demo/", "permanent": false }],
+  "functions": { "api/stage.js": { "maxDuration": 60 } }
+}
