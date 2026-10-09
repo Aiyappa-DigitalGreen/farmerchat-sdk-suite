@@ -66,9 +66,12 @@ const css = `
 .fcw-panel--fullscreen .fcw-panel-bar { display: flex; }
 /* hideLauncher: the floating panel has no launcher to close from either, so it gets the bar too. */
 .fcw-panel--barred .fcw-panel-bar { display: flex; }
-/* Scrolling past the end of an SDK list must not scroll the host page behind the panel
-   (scoped to the panel; the host page itself is never styled). */
-.fcw-panel, .fcw-panel * { overscroll-behavior: contain; }
+/* Scrolling past the end of an SDK list must not scroll the host page behind the panel.
+   The panel (overflow: hidden, so a scroll container) is the one boundary that needs it.
+   Never put it on every descendant: an overflow-hidden card is a scroll container too, and with
+   contain on it the wheel latched onto the card and never reached the feed, so the Home feed
+   did not scroll with a mouse wheel or trackpad. Inner lists chain normally up to the panel. */
+.fcw-panel { overscroll-behavior: contain; }
 .fcw-panel-close {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; padding: 0 10px; border: none; border-radius: 999px; cursor: pointer;
