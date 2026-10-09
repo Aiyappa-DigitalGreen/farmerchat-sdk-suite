@@ -14,6 +14,11 @@ Source of truth: the production Android app at `fc-compose` (org.digitalgreen.fa
 - **Integration guide (all seven flavours):** https://claude.ai/artifact/BqBKuAzn2wvALENkme1pLe (Digital Green org).
 - **Live web widget demo:** https://farmerchat-widget.vercel.app — the Intercom-style widget on a sample
   host page, talking to the stage backend. Test controls (bottom left) include a streaming replay.
+- **Defaults (v2):** the SDK opens straight into chat (`mode` defaults to `CHAT_ONLY`; pass
+  `FULL_JOURNEY` for onboarding, Home and the drawer). The FarmerChat API key (`farmerChatApiKey`,
+  formerly `guestApiKey`) and the Google geolocation key are built in, so hosts don't supply keys.
+- **Plain HTML website:** two `<script>` tags (see `versions/v2/web/widget/README.md`). Until the
+  backend allows the SDK headers in CORS, a page on another site must go through a proxy.
 - **Status ledger:** `docs/04-parity-matrix.md` records every platform's parity with the app, gaps and
   how each change was verified.
 

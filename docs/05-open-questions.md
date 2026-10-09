@@ -800,3 +800,12 @@ the stale `user_id` and never re-runs `initialize_user` — so every later reque
 guest (no phone login) wipe the session and re-initialise a new guest? Not done without a decision —
 it would change docs/02's 401 flow on all platforms. The widget demo has a "Reset session" test
 control for now.
+
+
+## Keys now bundled in every SDK, and an unrestricted Google key (2026-10-09)
+
+By user decision, the FarmerChat guest API key and the Google geolocation key are built into every
+v2 SDK (npm bundle, widget script, iOS binary, Android AAR), so hosts no longer supply them. Anyone
+can extract them from a shipped bundle. The Google key currently accepts requests from any origin.
+**Ask:** restrict it in Google Cloud to the Geolocation API (and, if feasible, to the app IDs and web
+referrers in use). Rotate it if abuse shows up.

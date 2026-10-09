@@ -22,6 +22,9 @@ buildable and publishable independently of v1.
   (Android and web already did this; iOS and React Native were ported).
 - **Web widget:** live at https://farmerchat-widget.vercel.app (see `web/widget/README.md` for
   the Vercel deploy and the streaming replay switch). Mouse-wheel scrolling on Home was fixed.
+- **Chat-only by default, keys built in (all platforms).** `mode` defaults to `CHAT_ONLY` (history
+  + language in the chat bar, a fresh conversation per journey); `FULL_JOURNEY` still works.
+  `guestApiKey` was renamed `farmerChatApiKey` (no alias), and it and `geoApiKey` are built in.
 - **Verification:** web is checked in a browser against stage. Android is checked on the emulator
   (two-question pinning). iOS and React Native are build- and test-verified only.
   `docs/04-parity-matrix.md` has the per-change detail.
