@@ -616,6 +616,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                             ChatRow.Ai(
                                 message = message,
                                 isLast = isLast,
+                                isFinalRow = message.id == state.messages.lastOrNull()?.id,
                                 followUps = if (showFollowUps) state.suggestedQuestions.orEmpty()
                                 else emptyList(),
                                 followUpIds = if (showFollowUps) {

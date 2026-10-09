@@ -663,7 +663,9 @@ export function ChatScreen(props: {
         // its action row and its related-questions section. An ADDITIVE one falls through to the
         // normal answer branch and renders below it as a nudge (see AiBubble).
         // core ChatReserve.kt holdsChatReserve — the exclusive alignment surface holds it too.
-        const reserve = holdsReserve(item, isLast) ? reserveHeight : null;
+        // Newest answer AND final row (core ChatReserve.kt isLastResponse): an unanswered
+        // alignment surface with a typed follow-up below it must collapse.
+        const reserve = holdsReserve(item, isLast && item.id === tailId) ? reserveHeight : null;
         if (alignmentKind !== null && !isAdditiveAlignment(alignmentKind)) {
           return (
             <ReserveRow

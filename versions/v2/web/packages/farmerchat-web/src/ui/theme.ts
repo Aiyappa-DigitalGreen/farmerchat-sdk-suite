@@ -1307,7 +1307,7 @@ const css = `
 .fcsdk-c-appbar-logo { flex: 1; display: flex; justify-content: center; transition: opacity 600ms cubic-bezier(0, 0, .58, 1); }
 .fcsdk-c-chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* ChatThreadContent.kt: LazyColumn padding(horizontal = 20.dp), contentPadding top 20, spacedBy 16. */
-.fcsdk-c-chat-scroll { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 20px 20px 0; }
+.fcsdk-c-chat-scroll { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 20px 20px 0; overflow-anchor: none; }
 .fcsdk-c-chat-scroll > * { flex: 0 0 auto; }
 .fcsdk-c-row-end { display: flex; justify-content: flex-end; }
 .fcsdk-c-ai { display: flex; flex-direction: column; gap: 12px; color: var(--fc-c-fg-primary); }

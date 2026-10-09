@@ -1153,7 +1153,10 @@ fun ChatScreen(
                                             // and stays here.
                                             val streamReserve = if (
                                                 message.holdsChatReserve(
-                                                    isLastResponse = isLastAi,
+                                                    // Newest answer AND final row: see the
+                                                    // isLastResponse KDoc in ChatReserve.kt.
+                                                    isLastResponse = isLastAi &&
+                                                        message.id == state.messages.lastOrNull()?.id,
                                                     isLoading = state.isLoading
                                                 )
                                             ) {

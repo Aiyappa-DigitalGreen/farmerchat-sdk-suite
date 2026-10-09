@@ -51,6 +51,8 @@ internal sealed interface ChatRow {
     data class Ai(
         val message: ChatMessage.AiResponse,
         val isLast: Boolean,
+        /** This answer is the thread's final row (nothing, e.g. a newer question, below it). */
+        val isFinalRow: Boolean,
         val followUps: List<String>,
         val followUpIds: List<String?>,
         val clarificationRequired: Boolean,
@@ -427,7 +429,8 @@ internal class ChatAdapter(
      */
     internal fun holdsReserve(row: ChatRow.Ai): Boolean =
         row.message.holdsChatReserve(
-            isLastResponse = row.isLast,
+            // Newest answer AND final row: see the isLastResponse KDoc in core ChatReserve.kt.
+            isLastResponse = row.isLast && row.isFinalRow,
             isLoading = row.isStateLoading
         )
 

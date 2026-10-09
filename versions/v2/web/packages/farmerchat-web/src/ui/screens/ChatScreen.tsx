@@ -300,7 +300,30 @@ export function ChatScreen(props: {
       }
     }
     const anchor = rowRefs.current.get(msgs[anchorIdx].id);
-    if (anchor) el.scrollTo({ top: Math.max(0, anchor.offsetTop - 20), behavior: 'smooth' });
+    if (!anchor) return;
+    const target = Math.max(0, anchor.offsetTop - 20);
+    // A hidden page never animates a smooth scroll, and a layout change mid-animation can cut it
+    // short; either way the question was left wherever it was. So check once the animation should
+    // have finished and snap to the target, unless the farmer scrolled by hand in the meantime.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      el.scrollTo({ top: target });
+      return;
+    }
+    let userScrolled = false;
+    const onUser = () => { userScrolled = true; };
+    const userEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
+    userEvents.forEach((n) => el.addEventListener(n, onUser, { passive: true }));
+    el.scrollTo({ top: target, behavior: 'smooth' });
+    const settle = setTimeout(() => {
+      userEvents.forEach((n) => el.removeEventListener(n, onUser));
+      // Re-read the anchor: rows above it may have changed height since the effect ran.
+      const settled = Math.max(0, anchor.offsetTop - 20);
+      if (!userScrolled && Math.abs(el.scrollTop - settled) > 2) el.scrollTo({ top: settled });
+    }, 700);
+    return () => {
+      clearTimeout(settle);
+      userEvents.forEach((n) => el.removeEventListener(n, onUser));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage?.id, chat.isLoading, chat.isInitialHistoryLoaded]);
 
@@ -514,7 +537,10 @@ export function ChatScreen(props: {
             const shouldAnimate =
               isLastAi && !isHistoryEntry && !ai.isPreGenerated && !ai.isStreaming && !ai.isAgentic && !revealedIds.has(ai.id);
             const revealed = !shouldAnimate || revealedIds.has(ai.id);
-            const reserve = holdsReserve(ai, isLastAi) ? reserveStyle : undefined;
+            // Newest answer AND final row (core ChatReserve.kt isLastResponse): an unanswered
+            // alignment surface with a typed follow-up below it must collapse, or two rows hold a
+            // screenful each and the new question never reaches the top.
+            const reserve = holdsReserve(ai, isLastAi && isFinal) ? reserveStyle : undefined;
             const alignmentKind = ai.alignmentKind ?? null;
             if (alignmentKind && !isAdditiveAlignment(alignmentKind)) {
               return (

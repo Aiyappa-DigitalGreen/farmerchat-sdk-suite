@@ -8130,3 +8130,36 @@ Plain websites: the backends' CORS preflight allows any origin, but not the SDK 
 `Build-Version`, `Device-Info`, `X-Request-ID`) on stage, prod or EKS. A page on another site
 therefore needs a proxy until the backend adds them to `CORS_ALLOW_HEADERS`. This is an ask for the
 backend team.
+
+## Latest question lost its pin after an unanswered alignment surface — all v2 platforms (2026-10-09)
+
+Reported on the widget: after several questions the chat showed an earlier question instead of the
+newest one. Reproduced on Railway: ask a question that gets an alignment surface (e.g. "What
+fertilizer should I use for paddy?" → "Share location"), then type the next question instead of
+tapping a chip.
+
+**Cause.** `holdsChatReserve`'s alignment clause (`alignmentKind != null && no selection`) kept
+the reserve on the previous answer even after a newer question was below it, because that answer
+was still the newest *AI response* while the follow-up was in flight. Two rows held a screenful
+each, so the pin target was a screen too low; when the old reserve collapsed, the browser's scroll
+anchoring pulled the view back toward the first question.
+
+**Fix.** `isLastResponse` now means *newest response AND the thread's final row* (KDoc in core
+`ChatReserve.kt`). Callers pass that:
+
+| Platform | Change |
+|---|---|
+| android compose | `isLastResponse = isLastAi && message.id == state.messages.lastOrNull()?.id` |
+| android views | `ChatRow.Ai.isFinalRow`; `holdsReserve` uses `isLast && isFinalRow` |
+| ios SwiftUI | `reserveRows` no longer adds the newest answer separately; only the final row holds it |
+| ios UIKit | no change: its reserve inset already keys on the final row only |
+| react-native | `holdsReserve(item, isLast && item.id === tailId)` |
+| web | `holdsReserve(ai, isLastAi && isFinal)`; plus web-only: `overflow-anchor: none` on the chat scroller, and the pin re-checks itself ~700 ms after the smooth scroll and snaps to the question unless the farmer scrolled by hand (a hidden page never animates `behavior: 'smooth'`, and a mid-animation layout change can cut it short) |
+
+Verified: android `:farmerchat-core:compileDebugKotlin :farmerchat-android-compose:compileDebugKotlin
+:farmerchat-android-views:compileDebugKotlin :farmerchat-core:testDebugUnitTest` (exit 0); ios
+`xcodebuild -scheme FarmerChatSwiftUI -destination 'generic/platform=iOS Simulator' build` (exit 0);
+react-native `npx tsc --noEmit`; web `tsc` + build + tests (fail 0), widget build + tsc. Browser, live
+stage: Q1 → Q2 (location surface) → typed Q3 — each new question lands at the top (scrollTop =
+question offset − 20) and the unanswered surface collapses. Android/iOS/RN were not re-run on a
+device for this change: UNVERIFIED on device.

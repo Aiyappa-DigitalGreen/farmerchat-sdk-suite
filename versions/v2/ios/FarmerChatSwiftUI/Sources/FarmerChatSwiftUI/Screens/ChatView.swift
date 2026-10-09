@@ -497,10 +497,10 @@ struct ChatView: View {
     /// The rows rendered at viewport minimum height this frame. `finalHolderId` is the final row
     /// when it holds the reserve (it then also hosts the real-content-end marker).
     private var reserveRows: (holderIds: Set<String>, finalHolderId: String?) {
+        // Only the FINAL row ever holds it (Android core ChatReserve.kt `isLastResponse`): the
+        // newest answer with a question below it, e.g. an unanswered alignment surface while a
+        // typed follow-up is in flight, must collapse or it pushes the pin off the new question.
         var ids: Set<String> = []
-        if let lastAi = lastAiMessage, holdsReserve(lastAi) {
-            ids.insert(ChatMessage.aiResponse(lastAi).id)
-        }
         var finalId: String?
         if let last = viewModel.state.messages.last, finalRowHoldsReserve(last) {
             ids.insert(last.id)

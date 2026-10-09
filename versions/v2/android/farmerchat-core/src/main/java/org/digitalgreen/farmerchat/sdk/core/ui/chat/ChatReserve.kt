@@ -44,7 +44,11 @@ package org.digitalgreen.farmerchat.sdk.core.ui.chat
  * Whether this AI response holds the reserve.
  *
  * @param isLastResponse whether this is the newest AI response in the thread (the app's
- *   `message == lastAiResponse`). A response that is not the newest never reserves.
+ *   `message == lastAiResponse`) AND the thread's final row. A response that is not the newest
+ *   never reserves, and neither does one with a question below it: an unanswered alignment
+ *   surface stays the newest response while the farmer's typed follow-up is in flight, and its
+ *   alignment clause would otherwise keep a second screenful of space above the new question and
+ *   push the pin off it (2026-10-09, seen on the web widget).
  * @param isLoading `ChatState.isLoading`. The `!isLoading` term is what extends the reserve to a
  *   FINISHED short answer — without it the reserve collapsed the instant a stream settled and the
  *   thread jumped one last time. It is also the term that makes that safe: while a follow-up is in
