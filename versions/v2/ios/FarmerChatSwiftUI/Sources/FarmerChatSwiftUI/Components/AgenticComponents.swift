@@ -83,29 +83,55 @@ public struct FCStreamErrorCard: View {
         }()
         let icon = errorKind == .network ? "wifi.slash" : "exclamationmark.triangle.fill"
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        // StreamErrorCard.kt: 12-radius card (Red500 8% fill, 1pt Red500 16% border, padding 16):
+        // [24pt icon, 12, bold bodyMedium title], 16, then a full-width radius-12 button (14pt
+        // vertical padding) holding a green 20pt Refresh, 8, and a bold labelLarge "Try again".
+        // The 16pt above the card is the bubble's own spacing (see FCAiResponseBubble).
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 24, height: 24)
                     .foregroundColor(fail)
                 Text(title)
-                    .fcTextStyle(theme.typography.titleSmall)
+                    .fcTextStyle(theme.typography.bodyMedium)
+                    .fontWeight(.bold)
                     .foregroundColor(theme.content.foregroundPrimary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            FCPrimaryButton(
-                title: fcLabel(AgenticLabels.tryAgain, AgenticLabels.tryAgainFallback),
-                action: onRetry
-            )
+            Button {
+                onRetry()
+                FarmerChat.shared.analytics.track(
+                    AnalyticsEvents.contentTryAgainClicked,
+                    props: ["screen_name": ScreenNames.chat]
+                )
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                        .foregroundColor(theme.content.buttonPrimaryAccent)
+                    Text(fcLabel(AgenticLabels.tryAgain, AgenticLabels.tryAgainFallback))
+                        .fcTextStyle(theme.typography.labelLarge)
+                        .fontWeight(.bold)
+                        .foregroundColor(theme.content.buttonPrimaryForeground)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(theme.content.buttonPrimarySurface)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(fail.opacity(0.08))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(fail.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(fail.opacity(0.16), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -121,52 +147,98 @@ enum FCChipType {
     case suggested
 }
 
-/// One numbered quick-reply chip.
+/// One numbered quick-reply chip. Port of `components/chips/Chip.kt`: radius 12, padding
+/// 14/14/14/10, 8pt gaps, a 24pt number badge (a check badge once picked), a labelMedium label
+/// (Bold only when selected) and a 24pt chevron while it still takes taps. Surface, label, chevron,
+/// border and badge colours follow Chip.kt's tables exactly.
 struct FCAlignmentChipView: View {
     @Environment(\.fcTheme) private var theme
     let label: String
-    let number: Int
+    let number: Int?
     let type: FCChipType
     let selected: Bool
     let enabled: Bool
     let onTap: () -> Void
 
     var body: some View {
-        let accent: Color = {
-            switch type {
-            case .agentic: return theme.content.borderActive
-            case .escalate: return theme.brand.feedbackFail
-            case .suggested: return theme.content.borderDefault
-            }
+        let c = theme.content
+        let red = theme.brand.feedbackFail
+        let isEscalate = type == .escalate
+        let clickable = enabled && !selected
+        let selectedAccent = isEscalate ? red : c.buttonPrimaryAccent
+        let surface: Color = {
+            if selected { return isEscalate ? red.opacity(0.08) : c.surfaceActive }
+            if !enabled { return c.surfaceTertiary }
+            if isEscalate { return red }
+            if type == .agentic { return c.surfaceActive }
+            return c.surfaceReadingSecondary
         }()
+        let labelColor: Color = {
+            if selected { return c.foregroundPrimary }
+            if !enabled { return c.foregroundSecondary }
+            if isEscalate { return theme.brand.foregroundPrimary }
+            return c.foregroundPrimary
+        }()
+        let chevronColor: Color = {
+            if !enabled { return c.foregroundTertiary }
+            if isEscalate { return theme.brand.foregroundPrimary }
+            if type == .agentic { return c.buttonPrimaryAccent }
+            return c.foregroundSecondary
+        }()
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
         Button(action: onTap) {
-            HStack(spacing: 10) {
-                Text("\(number)")
-                    .fcTextStyle(theme.typography.labelMedium)
-                    .foregroundColor(selected ? theme.content.buttonPrimaryForeground : accent)
-                    .frame(width: 20, height: 20)
-                    .background(selected ? accent : accent.opacity(0.14))
-                    .clipShape(Circle())
+            HStack(spacing: 8) {
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(c.buttonPrimaryForeground)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(selectedAccent))
+                } else if let number {
+                    let badge: Color = !enabled ? c.foregroundSecondary
+                        : (isEscalate ? theme.brand.foregroundPrimary : c.buttonPrimaryAccent)
+                    let numberColor: Color = !enabled ? c.surfaceTertiary
+                        : (isEscalate ? red : c.buttonPrimaryForeground)
+                    Text("\(number)")
+                        .fcTextStyle(theme.typography.labelMedium)
+                        .foregroundColor(numberColor)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(badge))
+                }
                 Text(label)
                     .fcTextStyle(theme.typography.labelMedium)
-                    .foregroundColor(theme.content.foregroundPrimary)
+                    .fontWeight(selected ? .bold : nil)
+                    .foregroundColor(labelColor)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if clickable {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(chevronColor)
+                        .frame(width: 24, height: 24)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.leading, 14)
+            .padding(.trailing, 10)
+            .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? accent.opacity(0.12) : theme.content.surfaceSecondary)
+            .background(surface)
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(accent.opacity(selected ? 0.9 : 0.35), lineWidth: 1)
+                Group {
+                    if selected {
+                        shape.strokeBorder(selectedAccent, lineWidth: 1.5)
+                    } else if !enabled {
+                        shape.strokeBorder(c.borderDefault, lineWidth: 0.5)
+                    }
+                }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(shape)
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .allowsHitTesting(enabled)
-        .opacity(enabled || selected ? 1 : 0.6)
+        .allowsHitTesting(clickable)
     }
 }
 
@@ -195,6 +267,9 @@ public struct FCAlignmentSurface: View {
     var onTypeInstead: () -> Void = {}
     /// True when rendering below a real answer; suppresses the heading and escape hatch.
     var additive: Bool
+    /// AlignmentSurface.kt Listen pill — shown on the live, non-escalate, exclusive prompt only.
+    /// Nil when the response has no server message id to synthesise.
+    var listen: FCListenConfig?
 
     public init(
         kind: AlignmentKind,
@@ -205,7 +280,8 @@ public struct FCAlignmentSurface: View {
         isLatest: Bool,
         onChipTap: @escaping (AlignmentChip) -> Void,
         onTypeInstead: @escaping () -> Void = {},
-        additive: Bool? = nil
+        additive: Bool? = nil,
+        listen: FCListenConfig? = nil
     ) {
         self.kind = kind
         self.message = message
@@ -216,6 +292,7 @@ public struct FCAlignmentSurface: View {
         self.onChipTap = onChipTap
         self.onTypeInstead = onTypeInstead
         self.additive = additive ?? kind.isAdditive
+        self.listen = listen
     }
 
     public var body: some View {
@@ -237,30 +314,83 @@ public struct FCAlignmentSurface: View {
         }
     }
 
+    /// AlignmentSurface.kt body: MarkdownText message (bodyMedium), [16 + Listen pill on the live
+    /// prompt], 16, then the options — inside a 16-radius 1pt-bordered card for capability prompts —
+    /// then the escape hatch. Escalate wraps the whole body in a 16-radius red-tinted card.
     @ViewBuilder
     private var content: some View {
         let isEscalate = kind == .escalate
         let isCapabilityPrompt = kind == .gpsPrompt || kind == .uploadPhoto
         let hasPick = !selectedValues.isEmpty
-        // Capability and additive surfaces are single-shot: one tap settles them, so every chip
-        // locks. Clarify/confirm stay open so the farmer can pick a different option.
-        let chipsLocked = (isCapabilityPrompt || additive) && hasPick
 
         VStack(alignment: .leading, spacing: 0) {
             if !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 FCMarkdownText(text: message)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer().frame(height: isEscalate || additive ? 12 : 16)
             }
 
-            if !isEscalate && !additive {
+            if !isEscalate && !additive && isLatest && !isLoading, let listen {
+                Spacer().frame(height: 16)
+                FCListenButton(config: listen)
+            }
+
+            Spacer().frame(height: 16)
+
+            if isCapabilityPrompt {
+                options
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(theme.content.borderDefault, lineWidth: 1)
+                    )
+            } else {
+                options
+            }
+
+            // Escape hatch: only on an open, exclusive, non-urgent surface that is still the
+            // latest. Without it a farmer whose answer is not among the chips has no way forward.
+            // One text run — hint (secondary) + " " + CTA (accent, SemiBold); only the CTA taps.
+            if !chips.isEmpty && !isEscalate && !isCapabilityPrompt && !additive
+                && !hasPick && isLatest && !isLoading {
+                Spacer().frame(height: 12)
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 13))
+                        .frame(width: 16, height: 16)
+                        .foregroundColor(theme.content.buttonPrimaryAccent)
+                    Text(escapeHatchText)
+                        .fcTextStyle(theme.typography.bodySmall)
+                        // SwiftUI paints link runs with the tint, not their foregroundColor.
+                        .tint(theme.content.buttonPrimaryAccent)
+                        .environment(\.openURL, OpenURLAction { _ in
+                            onTypeInstead()
+                            return .handled
+                        })
+                }
+            }
+        }
+    }
+
+    /// Header (clarify / confirm / capability) + the numbered chips, 8pt apart.
+    @ViewBuilder
+    private var options: some View {
+        let isEscalate = kind == .escalate
+        let isCapabilityPrompt = kind == .gpsPrompt || kind == .uploadPhoto
+        let hasPick = !selectedValues.isEmpty
+        let showHeading = !isEscalate && !additive
+        // Capability and additive surfaces are single-shot: one tap settles them, so every chip
+        // locks. Clarify/confirm stay open so the farmer can pick a different option.
+        let chipsLocked = (isCapabilityPrompt || additive) && hasPick
+
+        VStack(alignment: .leading, spacing: 0) {
+            if showHeading {
                 Text(headingText)
                     .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
-                Spacer().frame(height: 16)
             }
-
             if !chips.isEmpty {
+                if showHeading { Spacer().frame(height: 16) }
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(chips.enumerated()), id: \.offset) { index, chip in
                         let isSelected = isChipSelected(chip)
@@ -281,32 +411,22 @@ public struct FCAlignmentSurface: View {
                     }
                 }
             }
-
-            // Escape hatch: only on an open, exclusive, non-urgent surface that is still the
-            // latest. Without it a farmer whose answer is not among the chips has no way forward.
-            if !chips.isEmpty && !isEscalate && !isCapabilityPrompt && !additive
-                && !hasPick && isLatest && !isLoading {
-                Spacer().frame(height: 12)
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 13))
-                        .foregroundColor(theme.content.buttonPrimaryAccent)
-                    Text(fcLabel(
-                        AgenticLabels.dontSeeYourOption,
-                        AgenticLabels.dontSeeYourOptionFallback
-                    ))
-                    .fcTextStyle(theme.typography.bodySmall)
-                    .foregroundColor(theme.content.foregroundSecondary)
-                    Button(action: onTypeInstead) {
-                        Text(fcLabel(AgenticLabels.typeOrSayIt, AgenticLabels.typeOrSayItFallback))
-                            .fcTextStyle(theme.typography.bodySmall)
-                            .foregroundColor(theme.content.buttonPrimaryAccent)
-                    }
-                    .buttonStyle(.plain)
-                    Spacer(minLength: 0)
-                }
-            }
         }
+    }
+
+    /// "Don't see your option? Type or say it." as ONE run so it wraps as a sentence; the CTA run
+    /// carries a link that `.openURL` above routes to `onTypeInstead`.
+    private var escapeHatchText: AttributedString {
+        var hint = AttributedString(fcLabel(
+            AgenticLabels.dontSeeYourOption,
+            AgenticLabels.dontSeeYourOptionFallback
+        ))
+        hint.foregroundColor = theme.content.foregroundSecondary
+        var cta = AttributedString(fcLabel(AgenticLabels.typeOrSayIt, AgenticLabels.typeOrSayItFallback))
+        cta.foregroundColor = theme.content.buttonPrimaryAccent
+        cta.font = theme.typography.bodySmall.font.weight(.semibold)
+        cta.link = URL(string: "fcsdk-type-instead://")
+        return hint + AttributedString(" ") + cta
     }
 
     private var headingText: String {

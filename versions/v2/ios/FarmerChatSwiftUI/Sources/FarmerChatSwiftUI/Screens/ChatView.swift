@@ -163,26 +163,36 @@ struct ChatView: View {
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
-            } else {
-                Button {
-                    // CHAT_ONLY has no SDK Home — close exits the SDK to the host;
-                    // otherwise popUpTo(Home){!inclusive}.
-                    if args.source == "chatOnly" { exitSdk() } else { router.popToRoot() }
-                } label: {
+            } else if args.source == "chatOnly" {
+                // CHAT_ONLY has no SDK Home — close exits the SDK to the host.
+                Button(action: exitSdk) {
                     Image(systemName: "xmark")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(theme.content.foregroundPrimary)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+            } else {
+                // Home entry: the app's R.drawable.leftbutton (stroked arrow on a #08361B disc);
+                // popUpTo(Home){!inclusive}.
+                Button { router.popToRoot() } label: {
+                    FCLeftButtonGlyph().frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("back")
             }
 
-            if !viewModel.state.isLoading {
+            // LogoAppBar.kt: the logo fades in over 600ms (EaseOut) once the thread is idle and
+            // out over 300ms while loading.
+            let showLogo = !viewModel.state.isLoading
+            HStack(spacing: 8) {
                 FCLogoMark(size: 28, tint: theme.brand.surfacePrimary)
                 Text("FarmerChat")
                     .fcTextStyle(theme.typography.titleMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
             }
+            .opacity(showLogo ? 1 : 0)
+            .animation(.easeOut(duration: showLogo ? 0.6 : 0.3), value: showLogo)
             Spacer()
         }
         .padding(.horizontal, 8)
@@ -206,12 +216,15 @@ struct ChatView: View {
     private var threadBody: some View {
         if viewModel.state.messages.isEmpty && viewModel.state.isLoading {
             // ChatLoadingContent: first question bubble + branded thinking state.
-            VStack(alignment: .leading, spacing: 24) {
+            // ChatLoadingContent.kt: padding(horizontal 20, top 20), spacedBy 16; the bubble row
+            // has 64pt start padding.
+            VStack(alignment: .leading, spacing: 16) {
                 if let question = args.question, !question.isEmpty {
                     FCUserChatBubble(
                         message: ChatMessage.UserMessage(text: question),
                         playback: playback
                     )
+                    .padding(.leading, 64)
                 }
                 // App parity (ChatThreadContent.kt LoadingPlaceholder): LogoSpinnerHorizontal with
                 // the shimmering primary-colour label.
@@ -219,7 +232,8 @@ struct ChatView: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
         } else if let errorMessage = viewModel.state.errorMessage, viewModel.state.messages.isEmpty {
             chatError(errorMessage)
         } else {
@@ -231,7 +245,10 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             GeometryReader { viewport in
             ScrollView {
-                VStack(spacing: 14) {
+                // ChatThreadContent.kt: padding(horizontal 20), contentPadding top 20, spacedBy 16.
+                // The bottom is 16: unlike the app's floating input, this input bar sits BELOW the
+                // thread, so no composer height needs reserving.
+                VStack(spacing: 16) {
                     // History pagination: load-more affordance at top.
                     if viewModel.state.historyNextPage != nil {
                         Button {
@@ -253,17 +270,20 @@ struct ChatView: View {
                         messageRow(message).id(message.id)
                     }
 
-                    // Inline error under a failed message.
-                    if let errorMessage = viewModel.state.errorMessage, !viewModel.state.messages.isEmpty {
-                        inlineError(errorMessage)
+                    // An error not tied to a question bubble (e.g. a history page) keeps a
+                    // standalone inline row; a failed question carries it under its bubble.
+                    if viewModel.state.errorMessage != nil, !viewModel.state.isLoading,
+                       !viewModel.state.messages.isEmpty, failedUserRowId == nil {
+                        FCInlineErrorContent(onRetry: retry)
                     }
 
                     // Follow-up section — appears only after the last answer's
                     // reveal completes (fresh, history and pre-generated all
-                    // mark their last answer revealed; see FCAiAnswerText).
+                    // mark their last answer revealed; see FCAiAnswerText). App parity
+                    // (ChatResponseActions.kt): NOT hidden by an error, but hidden when an additive
+                    // alignment surface with chips owns the next action.
                     if let suggestions = viewModel.state.suggestedQuestions, !suggestions.isEmpty,
-                       !viewModel.state.isLoading, viewModel.state.errorMessage == nil,
-                       lastAnswerRevealed {
+                       !viewModel.state.isLoading, lastAnswerRevealed, !additiveSurfaceOpen {
                         FCFollowUpChips(
                             title: viewModel.state.clarificationRequired
                                 ? fcLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
@@ -276,7 +296,8 @@ struct ChatView: View {
                                 viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil))
                             }
                         )
-                        .padding(.top, 4)
+                        // ChatResponseActions.kt: 28 + 12 below the follow-ups.
+                        .padding(.bottom, 40)
                         // App parity (ChatResponseActions.kt 0456f364): a 300ms fade, and fade
                         // ONLY. The block used to also slide up from the bottom edge, which moves
                         // the thread under it while it settles; the app is explicit that no
@@ -300,7 +321,9 @@ struct ChatView: View {
                             }
                         )
                 }
-                .padding(16)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
                 .animation(.easeOut(duration: 0.35), value: lastAnswerRevealed)
             }
             .coordinateSpace(name: Self.threadSpace)
@@ -312,15 +335,18 @@ struct ChatView: View {
                 // last answer fits inside its reserved viewport, because everything under
                 // the text is then empty reserved space; iOS has no chat reserve yet (see
                 // docs/04), so that clause has nothing to guard against here.
+                // ScrollIndicator.kt is also suppressed while an error is showing.
                 if let lastAi = lastAiMessageId,
                    !viewModel.state.isLoading,
+                   viewModel.state.errorMessage == nil,
                    hiddenBelow >= 48 {
                     FCScrollIndicator(triggerKey: lastAi) {
                         if let last = viewModel.state.messages.last {
                             withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                         }
                     }
-                    .padding(.bottom, 12)
+                    // ChatThreadContent.kt: 16 above the input area (here the thread's bottom edge).
+                    .padding(.bottom, 16)
                 }
             }
             .onChange(of: viewModel.state.messages.count) { _ in
@@ -394,11 +420,47 @@ struct ChatView: View {
         return revealedIds.contains(last.id)
     }
 
+    /// ChatResponseActions.kt `showFollowUps = false` case: the last answer carries an ADDITIVE
+    /// alignment surface with chips, which owns the next action.
+    private var additiveSurfaceOpen: Bool {
+        guard let last = lastAiMessage, let kind = last.alignmentKind, kind.isAdditive else { return false }
+        return !(last.alignmentChips ?? []).isEmpty
+    }
+
+    /// `ChatMessage.id` of the question whose send failed, while its error is showing — the row
+    /// that carries InlineErrorContent (ChatThreadContent.kt `failedMessageId == message.id &&
+    /// errorMessage != null`). Nil when the error is not tied to a bubble in the thread.
+    private var failedUserRowId: String? {
+        guard viewModel.state.errorMessage != nil, !viewModel.state.isLoading,
+              let failed = viewModel.state.failedMessageId else { return nil }
+        let rowId = "user_\(failed)"
+        return viewModel.state.messages.contains { $0.id == rowId } ? rowId : nil
+    }
+
+    /// InlineErrorContent / ChatErrorContent retry (the tap's analytics are tracked by the view).
+    private func retry() {
+        viewModel.onAction(.retryLastRequest)
+    }
+
     @ViewBuilder
     private func messageRow(_ message: ChatMessage) -> some View {
         switch message {
         case .user(let user):
-            FCUserChatBubble(message: user, playback: playback)
+            // ChatThreadContent.kt: Column(spacedBy 12) [bubble row (start padding 64, End),
+            // + InlineErrorContent under the failed question], fading in over 500ms.
+            let failedHere = failedUserRowId == message.id
+            VStack(alignment: .leading, spacing: 12) {
+                FCUserChatBubble(message: user, playback: playback)
+                    .padding(.leading, 64)
+                if failedHere {
+                    if user.audioURL != nil {
+                        FCVoiceRetryPill(onRetry: retry)
+                    } else {
+                        FCInlineErrorContent(onRetry: retry)
+                    }
+                }
+            }
+            .modifier(FCFadeInOnAppear(duration: 0.5))
         case .aiResponse(let ai):
             let isLastAi = ai.id == lastAiMessage?.id
             // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the
@@ -417,7 +479,8 @@ struct ChatView: View {
                     onChipTap: { chip in
                         handleAlignmentChip(messageId: ai.id, kind: kind, chip: chip)
                     },
-                    onTypeInstead: { showTextInput = true }
+                    onTypeInstead: { showTextInput = true },
+                    listen: ai.messageId != nil ? listenConfig : nil
                 )
             } else {
                 // Only fresh answers animate: newest AI message, not from history,
@@ -451,14 +514,15 @@ struct ChatView: View {
                     onRetryStream: { viewModel.onAction(.retryLastRequest) },
                     onAlignmentChipTap: { chip in
                         handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
-                    }
+                    },
+                    hasAudio: viewModel.state.audioPlaybackUrl != nil
                 )
             }
         // 2.0.0: the farmer's resolved location, standing in for the text bubble they would
         // otherwise have sent. Right-aligned because it is their reply to a GPS_PROMPT chip.
         case .location(let location):
             HStack {
-                Spacer(minLength: 0)
+                Spacer(minLength: 64)
                 FCLocationChatBubble(
                     address: location.address,
                     label: fcLabel(AgenticLabels.yourLocation, AgenticLabels.yourLocationFallback)
@@ -573,56 +637,40 @@ struct ChatView: View {
             .joined(separator: ", ")
     }
 
+    /// ChatErrorContent.kt: padding(horizontal 20, top 20), spacedBy 16 — the failed question's
+    /// bubble (start padding 64) then InlineErrorContent (or the Retry pill for a voice question).
     private func chatError(_ message: String) -> some View {
-        // ChatErrorContent: message, retry, question bubble, input buttons.
-        VStack(spacing: 18) {
-            if let question = args.question, !question.isEmpty {
-                FCUserChatBubble(message: ChatMessage.UserMessage(text: question, isFailed: true), playback: playback)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
+        VStack(alignment: .leading, spacing: 16) {
+            let audioURL = args.audioPath.map { URL(fileURLWithPath: $0) }
+            let question = args.question ?? ""
+            if !question.isEmpty || audioURL != nil {
+                FCUserChatBubble(
+                    message: ChatMessage.UserMessage(text: question, audioURL: audioURL, isFailed: true),
+                    playback: playback
+                )
+                .padding(.leading, 64)
             }
-            Spacer()
-            Image(systemName: "exclamationmark.bubble")
-                .font(.system(size: 44))
-                .foregroundColor(theme.content.foregroundSecondary)
-            Text(message)
-                .fcTextStyle(theme.typography.bodyMedium)
-                .foregroundColor(theme.content.foregroundSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Button {
-                viewModel.onAction(.retryLastRequest)
-            } label: {
-                Text(fcLabel(FCLabels.tryAgain, "Try again"))
-                    .fcTextStyle(theme.typography.bodyMedium)
-                    .foregroundColor(theme.content.buttonPrimaryForeground)
-                    .padding(.horizontal, 28)
-                    .frame(height: 46)
-                    .background(theme.content.buttonPrimarySurface)
-                    .clipShape(Capsule())
+            if audioURL != nil {
+                FCVoiceRetryPill(onRetry: retry)
+            } else {
+                FCInlineErrorContent(onRetry: retry)
             }
-            .buttonStyle(.plain)
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
     }
 
-    private func inlineError(_ message: String) -> some View {
-        VStack(spacing: 10) {
-            Text(message)
-                .fcTextStyle(theme.typography.bodyMedium)
-                .foregroundColor(FCPrimitive.red500)
-                .multilineTextAlignment(.center)
-            Button {
-                viewModel.onAction(.retryLastRequest)
-            } label: {
-                Text(fcLabel(FCLabels.tryAgain, "Try again"))
-                    .fcTextStyle(theme.typography.bodyMedium)
-                    .foregroundColor(theme.brand.surfacePrimary)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+    /// Listen inputs shared by the answer bubble and the exclusive alignment surface.
+    private var listenConfig: FCListenConfig {
+        FCListenConfig(
+            enabled: viewModel.state.isTtsEnabled,
+            loading: viewModel.state.isLoadingSynthesiseAudio,
+            playing: viewModel.state.isAudioPlaying,
+            hasAudio: viewModel.state.audioPlaybackUrl != nil,
+            onTap: listenTapped
+        )
     }
 
     // MARK: - Input bar (follow-up entry points)

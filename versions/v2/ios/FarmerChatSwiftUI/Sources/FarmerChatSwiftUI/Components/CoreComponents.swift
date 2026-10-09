@@ -285,27 +285,31 @@ public struct FCLogoSpinner: View {
         }
     }
 
-    @State private var spin = false
+    /// Accumulated turns of the horizontal spinner's mark (LogoSpinnerHorizontal.kt LogoWithSpinner).
+    @State private var markRotation: Double = 0
 
     @ViewBuilder private var spinnerContent: some View {
-        // Port of LogoSpinner.kt: a Green500 progress ring with the static Green500 flower
-        // mark centred inside it. Geometry per LogoSpinner.kt:90/101 — 55/32/3 vertical,
-        // 40/23/2.5 horizontal. The stroke was 3 for both.
+        // Port of LogoSpinner.kt / LogoSpinnerHorizontal.kt: a Green500 Material indeterminate
+        // ring with the Green500 flower mark centred inside it. Geometry per LogoSpinner.kt:90/101
+        // — 55/32/3 vertical, 40/23/2.5 horizontal.
         ZStack {
-            Circle()
-                .trim(from: 0, to: 0.75)
-                .stroke(
-                    FCPrimitive.green500,
-                    style: StrokeStyle(lineWidth: vertical ? 3 : 2.5, lineCap: .round)
-                )
-                .frame(width: vertical ? 55 : 40, height: vertical ? 55 : 40)
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .onAppear {
-                    withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
-                        spin = true
+            FCMaterialProgressRing(
+                color: FCPrimitive.green500,
+                lineWidth: vertical ? 3 : 2.5
+            )
+            .frame(width: vertical ? 55 : 40, height: vertical ? 55 : 40)
+            FCLogoMark(size: vertical ? 32 : 23, tint: FCPrimitive.green500)
+                // LogoSpinnerHorizontal.kt: the mark turns +360° every 3s, 600ms EaseOut. The
+                // vertical LogoSpinner keeps a static mark.
+                .rotationEffect(.degrees(markRotation))
+                .task {
+                    guard !vertical, !UIAccessibility.isReduceMotionEnabled else { return }
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        if Task.isCancelled { return }
+                        withAnimation(.easeOut(duration: 0.6)) { markRotation += 360 }
                     }
                 }
-            FCLogoMark(size: vertical ? 32 : 23, tint: FCPrimitive.green500)
         }
 
         // App parity (LogoSpinner.kt:143-160): the HORIZONTAL spinner shimmers its label, the
@@ -326,6 +330,110 @@ public struct FCLogoSpinner: View {
                 baseColor: theme.content.foregroundPrimary
             )
         }
+    }
+}
+
+/// Approximation of Material3 1.4.0's indeterminate `CircularProgressIndicator` (round caps):
+/// one 6s cycle in which the arc's head grows it from 10% to 87% of the circle over 3s, then the
+/// tail catches up (87% -> 10%, ease-out) over the next 3s, while the whole ring turns. The tail's
+/// advance is carried into the next cycle's rotation so the ring never jumps.
+///
+/// Driven by `TimelineView(.animation)` rather than `repeatForever`, whose transaction leaks into
+/// the surrounding thread's layout changes inside a ScrollView.
+struct FCMaterialProgressRing: View {
+    let color: Color
+    let lineWidth: CGFloat
+
+    private static let cycle: Double = 6
+    private static let minArc: Double = 0.10
+    private static let maxArc: Double = 0.87
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let cycles = (t / Self.cycle).rounded(.down)
+            let phase = t - cycles * Self.cycle
+            let (from, to) = Self.trim(phase: phase)
+            // Base spin 1080°/cycle, plus the tail's 77% advance per cycle carried forward
+            // (kept small with mod 100 — 100 × 0.77 is a whole number of turns, so no jump).
+            let carry = (Self.maxArc - Self.minArc) * 360
+            let degrees = cycles.truncatingRemainder(dividingBy: 100) * carry
+                + phase / Self.cycle * 1080
+            Circle()
+                .trim(from: from, to: to)
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(degrees - 90))
+                .padding(lineWidth / 2)
+        }
+    }
+
+    private static func trim(phase: Double) -> (CGFloat, CGFloat) {
+        let span = maxArc - minArc
+        if phase < cycle / 2 {
+            // Head grows linearly.
+            let p = phase / (cycle / 2)
+            return (0, CGFloat(minArc + span * p))
+        }
+        // Tail catches up, ease-out (Material's emphasized-decelerate feel).
+        let p = (phase - cycle / 2) / (cycle / 2)
+        let eased = 1 - pow(1 - p, 3)
+        return (CGFloat(span * eased), CGFloat(maxArc))
+    }
+}
+
+// MARK: - attentionWobble (port of the app's Modifier.attentionWobble)
+
+/// After `delay`, one spring "press" (scale to 0.95 and back) followed by two rotation wobbles of
+/// ±1.5° (60 / 120 / 60ms, ease-in-out). The app's remote-config and once-per-day card-click gates
+/// have no SDK equivalent, so the wobble always runs (Reduce Motion skips it).
+struct FCAttentionWobble: ViewModifier {
+    var delay: Double
+    @State private var scale: CGFloat = 1
+    @State private var rotation: Double = 0
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .rotationEffect(.degrees(rotation))
+            .task {
+                guard !UIAccessibility.isReduceMotionEnabled else { return }
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                if Task.isCancelled { return }
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) { scale = 0.95 }
+                try? await Task.sleep(nanoseconds: 140_000_000)
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.35)) { scale = 1 }
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                for _ in 0..<2 {
+                    if Task.isCancelled { return }
+                    withAnimation(.easeInOut(duration: 0.06)) { rotation = 1.5 }
+                    try? await Task.sleep(nanoseconds: 60_000_000)
+                    withAnimation(.easeInOut(duration: 0.12)) { rotation = -1.5 }
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    withAnimation(.easeInOut(duration: 0.06)) { rotation = 0 }
+                    try? await Task.sleep(nanoseconds: 60_000_000)
+                }
+            }
+    }
+}
+
+// MARK: - leftbutton.xml (Chat app bar, Home entry)
+
+/// The app's `R.drawable.leftbutton`: a 42pt #08361B disc with a STROKED white back arrow (2pt,
+/// round caps and joins) on a 42×42 viewBox — not a filled chevron glyph.
+struct FCLeftButtonGlyph: View {
+    var body: some View {
+        ZStack {
+            Circle().fill(FCPrimitive.green800)
+            Path { p in
+                p.move(to: CGPoint(x: 27.708, y: 21.261))
+                p.addLine(to: CGPoint(x: 14.292, y: 21.261))
+                p.move(to: CGPoint(x: 21, y: 27.97))
+                p.addLine(to: CGPoint(x: 14.292, y: 21.261))
+                p.addLine(to: CGPoint(x: 21, y: 14.553))
+            }
+            .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+        }
+        .frame(width: 42, height: 42)
     }
 }
 

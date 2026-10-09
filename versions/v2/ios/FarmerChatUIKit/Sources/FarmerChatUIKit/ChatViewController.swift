@@ -34,13 +34,17 @@ final class FCUIChatViewController: UIViewController {
         /// A numbered follow-up chip. Keyed by position as well as text (two identical questions
         /// must not collide in the snapshot) and carrying the clarify flag, so a flip of the
         /// chips' accent re-renders them.
-        case followUp(index: Int, question: String, clarify: Bool)
-        case inlineError(String)
+        case followUp(index: Int, question: String, clarify: Bool, isLast: Bool)
+        /// ChatResponseActions.kt follow-up title ("You can also ask" / clarify variant).
+        case followUpTitle(String)
+        /// InlineErrorContent.kt under the failed question (or a standalone one when the error is
+        /// not tied to a question bubble). `isVoice` → the right-aligned Retry pill instead.
+        case inlineError(isVoice: Bool)
 
         var messageId: String? {
             switch self {
             case .message(let id), .alignment(let id), .location(let id): return id
-            case .loadEarlier, .followUp, .inlineError: return nil
+            case .loadEarlier, .followUp, .followUpTitle, .inlineError: return nil
             }
         }
     }
@@ -57,6 +61,13 @@ final class FCUIChatViewController: UIViewController {
     private var messagesById: [String: ChatMessage] = [:]
     private let inputBar = UIStackView()
     private let askButton = UIButton(type: .system)
+    /// ScrollIndicator.kt — bottom-centre, 16 above the thread's bottom edge (the input bar sits
+    /// below the list here rather than over it, so the app's `inputButtonsHeight` is not added).
+    private let scrollIndicator = FCUIScrollIndicator()
+    /// The answer id the indicator's timeline last started for (`remember(triggerKey)`).
+    private var scrollIndicatorKey: String?
+    /// "FarmerChat" title — LogoAppBar fades its centre mark in (600 ms) / out (300 ms) on `isLoading`.
+    private let titleLabel = UILabel()
     private var didInitialize = false
     // History pagination: track the previous thread shape so a prepended older
     // page (load-earlier) preserves scroll position instead of jumping to the
@@ -98,11 +109,24 @@ final class FCUIChatViewController: UIViewController {
         view.backgroundColor = FCUITheme.surfaceReadingPrimary
         navigationController?.setNavigationBarHidden(false, animated: false)
         title = "FarmerChat"
+        titleLabel.text = "FarmerChat"
+        titleLabel.font = FCUITypography.current.titleMedium.font
+        titleLabel.textColor = FCUITheme.foregroundPrimary
+        navigationItem.titleView = titleLabel
         navigationItem.hidesBackButton = true
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: args.source == "history" ? "chevron.left" : "xmark"),
-            primaryAction: UIAction { [weak self] _ in self?.close() }
-        )
+        if args.source == "history" {
+            navigationItem.leftBarButtonItem = UIBarButtonItem(
+                image: UIImage(systemName: "chevron.left"),
+                primaryAction: UIAction { [weak self] _ in self?.close() }
+            )
+        } else {
+            // App parity (ChatScreen.kt LogoAppBar `leftPainter = R.drawable.leftbutton` for the
+            // Home entry): the stroked back arrow on a 42pt #08361B disc. CHAT_ONLY keeps its
+            // close-the-SDK semantics behind the same glyph.
+            let back = FCUILeftButton()
+            back.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
+            navigationItem.leftBarButtonItem = UIBarButtonItem(customView: back)
+        }
 
         buildCollectionView()
         buildInputBar()
@@ -196,6 +220,9 @@ final class FCUIChatViewController: UIViewController {
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.backgroundColor = .clear
         collectionView.translatesAutoresizingMaskIntoConstraints = false
+        // ChatThreadContent.kt contentPadding: top 20, bottom 16 — less the 8 every row keeps
+        // above / below itself (rows are 16 apart: 8 + 8).
+        collectionView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 8, right: 0)
         view.addSubview(collectionView)
 
         let bubbleCell = UICollectionView.CellRegistration<FCUIChatBubbleCell, String> { [weak self] cell, _, messageId in
@@ -240,11 +267,14 @@ final class FCUIChatViewController: UIViewController {
             cell.configure(
                 message: ai,
                 isLatest: messageId == self.lastAiRowId,
-                isBusy: self.viewModel.state.isLoading
+                isBusy: self.viewModel.state.isLoading,
+                isTtsEnabled: self.viewModel.state.isTtsEnabled
             )
             cell.onChipTap = { [weak self] chip in
                 self?.handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
             }
+            // AlignmentSurface.kt Listen pill on the live prompt.
+            cell.onListen = { [weak self] in self?.listenTapped() }
             // The UIKit flavour's text input is a prompt sheet (there is no always-visible field
             // to focus), so the escape hatch opens it — the same affordance the input bar uses.
             cell.onTypeInstead = { [weak self] in self?.typeTapped() }
@@ -254,17 +284,20 @@ final class FCUIChatViewController: UIViewController {
             guard let self, case .location(let location)? = self.messagesById[messageId] else { return }
             cell.configure(message: location)
         }
-        let chipCell = UICollectionView.CellRegistration<FCUIFollowUpChipCell, (index: Int, question: String, clarify: Bool)> { [weak self] cell, _, item in
+        let chipCell = UICollectionView.CellRegistration<FCUIFollowUpChipCell, (index: Int, question: String, clarify: Bool, isLast: Bool)> { [weak self] cell, _, item in
             let question = item.question
-            cell.configure(question: question, number: item.index + 1, clarificationRequired: item.clarify)
+            cell.configure(question: question, number: item.index + 1, clarificationRequired: item.clarify, isLast: item.isLast)
             cell.onTap = {
                 self?.viewModel.onAction(.sendFollowUpQuestion(
                     question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil
                 ))
             }
         }
-        let errorCell = UICollectionView.CellRegistration<FCUIInlineErrorCell, String> { [weak self] cell, _, message in
-            cell.configure(message: message)
+        let titleCell = UICollectionView.CellRegistration<FCUIFollowUpTitleCell, String> { cell, _, title in
+            cell.configure(title: title)
+        }
+        let errorCell = UICollectionView.CellRegistration<FCUIInlineErrorCell, Bool> { [weak self] cell, _, isVoice in
+            cell.configure(isVoice: isVoice)
             cell.onRetry = { self?.viewModel.onAction(.retryLastRequest) }
         }
         // "Load earlier messages" affordance at the top of a history thread —
@@ -288,12 +321,14 @@ final class FCUIChatViewController: UIViewController {
                 return collectionView.dequeueConfiguredReusableCell(using: alignmentCell, for: indexPath, item: id)
             case .location(let id):
                 return collectionView.dequeueConfiguredReusableCell(using: locationCell, for: indexPath, item: id)
-            case .followUp(let index, let question, let clarify):
+            case .followUp(let index, let question, let clarify, let isLast):
                 return collectionView.dequeueConfiguredReusableCell(
-                    using: chipCell, for: indexPath, item: (index: index, question: question, clarify: clarify)
+                    using: chipCell, for: indexPath, item: (index: index, question: question, clarify: clarify, isLast: isLast)
                 )
-            case .inlineError(let message):
-                return collectionView.dequeueConfiguredReusableCell(using: errorCell, for: indexPath, item: message)
+            case .followUpTitle(let title):
+                return collectionView.dequeueConfiguredReusableCell(using: titleCell, for: indexPath, item: title)
+            case .inlineError(let isVoice):
+                return collectionView.dequeueConfiguredReusableCell(using: errorCell, for: indexPath, item: isVoice)
             }
         }
         collectionView.delegate = self
@@ -325,7 +360,14 @@ final class FCUIChatViewController: UIViewController {
         inputBar.addArrangedSubview(askButton)
 
         view.addSubview(inputBar)
+        scrollIndicator.addAction(UIAction { [weak self] _ in
+            self?.scrollIndicator.cancel()
+            self?.scrollToBottom()
+        }, for: .touchUpInside)
+        view.addSubview(scrollIndicator)
         NSLayoutConstraint.activate([
+            scrollIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            scrollIndicator.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor, constant: -16),
             collectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -368,19 +410,35 @@ final class FCUIChatViewController: UIViewController {
         if state.historyNextPage != nil {
             rows.append(.loadEarlier)
         }
-        rows.append(contentsOf: state.messages.map(row(for:)))
-        if let errorMessage = state.errorMessage, !state.messages.isEmpty {
-            rows.append(.inlineError(errorMessage))
+        // ChatThreadContent.kt: the inline error sits directly UNDER the failed question
+        // (Column(spacedBy 12) [bubble, InlineErrorContent]); an error not tied to a question
+        // bubble (e.g. a history page) keeps a standalone trailing row.
+        let showError = state.errorMessage != nil && !state.isLoading
+        let failedRowId = state.failedMessageId.map { "user_\($0)" }
+        var placedError = false
+        for message in state.messages {
+            rows.append(row(for: message))
+            if showError, !placedError, message.id == failedRowId, case .user(let user) = message {
+                rows.append(.inlineError(isVoice: user.audioURL != nil))
+                placedError = true
+            }
+        }
+        if showError, !placedError, !state.messages.isEmpty {
+            rows.append(.inlineError(isVoice: false))
         }
         // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the answer,
-        // its action row AND its related-questions section. (SwiftUI gets the same result by
-        // never marking such a surface "revealed", which gates its follow-up section.)
+        // its action row AND its related-questions section. ChatResponseActions.kt
+        // `showFollowUps = false` also when an additive surface with chips renders below the
+        // answer. Follow-ups are NOT hidden by an error.
         if let suggestions = state.suggestedQuestions, !suggestions.isEmpty, !state.isLoading,
-           !lastAiIsExclusiveSurface() {
+           !lastAiIsExclusiveSurface(), !lastAiHasAdditiveChips() {
             // App: a pre-generated answer's follow-ups never take the clarify accent.
             let clarify = state.clarificationRequired && !lastAiIsPreGenerated()
+            rows.append(.followUpTitle(clarify
+                ? fcuiLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
+                : fcuiLabel(FCLabels.relatedQuestions, "You can also ask")))
             rows.append(contentsOf: suggestions.enumerated().map {
-                Row.followUp(index: $0.offset, question: $0.element, clarify: clarify)
+                Row.followUp(index: $0.offset, question: $0.element, clarify: clarify, isLast: $0.offset == suggestions.count - 1)
             })
         }
 
@@ -428,6 +486,31 @@ final class FCUIChatViewController: UIViewController {
         inputBar.alpha = state.isLoading ? 0.5 : 1
         inputBar.isUserInteractionEnabled = !state.isLoading
 
+        // LogoAppBar.kt: centre logo fades in 600 ms / out 300 ms (EaseOut) on `!isLoading`.
+        let titleAlpha: CGFloat = state.isLoading ? 0 : 1
+        if titleLabel.alpha != titleAlpha {
+            UIView.animate(withDuration: state.isLoading ? 0.3 : 0.6, delay: 0, options: [.curveEaseOut]) {
+                self.titleLabel.alpha = titleAlpha
+            }
+        }
+
+        // ScrollIndicator: only with no error and not loading; one timeline per answer.
+        let indicatorKey = (state.errorMessage == nil && !state.isLoading) ? lastAiRowId : nil
+        if indicatorKey != scrollIndicatorKey {
+            scrollIndicatorKey = indicatorKey
+            if indicatorKey != nil {
+                scrollIndicator.trigger { [weak self] in
+                    guard let self else { return false }
+                    let cv = self.collectionView!
+                    let visibleBottom = cv.contentOffset.y + cv.bounds.height - cv.adjustedContentInset.bottom
+                    // ScrollIndicator threshold: at least two lines' worth (48pt) below the fold.
+                    return cv.contentSize.height - visibleBottom >= 48
+                }
+            } else {
+                scrollIndicator.cancel()
+            }
+        }
+
         if let urlString = state.audioPlaybackUrl, let url = URL(string: urlString), !state.isAudioPlaying {
             ttsPlayback.play(url: url, id: "tts")
             viewModel.onAction(.setAudioPlaying(true))
@@ -472,6 +555,14 @@ final class FCUIChatViewController: UIViewController {
         return ai.isPreGenerated
             && !(args.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && viewModel.state.readFullAdviceRequestedForMessageId != ai.id
+    }
+
+    /// ChatResponseActions.kt `showFollowUps = !(additive && chips non-empty)`.
+    private func lastAiHasAdditiveChips() -> Bool {
+        guard let id = lastAiRowId,
+              case .aiResponse(let ai)? = messagesById[id],
+              let kind = ai.alignmentKind, kind.isAdditive else { return false }
+        return !(ai.alignmentChips ?? []).isEmpty
     }
 
     private func lastAiIsExclusiveSurface() -> Bool {

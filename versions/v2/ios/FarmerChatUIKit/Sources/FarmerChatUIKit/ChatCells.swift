@@ -36,8 +36,18 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     private let additiveSurface = FCUIAlignmentSurfaceView()
     /// Interrupted-stream card with the "Try again" action.
     private let streamErrorCard = FCUIStreamErrorCardView()
+    /// StreamErrorCard.kt `padding(top = 16)`: 8 of stack spacing + 8 here.
+    private lazy var streamErrorWrap = FCUIInsetView(streamErrorCard, top: 8)
+    /// ChatThreadContent.kt: `Spacer(16)` before the additive surface (8 + 8).
+    private lazy var additiveWrap = FCUIInsetView(additiveSurface, top: 8)
     private var leadingConstraint: NSLayoutConstraint!
     private var trailingConstraint: NSLayoutConstraint!
+    /// User row: `Row(padding(start = 64))` inside the 20pt list gutter, bubble `widthIn(max 290)`.
+    private var userLeadingMinConstraint: NSLayoutConstraint!
+    private var userMaxWidthConstraint: NSLayoutConstraint!
+    private var aiMaxWidthConstraint: NSLayoutConstraint!
+    /// The message whose "Read full advice" wobble has already been scheduled (once per answer).
+    private var wobbledMessageId: String?
     private var imageTask: URLSessionDataTask?
     private var currentText = ""
 
@@ -70,10 +80,13 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         failedLabel.isHidden = true
 
         // Vertical: either the lone "Read full advice" button, or the "AI may be wrong" note
-        // above the Share / Listen pills (ChatResponseActions.kt, app dev/v2.5).
+        // above the Share / Listen pills (ChatResponseActions.kt, app dev/v2.5). The column sits
+        // 24 below the answer (`padding(top = 24)`: 8 stack spacing + 16 margin).
         actionsRow.axis = .vertical
         actionsRow.alignment = .fill
         actionsRow.spacing = 12
+        actionsRow.isLayoutMarginsRelativeArrangement = true
+        actionsRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 16, leading: 0, bottom: 1, trailing: 0)
         actionsRow.isHidden = true
 
         spinner.hidesWhenStopped = true
@@ -82,16 +95,16 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         // answer text → tool progress → stall hint → additive surface → stream error card →
         // action row.
         streamStatusView.isHidden = true
-        additiveSurface.isHidden = true
-        streamErrorCard.isHidden = true
+        additiveWrap.isHidden = true
+        streamErrorWrap.isHidden = true
         streamErrorCard.onRetry = { [weak self] in self?.onRetryStream?() }
         additiveSurface.onChipTap = { [weak self] chip in self?.onAlignmentChipTap?(chip) }
         stallHint.onStallChanged = { [weak self] in self?.onLayoutInvalidated?() }
 
         let stack = UIStackView(arrangedSubviews: [
             imageView, clipButton, textLabel, failedLabel,
-            streamStatusView, stallHint, additiveSurface, streamErrorCard,
-            actionsRow, spinner
+            streamStatusView, stallHint, streamErrorWrap,
+            actionsRow, additiveWrap, spinner
         ])
         stack.axis = .vertical
         stack.spacing = 8
@@ -100,12 +113,16 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         stack.translatesAutoresizingMaskIntoConstraints = false
         bubble.addSubview(stack)
 
-        leadingConstraint = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16)
-        trailingConstraint = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16)
+        // ChatThreadContent.kt: LazyColumn padding(horizontal = 20), spacedBy(16) — 8 + 8 here.
+        leadingConstraint = bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20)
+        trailingConstraint = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
+        userLeadingMinConstraint = bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20 + 64)
+        userMaxWidthConstraint = bubble.widthAnchor.constraint(lessThanOrEqualToConstant: 290)
+        aiMaxWidthConstraint = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.86)
         NSLayoutConstraint.activate([
-            bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
-            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
-            bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.86),
+            bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            aiMaxWidthConstraint,
             stack.topAnchor.constraint(equalTo: bubble.topAnchor),
             stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor),
@@ -123,8 +140,10 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         // A recycled cell must not keep a stall countdown (or a shown hint) from another message.
         stallHint.reset()
         streamStatusView.isHidden = true
-        additiveSurface.isHidden = true
-        streamErrorCard.isHidden = true
+        additiveWrap.isHidden = true
+        streamErrorWrap.isHidden = true
+        actionsRow.layer.removeAllAnimations()
+        actionsRow.transform = .identity
     }
 
     /// - Parameters:
@@ -197,10 +216,10 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
                 textLength: ai.text.count
             )
 
-            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
-            // Single-tap; the answer above keeps its own action row and follow-ups.
-            if let kind = ai.alignmentKind, kind.isAdditive {
-                additiveSurface.isHidden = false
+            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm),
+            // AFTER the action block and never while the answer is still streaming.
+            if let kind = ai.alignmentKind, kind.isAdditive, !ai.isStreaming {
+                additiveWrap.isHidden = false
                 additiveSurface.configure(
                     kind: kind,
                     message: ai.alignmentMessage ?? "",
@@ -211,14 +230,14 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
                     additive: true
                 )
             } else {
-                additiveSurface.isHidden = true
+                additiveWrap.isHidden = true
             }
 
             // Interrupted terminal state: keep any partial answer above and offer retry. Only the
             // latest answer shows the card — an older failed question keeps its partial text but
             // drops the retry action.
             let showErrorCard = ai.isInterrupted && isLatest
-            streamErrorCard.isHidden = !showErrorCard
+            streamErrorWrap.isHidden = !showErrorCard
             if showErrorCard {
                 streamErrorCard.configure(
                     errorKind: ai.streamErrorKind ?? .unknown,
@@ -234,10 +253,19 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             } else {
                 // Listen needs a server message id to synthesise (core's synthesiseAudio no-ops
                 // without one, e.g. on a pre-generated answer) — same gate as SwiftUI and web.
+                // TTS off no longer hides it: ListenButton draws it dimmed (alpha 0.4).
+                let wasHidden = actionsRow.isHidden
                 buildActions(
-                    isTtsEnabled: isTtsEnabled && ai.messageId != nil,
-                    readFullAdvice: readFullAdviceAvailable
+                    showListen: ai.messageId != nil,
+                    listenEnabled: isTtsEnabled,
+                    readFullAdvice: readFullAdviceAvailable,
+                    messageId: ai.id
                 )
+                // ChatThreadContent.kt: the block's AnimatedVisibility enter is fadeIn() only.
+                if wasHidden {
+                    actionsRow.alpha = 0
+                    UIView.animate(withDuration: 0.3) { self.actionsRow.alpha = 1 }
+                }
             }
 
         // 2.0.0: a location message is routed to `FCUILocationBubbleCell` by
@@ -282,19 +310,23 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     private func hideAgenticViews() {
         stallHint.reset()
         streamStatusView.isHidden = true
-        additiveSurface.isHidden = true
-        streamErrorCard.isHidden = true
+        additiveWrap.isHidden = true
+        streamErrorWrap.isHidden = true
     }
 
     private func alignRight(_ right: Bool) {
-        leadingConstraint.isActive = !right
-        trailingConstraint.isActive = right
         if right {
             leadingConstraint.isActive = false
+            aiMaxWidthConstraint.isActive = false
             trailingConstraint.isActive = true
+            userLeadingMinConstraint.isActive = true
+            userMaxWidthConstraint.isActive = true
         } else {
             trailingConstraint.isActive = false
+            userLeadingMinConstraint.isActive = false
+            userMaxWidthConstraint.isActive = false
             leadingConstraint.isActive = true
+            aiMaxWidthConstraint.isActive = true
         }
     }
 
@@ -319,16 +351,23 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     /// answer whose "Read full advice" is available shows ONLY that primary button; every other
     /// answer — agentic, legacy and pre-generated alike (`useChips = true` everywhere) — shows the
     /// "AI may be wrong" note above compact Share (accent sweep ring) + Listen pills. No Save.
-    private func buildActions(isTtsEnabled: Bool, readFullAdvice: Bool) {
+    private func buildActions(showListen: Bool, listenEnabled: Bool, readFullAdvice: Bool, messageId: String) {
         actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         actionsRow.isHidden = false
 
         if readFullAdvice {
+            // `Spacer(16)` below the button replaces the row's `Spacer(1)`.
+            actionsRow.directionalLayoutMargins.bottom = 16
             let button = FCUIPrimaryButton(title: fcuiLabel(FCLabels.readFullAdvice, "Read full advice"))
             button.addAction(UIAction { [weak self] _ in self?.onReadFullAdvice?() }, for: .touchUpInside)
             actionsRow.addArrangedSubview(button)
+            if wobbledMessageId != messageId {
+                wobbledMessageId = messageId
+                Self.attentionWobble(button, delay: 1.8)
+            }
             return
         }
+        actionsRow.directionalLayoutMargins.bottom = 1
 
         let infoIcon = UIImageView(image: UIImage(
             systemName: "info.circle",
@@ -351,7 +390,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         pills.axis = .horizontal
         pills.spacing = 8
         pills.alignment = .center
-        pills.addArrangedSubview(makeActionChip(
+        pills.addArrangedSubview(fcuiActionChip(
             systemImage: "square.and.arrow.up",
             title: fcuiLabel(FCLabels.shareDownload, "Share"),
             sweepBorder: true,
@@ -360,10 +399,11 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
                 self.onShare?(self.currentText)
             }
         ))
-        if isTtsEnabled {
-            pills.addArrangedSubview(makeActionChip(
+        if showListen {
+            pills.addArrangedSubview(fcuiActionChip(
                 systemImage: "speaker.wave.2.fill",
                 title: fcuiLabel(FCLabels.listen, "Listen"),
+                enabled: listenEnabled,
                 action: { [weak self] in self?.onListen?() }
             ))
         }
@@ -371,46 +411,36 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         actionsRow.addArrangedSubview(pills)
     }
 
-    /// Bordered brand-accent action pill (Share / Listen). `sweepBorder` is the Share pill's
-    /// accent ring — the UIKit equivalent of Compose's `ActionButton(borderBrush =
-    /// brand.accentSweepBorder)`; Listen keeps the plain 1pt accent hairline.
-    private func makeActionChip(
-        systemImage: String,
-        title: String,
-        sweepBorder: Bool = false,
-        action: @escaping () -> Void
-    ) -> UIButton {
-        let accent = FCUITheme.brandAccent
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
-        config.title = title
-        config.imagePadding = 6
-        config.baseForegroundColor = FCUITheme.foregroundSecondary
-        config.imageColorTransformer = UIConfigurationColorTransformer { _ in accent }
-        config.background.backgroundColor = FCUITheme.surfaceSecondary
-        config.cornerStyle = .capsule
-        if sweepBorder {
-            config.background.strokeWidth = 0
-        } else {
-            config.background.strokeColor = accent.withAlphaComponent(0.28)
-            config.background.strokeWidth = 1
+    /// `Modifier.attentionWobble(delayMs = 1800)` defaults: one bounce (spring to 0.95 and back),
+    /// then two rotation cycles of ±1.5° (60 / 120 / 60 ms, EaseInOut). The app also gates it on
+    /// remote config + a once-per-day card-click rule; the SDK has neither, so it always runs once.
+    private static func attentionWobble(_ view: UIView, delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak view] in
+            guard let view, view.window != nil else { return }
+            UIView.animate(withDuration: 0.12, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [], animations: {
+                view.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
+            }) { _ in
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.35, initialSpringVelocity: 0, options: [], animations: {
+                    view.transform = .identity
+                }) { _ in
+                    let angle = 1.5 * CGFloat.pi / 180
+                    UIView.animateKeyframes(withDuration: 0.48, delay: 0, options: [.calculationModeCubic], animations: {
+                        for cycle in 0..<2 {
+                            let base = Double(cycle) * 0.5
+                            UIView.addKeyframe(withRelativeStartTime: base, relativeDuration: 0.125) {
+                                view.transform = CGAffineTransform(rotationAngle: angle)
+                            }
+                            UIView.addKeyframe(withRelativeStartTime: base + 0.125, relativeDuration: 0.25) {
+                                view.transform = CGAffineTransform(rotationAngle: -angle)
+                            }
+                            UIView.addKeyframe(withRelativeStartTime: base + 0.375, relativeDuration: 0.125) {
+                                view.transform = .identity
+                            }
+                        }
+                    })
+                }
+            }
         }
-        config.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
-        let button = UIButton(configuration: config)
-        button.titleLabel?.font = FCUITypography.current.labelSmall.font
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
-        if sweepBorder {
-            let ring = FCUISweepBorderView(cornerRadius: .greatestFiniteMagnitude)
-            ring.translatesAutoresizingMaskIntoConstraints = false
-            button.addSubview(ring)
-            NSLayoutConstraint.activate([
-                ring.topAnchor.constraint(equalTo: button.topAnchor),
-                ring.bottomAnchor.constraint(equalTo: button.bottomAnchor),
-                ring.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-                ring.trailingAnchor.constraint(equalTo: button.trailingAnchor)
-            ])
-        }
-        return button
     }
 }
 
@@ -462,25 +492,57 @@ final class FCUISweepBorderView: UIView {
     }
 }
 
-// MARK: - Follow-up chip cell
+// MARK: - Follow-up section (ChatResponseActions.kt follow-ups)
+
+/// The follow-up title: `Spacer(16)`, a titleMedium foregroundPrimary title (no dot), `Spacer(10)`.
+/// The answer cell above ends 8pt below its bubble, so the title adds 8 + 2 (the first chip cell
+/// adds its own 4 + 4 → 10 to the chip).
+final class FCUIFollowUpTitleCell: UICollectionViewCell {
+    private let label = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        label.numberOfLines = 0
+        label.textColor = FCUITheme.foregroundPrimary
+        label.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(title: String) {
+        label.textColor = FCUITheme.foregroundPrimary
+        label.fcSetText(title, style: FCUITypography.current.titleMedium)
+        // AnimatedVisibility(fadeIn(tween(300))).
+        contentView.alpha = 0
+        UIView.animate(withDuration: 0.3) { self.contentView.alpha = 1 }
+    }
+}
 
 final class FCUIFollowUpChipCell: UICollectionViewCell {
     var onTap: (() -> Void)?
     private let chip = FCUIAlignmentChipView()
+    private var bottomConstraint: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         // App parity (ChatResponseActions.kt, app dev/v2.5 — `useChips = true` for every answer):
-        // follow-ups are ALWAYS numbered chips, never the legacy suggestion cards.
+        // follow-ups are ALWAYS numbered chips, never the legacy suggestion cards. 8 apart (4+4).
         chip.translatesAutoresizingMaskIntoConstraints = false
         chip.addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
         contentView.addSubview(chip)
+        bottomConstraint = chip.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4)
         NSLayoutConstraint.activate([
             chip.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-            chip.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
-            chip.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            chip.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            chip.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+            bottomConstraint,
+            chip.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            chip.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
         ])
     }
 
@@ -489,7 +551,8 @@ final class FCUIFollowUpChipCell: UICollectionViewCell {
     /// - Parameters:
     ///   - number: 1-based position in the follow-up list (the chip's badge).
     ///   - clarificationRequired: clarify moment → green Agentic accent, else neutral Suggested.
-    func configure(question: String, number: Int, clarificationRequired: Bool) {
+    ///   - isLast: the last chip carries the section's trailing `Spacer(28) + Spacer(12)`.
+    func configure(question: String, number: Int, clarificationRequired: Bool, isLast: Bool = false) {
         chip.configure(
             label: question,
             number: number,
@@ -497,50 +560,140 @@ final class FCUIFollowUpChipCell: UICollectionViewCell {
             selected: false,
             enabled: true
         )
+        bottomConstraint.constant = isLast ? -40 : -4
         chip.accessibilityLabel = question
         chip.accessibilityHint = fcuiLabel(FCLabels.ask, "Ask")
         chip.isAccessibilityElement = true
         chip.accessibilityTraits = .button
+        contentView.alpha = 0
+        UIView.animate(withDuration: 0.3) { self.contentView.alpha = 1 }
     }
 }
 
-// MARK: - Inline error cell (retry under failed message)
+// MARK: - Inline error cell (InlineErrorContent.kt — under the failed question)
 
+/// Port of `InlineErrorContent.kt`: Row(fillMaxWidth, padding start 4, CenterVertically) —
+/// [48pt feedbackFail circle + white Close 24], 12, the FIXED "Something went wrong" label
+/// (bodyMedium, foregroundPrimary, weight 1), 8, a "Try again" pill (surfaceTertiary, radius 12,
+/// padding 10/12, spacedBy 4: Refresh 16 + labelMedium). The raw error string is never shown.
+///
+/// A failed VOICE question gets `LogoSpinnerHorizontal(state = Retry)` instead, right-aligned:
+/// a surfaceTertiary radius-12 pill (padding 10/14/10/10, spacedBy 6: Refresh 23 + labelMedium).
 final class FCUIInlineErrorCell: UICollectionViewCell {
     var onRetry: (() -> Void)?
+    private let icon = UIView()
     private let label = UILabel()
-    private let retryButton = UIButton(type: .system)
+    private let pill = UIControl()
+    private let pillIcon = UIImageView()
+    private let pillLabel = UILabel()
+    private let pillRow = UIStackView()
+    private var pillInsets: [NSLayoutConstraint] = []
+    private var pillIconSize: [NSLayoutConstraint] = []
+    private let row = UIStackView()
+    private let spacerBeforePill = UIView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        label.font = FCUITypography.current.bodyMedium.font
-        label.textColor = FCUITheme.red500
+        icon.backgroundColor = FCUITheme.red500
+        icon.layer.cornerRadius = 24
+        let close = UIImageView(image: UIImage(
+            systemName: "xmark",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        ))
+        close.tintColor = .white
+        close.translatesAutoresizingMaskIntoConstraints = false
+        icon.addSubview(close)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
         label.numberOfLines = 0
-        label.textAlignment = .center
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        retryButton.setTitle(fcuiLabel(FCLabels.tryAgain, "Try again"), for: .normal)
-        retryButton.setTitleColor(FCUITheme.brandSurfacePrimary, for: .normal)
-        retryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
-        retryButton.addAction(UIAction { [weak self] _ in self?.onRetry?() }, for: .touchUpInside)
+        pill.backgroundColor = FCUITheme.surfaceTertiary
+        pill.layer.cornerRadius = 12
+        pill.layer.cornerCurve = .continuous
+        pillIcon.tintColor = FCUITheme.foregroundPrimary
+        pillIcon.contentMode = .center
+        pillIcon.translatesAutoresizingMaskIntoConstraints = false
+        pillLabel.font = FCUITypography.current.labelMedium.font
+        pillLabel.textColor = FCUITheme.foregroundPrimary
+        pillLabel.text = fcuiLabel(AgenticLabels.tryAgain, AgenticLabels.tryAgainFallback)
+        pillRow.addArrangedSubview(pillIcon)
+        pillRow.addArrangedSubview(pillLabel)
+        pillRow.axis = .horizontal
+        pillRow.alignment = .center
+        pillRow.isUserInteractionEnabled = false
+        pillRow.translatesAutoresizingMaskIntoConstraints = false
+        pill.addSubview(pillRow)
+        pill.setContentHuggingPriority(.required, for: .horizontal)
+        pill.setContentCompressionResistancePriority(.required, for: .horizontal)
+        pill.isAccessibilityElement = true
+        pill.accessibilityTraits = .button
+        pill.accessibilityLabel = pillLabel.text
+        pill.addAction(UIAction { [weak self] _ in
+            fcuiTrackTryAgain()
+            self?.onRetry?()
+        }, for: .touchUpInside)
 
-        let stack = UIStackView(arrangedSubviews: [label, retryButton])
-        stack.axis = .vertical
-        stack.spacing = 6
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(stack)
+        spacerBeforePill.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        row.axis = .horizontal
+        row.alignment = .center
+        row.translatesAutoresizingMaskIntoConstraints = false
+        [icon, label, spacerBeforePill, pill].forEach(row.addArrangedSubview)
+        row.setCustomSpacing(12, after: icon)
+        row.setCustomSpacing(8, after: label)
+        contentView.addSubview(row)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24)
+            icon.widthAnchor.constraint(equalToConstant: 48),
+            icon.heightAnchor.constraint(equalToConstant: 48),
+            close.centerXAnchor.constraint(equalTo: icon.centerXAnchor),
+            close.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
+            close.widthAnchor.constraint(equalToConstant: 24),
+            close.heightAnchor.constraint(equalToConstant: 24),
+            // 12 under the bubble (its cell keeps 8 below) and the list's 16 after (8 + 8).
+            row.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            row.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20 + 4),
+            row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func configure(message: String) {
-        label.text = message
+    /// - Parameter isVoice: the failed question was a voice clip → the right-aligned Retry pill.
+    func configure(isVoice: Bool) {
+        icon.isHidden = isVoice
+        label.isHidden = isVoice
+        spacerBeforePill.isHidden = !isVoice
+        label.textColor = FCUITheme.foregroundPrimary
+        label.fcSetText(
+            fcuiLabel(AgenticLabels.somethingWentWrong, AgenticLabels.somethingWentWrongFallback),
+            style: FCUITypography.current.bodyMedium
+        )
+        let iconSize: CGFloat = isVoice ? 23 : 16
+        pillIcon.image = UIImage(
+            systemName: "arrow.clockwise",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: isVoice ? 18 : 13, weight: .semibold)
+        )
+        NSLayoutConstraint.deactivate(pillIconSize + pillInsets)
+        pillIconSize = [
+            pillIcon.widthAnchor.constraint(equalToConstant: iconSize),
+            pillIcon.heightAnchor.constraint(equalToConstant: iconSize)
+        ]
+        pillRow.spacing = isVoice ? 6 : 4
+        pillInsets = [
+            pillRow.topAnchor.constraint(equalTo: pill.topAnchor, constant: isVoice ? 10 : 12),
+            pillRow.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: isVoice ? -10 : -12),
+            pillRow.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 10),
+            pillRow.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: isVoice ? -14 : -10)
+        ]
+        NSLayoutConstraint.activate(pillIconSize + pillInsets)
+    }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        pill.backgroundColor = FCUITheme.surfaceTertiary
     }
 }
 
@@ -622,10 +775,10 @@ final class FCUILocationBubbleCell: UICollectionViewCell {
             // Fixed 290x184 card, right-aligned with the same 16pt gutter the bubbles use.
             bubble.widthAnchor.constraint(equalToConstant: 290),
             bubble.heightAnchor.constraint(equalToConstant: 184),
-            bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
-            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
-            bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 16),
+            bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20 + 64),
 
             stack.topAnchor.constraint(equalTo: bubble.topAnchor),
             stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),

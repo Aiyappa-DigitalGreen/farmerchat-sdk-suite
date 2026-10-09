@@ -583,7 +583,8 @@ public struct FCUserChatBubble: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .frame(maxWidth: 300, alignment: .leading)
+                    // UserChatBubble.kt: widthIn(max = 290.dp).
+                    .frame(maxWidth: 290, alignment: .leading)
                     .background(FarmerChat.shared.config.userBubbleColor ?? theme.content.surfaceReadingSecondary)
                     .clipShape(UnevenRoundedRectangle(
                         topLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
@@ -593,14 +594,8 @@ public struct FCUserChatBubble: View {
                         style: .continuous
                     ))
             }
-            if message.isFailed {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                    Text(fcLabel("message_failed", "Not sent"))
-                }
-                .fcTextStyle(theme.typography.labelSmall)
-                .foregroundColor(FCPrimitive.red500)
-            }
+            // A failed question shows no marker of its own: ChatThreadContent.kt renders
+            // InlineErrorContent directly under it instead (see ChatView).
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -684,6 +679,8 @@ public struct FCAiResponseBubble: View {
     var isTtsEnabled: Bool
     var isSynthesising: Bool
     var isAudioPlaying: Bool
+    /// ListenButton `hasAudioUrl` — a synthesised clip exists, so the pill shows Play (paused).
+    var hasAudio: Bool = false
     /// Fresh answers animate their reveal; history + pre-generated pass false.
     var animate: Bool
     let onListen: () -> Void
@@ -723,7 +720,8 @@ public struct FCAiResponseBubble: View {
         isLatest: Bool = false,
         isBusy: Bool = false,
         onRetryStream: (() -> Void)? = nil,
-        onAlignmentChipTap: ((AlignmentChip) -> Void)? = nil
+        onAlignmentChipTap: ((AlignmentChip) -> Void)? = nil,
+        hasAudio: Bool = false
     ) {
         self.message = message
         self.showActions = showActions
@@ -740,6 +738,7 @@ public struct FCAiResponseBubble: View {
         self.isBusy = isBusy
         self.onRetryStream = onRetryStream
         self.onAlignmentChipTap = onAlignmentChipTap
+        self.hasAudio = hasAudio
         _revealFinished = State(initialValue: !animate)
     }
 
@@ -783,44 +782,31 @@ public struct FCAiResponseBubble: View {
                 FCStreamStallHint(textLength: message.text.count)
             }
 
-            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
-            // Single-tap; the answer above keeps its own action row.
-            if let kind = message.alignmentKind, kind.isAdditive, let onAlignmentChipTap {
-                FCAlignmentSurface(
-                    kind: kind,
-                    message: message.alignmentMessage ?? "",
-                    chips: message.alignmentChips ?? [],
-                    selectedValues: message.alignmentSelectedValues,
-                    isLoading: isBusy,
-                    isLatest: isLatest,
-                    onChipTap: onAlignmentChipTap
-                )
-            }
-
             // Interrupted terminal state: keep any partial answer above and offer retry. Only the
             // latest answer shows the card — an older failed question keeps its partial text but
-            // drops the retry action.
+            // drops the retry action. StreamErrorCard.kt sits 16pt below the text (14 + 2).
             if message.isInterrupted, isLatest, let onRetryStream {
                 FCStreamErrorCard(
                     errorKind: message.streamErrorKind ?? .unknown,
                     hasPartial: !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                     onRetry: onRetryStream
                 )
+                .padding(.top, 2)
             }
 
             if revealFinished, showActions, !message.isStreaming, !message.isInterrupted {
-                // App parity (ChatResponseActions.kt, app dev/v2.5): the branches are EXCLUSIVE.
-                // A pre-generated answer whose "Read full advice" is available shows ONLY that
-                // primary button; every other answer — agentic, legacy and pre-generated alike
-                // (`useChips = true` everywhere) — gets the "AI may be wrong" note above compact
-                // Share (accent sweep ring) + Listen pills. No Save. Fades/slides in only after
-                // the reveal completes.
+                // App parity (ChatResponseActions.kt, app dev/v2.5): Column(padding top 24) — the
+                // branches are EXCLUSIVE. A pre-generated answer whose "Read full advice" is
+                // available shows ONLY that primary button (attentionWobble after 1800ms); every
+                // other answer gets the "AI may be wrong" note above Share (accent sweep ring) +
+                // Listen, 8 apart. The block's enter is a fade only — no slide.
                 Group {
                     if let onReadFullAdvice {
                         FCPrimaryButton(
                             title: fcLabel(FCLabels.readFullAdvice, "Read full advice"),
                             action: onReadFullAdvice
                         )
+                        .modifier(FCAttentionWobble(delay: 1.8))
                     } else {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 6) {
@@ -844,21 +830,40 @@ public struct FCAiResponseBubble: View {
                                 )
                                 // Listen needs a server message id to synthesise (core's
                                 // synthesiseAudio no-ops without one, e.g. on a pre-generated
-                                // answer) — same gate as the web SDK.
-                                if isTtsEnabled, message.messageId != nil {
-                                    actionChip(
-                                        icon: isAudioPlaying ? "pause.fill" : "speaker.wave.2.fill",
-                                        title: fcLabel(FCLabels.listen, "Listen"),
+                                // answer). TTS off → still drawn, dimmed and inert (ListenButton.kt
+                                // `enabled = isTtsEnabled`).
+                                if message.messageId != nil {
+                                    FCListenButton(config: FCListenConfig(
+                                        enabled: isTtsEnabled,
                                         loading: isSynthesising,
-                                        action: onListen
-                                    )
+                                        playing: isAudioPlaying,
+                                        hasAudio: hasAudio,
+                                        onTap: onListen
+                                    ), fill: theme.content.surfaceSecondary)
                                 }
                                 Spacer(minLength: 0)
                             }
                         }
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .padding(.top, 10)
+                .transition(.opacity)
+            }
+
+            // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm),
+            // after the action block, 16 above, and only once the answer has stopped streaming.
+            if let kind = message.alignmentKind, kind.isAdditive, !message.isStreaming,
+               let onAlignmentChipTap {
+                FCAlignmentSurface(
+                    kind: kind,
+                    message: message.alignmentMessage ?? "",
+                    chips: message.alignmentChips ?? [],
+                    selectedValues: message.alignmentSelectedValues,
+                    isLoading: isBusy,
+                    isLatest: isLatest,
+                    onChipTap: onAlignmentChipTap
+                )
+                .padding(.top, 2)
             }
         }
         .padding(16)
@@ -911,6 +916,178 @@ public struct FCAiResponseBubble: View {
     }
 }
 
+// MARK: - Listen pill (port of components/buttons/ListenButton.kt, light)
+
+/// Inputs of a Listen pill. `enabled` is the app's `isTtsEnabled`: when false the pill is still
+/// drawn, at 40% alpha, and ignores taps.
+public struct FCListenConfig {
+    public var enabled: Bool
+    public var loading: Bool
+    public var playing: Bool
+    public var hasAudio: Bool
+    public var onTap: () -> Void
+
+    public init(enabled: Bool, loading: Bool, playing: Bool, hasAudio: Bool, onTap: @escaping () -> Void) {
+        self.enabled = enabled
+        self.loading = loading
+        self.playing = playing
+        self.hasAudio = hasAudio
+        self.onTap = onTap
+    }
+}
+
+/// ListenButton.kt `light = true`: a 42pt capsule on surfaceReadingSecondary, 12pt side padding,
+/// foregroundPrimary icon (23) + 6 + labelMedium. Loading swaps in a 20pt ring + "Loading...".
+/// (The animated sound-wave of the Playing / Paused states is not ported; those states keep the
+/// Pause / Play glyph beside the label.)
+struct FCListenButton: View {
+    @Environment(\.fcTheme) private var theme
+    let config: FCListenConfig
+    /// Pill fill. Nil = the app's surfaceReadingSecondary. Inside the iOS answer card (which is
+    /// itself surfaceReadingSecondary — the app's answer has no card) the caller passes the Share
+    /// pill's surfaceSecondary so the pill keeps a visible shape.
+    var fill: Color? = nil
+
+    var body: some View {
+        let c = theme.content
+        Button(action: config.onTap) {
+            HStack(spacing: config.loading ? 8 : 6) {
+                if config.loading {
+                    ProgressView()
+                        .tint(c.foregroundPrimary)
+                        .frame(width: 20, height: 20)
+                        .scaleEffect(0.8)
+                    Text(fcLabel(FCLabels.loading, "Loading..."))
+                        .fcTextStyle(theme.typography.labelMedium)
+                        .foregroundColor(c.foregroundPrimary)
+                        .lineLimit(1)
+                } else {
+                    Image(systemName: config.playing ? "pause.fill"
+                          : (config.hasAudio ? "play.fill" : "speaker.wave.2.fill"))
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 23, height: 23)
+                        .foregroundColor(c.foregroundPrimary)
+                    Text(fcLabel(FCLabels.listen, "Listen"))
+                        .fcTextStyle(theme.typography.labelMedium)
+                        .foregroundColor(c.foregroundPrimary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .background(fill ?? c.surfaceReadingSecondary)
+            .clipShape(Capsule())
+            .animation(.easeInOut(duration: 0.5), value: config.loading)
+        }
+        .buttonStyle(.plain)
+        .opacity(config.enabled ? 1 : 0.4)
+        .allowsHitTesting(config.enabled && !config.loading)
+    }
+}
+
+/// Fades a thread item in once, on first appearance (ChatThreadContent.kt user item:
+/// `Animatable(0f).animateTo(1f, tween(500))`).
+struct FCFadeInOnAppear: ViewModifier {
+    var duration: Double
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(.linear(duration: duration)) { shown = true }
+            }
+    }
+}
+
+// MARK: - Inline error (port of ui/chat/component/InlineErrorContent.kt)
+
+/// Row(fillMaxWidth, padding start 4, centred): a 48pt feedbackFail disc with a white Close 24,
+/// 12, the fixed "Something went wrong" label (bodyMedium, foregroundPrimary, never the raw
+/// error), 8, and a "Try again" pill (surfaceTertiary, radius 12, padding 10/12, Refresh 16 + 4 +
+/// labelMedium). The tap tracks Content_Try_Again_Clicked on the Chat screen, then retries.
+public struct FCInlineErrorContent: View {
+    @Environment(\.fcTheme) private var theme
+    let onRetry: () -> Void
+
+    public init(onRetry: @escaping () -> Void) {
+        self.onRetry = onRetry
+    }
+
+    public var body: some View {
+        let c = theme.content
+        HStack(spacing: 0) {
+            Image(systemName: "xmark")
+                .font(.system(size: 18, weight: .bold))
+                .frame(width: 24, height: 24)
+                .foregroundColor(.white)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(theme.brand.feedbackFail))
+                .accessibilityLabel("Error")
+            Spacer().frame(width: 12)
+            Text(fcLabel(AgenticLabels.somethingWentWrong, AgenticLabels.somethingWentWrongFallback))
+                .fcTextStyle(theme.typography.bodyMedium)
+                .foregroundColor(c.foregroundPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer().frame(width: 8)
+            Button {
+                onRetry()
+                FarmerChat.shared.analytics.track(
+                    AnalyticsEvents.contentTryAgainClicked,
+                    props: ["screen_name": ScreenNames.chat]
+                )
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                    Text(fcLabel(AgenticLabels.tryAgain, AgenticLabels.tryAgainFallback))
+                        .fcTextStyle(theme.typography.labelMedium)
+                }
+                .foregroundColor(c.foregroundPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 12)
+                .background(c.surfaceTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// LogoSpinnerHorizontal.kt `Retry` state — what ChatThreadContent.kt / ChatErrorContent.kt show
+/// under a failed VOICE question instead of InlineErrorContent: a right-aligned surfaceTertiary
+/// pill (radius 12, padding 10 / 14 / 10 / 10, 6 apart) with a Refresh 23 + labelMedium "Try again".
+struct FCVoiceRetryPill: View {
+    @Environment(\.fcTheme) private var theme
+    let onRetry: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button(action: onRetry) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 23, height: 23)
+                    Text(fcLabel(AgenticLabels.tryAgain, AgenticLabels.tryAgainFallback))
+                        .fcTextStyle(theme.typography.labelMedium)
+                }
+                .foregroundColor(theme.content.foregroundPrimary)
+                .padding(.leading, 10)
+                .padding(.trailing, 14)
+                .padding(.vertical, 10)
+                .background(theme.content.surfaceTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
 // MARK: - Follow-up chips (suggested/related questions)
 
 public struct FCFollowUpChips: View {
@@ -926,16 +1103,12 @@ public struct FCFollowUpChips: View {
         // (ChatResponseActions.kt, app dev/v2.5 — `useChips = true` for every answer): follow-ups
         // are ALWAYS numbered chips — `ChipType.Agentic` on a clarify moment, `ChipType.Suggested`
         // otherwise — never the legacy suggestion cards.
+        // ChatResponseActions.kt: a titleMedium foregroundPrimary title (no dot), 10, then the
+        // chips 8 apart.
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(theme.content.borderActive)
-                    .frame(width: 6, height: 6)
-                Text(title)
-                    .fcTextStyle(theme.typography.labelMedium)
-                    .foregroundColor(theme.content.foregroundSecondary)
-            }
-            .padding(.leading, 2)
+            Text(title)
+                .fcTextStyle(theme.typography.titleMedium)
+                .foregroundColor(theme.content.foregroundPrimary)
 
             VStack(alignment: .leading, spacing: 8) {
                 // Keyed by offset: two identical questions must not collide.
@@ -1076,6 +1249,7 @@ enum FCShareCardRenderer {
 /// `triggerKey` restarts the whole timeline — pass the last answer's id, as android does.
 public struct FCScrollIndicator: View {
     @Environment(\.fcTheme) private var theme
+    @Environment(\.displayScale) private var displayScale
     let triggerKey: String
     let action: () -> Void
 
@@ -1089,11 +1263,14 @@ public struct FCScrollIndicator: View {
 
     public var body: some View {
         Button(action: action) {
+            // ScrollIndicator.kt: a buttonPrimaryAccent disc, icon_arrow_down 20 tinted
+            // buttonPrimaryForeground (white).
             Image(systemName: "arrow.down")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(theme.content.foregroundPrimary)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 20, height: 20)
+                .foregroundColor(theme.content.buttonPrimaryForeground)
                 .frame(width: 40, height: 40)
-                .background(theme.content.surfaceReadingSecondary)
+                .background(theme.content.buttonPrimaryAccent)
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -1112,7 +1289,8 @@ public struct FCScrollIndicator: View {
             try? await Task.sleep(nanoseconds: 300_000_000)
             for _ in 0..<3 {
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.28)) { bounceOffset = 14 }
+                // `IntOffset(0, 14)` is 14 device PIXELS, not dp.
+                withAnimation(.easeInOut(duration: 0.28)) { bounceOffset = 14 / max(displayScale, 1) }
                 try? await Task.sleep(nanoseconds: 280_000_000)
                 withAnimation(.easeInOut(duration: 0.32)) { bounceOffset = 0 }
                 try? await Task.sleep(nanoseconds: 320_000_000)
