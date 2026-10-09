@@ -113,10 +113,13 @@ export function ChatScreen(props: {
   // viewport? Tracked from scroll / layout / content-size events.
   const scrollMetrics = useRef({ content: 0, offset: 0, viewport: 0 });
   const [contentBelow, setContentBelow] = useState(false);
+  // The final row's blank reserve (set below, once the reserve helpers exist) is not content.
+  const tailBlankRef = useRef<() => number>(() => 0);
   const updateContentBelow = useCallback(() => {
     const { content, offset, viewport } = scrollMetrics.current;
     // THREAD_BOTTOM_GAP is the content padding after the last item, not hidden content.
-    setContentBelow(content - offset - viewport - THREAD_BOTTOM_GAP >= 2 * 24);
+    const realContent = content - tailBlankRef.current();
+    setContentBelow(realContent - offset - viewport - THREAD_BOTTOM_GAP >= 2 * 24);
   }, []);
 
   const isHistoryEntry = props.params.source === 'history';
@@ -278,21 +281,126 @@ export function ChatScreen(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHistoryEntry, state.historyNextPage, state.isLoadingMoreHistory]);
 
-  // one-time scroll-to-bottom on isInitialHistoryLoaded
-  useEffect(() => {
-    if (state.isInitialHistoryLoaded) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 150);
-    }
-  }, [state.isInitialHistoryLoaded]);
+  // --- reserve + pinning (core ChatReserve.kt; web ChatScreen.tsx) -----------------------------
+  // The newest answer holds a viewport of height below the farmer's question, and the question is
+  // scrolled to the TOP of the viewport (minus the 20dp content top padding) so the answer grows
+  // into the reserve beneath it. The screen never follows the stream's tail: the anchor effect is
+  // keyed on the tail id + isLoading (+ the first history load) only, never on text deltas.
+  const holdsReserve = (ai: AiResponse, isLastAi: boolean): boolean =>
+    isLastAi &&
+    (ai.isStreaming === true ||
+      ai.isInterrupted === true ||
+      !state.isLoading ||
+      (ai.alignmentKind != null && (ai.alignmentSelectedValues ?? []).length === 0));
 
-  // auto-scroll on new messages (non-history sends)
-  const messageCount = state.messages.length;
-  useEffect(() => {
-    if (!isHistoryEntry && messageCount > 0) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+  const finalMessage = state.messages[state.messages.length - 1];
+  const tailId = finalMessage?.id ?? null;
+  // Does the FINAL row hold the reserve (a reserve-holding AI response, or the loading
+  // placeholder)? Then the anchor is the farmer's question above it (ChatReserve.kt
+  // chatScrollAnchorIndex).
+  const finalHoldsSpace =
+    finalMessage !== undefined &&
+    (finalMessage.kind === 'loading' ||
+      // A final AI row is by definition the newest AI response.
+      (finalMessage.kind === 'ai' && holdsReserve(finalMessage, true)));
+  const finalHoldsSpaceRef = useRef(false);
+  finalHoldsSpaceRef.current = finalHoldsSpace;
+  const tailIdRef = useRef<string | null>(null);
+  tailIdRef.current = tailId;
+
+  // The blank part of the final row's reserve (reserve minus its real content height). The
+  // scroll indicator must neither count it as "content below" nor scroll into it.
+  const rowRealHeights = useRef(new Map<string, number>());
+  const reserveHeightRef = useRef(reserveHeight);
+  reserveHeightRef.current = reserveHeight;
+  const tailBlank = useCallback((): number => {
+    const id = tailIdRef.current;
+    const h = id === null ? undefined : rowRealHeights.current.get(id);
+    if (!finalHoldsSpaceRef.current || h === undefined) return 0;
+    return Math.max(0, reserveHeightRef.current - h);
+  }, []);
+  tailBlankRef.current = tailBlank;
+  const onReserveContentLayout = useCallback(
+    (id: string, height: number) => {
+      rowRealHeights.current.set(id, height);
+      if (id === tailIdRef.current) updateContentBelow();
+    },
+    [updateContentBelow],
+  );
+  // Scroll indicator: the bottom of REAL content, never the blank end of the reserve.
+  const scrollToContentEnd = useCallback(() => {
+    const blank = tailBlank();
+    if (blank <= 0) {
+      listRef.current?.scrollToEnd({ animated: true });
+      return;
     }
+    const { content, viewport } = scrollMetrics.current;
+    listRef.current?.scrollToOffset({
+      offset: Math.max(0, content - blank - viewport),
+      animated: true,
+    });
+  }, [tailBlank]);
+
+  const anchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorRetries = useRef(0);
+  const scheduleScroll = useCallback((fn: () => void, delay = 100) => {
+    if (anchorTimer.current !== null) clearTimeout(anchorTimer.current);
+    anchorTimer.current = setTimeout(() => {
+      anchorTimer.current = null;
+      fn();
+    }, delay);
+  }, []);
+  useEffect(
+    () => () => {
+      if (anchorTimer.current !== null) clearTimeout(anchorTimer.current);
+    },
+    [],
+  );
+  const scrollToAnchor = useCallback((index: number) => {
+    // viewOffset 20 = the thread's paddingTop (the cell offsets already include it), i.e. the
+    // web's `offsetTop - 20` / Compose's anchor with the 20dp content padding.
+    listRef.current?.scrollToIndex({ index, viewPosition: 0, viewOffset: 20, animated: true });
+  }, []);
+  // Without getItemLayout an unmeasured row fails: jump near it, then retry a bounded number of
+  // times once FlatList has rendered and measured it.
+  const onScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      listRef.current?.scrollToOffset({
+        offset: Math.max(0, info.averageItemLength * info.index),
+        animated: false,
+      });
+      if (anchorRetries.current >= 3) return;
+      anchorRetries.current += 1;
+      scheduleScroll(() => scrollToAnchor(info.index), 50);
+    },
+    [scheduleScroll, scrollToAnchor],
+  );
+
+  // History entry: the tail id at the first load. Until a NEW tail appears nothing auto-scrolls
+  // (older pages keep the visible position via maintainVisibleContentPosition). undefined = the
+  // first page has not loaded yet; null = a new tail has appeared, anchoring is live.
+  const historyTailRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (tailId === null) return;
+    if (isHistoryEntry) {
+      if (!state.isInitialHistoryLoaded) return;
+      if (historyTailRef.current === undefined) {
+        // First open: the first message sits at the top, once.
+        historyTailRef.current = tailId;
+        scheduleScroll(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }));
+        return;
+      }
+      if (historyTailRef.current === tailId) return;
+      historyTailRef.current = null;
+    }
+    const lastIndex = state.messages.length - 1;
+    const anchor = finalHoldsSpace && lastIndex > 0 ? lastIndex - 1 : lastIndex;
+    anchorRetries.current = 0;
+    // Deferred so the new rows (and their reserve minHeight) are laid out first; otherwise the
+    // scroll clamps at the old max offset and the question never reaches the top.
+    scheduleScroll(() => scrollToAnchor(anchor));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageCount]);
+  }, [tailId, state.isLoading, state.isInitialHistoryLoaded]);
 
   // --- share/download card --------------------------------------------------------
   const lastAi = useMemo(
@@ -548,9 +656,16 @@ export function ChatScreen(props: {
         // 2.0.0: an EXCLUSIVE alignment surface owns the message area — it replaces the answer,
         // its action row and its related-questions section. An ADDITIVE one falls through to the
         // normal answer branch and renders below it as a nudge (see AiBubble).
+        // core ChatReserve.kt holdsChatReserve — the exclusive alignment surface holds it too.
+        const reserve = holdsReserve(item, isLast) ? reserveHeight : null;
         if (alignmentKind !== null && !isAdditiveAlignment(alignmentKind)) {
           return (
-            <View style={styles.aiRow}>
+            <ReserveRow
+              id={item.id}
+              minHeight={reserve}
+              style={styles.aiRow}
+              onContentLayout={onReserveContentLayout}
+            >
               <AlignmentSurface
                 kind={alignmentKind}
                 message={item.text}
@@ -573,62 +688,70 @@ export function ChatScreen(props: {
                   ) : null
                 }
               />
-            </View>
+            </ReserveRow>
           );
         }
         return (
-          <AiBubble
-            message={item}
-            isLast={isLast}
-            animate={shouldAnimate}
-            revealed={revealed}
-            onRevealComplete={() => markRevealed(item.id)}
-            clarificationRequired={state.clarificationRequired && isLast}
-            // Host `enableVoice = false` removes the Listen pill; the server's TTS flag only dims
-            // it (ListenButton.kt: enabled = isTtsEnabled → alpha 0.4, not clickable).
-            ttsAvailable={sdk.config.enableVoice}
-            isTtsEnabled={state.isTtsEnabled}
-            isLoadingTts={state.isLoadingSynthesiseAudio}
-            isPlayingTts={state.isAudioPlaying}
-            onListen={toggleListen}
-            onShare={() => void shareCard.handle.share(sdk)}
-            // App parity (ChatThreadContent.kt): offered only on a pre-generated answer with a
-            // non-blank question, and not once read-full-advice was already requested for it.
-            onReadFullAdvice={
-              item.isPreGenerated &&
-              (firstUser?.text ?? '').trim().length > 0 &&
-              state.readFullAdviceRequestedForMessageId !== item.id
-                ? () =>
-                    onAction({
-                      type: 'ReplacePreGeneratedWithQuestion',
-                      question: firstUser?.text ?? '',
-                      triggerInputType: 'card',
-                    })
-                : undefined
-            }
-            followUps={state.suggestedQuestions}
-            // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
-            // clarification treatment.
-            followUpsClarification={state.clarificationRequired && item.isPreGenerated !== true}
-            onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
-            onAlignmentChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
-            isThreadLoading={state.isLoading}
-            reserveHeight={reserveHeight}
-            onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
-          />
+          <ReserveRow id={item.id} minHeight={reserve} onContentLayout={onReserveContentLayout}>
+            <AiBubble
+              message={item}
+              isLast={isLast}
+              animate={shouldAnimate}
+              revealed={revealed}
+              onRevealComplete={() => markRevealed(item.id)}
+              clarificationRequired={state.clarificationRequired && isLast}
+              // Host `enableVoice = false` removes the Listen pill; the server's TTS flag only dims
+              // it (ListenButton.kt: enabled = isTtsEnabled → alpha 0.4, not clickable).
+              ttsAvailable={sdk.config.enableVoice}
+              isTtsEnabled={state.isTtsEnabled}
+              isLoadingTts={state.isLoadingSynthesiseAudio}
+              isPlayingTts={state.isAudioPlaying}
+              onListen={toggleListen}
+              onShare={() => void shareCard.handle.share(sdk)}
+              // App parity (ChatThreadContent.kt): offered only on a pre-generated answer with a
+              // non-blank question, and not once read-full-advice was already requested for it.
+              onReadFullAdvice={
+                item.isPreGenerated &&
+                (firstUser?.text ?? '').trim().length > 0 &&
+                state.readFullAdviceRequestedForMessageId !== item.id
+                  ? () =>
+                      onAction({
+                        type: 'ReplacePreGeneratedWithQuestion',
+                        question: firstUser?.text ?? '',
+                        triggerInputType: 'card',
+                      })
+                  : undefined
+              }
+              followUps={state.suggestedQuestions}
+              // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
+              // clarification treatment.
+              followUpsClarification={state.clarificationRequired && item.isPreGenerated !== true}
+              onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
+              onAlignmentChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
+              isThreadLoading={state.isLoading}
+              onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
+            />
+          </ReserveRow>
         );
       }
       case 'loading':
         return (
           // ChatThreadContent.kt LoadingPlaceholder: LogoSpinnerHorizontal + "Getting your
           // answer…" — the same spinner the streaming status uses (no shimmer on RN; see
-          // LogoSpinner).
-          <View style={styles.loadingBubble} accessibilityLiveRegion="polite">
-            <LogoSpinner
-              message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')}
-              style={INLINE_SPINNER_STYLE}
-            />
-          </View>
+          // LogoSpinner). As the final row it holds the same viewport reserve as an answer, so
+          // the question above it stays pinned at the top (ChatReserve.kt).
+          <ReserveRow
+            id={item.id}
+            minHeight={state.messages[state.messages.length - 1]?.id === item.id ? reserveHeight : null}
+            onContentLayout={onReserveContentLayout}
+          >
+            <View style={styles.loadingBubble} accessibilityLiveRegion="polite">
+              <LogoSpinner
+                message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')}
+                style={INLINE_SPINNER_STYLE}
+              />
+            </View>
+          </ReserveRow>
         );
       default:
         return null;
@@ -708,6 +831,7 @@ export function ChatScreen(props: {
               keyExtractor={(m) => m.id}
               contentContainerStyle={styles.thread}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              onScrollToIndexFailed={onScrollToIndexFailed}
               onStartReached={onScrollNearTop}
               onStartReachedThreshold={0.2}
               onLayout={(e: LayoutChangeEvent) => {
@@ -756,7 +880,7 @@ export function ChatScreen(props: {
                   : null
               }
               available={contentBelow && !state.isLoading && state.errorMessage === null}
-              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+              onPress={scrollToContentEnd}
               style={styles.scrollIndicator}
             />
           </View>
@@ -940,6 +1064,28 @@ function LocationBubbleRow(props: { message: LocationMessage }): React.ReactElem
   );
 }
 
+/**
+ * A chat row that may hold the viewport reserve (`minHeight`). The tree shape never changes with
+ * the reserve (so toggling it cannot remount the row and restart its typewriter); the inner View
+ * reports the row's REAL content height so the scroll indicator can ignore the blank reserve.
+ */
+function ReserveRow(props: {
+  id: string;
+  minHeight: number | null;
+  style?: StyleProp<ViewStyle>;
+  onContentLayout: (id: string, height: number) => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const { id, onContentLayout } = props;
+  return (
+    <View style={[props.style, props.minHeight != null ? { minHeight: props.minHeight } : null]}>
+      <View onLayout={(e: LayoutChangeEvent) => onContentLayout(id, e.nativeEvent.layout.height)}>
+        {props.children}
+      </View>
+    </View>
+  );
+}
+
 function AiBubble(props: {
   message: AiResponse;
   isLast: boolean;
@@ -966,8 +1112,6 @@ function AiBubble(props: {
   onAlignmentChipPress?: (chip: AlignmentChip) => void;
   /** ChatState.isLoading — locks alignment chips while another query is in flight. */
   isThreadLoading?: boolean;
-  /** The list viewport height (ChatThreadContent.kt `reserveHeightDp`). */
-  reserveHeight: number;
   /** Retry after an interrupted stream. */
   onRetryStream?: () => void;
 }): React.ReactElement {
@@ -978,17 +1122,9 @@ function AiBubble(props: {
   const isStreaming = message.isStreaming === true;
   const isInterrupted = message.isInterrupted === true;
   const isThreadLoading = props.isThreadLoading === true;
-  // While a stream is live the answer grows in place, so reserve a viewport's height to pin the
-  // question at the top instead of letting the list clamp it downward as text arrives. Also held
-  // for the interrupted state so the error card sits near the top. Port of the Compose
-  // `streamReserveModifier` (Modifier.heightIn(min = reserveHeightDp)).
-  //
-  // DEVIATION (parity gap): the app also holds this reserve for a FINISHED last answer
-  // (`!isLoading`), because it pins the new question to the top with an anchor scroll. This
-  // screen still follows new messages with scrollToEnd, under which a finished-answer reserve
-  // would push the question off screen — so it is not extended until the anchor scroll is ported.
-  const streamReserve =
-    props.isLast && (isStreaming || isInterrupted) ? { minHeight: props.reserveHeight } : null;
+  // The viewport reserve (Compose `streamReserveModifier`, core ChatReserve.kt) is applied by
+  // the caller's ReserveRow wrapper — streaming, interrupted, FINISHED (`!isLoading`) and
+  // pending-alignment — paired with ChatScreen's anchor scroll that pins the question on top.
   const additiveAlignmentKind =
     message.alignmentKind != null && isAdditiveAlignment(message.alignmentKind)
       ? message.alignmentKind
@@ -1010,7 +1146,7 @@ function AiBubble(props: {
       ? message.streamingStatus
       : null;
   return (
-    <View style={[styles.aiRow, streamReserve]}>
+    <View style={styles.aiRow}>
       {props.clarificationRequired ? (
         <View
           style={[
