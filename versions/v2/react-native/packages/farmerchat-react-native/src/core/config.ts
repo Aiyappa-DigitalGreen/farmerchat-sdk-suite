@@ -126,10 +126,18 @@ export interface FarmerChatConfig {
    * base URL — point the SDK at your own backend, or a local mock. Should end with `/`.
    */
   customBaseUrl?: string;
-  /** Google Geolocation API key (language auto-detect fallback). */
+  /**
+   * OPTIONAL override for the Google Geolocation API key (language auto-detect + the coordinates
+   * guest init needs for the home feed). **Built in — hosts do not need to supply it.** Omitted or
+   * blank → the SDK's bundled {@link DEFAULT_GEO_API_KEY} (the same key the Android SDK ships).
+   */
   geoApiKey?: string;
-  /** Overrides the built-in guest-init / send_tokens API key. */
-  guestApiKey?: string;
+  /**
+   * OPTIONAL override for the FarmerChat API key sent as the `API-Key` header on guest init
+   * (`initialize_user`) and the guest `send_tokens` fallback. **Built in — hosts do not need to
+   * supply it.** Omitted or blank → {@link DEFAULT_FARMERCHAT_API_KEY}.
+   */
+  farmerChatApiKey?: string;
   /** Theme mode. Default 'auto' (follows system). */
   appearance?: AppearanceMode;
   /** Preselect a language code; skips the language screen when valid. */
@@ -182,7 +190,11 @@ export interface FarmerChatConfig {
   showSettings?: boolean;
   /** Show the chat-history entry + "See all" in the drawer. Default true. */
   showHistory?: boolean;
-  /** Show the hamburger/drawer chrome at all. Default true. */
+  /**
+   * Show the hamburger/drawer chrome at all. **Unset by default**, and an unset value resolves to
+   * `mode === 'FULL_JOURNEY'`: no drawer in CHAT_ONLY (the default mode), a drawer in
+   * FULL_JOURNEY. An explicit host value always wins.
+   */
   showDrawer?: boolean;
   /**
    * Mirrors the app's `show_name_screen` RemoteConfig flag and Android's
@@ -246,7 +258,11 @@ export interface FarmerChatConfig {
   /** Host theme overrides (docs/07 Part B). Omitted → built-in green brand. */
   theme?: FarmerChatTheme;
 
-  /** Journey mode (C3). `FULL_JOURNEY` (default) or `CHAT_ONLY`. */
+  /**
+   * Journey mode (C3). **`CHAT_ONLY` (the default)** lands straight in a fresh chat, bootstrapping
+   * the guest session, labels and conversation headlessly. Pass `FULL_JOURNEY` for the full app
+   * journey (onboarding, Home, drawer, settings…).
+   */
   mode?: FarmerChatMode;
 
   /** Authentication mode (C2). `SDK_OTP` (default) or `HOST_TOKEN`. */
@@ -275,8 +291,10 @@ export interface FarmerChatConfig {
 export interface ResolvedFarmerChatConfig {
   environment: FarmerChatEnvironment;
   baseUrl: string;
-  geoApiKey: string | null;
-  guestApiKey: string | null;
+  /** Never blank: the host override, else {@link DEFAULT_GEO_API_KEY}. */
+  geoApiKey: string;
+  /** Never blank: the host override, else {@link DEFAULT_FARMERCHAT_API_KEY}. */
+  farmerChatApiKey: string;
   appearance: AppearanceMode;
   languageCode: string | null;
   defaultCountryCode: string;
@@ -289,6 +307,7 @@ export interface ResolvedFarmerChatConfig {
   enableSsfr: boolean;
   showSettings: boolean;
   showHistory: boolean;
+  /** Host value when set, else `mode === 'FULL_JOURNEY'`. */
   showDrawer: boolean;
   showNameScreen: boolean;
   enableAnalytics: boolean;
@@ -332,11 +351,14 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     config.customBaseUrl && config.customBaseUrl.length > 0
       ? config.customBaseUrl
       : envBaseUrl;
+  // CHAT_ONLY is the default; `showDrawer` follows the mode unless the host set it explicitly.
+  const mode: FarmerChatMode = config.mode ?? 'CHAT_ONLY';
   return {
     environment: config.environment,
     baseUrl,
-    geoApiKey: config.geoApiKey ?? null,
-    guestApiKey: config.guestApiKey ?? DEFAULT_GUEST_API_KEY,
+    // Built-in keys: an omitted OR blank host value falls back to the bundled default.
+    geoApiKey: config.geoApiKey?.trim() || DEFAULT_GEO_API_KEY,
+    farmerChatApiKey: config.farmerChatApiKey?.trim() || DEFAULT_FARMERCHAT_API_KEY,
     appearance: config.appearance ?? 'auto',
     // A forced locale (C5) also preselects the language, skipping the language screen.
     languageCode: config.locale ?? config.languageCode ?? null,
@@ -350,7 +372,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     enableSsfr: config.enableSsfr ?? true,
     showSettings: config.showSettings ?? true,
     showHistory: config.showHistory ?? true,
-    showDrawer: config.showDrawer ?? true,
+    showDrawer: config.showDrawer ?? (mode === 'FULL_JOURNEY'),
     showNameScreen: config.showNameScreen ?? true,
     enableAnalytics: config.enableAnalytics ?? false,
     // 2.0.0 opt-in; false keeps the synchronous #27 path (root CLAUDE.md §3 no-regression).
@@ -366,7 +388,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     bubbleCornerRadius: config.bubbleCornerRadius ?? null,
     messageFontSize: config.messageFontSize ?? null,
     theme: config.theme ?? null,
-    mode: config.mode ?? 'FULL_JOURNEY',
+    mode,
     authMode: config.authMode ?? 'SDK_OTP',
     accessToken: config.accessToken ?? null,
     refreshToken: config.refreshToken ?? null,
@@ -384,10 +406,18 @@ export const BUILD_VERSION_HEADER_VALUE = 'v2';
 export const SDK_VERSION = '2.2.0';
 
 /**
- * Built-in guest API key (app's `RemoteConfigKeys.GUEST_USER_API_KEY`),
- * overridable via `FarmerChatConfig.guestApiKey` — see docs/05 open question #2.
+ * Built-in FarmerChat API key (app's `RemoteConfigKeys.GUEST_USER_API_KEY`), sent as the
+ * `API-Key` header. Overridable via `FarmerChatConfig.farmerChatApiKey` — see docs/05 open
+ * question #2.
  */
-export const DEFAULT_GUEST_API_KEY = 'Y2K3kW5R9uQ0fL2X8zI7hT3aJ7';
+export const DEFAULT_FARMERCHAT_API_KEY = 'Y2K3kW5R9uQ0fL2X8zI7hT3aJ7';
+
+/**
+ * Built-in Google Geolocation API key — the same value as the Android SDK's
+ * `ApiConstants.DEFAULT_GEO_API_KEY`. Used whenever `FarmerChatConfig.geoApiKey` is omitted or
+ * blank, so hosts never have to supply one.
+ */
+export const DEFAULT_GEO_API_KEY = 'AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo';
 
 /**
  * Last-resort country for endpoint #2 — used ONLY when the server, the persisted value, the host

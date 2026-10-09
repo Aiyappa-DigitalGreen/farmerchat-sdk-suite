@@ -163,14 +163,14 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
         }
       }
 
-      // GEO FAILURE (or no `geoApiKey` at all) → DEVICE LOCALE, exactly as the app does. The app
+      // GEO FAILURE → DEVICE LOCALE, exactly as the app does. The app
       // does NOT proceed with no coordinates when IP geolocation fails: it falls back to the
       // device locale's country centroid (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and
       // accepts it ONLY when `lat != 0.0 && lng != 0.0`. A locale carrying no region yields
       // (0, 0), which must stay unresolved — sending it would place the farmer off West Africa.
       //
-      // Keyed on `lat === null` rather than on the error branch so it also covers a host that
-      // configured no `geoApiKey`, where the geolocate call never ran at all.
+      // Keyed on `lat === null` rather than on the error branch so it covers every way the
+      // geolocate step can come back empty (the key is built in, so the call itself always runs).
       if (lat === null) {
         const [localeLat, localeLng] = resolveFallbackCoordinates(sdk.config);
         if (isResolved(localeLat, localeLng)) {

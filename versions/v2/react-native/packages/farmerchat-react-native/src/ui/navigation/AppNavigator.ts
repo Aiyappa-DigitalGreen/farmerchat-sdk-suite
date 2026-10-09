@@ -81,6 +81,24 @@ export class AppNavigator {
     );
   }
 
+  private get isChatOnly(): boolean {
+    return this.sdk.config.mode === 'CHAT_ONLY';
+  }
+
+  /**
+   * Prefixes the journey root. FULL_JOURNEY keeps Home at the bottom of every stack (the app's
+   * start destination). CHAT_ONLY has no Home, so the requested routes ARE the stack — otherwise
+   * a back press would surface the dashboard CHAT_ONLY hides (views `NavRoutes.navigateChatOnly`).
+   */
+  private withRoot(
+    routes: Array<{ name: keyof RootStackParamList; params?: object }>,
+  ): Array<{ name: keyof RootStackParamList; params?: object }> {
+    if (!this.isChatOnly) return [{ name: 'Home' }, ...routes];
+    return routes.length > 0
+      ? routes
+      : [{ name: 'Chat', params: { source: 'home' } satisfies ChatRouteParams }];
+  }
+
   /**
    * routeFromSplash() decision tree (docs/01 §2 AppNavigator):
    *  1. !isLanguageSelected → Language
@@ -127,8 +145,7 @@ export class AppNavigator {
   private routePendingTarget(target: PendingTarget): void {
     switch (target.kind) {
       case 'chat':
-        this.resetTo([
-          { name: 'Home' },
+        this.resetTo(this.withRoot([
           {
             name: 'Chat',
             params: {
@@ -136,11 +153,10 @@ export class AppNavigator {
               conversationId: target.chatId,
             } satisfies ChatRouteParams,
           },
-        ]);
+        ]));
         break;
       case 'chatQuery':
-        this.resetTo([
-          { name: 'Home' },
+        this.resetTo(this.withRoot([
           {
             name: 'Chat',
             params: {
@@ -149,7 +165,7 @@ export class AppNavigator {
               channel: target.channel ?? undefined,
             } satisfies ChatRouteParams,
           },
-        ]);
+        ]));
         break;
       case 'screen':
         this.openScreenTarget(target.destination);
@@ -171,7 +187,7 @@ export class AppNavigator {
   /** Programmatic C4 navigation to a top-level screen. */
   openScreenTarget(destination: FarmerChatScreen): void {
     if (destination === 'chat') {
-      this.resetTo([{ name: 'Home' }, { name: 'Chat', params: { source: 'home' } satisfies ChatRouteParams }]);
+      this.resetTo(this.withRoot([{ name: 'Chat', params: { source: 'home' } satisfies ChatRouteParams }]));
       return;
     }
     this.navigateDrawerRoute(screenToRoute(destination));
@@ -202,13 +218,52 @@ export class AppNavigator {
     }
   }
 
-  /** Drawer route: popUpTo(startDestinationId) + singleTop equivalent. */
+  /**
+   * Drawer route: popUpTo(startDestinationId) + singleTop equivalent. In CHAT_ONLY the start
+   * destination is a fresh chat, so `Home` maps to it and other routes become the stack root.
+   */
   navigateDrawerRoute(route: keyof RootStackParamList): void {
     if (!this.navRef.isReady()) return;
     if (route === 'Home') {
-      this.resetTo([{ name: 'Home' }]);
+      this.resetTo(this.withRoot([]).slice(0, 1));
     } else {
-      this.resetTo([{ name: 'Home' }, { name: route }]);
+      this.resetTo(this.withRoot([{ name: route }]));
+    }
+  }
+
+  /**
+   * Drawer-off back (C3 `showDrawer=false`): the screen's left button pops instead of opening a
+   * suppressed drawer. With nothing to pop — the screen is the journey root, e.g. a CHAT_ONLY
+   * `openScreen` — CHAT_ONLY hands control back to the host (`onExit`, as chat close does) and
+   * FULL_JOURNEY returns to Home. Android views: `popBackStack() || exitJourney()`.
+   */
+  navigateBackOrExit(): void {
+    if (!this.navRef.isReady()) return;
+    if (collectStackRoutes(this.navRef.getRootState()).length > 1) {
+      this.dispatchToStack(StackActions.pop() as NavAction);
+      return;
+    }
+    if (this.isChatOnly) {
+      this.sdk.analytics.fireCallback('onExit');
+      return;
+    }
+    this.resetTo([{ name: 'Home' }]);
+  }
+
+  /**
+   * SettingsLanguage saved. FULL_JOURNEY: Home with popUpTo(0){inclusive}. CHAT_ONLY has no Home,
+   * so it returns to the chat the language screen was opened from (or a fresh one).
+   */
+  navigateLanguageSaved(): void {
+    if (!this.isChatOnly) {
+      this.navigateLanguageSavedToHome();
+      return;
+    }
+    if (!this.navRef.isReady()) return;
+    if (collectStackRoutes(this.navRef.getRootState()).includes('Chat')) {
+      this.dispatchToStack(StackActions.popTo('Chat') as NavAction);
+    } else {
+      this.resetTo(this.withRoot([]));
     }
   }
 

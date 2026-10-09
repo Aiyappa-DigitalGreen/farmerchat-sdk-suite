@@ -61,6 +61,11 @@ function AppearanceModeButton(props: {
 
 export function SettingsScreen(props: {
   onOpenDrawer: () => void;
+  /**
+   * Set when the drawer is OFF (C3 `showDrawer=false`, the CHAT_ONLY default): the left button
+   * becomes a back control instead of a menu that would open a suppressed drawer.
+   */
+  onBack?: () => void;
   onNameClick: () => void;
   onSignUpClick: () => void;
   onLogOutClick: () => void;
@@ -173,8 +178,8 @@ export function SettingsScreen(props: {
     <View style={[styles.container, { backgroundColor: c.surfacePrimary }]}>
       <DefaultAppBar
         title={label(Labels.SETTINGS, 'Settings')}
-        navIcon="menu"
-        onNavPress={props.onOpenDrawer}
+        navIcon={props.onBack ? 'back' : 'menu'}
+        onNavPress={props.onBack ?? props.onOpenDrawer}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* App parity (SettingsScreen.kt:137): labelLarge, not titleSmall. */}

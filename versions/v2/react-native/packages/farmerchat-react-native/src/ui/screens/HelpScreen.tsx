@@ -16,6 +16,11 @@ import { spacing, typography } from '../theme';
 
 export function HelpScreen(props: {
   onOpenDrawer: () => void;
+  /**
+   * Set when the drawer is OFF (C3 `showDrawer=false`, the CHAT_ONLY default): the left button
+   * becomes a back control instead of a menu that would open a suppressed drawer.
+   */
+  onBack?: () => void;
   onOpenUrl: (url: string, title: string) => void;
   onNavigateToError: (isNetworkError: boolean, retry: () => void) => void;
 }): React.ReactElement {
@@ -45,8 +50,8 @@ export function HelpScreen(props: {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
         title={label('fc_v2_app_label_help', 'Help')}
-        navIcon="menu"
-        onNavPress={props.onOpenDrawer}
+        navIcon={props.onBack ? 'back' : 'menu'}
+        onNavPress={props.onBack ?? props.onOpenDrawer}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         <ListCard title={label('help_faq_section', 'How to use FarmerChat')}>

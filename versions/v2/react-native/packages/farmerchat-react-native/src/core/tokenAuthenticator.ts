@@ -124,7 +124,7 @@ export class TokenAuthenticator {
       const guest = await this.postTokenEndpoint<RefreshTokenResponse>(
         'api/user/send_tokens/',
         { device_id: deviceId, user_id: userId },
-        this.config.guestApiKey,
+        this.config.farmerChatApiKey,
       );
       if (guest.ok && hasTokenPair(guest.data)) {
         this.store.saveTokens(guest.data.access_token, guest.data.refresh_token);
@@ -164,7 +164,7 @@ export class TokenAuthenticator {
       const init = await this.postTokenEndpoint<InitializeGuestUserResponse>(
         'api/user/initialize_user/',
         body,
-        this.config.guestApiKey,
+        this.config.farmerChatApiKey,
       );
       const accessToken = init.ok ? init.data.access_token : undefined;
       if (init.ok && typeof accessToken === 'string' && accessToken.trim() !== '') {

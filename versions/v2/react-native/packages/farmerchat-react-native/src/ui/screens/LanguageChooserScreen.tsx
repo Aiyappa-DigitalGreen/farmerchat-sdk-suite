@@ -16,6 +16,11 @@ import { spacing, typography } from '../theme';
 
 export function LanguageChooserScreen(props: {
   onOpenDrawer: () => void;
+  /**
+   * Set when the drawer is OFF (C3 `showDrawer=false`, the CHAT_ONLY default): the left button
+   * becomes a back control instead of a menu that would open a suppressed drawer.
+   */
+  onBack?: () => void;
   onLanguageSaved: () => void;
   onFetchLabelsFailure: () => void;
 }): React.ReactElement {
@@ -67,8 +72,8 @@ export function LanguageChooserScreen(props: {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
         title={label('fc_v2_app_label_choose_your_language', 'Choose your language')}
-        navIcon="menu"
-        onNavPress={props.onOpenDrawer}
+        navIcon={props.onBack ? 'back' : 'menu'}
+        onNavPress={props.onBack ?? props.onOpenDrawer}
       />
       {languageGroups === null ? (
         <View style={styles.spinnerWrap}>

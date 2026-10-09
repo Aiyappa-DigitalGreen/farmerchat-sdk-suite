@@ -36,6 +36,11 @@ function iconFor(messageType: string | null | undefined): IconName {
 export function ChatHistoryScreen(props: {
   history: UseChatHistoryResult;
   onOpenDrawer: () => void;
+  /**
+   * Set when the drawer is OFF (C3 `showDrawer=false`, the CHAT_ONLY default): the left button
+   * becomes a back control instead of a menu that would open a suppressed drawer.
+   */
+  onBack?: () => void;
   onOpenChatFromHistory: (conversationId: string) => void;
   onNavigateToError: (isNetworkError: boolean) => void;
 }): React.ReactElement {
@@ -71,8 +76,8 @@ export function ChatHistoryScreen(props: {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <DefaultAppBar
         title={label('history_title', 'Recent Chats')}
-        navIcon="menu"
-        onNavPress={props.onOpenDrawer}
+        navIcon={props.onBack ? 'back' : 'menu'}
+        onNavPress={props.onBack ?? props.onOpenDrawer}
       />
       {state.isLoading && state.items.length === 0 ? (
         <View style={styles.center}>

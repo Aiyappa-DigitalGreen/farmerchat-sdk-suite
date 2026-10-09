@@ -36,7 +36,7 @@ import {
   type LocationMessage,
   type UserMessage,
 } from '../../state/useChat';
-import { PrimaryButton, ScrollIndicator } from '../components/Buttons';
+import { ActionButton, PrimaryButton, ScrollIndicator } from '../components/Buttons';
 import { AiAnswerBlock } from '../components/AiAnswer';
 import {
   AlignmentSurface,
@@ -82,6 +82,12 @@ export function ChatScreen(props: {
   params: ChatRouteParams;
   onClose: () => void;
   onOpenDrawer: () => void;
+  /** Drawer off: back out of a history thread (pop, or exit when it is the journey root). */
+  onBack: () => void;
+  /** Drawer off: the chat bar's Past Advice button (ChatFragment.setUpAppBarActions). */
+  onOpenHistory: () => void;
+  /** Drawer off: the chat bar's language button. */
+  onOpenLanguage: () => void;
   /**
    * The SHARED location-prompt state machine (the same instance Home and the prompt host use).
    * 2.0.0: a `gps-prompt` capability chip drives it, and the outcome comes back on its event
@@ -763,9 +769,21 @@ export function ChatScreen(props: {
       <LogoAppBar
         // ChatScreen.kt: History → Menu; Home → the self-contained R.drawable.leftbutton back
         // arrow. CHAT_ONLY has no Home behind it, so it keeps the close glyph (as on web).
-        navIcon={isHistoryEntry ? 'menu' : sdk.config.mode === 'CHAT_ONLY' ? 'close' : 'homeBack'}
+        // Drawer off (the CHAT_ONLY default): a history thread gets a plain back instead of a
+        // menu that would open a suppressed drawer (web ChatScreen / views ChatFragment parity).
+        navIcon={
+          isHistoryEntry
+            ? sdk.config.showDrawer
+              ? 'menu'
+              : 'back'
+            : sdk.config.mode === 'CHAT_ONLY'
+              ? 'close'
+              : 'homeBack'
+        }
         onNavPress={() => {
-          if (isHistoryEntry) {
+          if (isHistoryEntry && !sdk.config.showDrawer) {
+            props.onBack();
+          } else if (isHistoryEntry) {
             props.onOpenDrawer();
           } else {
             sdk.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK, {});
@@ -773,6 +791,37 @@ export function ChatScreen(props: {
           }
         }}
         showLogo={uiState.kind === 'thread' && !state.isLoading}
+        // ChatFragment.setUpAppBarActions / web ChatScreen: with the drawer OFF (the CHAT_ONLY
+        // default) there is otherwise no way to reach Past Advice or the language screen. History
+        // is gated on showHistory; language is always shown — it is the only way to change
+        // language once onboarding is skipped. With the drawer on, the drawer stays the single
+        // navigation surface.
+        rightContent={
+          sdk.config.showDrawer ? undefined : (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {sdk.config.showHistory ? (
+                <ActionButton
+                  testID="fc-chat-history"
+                  accessibilityLabel={label(Labels.RECENT_CHATS, 'Recent Chats')}
+                  onPress={props.onOpenHistory}
+                  icon="timer"
+                  background={theme.brand.surfaceSecondary}
+                  iconColor={theme.brand.foregroundPrimary}
+                  style={{ borderRadius: radius.md }}
+                />
+              ) : null}
+              <ActionButton
+                testID="fc-chat-language"
+                accessibilityLabel={label(Labels.LANGUAGE, 'Language')}
+                onPress={props.onOpenLanguage}
+                icon="language"
+                background={theme.brand.surfaceSecondary}
+                iconColor={theme.brand.foregroundPrimary}
+                style={{ borderRadius: radius.md }}
+              />
+            </View>
+          )
+        }
       />
 
       {uiState.kind === 'loading' ? (

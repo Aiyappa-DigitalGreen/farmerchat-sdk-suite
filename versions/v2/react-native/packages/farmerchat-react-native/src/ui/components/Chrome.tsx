@@ -582,6 +582,8 @@ export function LogoAppBar(props: {
   navIcon: AppBarNavIcon;
   onNavPress?: () => void;
   showLogo: boolean;
+  /** Trailing actions (chat bar with the drawer off: history + language). Omitted → spacer. */
+  rightContent?: React.ReactNode;
 }): React.ReactElement {
   const theme = useTheme();
   const brand = theme.brand;
@@ -631,7 +633,7 @@ export function LogoAppBar(props: {
           </Animated.View>
         ) : null}
       </View>
-      <View style={{ width: 42 }} />
+      {props.rightContent ?? <View style={{ width: 42 }} />}
     </AppBarShell>
   );
 }

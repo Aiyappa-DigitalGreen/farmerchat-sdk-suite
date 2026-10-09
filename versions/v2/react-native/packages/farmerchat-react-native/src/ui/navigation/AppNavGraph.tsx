@@ -324,6 +324,14 @@ export function AppNavGraph(): React.ReactElement {
   );
 }
 
+/** Drawer off → a back handler for the drawer-level screens; drawer on → none (menu stays). */
+function drawerOffBack(
+  showDrawer: boolean,
+  appNavigator: AppNavigator,
+): (() => void) | undefined {
+  return showDrawer ? undefined : () => appNavigator.navigateBackOrExit();
+}
+
 /** Maps route names to ErrorNavigationManager screen ids. */
 function routeToScreenId(route: string): string {
   switch (route) {
@@ -442,6 +450,10 @@ function ChatRoute(
       params={props.route.params ?? {}}
       onClose={() => appNavigator.navigateChatCloseToHome()}
       onOpenDrawer={openDrawer}
+      onBack={() => appNavigator.navigateBackOrExit()}
+      // Opened ON TOP of this chat (views: singleTop, no popUpTo) so coming back keeps the thread.
+      onOpenHistory={() => appNavigator.navigate('ChatHistory')}
+      onOpenLanguage={() => appNavigator.navigate('SettingsLanguage')}
       // 2.0.0: the `gps-prompt` capability chip drives the SHARED location flow, so the prompt
       // host's overlay renders its permission / fetch / recovery UI.
       locationPrompt={locationPrompt}
@@ -450,11 +462,12 @@ function ChatRoute(
 }
 
 function ChatHistoryRoute(): React.ReactElement {
-  const { appNavigator, chatHistory, openDrawer } = useGraph();
+  const { sdk, appNavigator, chatHistory, openDrawer } = useGraph();
   return (
     <ChatHistoryScreen
       history={chatHistory}
       onOpenDrawer={openDrawer}
+      onBack={drawerOffBack(sdk.config.showDrawer, appNavigator)}
       onOpenChatFromHistory={(conversationId) =>
         appNavigator.navigateToChat({ source: 'history', conversationId })
       }
@@ -467,6 +480,7 @@ function ChatHistoryRoute(): React.ReactElement {
 
 function SettingsRoute(): React.ReactElement {
   const {
+    sdk,
     appNavigator,
     openDrawer,
     handleSignUpClick,
@@ -479,6 +493,7 @@ function SettingsRoute(): React.ReactElement {
     <SettingsScreen
       locationPrompt={locationPrompt}
       onOpenDrawer={openDrawer}
+      onBack={drawerOffBack(sdk.config.showDrawer, appNavigator)}
       onNameClick={() => appNavigator.push('SettingsName')}
       onSignUpClick={handleSignUpClick}
       onLogOutClick={handleLogout}
@@ -502,21 +517,24 @@ function SettingsNameRoute(): React.ReactElement {
 }
 
 function SettingsLanguageRoute(): React.ReactElement {
-  const { appNavigator, openDrawer } = useGraph();
+  const { sdk, appNavigator, openDrawer } = useGraph();
   return (
     <LanguageChooserScreen
       onOpenDrawer={openDrawer}
-      onLanguageSaved={() => appNavigator.navigateLanguageSavedToHome()}
+      onBack={drawerOffBack(sdk.config.showDrawer, appNavigator)}
+      // CHAT_ONLY returns to the chat it was opened from; FULL_JOURNEY resets to Home.
+      onLanguageSaved={() => appNavigator.navigateLanguageSaved()}
       onFetchLabelsFailure={() => appNavigator.navigateDrawerRoute('Home')}
     />
   );
 }
 
 function HelpRoute(): React.ReactElement {
-  const { appNavigator, errorManager, openDrawer } = useGraph();
+  const { sdk, appNavigator, errorManager, openDrawer } = useGraph();
   return (
     <HelpScreen
       onOpenDrawer={openDrawer}
+      onBack={drawerOffBack(sdk.config.showDrawer, appNavigator)}
       onOpenUrl={(url, title) => appNavigator.push('LegalContent', { url, title })}
       onNavigateToError={(isNetworkError, retry) =>
         errorManager.navigateToError(isNetworkError, 'help', retry)

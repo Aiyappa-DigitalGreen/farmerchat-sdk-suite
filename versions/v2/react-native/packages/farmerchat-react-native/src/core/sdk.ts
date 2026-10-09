@@ -7,9 +7,12 @@ import { FarmerChatApi } from './api';
 import { AnalyticsManager } from './analytics';
 import {
   resolveConfig,
+  resolveCountryCode,
+  resolveFallbackCoordinates,
   type FarmerChatConfig,
   type ResolvedFarmerChatConfig,
 } from './config';
+import { isResolved } from './countryLatLng';
 import { HttpClient } from './httpClient';
 import { LabelManager } from './labelManager';
 import { SessionManager } from './sessionManager';
@@ -114,6 +117,136 @@ export class FarmerChatSdk {
       });
     }
     return this.hydratePromise;
+  }
+
+  // --- CHAT_ONLY headless bootstrap (FarmerChatGraph.ensureChatOnlySession parity) -----------
+
+  /** Set once endpoint #2 404s: this backend has no language list, so stop asking every open. */
+  private labelBootstrapUnavailable = false;
+
+  /**
+   * CHAT_ONLY skips onboarding and Home, which are where the guest session, the UI labels and the
+   * conversation are normally established. Port of Android's `FarmerChatGraph.ensureChatOnlySession`:
+   *
+   *  1. guest init (#1) with coordinates resolved FIRST — geolocate, then the device-locale
+   *     centroid, then nothing — exactly as onboarding does;
+   *  2. labels (#2 → #3, + #5 set_preferred_language) for the stored / host / `en` language,
+   *     because the language screen is the only other caller of `get_labels`;
+   *  3. `new_conversation` (#15) when no conversation id is stored.
+   *
+   * Every step is best-effort and idempotent: a failure leaves the chat to retry lazily
+   * (`useChat.ensureConversationId`) and labels to fall back to English.
+   */
+  async ensureChatOnlySession(): Promise<void> {
+    if (!this.session.hasSession) {
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let accuracy: number | null = null;
+      try {
+        const geo = await this.api.geolocate();
+        if (geo.ok) {
+          lat = geo.data.location.lat;
+          lng = geo.data.location.lng;
+          accuracy = geo.data.accuracy ?? null;
+          this.store.set(StorageKeys.FARMER_APP_LATITUDE, lat);
+          this.store.set(StorageKeys.FARMER_APP_LONGITUDE, lng);
+        }
+      } catch {
+        // best-effort
+      }
+      if (lat === null) {
+        const [localeLat, localeLng] = resolveFallbackCoordinates(this.config);
+        if (isResolved(localeLat, localeLng)) {
+          lat = localeLat;
+          lng = localeLng;
+          accuracy = 0;
+        }
+      }
+      try {
+        await this.session.ensureGuestSession({ lat, long: lng, accuracy });
+      } catch {
+        // best-effort
+      }
+    }
+    await this.ensureLabelsLoaded();
+    if (!this.store.getString(StorageKeys.NEW_CONVERSATION_ID)) {
+      const userId = this.session.userId?.trim();
+      if (userId) {
+        try {
+          const res = await this.api.newConversation({ user_id: userId, content_provider_id: null });
+          if (res.ok) this.store.set(StorageKeys.NEW_CONVERSATION_ID, res.data.conversation_id);
+        } catch {
+          // best-effort — useChat creates one lazily on the first send
+        }
+      }
+    }
+  }
+
+  /**
+   * A CHAT_ONLY journey opening fresh is the app's "Home entry", and the app starts a NEW
+   * conversation on every Home entry. Port of Android `FarmerChatGraph.beginChatOnlyJourney`:
+   * drop the stored conversation id unless the journey is opening a specific history thread
+   * (pending `chat` target), which keeps its own id. Called once per journey start (Splash),
+   * before {@link ensureChatOnlySession}, which then creates the new conversation.
+   */
+  beginChatOnlyJourney(): void {
+    if (this.pendingTarget?.kind !== 'chat') {
+      this.store.remove(StorageKeys.NEW_CONVERSATION_ID);
+    }
+  }
+
+  /** FarmerChatGraph.ensureLabelsLoaded parity. */
+  private async ensureLabelsLoaded(): Promise<void> {
+    if (this.labels.isLoaded || this.labelBootstrapUnavailable) return;
+    const code = (
+      this.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE)?.trim() ||
+      this.config.locale ||
+      this.config.languageCode ||
+      'en'
+    )
+      .trim()
+      .toLowerCase();
+    if (!this.session.hasSession) {
+      try {
+        await this.session.ensureGuestSession();
+      } catch {
+        // best-effort
+      }
+    }
+    try {
+      const country = resolveCountryCode(
+        this.config,
+        this.store.getString(StorageKeys.USER_COUNTRY_CODE),
+      );
+      const state =
+        this.store.getString(StorageKeys.USER_STATE)?.trim() || this.config.defaultStateCode;
+      const groups = await this.api.getSupportedLanguages(country, state);
+      if (!groups.ok) {
+        // 404 = this backend has no such endpoint; offline/5xx may succeed next open.
+        if (groups.code === 404) this.labelBootstrapUnavailable = true;
+        return;
+      }
+      const all = groups.data.flatMap((g) => [...g.priority_view, ...g.expanded_view]);
+      const match =
+        all.find((l) => l.code.toLowerCase() === code) ??
+        all.find((l) => l.code.toLowerCase() === 'en');
+      if (!match) return;
+      const labels = await this.api.getLabels(match.id);
+      if (labels.ok) {
+        this.labels.setLabels(labels.data);
+        this.store.set(StorageKeys.SELECTED_LANGUAGE_ID, match.id);
+        this.store.set(StorageKeys.SELECTED_LANGUAGE_CODE, match.code);
+        if (match.display_name?.trim()) {
+          this.store.set(StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME, match.display_name);
+        }
+      }
+      const userId = this.session.userId?.trim();
+      if (userId) {
+        await this.api.setPreferredLanguage({ user_id: userId, language_id: match.id });
+      }
+    } catch {
+      // best-effort — the chat renders English fallbacks
+    }
   }
 
   private applyConfigDefaults(): void {

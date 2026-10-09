@@ -78,8 +78,10 @@ import {
 FarmerChat.initialize({
   environment: 'prod', // 'dev' | 'stage' | 'demo' | 'prod' | 'eks'
   appearance: 'auto', // 'day' | 'night' | 'auto'
-  geoApiKey: '<google-geolocation-key>', // optional — language auto-detect fallback
-  // guestApiKey: '<override>',          // optional — overrides the built-in guest key
+  // mode defaults to 'CHAT_ONLY' (straight into a chat). Pass 'FULL_JOURNEY' for onboarding,
+  // Home, drawer and settings.
+  // No keys to supply: the FarmerChat API key and the Google Geolocation key are built in.
+  // `farmerChatApiKey` / `geoApiKey` exist only as optional overrides.
   enableVoice: true,
   enableImages: true,
   enableWeather: true,
@@ -115,8 +117,10 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `environment` | `'dev'\|'stage'\|'demo'\|'prod'\|'eks'` | — (required) | selects the backend base URL |
-| `geoApiKey` | `string` | – | Google Geolocation key for language auto-detect. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
-| `guestApiKey` | `string` | built-in | overrides the guest-init API key |
+| `mode` | `'CHAT_ONLY'\|'FULL_JOURNEY'` | `'CHAT_ONLY'` | `CHAT_ONLY` lands straight in a fresh chat and bootstraps the guest session, labels and conversation headlessly; `FULL_JOURNEY` runs onboarding → Home with drawer and settings |
+| `showDrawer` | `boolean` | follows `mode` | unset → `mode === 'FULL_JOURNEY'` (no drawer in CHAT_ONLY). An explicit value wins |
+| `geoApiKey` | `string` | built-in | **Optional override — built in, hosts do not need to supply it.** Google Geolocation key used for language auto-detect and for the coordinates passed to `initialize_user` (endpoint #12 returns an empty home feed until the backend has a resolved location). Omitted or blank → the SDK's bundled key (the same one the Android SDK ships). |
+| `farmerChatApiKey` | `string` | built-in | **Optional override — built in, hosts do not need to supply it.** Sent as the `API-Key` header on guest init and the guest `send_tokens` fallback. Omitted or blank → the SDK's bundled key. |
 | `appearance` | `'day'\|'night'\|'auto'` | `'auto'` | theme mode |
 | `languageCode` | `string` | – | preselect a language, skips the language screen |
 | `defaultCountryCode` | `string` | `''` (derive) | OPTIONAL override for the country used in the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. **Leave it unset and the SDK derives the country from the device locale**, exactly as the app does. Set it only to pin the SDK to one region. |
@@ -233,7 +237,7 @@ keys as the Android SDK, but localization on React Native is **not verified**.
 
 Endpoint #12 (home feed) stays empty until the backend has a resolved location, and it resolves
 one ONLY from coordinates — a country name alone is rejected. When the Google `geolocate` call
-fails (or no `geoApiKey` is configured), the SDK does what the app does: it derives the **device
+fails, the SDK does what the app does: it derives the **device
 locale's country** and uses that country's centroid from a 247-entry table ported verbatim from
 the app's `CountryLatLngProvider`, accepting it only when `lat != 0 && lng != 0`.
 

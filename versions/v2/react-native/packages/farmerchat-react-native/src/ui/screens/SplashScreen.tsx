@@ -32,8 +32,15 @@ export function SplashScreen(props: {
     const run = async () => {
       const startedAt = Date.now();
       await sdk.ready();
-      // Guest session bootstrap (issues tokens for all later calls).
-      await sdk.session.ensureGuestSession();
+      // Guest session bootstrap (issues tokens for all later calls). CHAT_ONLY skips onboarding,
+      // so it also bootstraps labels + the conversation headlessly (FarmerChatGraph parity).
+      if (sdk.config.mode === 'CHAT_ONLY') {
+        // Each fresh journey = a new conversation (the app's per-Home-entry rule).
+        sdk.beginChatOnlyJourney();
+        await sdk.ensureChatOnlySession();
+      } else {
+        await sdk.session.ensureGuestSession();
+      }
       sdk.store.set(StorageKeys.IS_PROFILE_LOADED, true);
       sdk.analytics.track(AnalyticsEvents.APP_OPENED, { build_version: 'V2' });
       sdk.analytics.trackScreenView(ScreenNames.SPLASH);

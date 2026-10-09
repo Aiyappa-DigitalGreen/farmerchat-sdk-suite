@@ -156,6 +156,7 @@ export function ActionButton(props: {
   iconSize?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  accessibilityLabel?: string;
 }): React.ReactElement {
   const theme = useTheme();
   const bg = props.background ?? theme.content.buttonPrimarySurface;
@@ -166,6 +167,7 @@ export function ActionButton(props: {
     <Pressable
       testID={props.testID}
       accessibilityRole="button"
+      accessibilityLabel={props.accessibilityLabel}
       onPress={props.onPress}
       hitSlop={6}
       style={({ pressed }) => [

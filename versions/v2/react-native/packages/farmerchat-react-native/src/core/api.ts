@@ -23,7 +23,7 @@ export class FarmerChatApi {
   geolocate(): Promise<ApiResult<M.GeoResponse>> {
     return this.http.request<M.GeoResponse>({
       method: 'POST',
-      path: `${GOOGLE_GEOLOCATE_URL}?key=${encodeURIComponent(this.config.geoApiKey ?? '')}`,
+      path: `${GOOGLE_GEOLOCATE_URL}?key=${encodeURIComponent(this.config.geoApiKey)}`,
       apiName: 'geolocate',
       body: { considerIp: true } satisfies M.GeoRequestBody,
       priority: ApiPriorities.P1_ONBOARDING_FALLBACK,
@@ -37,7 +37,7 @@ export class FarmerChatApi {
     body: M.InitializeGuestUserRequest,
   ): Promise<ApiResult<M.InitializeGuestUserResponse>> {
     const headers: Record<string, string> = {};
-    if (this.config.guestApiKey) headers['API-Key'] = this.config.guestApiKey;
+    if (this.config.farmerChatApiKey) headers['API-Key'] = this.config.farmerChatApiKey;
     return this.http.request<M.InitializeGuestUserResponse>({
       method: 'POST',
       path: 'api/user/initialize_user/',
