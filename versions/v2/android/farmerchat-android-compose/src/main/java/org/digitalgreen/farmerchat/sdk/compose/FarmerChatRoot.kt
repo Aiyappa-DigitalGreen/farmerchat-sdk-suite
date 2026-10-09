@@ -140,6 +140,24 @@ fun FarmerChatRoot(
 
     // ------------------------------------------------------------------ navigation helpers
 
+    /**
+     * Leave the SDK (CHAT_ONLY close, Back on the chat root, a host-opened root screen). Fires the
+     * host's `onExit`. In the SDK's own [FarmerChatActivity] the activity then finishes; embedded
+     * ([FarmerChatInline] / a host-placed [FarmerChatRoot]) the SDK cannot remove itself, so a
+     * wired `onExit` hands that to the host and the HOST activity is left alone — it only finishes
+     * when nothing is wired (the pre-existing behaviour). The context is unwrapped first: a host
+     * that provides a wrapped `LocalContext` made the old `context as? Activity` a silent no-op.
+     */
+    fun exitSdk() {
+        val activity = context.findActivity()
+        val onExit = graph.config.hooks.onExit
+        runCatching { onExit?.invoke() }
+        if (activity is FarmerChatActivity || onExit == null) activity?.finish()
+    }
+
+    /** Whether [exitSdk] can make the SDK UI go away (always in our activity; embedded only with `onExit`). */
+    val exitRemovesSdk = context.findActivity() is FarmerChatActivity || graph.config.hooks.onExit != null
+
     fun navigateClearingStack(destination: Destination) {
         navController.navigate(destination) {
             popUpTo(0) { inclusive = true }
@@ -355,7 +373,7 @@ fun FarmerChatRoot(
             // Opened over an existing screen (the chat's toolbar): back to THAT screen, state
             // intact, instead of rebuilding a fresh one (views parity).
             navController.previousBackStackEntry != null -> navController.popBackStack()
-            screenOpenedByHost -> (context as? Activity)?.finish()
+            screenOpenedByHost -> exitSdk()
             else -> navigateHomeOrChat()
         }
     }
@@ -592,6 +610,15 @@ fun FarmerChatRoot(
 
             composable<Destination.Chat> { backStackEntry ->
                 val args = backStackEntry.toRoute<Destination.Chat>()
+                // System Back on the CHAT_ONLY chat root does what the close button does. Declared
+                // before ChatScreen so its own (overlay/sheet) handlers still win. Embedded with
+                // no `onExit`, Back keeps falling through to the host as before. FULL_JOURNEY is
+                // untouched (its chat sits above Home).
+                androidx.activity.compose.BackHandler(
+                    enabled = graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
+                        navController.previousBackStackEntry == null &&
+                        exitRemovesSdk
+                ) { exitSdk() }
                 WithDrawer { openDrawer ->
                     ChatScreen(
                         args = args,
@@ -600,7 +627,7 @@ fun FarmerChatRoot(
                             // CHAT_ONLY has no SDK Home to return to — close should exit
                             // the SDK and hand control back to the host app.
                             if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
-                                (context as? Activity)?.finish()
+                                exitSdk()
                             } else {
                                 navController.navigate(Destination.Home) {
                                     popUpTo<Destination.Home> { inclusive = false }
@@ -620,7 +647,14 @@ fun FarmerChatRoot(
                             navController.navigate(Destination.SettingsLanguage) { launchSingleTop = true }
                         },
                         onBackToHistory = {
-                            if (!navController.popBackStack()) (context as? Activity)?.finish()
+                            // `popBackStack()` also pops the ROOT entry (returns true, blank
+                            // NavHost), so a CHAT_ONLY `openChat(conversationId)` thread — the
+                            // only entry — never exited. Exit when there is nothing beneath.
+                            if (navController.previousBackStackEntry != null) {
+                                navController.popBackStack()
+                            } else {
+                                exitSdk()
+                            }
                         }
                     )
                 }
@@ -872,4 +906,11 @@ fun FarmerChatRoot(
         )
     }
     }
+}
+
+/** The Activity behind a (possibly wrapped) context, or null. */
+private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

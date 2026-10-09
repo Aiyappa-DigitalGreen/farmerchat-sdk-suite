@@ -7,6 +7,13 @@ import FarmerChatCore
 /// route, global LocationPromptHost.
 public struct FarmerChatView: View {
     @Environment(\.colorScheme) private var colorScheme
+    /// Set by the SDK's own presenters (FAB cover, `present(from:)`) — see ``FCExitActionKey``.
+    @Environment(\.fcExitAction) private var sdkExitAction
+    /// The HOST's presentation context (outside this view's NavigationStack): when the host put
+    /// `FarmerChatView` in its own `.sheet`/`.fullScreenCover`, this dismisses it with the host's
+    /// binding kept in sync.
+    @Environment(\.dismiss) private var hostDismiss
+    @Environment(\.isPresented) private var hostIsPresented
     @StateObject private var router: FCRouter
     @StateObject private var chatHistoryVM: ChatHistoryViewModel
     @StateObject private var settingsVM: SettingsViewModel
@@ -20,8 +27,18 @@ public struct FarmerChatView: View {
     /// take effect until the next launch.
     @State private var languageTick = 0
 
+    /// Inline embedding (`FarmerChatInlineView`): the Close (X) must not dismiss the HOST's
+    /// presentation — `isPresented` is also true for an inline view inside a host sheet or a
+    /// pushed host screen, and dismissing would close the host's whole screen.
+    private let inline: Bool
+
     public init() {
+        self.init(inline: false)
+    }
+
+    init(inline: Bool) {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatView()")
+        self.inline = inline
         _router = StateObject(wrappedValue: FCRouter())
         _chatHistoryVM = StateObject(wrappedValue: ChatHistoryViewModel())
         _settingsVM = StateObject(wrappedValue: SettingsViewModel())
@@ -85,6 +102,7 @@ public struct FarmerChatView: View {
                 .zIndex(20)
         }
         .environment(\.fcTheme, theme)
+        .environment(\.fcExitAction, resolvedExitAction)
         .environmentObject(router)
         .environmentObject(locationPrompt)
         .preferredColorScheme(preferredScheme)
@@ -96,6 +114,16 @@ public struct FarmerChatView: View {
         }
         // Home reloads its feed + weather itself on a location success (HomeView), as the app's
         // HomeScreen does — no root rebuild here, which reloaded Home a second time.
+    }
+
+    /// What the CHAT_ONLY Close (X) does after firing `config.onExit`: the SDK presenter's own
+    /// dismiss, else (non-inline only) the host's SwiftUI presentation dismiss, else nothing —
+    /// the host hides the SDK from `onExit`.
+    private var resolvedExitAction: (@MainActor () -> Void)? {
+        if let sdkExitAction { return sdkExitAction }
+        guard !inline, hostIsPresented else { return nil }
+        let dismiss = hostDismiss
+        return { dismiss() }
     }
 
     private var preferredScheme: ColorScheme? {
@@ -206,7 +234,7 @@ public struct FarmerChatInlineView: View {
     }
 
     public var body: some View {
-        FarmerChatView()
+        FarmerChatView(inline: true)
     }
 }
 
@@ -216,8 +244,33 @@ extension FarmerChat {
     /// Presents the full SwiftUI journey modally from UIKit (iOS 16+).
     @MainActor
     public func present(from presenter: UIViewController, animated: Bool = true) {
-        let hosting = UIHostingController(rootView: FarmerChatView())
+        let box = FCWeakViewController()
+        let hosting = UIHostingController(rootView: FarmerChatView()
+            .environment(\.fcExitAction) { box.controller?.dismiss(animated: true) })
+        box.controller = hosting
         hosting.modalPresentationStyle = .fullScreen
         presenter.present(hosting, animated: animated)
     }
+}
+
+// MARK: - Exit (CHAT_ONLY Close)
+
+/// How the SDK's chat Close (X) removes the SDK UI. Each SDK presenter (FAB cover,
+/// `present(from:)`) installs the dismiss of exactly the container it created; the chat never
+/// walks the window hierarchy (that dismissed whatever happened to be on top — a host's own
+/// sheet, or a SwiftUI cover behind its binding's back, so the FAB could not reopen).
+struct FCExitActionKey: EnvironmentKey {
+    static let defaultValue: (@MainActor () -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var fcExitAction: (@MainActor () -> Void)? {
+        get { self[FCExitActionKey.self] }
+        set { self[FCExitActionKey.self] = newValue }
+    }
+}
+
+/// Lets `present(from:)` hand the hosting controller to its own root view without a cycle.
+final class FCWeakViewController {
+    weak var controller: UIViewController?
 }

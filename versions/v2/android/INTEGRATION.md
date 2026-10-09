@@ -379,6 +379,21 @@ supportFragmentManager.beginTransaction()
 `FarmerChatRoot()` (Compose) is the whole journey as a composable, if you want to host the nav
 graph yourself rather than use the SDK's `Activity`.
 
+### Closing an embedded chat (`onExit`)
+
+In CHAT_ONLY the chat's close (✕) button — and system Back on the chat — leaves the SDK. In the
+SDK's own `Activity` (`launch`, `openChat`, both FABs) that just finishes the activity. Embedded
+(`FarmerChatInline`, `FarmerChatRoot`, `FarmerChatFragment`) the SDK cannot remove itself, so wire
+`onExit` and remove it yourself:
+
+```kotlin
+.onExit { showChat = false }   // config builder; also fires (as a notification) in the SDK Activity
+```
+
+With `onExit` wired, an embedded SDK never finishes your activity. With nothing wired, close
+finishes the host activity and Back falls through to your activity, as before. `FarmerChatFragment`
+also still honours a `FarmerChatFragment.ExitListener` on a parent fragment or the activity.
+
 ### Views: the SDK composer on your own screen
 
 `FarmerChatComposerFragment` puts the SDK's input composer on a host screen (your home /
@@ -562,7 +577,7 @@ in whatever you already use.
 ```
 
 Narrower hooks also exist: `onChatOpened`, `onMessageSent`, `onAnswerReceived`, `onScreenView`,
-`onSessionStart`. `enableAnalytics(false)` silences all of it.
+`onSessionStart`, `onExit` (the user closed the SDK — see "Closing an embedded chat"). `enableAnalytics(false)` silences all of it.
 `FarmerChat.setAnalyticsListener(...)` swaps the listener after `initialize`.
 
 Event names are byte-identical to the reference app's constants, so dashboards line up.

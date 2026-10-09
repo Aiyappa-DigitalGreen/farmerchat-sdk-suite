@@ -25,6 +25,8 @@ FarmerChat.updateTokens(accessToken, refreshToken?)  // HOST_TOKEN: push a fresh
 FarmerChat.logout()
 FarmerChat.isAuthenticated / onAuthStateChanged
 FarmerChat.setAnalyticsListener(listener)
+config.onExit                     // CHAT_ONLY close / back with nothing beneath: SDK presenters close themselves and
+                                  //   fire it; embedded hosts remove the SDK in it (docs/07 C4). All four platforms.
 FarmerChat.ensureChatOnlyBootstrap() / FarmerChat.beginChatOnlyJourney()
                                   // iOS public (2.2.0); internal on Android (FarmerChatGraph), RN (sdk.ts) and
                                   // web (chatOnlyBootstrap.ts): headless guest init + languages + labels, and a

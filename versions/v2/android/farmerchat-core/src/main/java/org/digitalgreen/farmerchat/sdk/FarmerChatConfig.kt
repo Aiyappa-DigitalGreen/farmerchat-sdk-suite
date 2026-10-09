@@ -65,6 +65,14 @@ class FarmerChatHooks internal constructor(
     val onSessionStart: (() -> Unit)?,
     /** The user picked a language inside the SDK (id + code as the backend knows them). */
     val onLanguageChanged: ((languageId: Int, languageCode: String) -> Unit)? = null,
+    /**
+     * The user closed the SDK from a surface with nowhere to go back to (the CHAT_ONLY chat's
+     * close button, or system Back on it). The SDK's own Activity still finishes itself; an
+     * EMBEDDED journey (compose `FarmerChatInline`/`FarmerChatRoot`, views `FarmerChatFragment`)
+     * cannot remove itself, so with this set it leaves the removal to the host instead of
+     * finishing the host's Activity (docs/07 `onExit()`).
+     */
+    val onExit: (() -> Unit)? = null,
 )
 
 /**
@@ -400,6 +408,7 @@ class FarmerChatConfig private constructor(
         .stringOverrides(stringOverrides)
         .locale(locale)
         .onLanguageChanged(hooks.onLanguageChanged)
+        .onExit(hooks.onExit)
         .endpointOverrides(endpointOverrides)
 
     class Builder(private val environment: FarmerChatEnvironment) {
@@ -458,6 +467,7 @@ class FarmerChatConfig private constructor(
         private var onError: ((Int, String) -> Unit)? = null
         private var onSessionStart: (() -> Unit)? = null
         private var onLanguageChanged: ((Int, String) -> Unit)? = null
+        private var onExit: (() -> Unit)? = null
         private var endpointOverrides: Map<String, String> = emptyMap()
 
         private var stringOverrides: Map<String, String> = emptyMap()
@@ -575,6 +585,8 @@ class FarmerChatConfig private constructor(
         /** Language picked inside the SDK — keep the host's own language state in step. */
         fun onLanguageChanged(cb: ((languageId: Int, languageCode: String) -> Unit)?) =
             apply { onLanguageChanged = cb }
+        /** The user closed the SDK (CHAT_ONLY close / Back on the chat) — see [FarmerChatHooks.onExit]. */
+        fun onExit(cb: (() -> Unit)?) = apply { onExit = cb }
 
         /** SDK path → host path (relative to the base URL) for a host backend on other paths. */
         fun endpointOverrides(overrides: Map<String, String>) = apply { endpointOverrides = overrides }
@@ -628,7 +640,7 @@ class FarmerChatConfig private constructor(
             messageFontSizeSp = messageFontSizeSp,
             hooks = FarmerChatHooks(
                 onChatOpened, onMessageSent, onAnswerReceived,
-                onScreenView, onError, onSessionStart, onLanguageChanged
+                onScreenView, onError, onSessionStart, onLanguageChanged, onExit
             ),
             stringOverrides = stringOverrides,
             locale = locale,

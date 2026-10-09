@@ -8,6 +8,7 @@ import FarmerChatCore
 /// pagination, input overlays.
 struct ChatView: View {
     @Environment(\.fcTheme) private var theme
+    @Environment(\.fcExitAction) private var exitAction
     @EnvironmentObject var router: FCRouter
     /// The global location prompt state machine (provided by `FarmerChatView`). 2.0.0: the
     /// GPS_PROMPT capability chip drives it and consumes the outcome.
@@ -240,15 +241,12 @@ struct ChatView: View {
         .accessibilityLabel(label)
     }
 
-    /// CHAT_ONLY exit: dismiss the modally-presented SDK (present(from:)) back to
-    /// the host. No-op when embedded inline (host owns the surface).
+    /// CHAT_ONLY exit: tell the host (`config.onExit` — the only signal an inline-embedded SDK
+    /// has), then dismiss the container the SDK UI is shown in, when there is one to dismiss
+    /// (FAB cover, `present(from:)`, or the host's own SwiftUI sheet/cover).
     private func exitSdk() {
-        var top = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }?.rootViewController
-        while let presented = top?.presentedViewController { top = presented }
-        top?.dismiss(animated: true)
+        FarmerChat.shared.analytics.exit()
+        exitAction?()
     }
 
     // MARK: - Thread

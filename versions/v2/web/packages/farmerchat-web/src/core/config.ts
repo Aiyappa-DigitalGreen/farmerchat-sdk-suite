@@ -446,6 +446,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
       onScreenView: config.onScreenView,
       onError: config.onError,
       onSessionStart: config.onSessionStart,
+      // Without this the CHAT_ONLY close button fired into nothing and the host never closed.
+      onExit: config.onExit,
     },
     onEvent: config.onEvent,
     onSessionExpired: config.onSessionExpired,

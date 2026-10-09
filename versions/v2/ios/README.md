@@ -190,9 +190,27 @@ FarmerChatConfig(
     onAnswerReceived: { messageId in … },
     onScreenView: { name in … },
     onError: { code, message in … },
-    onSessionStart: { … }
+    onSessionStart: { … },
+    onExit: { … }                       // CHAT_ONLY Close (X) — see "Closing the SDK"
 )
 ```
+
+### Closing the SDK (`onExit`)
+
+In CHAT_ONLY the chat's left app-bar button is a Close (X). Pressing it always fires
+`config.onExit` (also `FCFarmerChatConfiguration.onExit` for Objective-C; fires on the main thread,
+independent of `enableAnalytics`), and then:
+
+| How the SDK is shown | What the X does |
+|---|---|
+| `FarmerChatFabButton` (SwiftUI or UIKit) | dismisses the FAB's own full-screen cover |
+| `FarmerChat.shared.present(from:)` / `FCFarmerChat.present(from:)` / host `present(FarmerChatViewController())` | dismisses that presentation |
+| `FarmerChatView()` as the content of the host's own SwiftUI `.sheet` / `.fullScreenCover`, or pushed onto the host's `NavigationStack` | dismisses / pops it through SwiftUI's `dismiss` (the host's binding stays in sync) |
+| Inline / embedded — `FarmerChatInlineView()` (even inside a host sheet or pushed screen), `FarmerChatViewController` as a child VC, or inside a `UIViewControllerRepresentable` | **nothing else** — the SDK cannot remove itself; hide/remove it in `onExit` |
+| `FarmerChatView()` in the host's OWN `UIHostingController`, presented from UIKit | **nothing else** (changed 2026-10-09: the X used to dismiss whatever was topmost in the key window) — use `FarmerChat.shared.present(from:)` instead, or dismiss in `onExit` |
+
+If you dismiss a self-dismissing presentation from `onExit` as well, guard against a double
+dismiss. FULL_JOURNEY's back arrow is unchanged (it returns to the SDK's Home).
 
 Programmatic navigation + inline embedding:
 

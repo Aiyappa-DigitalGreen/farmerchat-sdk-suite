@@ -114,3 +114,22 @@ test('drawer off: drawer-level screens get back, never a dead drawer opener', ()
   assert.equal(graph.match(/onBack=\{drawerOffBack\(sdk\.config\.showDrawer, appNavigator\)\}/g)?.length, 4);
   assert.ok(graph.includes('onLanguageSaved={() => appNavigator.navigateLanguageSaved()}'));
 });
+
+test('onExit also reaches the SDK\'s own presenters (FarmerChatFab), host callback or not', async () => {
+  const { AnalyticsManager } = await import('../src/core/analytics.ts');
+  const { onSdkExit } = await import('../src/core/exitSignal.ts');
+  let presenterClosed = 0;
+  let hostCalled = 0;
+  const off = onSdkExit(() => { presenterClosed += 1; });
+  new AnalyticsManager(null, {}, false).fireCallback('onExit');
+  new AnalyticsManager(null, { onExit: () => { hostCalled += 1; } }, false).fireCallback('onExit');
+  off();
+  new AnalyticsManager(null, {}, false).fireCallback('onExit');
+  assert.equal(presenterClosed, 2);
+  assert.equal(hostCalled, 1);
+});
+
+test('FarmerChatFab closes its modal on the SDK exit', () => {
+  const src = readFileSync(new URL('../src/FarmerChatFab.tsx', import.meta.url), 'utf8');
+  assert.match(src, /onSdkExit\(\(\) => setOpen\(false\)\)/);
+});

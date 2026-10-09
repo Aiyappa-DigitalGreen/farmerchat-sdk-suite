@@ -92,7 +92,10 @@ public struct FarmerChatFabButton: View {
         .padding(20)
         .fullScreenCover(isPresented: $isPresented) {
             ZStack(alignment: .topTrailing) {
+                // The chat's own Close (X) flips the binding — dismissing the cover through
+                // UIKit left `isPresented` stuck at true, so the FAB could not reopen it.
                 FarmerChatView()
+                    .environment(\.fcExitAction) { isPresented = false }
                 Button {
                     isPresented = false
                 } label: {

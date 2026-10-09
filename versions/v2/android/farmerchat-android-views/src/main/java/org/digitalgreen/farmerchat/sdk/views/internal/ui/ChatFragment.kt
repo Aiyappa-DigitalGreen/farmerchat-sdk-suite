@@ -187,7 +187,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 // Drawer off (CHAT_ONLY): openDrawer() is a no-op, so this would strand the
                 // user in a thread opened from history. Step back to the history list, or exit
                 // if there is nothing to pop.
-                if (!findNavController().popBackStack()) exitJourney()
+                // `popBackStack()` also pops the ROOT entry (true, blank NavHost), so a CHAT_ONLY
+                // `openChat(conversationId)` thread — the only entry — never exited.
+                val nav = findNavController()
+                if (nav.previousBackStackEntry != null) nav.popBackStack() else exitJourney()
             } else {
                 graph.analytics.track(AnalyticsEvents.CHAT_SCREEN_BACK_BUTTON_CLICK)
                 // CHAT_ONLY has no SDK Home — close exits the SDK back to the host
@@ -209,6 +212,22 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             }
         }
         setUpAppBarActions()
+
+        // System Back on the CHAT_ONLY chat root does what the close button does (fires `onExit`,
+        // leaves the SDK). Only where leaving actually removes the SDK — an embed with no
+        // ExitListener/`onExit` keeps Back falling through to the host. FULL_JOURNEY untouched.
+        // Evaluated once per view: a screen pushed over the chat destroys this view (and the
+        // callback with it), so the chat's root-ness cannot change while it is registered.
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : androidx.activity.OnBackPressedCallback(
+                isChatOnly &&
+                    findNavController().previousBackStackEntry == null &&
+                    journeyHost()?.exitRemovesSdk != false
+            ) {
+                override fun handleOnBackPressed() = exitJourney()
+            }
+        )
 
         overlays = InputOverlaysController(
             fragment = this,

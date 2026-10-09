@@ -127,14 +127,32 @@ class FarmerChatFragment : Fragment(R.layout.fc_journey_host), JourneyHost {
         (activity as? AppCompatActivity)?.applyLocalNightMode(mode)
     }
 
-    override fun exitJourney() {
+    /** The nearest [ExitListener] on the parent chain, then the activity. */
+    private fun exitListener(): ExitListener? {
         var parent: Fragment? = parentFragment
         while (parent != null) {
-            if (parent is ExitListener) return parent.onFarmerChatExit()
+            if (parent is ExitListener) return parent
             parent = parent.parentFragment
         }
-        (activity as? ExitListener)?.onFarmerChatExit() ?: activity?.finish()
+        return activity as? ExitListener
     }
+
+    private fun onExitHook(): (() -> Unit)? =
+        runCatching { FarmerChat.requireGraph().config.hooks.onExit }.getOrNull()
+
+    override fun exitJourney() {
+        val hook = onExitHook()
+        runCatching { hook?.invoke() }
+        val listener = exitListener()
+        when {
+            listener != null -> listener.onFarmerChatExit()
+            // `onExit` is wired: the host removes this fragment; never finish ITS activity.
+            hook != null -> Unit
+            else -> activity?.finish()
+        }
+    }
+
+    override val exitRemovesSdk: Boolean get() = exitListener() != null || onExitHook() != null
 
     companion object {
         private const val ARG_QUESTION = "fc_arg_question"

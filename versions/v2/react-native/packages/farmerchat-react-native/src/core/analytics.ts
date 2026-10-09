@@ -9,6 +9,8 @@
  * read-only reference). No invented events.
  */
 import type { FarmerChatCallbacks, FarmerChatEventListener } from './config';
+import { emitSdkExit } from './exitSignal';
+
 
 export const AnalyticsEvents = {
   // --- app lifecycle ---
@@ -213,6 +215,8 @@ export class AnalyticsManager {
   ): void {
     const fn = this.callbacks[name] as ((...a: unknown[]) => void) | undefined;
     this.semantic(fn ? () => fn(...args) : undefined);
+    // The SDK's own presenters (FarmerChatFab) close on exit even when the host wired no onExit.
+    if (name === 'onExit') emitSdkExit();
   }
 
   trackScreenExit(screen: string, extra: Record<string, unknown> = {}): void {

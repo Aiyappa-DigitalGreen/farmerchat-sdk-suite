@@ -108,8 +108,11 @@ class FarmerChatActivity : AppCompatActivity(), JourneyHost {
     }
 
     override fun exitJourney() {
+        runCatching { FarmerChat.requireGraph().config.hooks.onExit?.invoke() }
         finish()
     }
+
+    override val exitRemovesSdk: Boolean get() = true
 
     override fun applyAppearance(mode: String) {
         applyLocalNightMode(mode)

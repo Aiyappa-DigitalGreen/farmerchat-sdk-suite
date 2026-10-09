@@ -118,6 +118,7 @@ public final class FarmerChat: @unchecked Sendable {
             },
             onScreenView: config.onScreenView,
             onChatOpened: config.onChatOpened,
+            onExit: config.onExit,
             enabled: config.enableAnalytics
         )
 

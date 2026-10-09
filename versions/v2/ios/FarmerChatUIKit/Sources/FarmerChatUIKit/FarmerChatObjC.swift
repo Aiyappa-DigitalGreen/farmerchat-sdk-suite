@@ -204,6 +204,9 @@ public final class FCFarmerChatConfiguration: NSObject {
     /// is not the same as status 0. Same reasoning as `bubbleCornerRadius`.
     @objc public var onError: ((NSNumber?, String) -> Void)?
     @objc public var onSessionStart: (() -> Void)?
+    /// The user closed the SDK (CHAT_ONLY chat Close). A modally presented journey also
+    /// dismisses itself; an embedded one cannot, so hide/remove it here.
+    @objc public var onExit: (() -> Void)?
 
     @objc public override init() { super.init() }
 
@@ -283,7 +286,8 @@ public final class FCFarmerChatConfiguration: NSObject {
             onError: onErrorBlock.map { block in
                 { @Sendable code, message in block(code.map(NSNumber.init(value:)), message) }
             },
-            onSessionStart: onSessionStart.map { block in { @Sendable in block() } }
+            onSessionStart: onSessionStart.map { block in { @Sendable in block() } },
+            onExit: onExit.map { block in { @Sendable in block() } }
         )
     }
 }

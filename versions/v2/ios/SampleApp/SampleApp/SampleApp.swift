@@ -5,6 +5,10 @@ import FarmerChatSwiftUI
 /// Sample host app. Add this file set to an iOS App target (iOS 16+) with the
 /// local packages FarmerChatCore, FarmerChatSwiftUI and FarmerChatUIKit —
 /// see SampleApp/README.md.
+extension Notification.Name {
+    static let farmerChatDidExit = Notification.Name("SampleAppFarmerChatDidExit")
+}
+
 @main
 struct SampleApp: App {
     init() {
@@ -51,6 +55,11 @@ struct SampleApp: App {
             },
             onSessionExpired: {
                 print("[FarmerChat] session expired")
+            },
+            onExit: {
+                // 3. CHAT_ONLY Close (X). The UIKit flow below is embedded in a SwiftUI cover
+                // through a representable, so the SDK cannot dismiss it itself — hide it here.
+                NotificationCenter.default.post(name: .farmerChatDidExit, object: nil)
             }
         ))
     }

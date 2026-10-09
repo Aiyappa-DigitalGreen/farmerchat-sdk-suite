@@ -8270,3 +8270,23 @@ web tsc + build + tests; browser: the widget's chat bar shows only the language 
 The Malnad Monsoon Collective page gained a five-day forecast strip (with the dry spray window
 highlighted), member numbers, member services, collection-centre events and a field quote, so it reads
 as a full site like the earlier demo. All figures and the quote are labelled illustrative.
+
+## Chat close (X) did not close the SDK — all v2 platforms (2026-10-09)
+
+User report: "clicking close on any platform is not closing the chat interface". CHAT_ONLY's chat app
+bar X fires the SDK exit; the bugs were in who heard it.
+
+| Platform | Before | Fix |
+|---|---|---|
+| web | `resolveConfig` dropped `onExit` from `callbacks`, so the close fired into nothing and the widget panel (which collapses on `onExit`) stayed open | `callbacks.onExit: config.onExit`; test in `chatOnlyDefaults.test.ts`. **Browser-verified** on the widget: real click on X → panel closes, launcher returns |
+| react-native | `FarmerChatFab`'s modal never listened for the exit | internal `core/exitSignal.ts` (`emitSdkExit` from `fireCallback('onExit')`, `onSdkExit` in the FAB → `setOpen(false)`); tests in `config.test.ts`. `<FarmerChatView>` hosts use `onExit` |
+| android | SDK's own Activity already closed on X/Back (re-verified on emulator-5554, compose + views). Gaps: no `onExit` at all for embedded hosts; system Back didn't share X's path; a CHAT_ONLY history thread at the root could pop to a blank screen | **public** `FarmerChatHooks.onExit` / `Builder.onExit` (kept by `newBuilder`); `exitSdk()` (compose `FarmerChatRoot`), `exitJourney()` (views Activity/Fragment) fire it then finish only when the SDK owns the Activity or nothing is wired; CHAT_ONLY root-chat `BackHandler`/callback; pop only when a screen is beneath; `findActivity()` instead of `context as? Activity`. Test `ExitHookConfigTest` (3). Embedded paths compile-only; root history-thread fix not reproduced |
+| ios | X walked the key window and dismissed whatever was topmost: FAB cover's `isPresented` never reset (reopen likely broken, unverified), inline/embedded dismissed the host's modal or did nothing, no `onExit` | **public** `FarmerChatConfig.onExit` + ObjC `FCFarmerChatConfiguration.onExit` → `AnalyticsDispatcher.exit()` (fires even with analytics off); SwiftUI `fcExitAction` environment per presenter (present(from:) dismisses its own hosting controller, FAB sets `isPresented = false`, host sheet/cover/nav uses the host's `dismiss`, inline fires `onExit` only); UIKit `close()` fires `onExit`, dismisses only if it is the presented VC. Tests `ExitCallbackTests` (4); SampleApp updated |
+
+FULL_JOURNEY back-arrow behaviour (pop to Home) is unchanged everywhere.
+
+Verified: web tsc + build + tests (8 pass) + widget build + browser; RN tsc + tests (13 pass); android
+core/compose/views compile + core tests (241, 0 failures) + samples compile, emulator X/Back on the
+SDK Activity (compose + views); ios Core build + test (134, 0 failures), SwiftUI + UIKit + SampleApp
+simulator builds. iOS runtime (incl. FAB → X → reopen) and Android/iOS/RN embedded `onExit` paths:
+UNVERIFIED on device.

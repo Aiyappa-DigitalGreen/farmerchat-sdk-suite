@@ -100,6 +100,9 @@ public final class AnalyticsDispatcher: @unchecked Sendable {
     /// Semantic screen callbacks (docs/07 C4). Fired alongside raw events.
     private let onScreenView: (@Sendable (String) -> Void)?
     private let onChatOpened: (@Sendable () -> Void)?
+    /// Host `FarmerChatConfig.onExit` — a lifecycle callback, NOT telemetry: it fires
+    /// regardless of `enabled`.
+    private let onExit: (@Sendable () -> Void)?
     /// Telemetry master switch — `FarmerChatConfig.enableAnalytics`, default FALSE.
     ///
     /// Everything upstream is unchanged when it is false: events are still constructed with their
@@ -114,12 +117,20 @@ public final class AnalyticsDispatcher: @unchecked Sendable {
         handler: FarmerChatEventHandler?,
         onScreenView: (@Sendable (String) -> Void)? = nil,
         onChatOpened: (@Sendable () -> Void)? = nil,
+        onExit: (@Sendable () -> Void)? = nil,
         enabled: Bool = false
     ) {
         self.enabled = enabled
         self.handler = handler
         self.onScreenView = onScreenView
         self.onChatOpened = onChatOpened
+        self.onExit = onExit
+    }
+
+    /// The user closed the SDK (CHAT_ONLY chat Close). Tells the host, which must hide an
+    /// inline-embedded SDK; self-presented containers also dismiss themselves.
+    public func exit() {
+        onExit?()
     }
 
     public func track(_ name: String, props: [String: String] = [:]) {

@@ -98,3 +98,10 @@ test('a CHAT_ONLY journey start clears the stored conversation unless opening a 
   beginChatOnlyJourney(store, { type: 'chat', chatId: 'conv-history' });
   assert.equal(store.getString(PrefKeys.NEW_CONVERSATION_ID), 'conv-old');
 });
+
+test('resolveConfig keeps onExit, so the CHAT_ONLY close reaches the host (and the widget)', () => {
+  let exited = 0;
+  const c = resolveConfig({ environment: 'prod', onExit: () => { exited += 1; } });
+  c.callbacks.onExit?.();
+  assert.equal(exited, 1);
+});

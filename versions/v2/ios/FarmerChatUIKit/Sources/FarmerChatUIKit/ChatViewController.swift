@@ -213,8 +213,18 @@ final class FCUIChatViewController: UIViewController {
 
     private func close() {
         if args.source == "chatOnly" {
-            // CHAT_ONLY has no SDK Home — exit the SDK back to the host.
-            (navigationController ?? self).presentingViewController?.dismiss(animated: true)
+            // CHAT_ONLY has no SDK Home — exit the SDK back to the host. Always tell the host
+            // (`config.onExit`): an embedded journey (child VC, tab, SwiftUI representable)
+            // cannot remove itself. Self-dismiss ONLY when the journey itself is the presented
+            // controller (FAB, FCFarmerChat.present, host `present(...)`): for an embedded one,
+            // `presentingViewController` is the presenter of an ANCESTOR, and dismissing it
+            // would close the host's own modal.
+            FarmerChat.shared.analytics.exit()
+            let journey = navigationController ?? self
+            if let presenter = journey.presentingViewController,
+               presenter.presentedViewController === journey {
+                presenter.dismiss(animated: true)
+            }
         } else if args.source == "history" {
             navigationController?.popViewController(animated: true)
         } else {

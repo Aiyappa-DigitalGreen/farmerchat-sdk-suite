@@ -278,6 +278,12 @@ public struct FarmerChatConfig: Sendable {
     public var onScreenView: (@Sendable (_ name: String) -> Void)?
     public var onError: (@Sendable (_ code: Int?, _ message: String) -> Void)?
     public var onSessionStart: (@Sendable () -> Void)?
+    /// Fired when the user closes the SDK from a surface with nowhere to go back to (the
+    /// CHAT_ONLY chat's Close (X)) — docs/07 C4. When the SDK presented itself (FAB,
+    /// `present(from:)`, a modally presented `FarmerChatViewController`) it also dismisses
+    /// itself; when it is embedded inline (`FarmerChatInlineView`, a child view controller)
+    /// it cannot remove itself, so the host must hide/unmount it here.
+    public var onExit: (@Sendable () -> Void)?
 
     public init(
         environment: FarmerChatEnvironment = .prod,
@@ -323,7 +329,8 @@ public struct FarmerChatConfig: Sendable {
         onAnswerReceived: (@Sendable (_ messageId: String) -> Void)? = nil,
         onScreenView: (@Sendable (_ name: String) -> Void)? = nil,
         onError: (@Sendable (_ code: Int?, _ message: String) -> Void)? = nil,
-        onSessionStart: (@Sendable () -> Void)? = nil
+        onSessionStart: (@Sendable () -> Void)? = nil,
+        onExit: (@Sendable () -> Void)? = nil
     ) {
         self.environment = environment
         self.customBaseURL = customBaseURL
@@ -371,5 +378,6 @@ public struct FarmerChatConfig: Sendable {
         self.onScreenView = onScreenView
         self.onError = onError
         self.onSessionStart = onSessionStart
+        self.onExit = onExit
     }
 }

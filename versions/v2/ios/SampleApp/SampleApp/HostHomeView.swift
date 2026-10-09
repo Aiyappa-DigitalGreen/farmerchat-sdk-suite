@@ -44,6 +44,12 @@ struct HostHomeView: View {
             UIKitFlowHost()
                 .ignoresSafeArea()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .farmerChatDidExit).receive(on: DispatchQueue.main)) { _ in
+            // config.onExit: the SwiftUI cover already closed itself; the UIKit-in-SwiftUI
+            // cover is embedded, so the host closes it.
+            showUIKitFlow = false
+            showSwiftUIFlow = false
+        }
         .onReceive(FarmerChat.shared.onAuthStateChanged.receive(on: DispatchQueue.main)) { value in
             isAuthenticated = value
         }

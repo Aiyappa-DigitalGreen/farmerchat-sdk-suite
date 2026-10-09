@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { FarmerChat } from './FarmerChat';
 import { FarmerChatView } from './FarmerChatView';
+import { onSdkExit } from './core/exitSignal';
 import { Assets } from './ui/assets';
 import { brandLogo, dayTheme } from './ui/theme';
 
@@ -48,6 +49,8 @@ function fabConfigDefaults(): { label?: string; bg?: string; fg?: string } {
 
 export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
+  // The chat's own Close (CHAT_ONLY) fires the SDK exit: dismiss the modal it lives in.
+  React.useEffect(() => onSdkExit(() => setOpen(false)), []);
   const defaults = fabConfigDefaults();
   // Precedence: per-instance prop → config default → theme brand.
   const bg = props.backgroundColor ?? defaults.bg ?? dayTheme.brandPrimary;
