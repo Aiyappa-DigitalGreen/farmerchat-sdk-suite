@@ -1,8 +1,12 @@
 # FarmerChat iOS SDK
 
-Full app-as-SDK: one entry point launches the complete FarmerChat journey —
-splash → language → name → home feed → AI chat (text/voice/image) → history →
-settings, with OTP auth reachable from the drawer/settings. Behavior is
+Full app-as-SDK. **By default (`mode: .chatOnly`) one entry point lands directly in a fresh AI
+chat** — guest init, the conversation and the server labels are bootstrapped headlessly, there is
+no drawer, and the chat bar carries the history and language icons. Hosts that opt in with
+`mode: .fullJourney` get the complete FarmerChat journey — splash → language → name → home feed →
+AI chat (text/voice/image) → history → settings, with OTP auth reachable from the drawer/settings.
+Neither the FarmerChat API key nor the Google Geolocation key needs to be supplied: both are
+built in (`farmerChatApiKey` / `geoApiKey` are optional overrides). Behavior is
 specified by `docs/01-app-specification.md`, `docs/02-api-reference.md` and
 `docs/03-sdk-architecture.md` at the repository root.
 
@@ -70,10 +74,8 @@ import FarmerChatCore
 
 FarmerChat.initialize(config: FarmerChatConfig(
     environment: .prod,          // dev | stage | demo | prod | eks
-    geoApiKey: "…",              // Google Geolocation. Also gates the HOME FEED: without it,
-                                 // location comes from backend IP only, and endpoint #12 returns
-                                 // an empty `sections` list until a location resolves.
-    guestApiKey: "…",            // overrides built-in guest init API key
+    // geoApiKey / farmerChatApiKey: OPTIONAL. Both keys are BUILT IN — hosts do not supply
+    // them. Pass a value only to override the SDK's bundled key (nil/blank = built-in).
     appearance: .auto,           // day | night | auto
     languageCode: nil,           // preselect a language, skips language screen if valid
     defaultCountryCode: "",      // OPTIONAL region pin. Leave EMPTY (the default) and the SDK
@@ -162,8 +164,11 @@ FarmerChatConfig(
     tokenProvider: { await host.freshToken() },  // called on 401
 
     // C3 scope + toggles
-    mode: .chatOnly,                      // .fullJourney (default) | .chatOnly
-    showSettings: true, showHistory: true, showDrawer: true,
+    mode: .chatOnly,                      // .chatOnly (default) | .fullJourney
+    showSettings: true, showHistory: true,
+    showDrawer: nil,                      // unset (default) = mode == .fullJourney; set to force
+                                          // With the drawer off the chat bar carries the
+                                          // history (showHistory) and language icons.
     enableWeather: true, enableSsfr: true,
 
     // 2.0.0 agentic streaming chat (#27a) — default false keeps 1.0.0 chat
@@ -234,9 +239,9 @@ FCFarmerChatConfiguration *cfg =
     [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
 cfg.languageCode      = @"en";
 cfg.defaultCountryCode = @"IN";
-cfg.guestApiKey       = @"<your guest key>";
-cfg.mode              = FCModeChatOnly;   // or FCModeFullJourney
-cfg.showDrawer        = NO;
+// farmerChatApiKey / geoApiKey are built in — set them only to override.
+cfg.mode              = FCModeChatOnly;   // the default; FCModeFullJourney opts in to Home
+// cfg.showDrawer unset = resolves from mode (NO in chat-only); assigning pins it.
 cfg.enableAnalytics   = YES;              // default NO, matching Android
 
 // Host-supplied auth (optional). The async Swift tokenProvider becomes a completion block.

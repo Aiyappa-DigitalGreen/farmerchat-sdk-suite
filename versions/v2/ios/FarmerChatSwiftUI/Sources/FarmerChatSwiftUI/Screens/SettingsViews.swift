@@ -20,8 +20,9 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             FCAppBar(
                 title: fcLabel(FCLabels.settings, "Settings"),
-                leading: .menu,
-                onLeadingTap: openDrawer
+                // Drawer off: back instead of a dead hamburger.
+                leading: FarmerChat.shared.config.showDrawer ? .menu : .back,
+                onLeadingTap: FarmerChat.shared.config.showDrawer ? openDrawer : { router.pop() }
             )
 
             ScrollView {
@@ -200,8 +201,9 @@ struct LanguageChooserView: View {
         VStack(spacing: 0) {
             FCAppBar(
                 title: fcLabel(FCLabels.chooseYourLanguage, "Choose your language"),
-                leading: .menu,
-                onLeadingTap: openDrawer
+                // Drawer off: back instead of a dead hamburger.
+                leading: FarmerChat.shared.config.showDrawer ? .menu : .back,
+                onLeadingTap: FarmerChat.shared.config.showDrawer ? openDrawer : { router.pop() }
             )
 
             switch settingsVM.state.languageState {
@@ -287,8 +289,9 @@ struct HelpView: View {
         VStack(spacing: 0) {
             FCAppBar(
                 title: fcLabel(FCLabels.help, "Help"),
-                leading: .menu,
-                onLeadingTap: openDrawer
+                // Drawer off: back instead of a dead hamburger.
+                leading: FarmerChat.shared.config.showDrawer ? .menu : .back,
+                onLeadingTap: FarmerChat.shared.config.showDrawer ? openDrawer : { router.pop() }
             )
 
             ScrollView {

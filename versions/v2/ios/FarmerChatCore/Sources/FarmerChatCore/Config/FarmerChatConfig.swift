@@ -41,8 +41,8 @@ public enum FarmerChatAuthMode: String, Sendable {
     case hostToken
 }
 
-/// Journey scope (docs/07 C3). `fullJourney` (default) = onboarding + home +
-/// chat. `chatOnly` = skip onboarding/home, land directly in chat.
+/// Journey scope (docs/07 C3). `chatOnly` (default) = skip onboarding/home, land
+/// directly in chat. `fullJourney` = onboarding + home + chat (opt in).
 public enum FarmerChatMode: String, Sendable {
     case fullJourney
     case chatOnly
@@ -54,13 +54,22 @@ public typealias FarmerChatTokenProvider = @Sendable () async -> String?
 
 /// SDK configuration. See `docs/03-sdk-architecture.md`.
 public struct FarmerChatConfig: Sendable {
-    /// Default guest-init `API-Key`; overridable via `guestApiKey`
-    /// (parity with Android `ApiConstants.DEFAULT_GUEST_USER_API_KEY`).
-    static let defaultGuestApiKey = "Y2K3kW5R9uQ0fL2X8zI7hT3aJ7"
+    /// Built-in FarmerChat `API-Key` (guest init + `send_tokens`); overridable via
+    /// `farmerChatApiKey` (parity with Android `ApiConstants.DEFAULT_GUEST_USER_API_KEY`).
+    static let defaultFarmerChatApiKey = "Y2K3kW5R9uQ0fL2X8zI7hT3aJ7"
 
-    /// The key actually sent: the host override, else the built-in default.
-    var resolvedGuestApiKey: String {
-        guestApiKey?.isEmpty == false ? guestApiKey! : Self.defaultGuestApiKey
+    /// Built-in Google Geolocation key; overridable via `geoApiKey`
+    /// (parity with Android `ApiConstants.DEFAULT_GEO_API_KEY`).
+    static let defaultGeoApiKey = "AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo"
+
+    /// The FarmerChat API key actually sent: the host override, else the built-in default.
+    var resolvedFarmerChatApiKey: String {
+        farmerChatApiKey?.nonBlank ?? Self.defaultFarmerChatApiKey
+    }
+
+    /// The geolocation key actually used: the host override, else the built-in default.
+    var resolvedGeoApiKey: String {
+        geoApiKey?.nonBlank ?? Self.defaultGeoApiKey
     }
 
     /// The base URL actually used: `customBaseURL` when set (non-empty & valid), else `environment`'s.
@@ -134,11 +143,13 @@ public struct FarmerChatConfig: Sendable {
     /// base URL for the API + token clients — lets a host point the SDK at its own
     /// backend (and lets samples target a local mock). Should end with `/`.
     public var customBaseURL: String?
-    /// Google Geolocation API key (language auto-detect fallback). Optional.
+    /// OPTIONAL override for the Google Geolocation API key. The SDK ships a built-in key and
+    /// uses it when this is nil or blank, so hosts do not need to supply one.
     public var geoApiKey: String?
-    /// Overrides the built-in guest-init API key sent as `API-Key` header on
-    /// `initialize_user` and `send_tokens`.
-    public var guestApiKey: String?
+    /// OPTIONAL override for the FarmerChat API key sent as the `API-Key` header on
+    /// `initialize_user` and `send_tokens`. The SDK ships a built-in key and uses it when this
+    /// is nil or blank, so hosts do not need to supply one.
+    public var farmerChatApiKey: String?
     public var appearance: FarmerChatAppearance
     /// Optional host theme (docs/07 Part B). Nil = built-in green brand.
     public var theme: FarmerChatTheme?
@@ -209,10 +220,23 @@ public struct FarmerChatConfig: Sendable {
     public var tokenProvider: FarmerChatTokenProvider?
 
     // MARK: - C3 Screen/feature toggles
+    /// Journey scope. Default **`.chatOnly`**: the SDK lands directly in a fresh chat (guest
+    /// init + new conversation + labels run headlessly). Pass `.fullJourney` for onboarding +
+    /// Home + drawer.
     public var mode: FarmerChatMode
     public var showSettings: Bool
+    /// History entry point. Default true: in the drawer (full journey) or, when the drawer is
+    /// off, as an icon in the chat app bar.
     public var showHistory: Bool
-    public var showDrawer: Bool
+    /// The host's explicit `showDrawer`, or nil when it did not set one.
+    private var showDrawerOverride: Bool?
+    /// Navigation drawer. Unset by default, in which case it resolves to `mode == .fullJourney`
+    /// (no drawer in chat-only; the chat app bar then carries the history and language icons).
+    /// An explicit host value always wins.
+    public var showDrawer: Bool {
+        get { showDrawerOverride ?? (mode == .fullJourney) }
+        set { showDrawerOverride = newValue }
+    }
     /// Mirrors the app's `show_name_screen` RemoteConfig flag and Android's
     /// `FarmerChatConfig.showNameScreen`. When false the Enter-Name step is skipped and the
     /// profile is marked done, so the farmer goes straight past it. Added 2026-09-16 — iOS,
@@ -248,7 +272,7 @@ public struct FarmerChatConfig: Sendable {
         environment: FarmerChatEnvironment = .prod,
         customBaseURL: String? = nil,
         geoApiKey: String? = nil,
-        guestApiKey: String? = nil,
+        farmerChatApiKey: String? = nil,
         appearance: FarmerChatAppearance = .auto,
         theme: FarmerChatTheme? = nil,
         languageCode: String? = nil,
@@ -272,10 +296,10 @@ public struct FarmerChatConfig: Sendable {
         accessToken: String? = nil,
         refreshToken: String? = nil,
         tokenProvider: FarmerChatTokenProvider? = nil,
-        mode: FarmerChatMode = .fullJourney,
+        mode: FarmerChatMode = .chatOnly,
         showSettings: Bool = true,
         showHistory: Bool = true,
-        showDrawer: Bool = true,
+        showDrawer: Bool? = nil,
         showNameScreen: Bool = true,
         enableAnalytics: Bool = false,
         enableSsfr: Bool = true,
@@ -293,7 +317,7 @@ public struct FarmerChatConfig: Sendable {
         self.environment = environment
         self.customBaseURL = customBaseURL
         self.geoApiKey = geoApiKey
-        self.guestApiKey = guestApiKey
+        self.farmerChatApiKey = farmerChatApiKey
         self.appearance = appearance
         self.theme = theme
         self.languageCode = languageCode
@@ -322,7 +346,7 @@ public struct FarmerChatConfig: Sendable {
         self.mode = mode
         self.showSettings = showSettings
         self.showHistory = showHistory
-        self.showDrawer = showDrawer
+        self.showDrawerOverride = showDrawer
         self.showNameScreen = showNameScreen
         self.enableAnalytics = enableAnalytics
         self.enableSsfr = enableSsfr

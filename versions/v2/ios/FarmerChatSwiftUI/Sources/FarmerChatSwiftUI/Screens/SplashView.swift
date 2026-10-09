@@ -55,8 +55,19 @@ struct SplashView: View {
                 withAnimation { showStartingToast = true }
             }
 
+            // CHAT_ONLY: every journey start is a fresh conversation (unless opening a thread).
+            if env.config.mode == .chatOnly {
+                env.beginChatOnlyJourney()
+            }
+
             // Bootstrap: guest session (idempotent) then min-duration delay.
             _ = await env.session.ensureGuestSession()
+            // CHAT_ONLY skips onboarding, so run its label/language work headlessly
+            // (best-effort, no-op once server labels exist).
+            // Only once a guest session exists, so a failed init reaches the error route fast.
+            if env.config.mode == .chatOnly, env.session.userId != nil {
+                await env.ensureChatOnlyBootstrap()
+            }
             try? await Task.sleep(nanoseconds: 200_000_000)
 
             guard !router.errorNavigation.hasPendingError else { return }

@@ -127,7 +127,7 @@ public final class FarmerChat: @unchecked Sendable {
         let refresher = TokenRefresher(
             tokenStore: tokenStore,
             baseURL: config.resolvedBaseURL,
-            guestApiKey: config.resolvedGuestApiKey,
+            farmerChatApiKey: config.resolvedFarmerChatApiKey,
             deviceInfo: deviceInfo,
             authMode: config.authMode,
             tokenProvider: config.tokenProvider,
@@ -143,7 +143,7 @@ public final class FarmerChat: @unchecked Sendable {
             refresher: refresher,
             deviceInfo: deviceInfo
         )
-        self.api = FarmerChatAPI(client: client, guestApiKey: config.resolvedGuestApiKey, geoApiKey: config.geoApiKey)
+        self.api = FarmerChatAPI(client: client, farmerChatApiKey: config.resolvedFarmerChatApiKey, geoApiKey: config.resolvedGeoApiKey)
         self.session = SessionManager(tokenStore: tokenStore, prefs: prefs, api: api, analytics: analytics, guestReplaced: guestReplaced)
 
         // C5: host string overrides + forced locale.
@@ -211,6 +211,83 @@ public final class FarmerChat: @unchecked Sendable {
 
     public func logout() async {
         await session.logout()
+    }
+
+    // MARK: - CHAT_ONLY headless bootstrap
+
+    /// Set when the language list 404s in this process: a backend without endpoint #2 (a host's
+    /// own server) would otherwise pay P2 retries on every chat open for an English fallback.
+    private let bootstrapLock = NSLock()
+    private var _labelBootstrapUnavailable = false
+    private var labelBootstrapUnavailable: Bool {
+        get { bootstrapLock.lock(); defer { bootstrapLock.unlock() }; return _labelBootstrapUnavailable }
+        set { bootstrapLock.lock(); _labelBootstrapUnavailable = newValue; bootstrapLock.unlock() }
+    }
+
+    /// A CHAT_ONLY journey opening fresh is the app's "Home entry", and the app starts a NEW
+    /// conversation on every Home entry. Port of Android `FarmerChatGraph.beginChatOnlyJourney`:
+    /// drop the stored conversation id so the first send creates a new one (#15), unless the
+    /// journey is opening a specific history thread (`openChat(conversationId:)`), which keeps
+    /// its own id. Call once per journey start (the splash), before routing consumes the target.
+    public func beginChatOnlyJourney() {
+        Self.beginChatOnlyJourney(prefs: prefs, pendingTarget: pendingChatTarget.value)
+    }
+
+    static func beginChatOnlyJourney(prefs: PreferenceStore, pendingTarget: PendingChatTarget?) {
+        if pendingTarget?.conversationId?.nonBlank == nil {
+            prefs.remove(.newConversationId)
+        }
+    }
+
+    /// CHAT_ONLY bootstrap — port of Android `FarmerChatGraph.ensureChatOnlySession()` /
+    /// `ensureLabelsLoaded()`. CHAT_ONLY skips onboarding, which is the only other caller of
+    /// #3 `get_labels` and #6 `set_preferred_language`; without this the chat renders hardcoded
+    /// English fallbacks and the backend never learns the language.
+    ///
+    /// Runs: guest init (#1, idempotent) → #2 languages → resolve the stored/configured code
+    /// (else `en`) → #3 labels → #6 preferred language. The conversation (#15) is created by
+    /// `ChatViewModel` on first send. Best-effort and idempotent: no-ops once server labels
+    /// exist, and any failure leaves the English fallbacks in place.
+    public func ensureChatOnlyBootstrap() async {
+        if session.userId == nil {
+            _ = await session.ensureGuestSession()
+        }
+        if labels.hasServerLabels || labelBootstrapUnavailable { return }
+
+        let code = (prefs.string(.selectedLanguageCode)?.nonBlank
+            ?? config.locale?.nonBlank
+            ?? config.languageCode?.nonBlank
+            ?? "en").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let country = prefs.string(.userCountryCode)?.nonBlank ?? config.resolvedFallbackCountryCode
+        let regionState = prefs.string(.userState)?.nonBlank ?? config.defaultStateCode
+
+        let groups: [SupportedLanguageGroup]
+        switch await api.countryWiseSupportedLanguages(countryCode: country, state: regionState) {
+        case .success(let value):
+            groups = value
+        case .error(let error):
+            // 404 = this backend has no such endpoint; offline/5xx may succeed next open.
+            if error.code == 404 { labelBootstrapUnavailable = true }
+            return
+        }
+        let all = groups.flatMap { ($0.priorityView ?? []) + ($0.expandedView ?? []) }
+        guard let match = all.first(where: { $0.code?.lowercased() == code })
+            ?? all.first(where: { $0.code?.lowercased() == "en" }) else { return }
+
+        if case .success(let map) = await api.getLabels(languageId: match.id) {
+            prefs.setInt(match.id, .selectedLanguageId)
+            if let matchCode = match.code { prefs.setString(matchCode, .selectedLanguageCode) }
+            if let display = match.displayName?.nonBlank {
+                prefs.setString(display, .selectedLanguageDisplayName)
+            }
+            // Same as onboarding's selection: the language's streaming_required (default true).
+            prefs.setBool(match.streamingRequired ?? true, .streamingRequired)
+            labels.update(labels: map)
+        }
+
+        if let userId = session.userId?.nonBlank {
+            _ = await api.setPreferredLanguage(SetPreferredLanguageRequest(userId: userId, languageId: match.id))
+        }
     }
 
     /// Push a freshly-refreshed token into the active session (HOST_TOKEN mode).

@@ -423,7 +423,7 @@ final class AgenticStreamTests: XCTestCase {
             refresher: TokenRefresher(
                 tokenStore: tokenStore,
                 baseURL: baseURL,
-                guestApiKey: nil,
+                farmerChatApiKey: nil,
                 deviceInfo: deviceInfo
             ),
             deviceInfo: deviceInfo

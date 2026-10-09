@@ -113,7 +113,7 @@ final class TokenRefresherGuestReinitTests: XCTestCase {
         let refresher = TokenRefresher(
             tokenStore: tokenStore,
             baseURL: baseURL,
-            guestApiKey: "guest-key",
+            farmerChatApiKey: "guest-key",
             session: session,
             deviceInfo: deviceInfo,
             onSessionExpired: { [weak self] in

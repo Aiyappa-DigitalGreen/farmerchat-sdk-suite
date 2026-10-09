@@ -42,7 +42,7 @@ _Static_assert(FCModeChatOnly    == 1, "FCMode raw values are ABI; do not reorde
     cfg.environment      = FCEnvironmentStage;
     cfg.customBaseURL    = @"https://example.invalid/";
     cfg.geoApiKey        = @"geo";
-    cfg.guestApiKey      = @"guest";
+    cfg.farmerChatApiKey = @"fc-key";
 
     cfg.appearance           = FCAppearanceAuto;
     cfg.fabBackgroundColor   = UIColor.systemGreenColor;

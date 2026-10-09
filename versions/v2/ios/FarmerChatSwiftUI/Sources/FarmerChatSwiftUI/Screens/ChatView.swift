@@ -160,7 +160,17 @@ struct ChatView: View {
 
     private var appBar: some View {
         HStack(spacing: 8) {
-            if args.source == "history" {
+            if args.source == "history" && !FarmerChat.shared.config.showDrawer {
+                // Drawer off: the hamburger would be a dead button — pop back to the list.
+                Button { router.pop() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(theme.content.foregroundPrimary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("back")
+            } else if args.source == "history" {
                 Button(action: openDrawer) {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 19, weight: .semibold))
@@ -199,9 +209,35 @@ struct ChatView: View {
             .opacity(showLogo ? 1 : 0)
             .animation(.easeOut(duration: showLogo ? 0.6 : 0.3), value: showLogo)
             Spacer()
+
+            // Drawer off (the CHAT_ONLY default): these icons are the only routes to Past Advice
+            // and Language. Gated as on Android: history on `!showDrawer && showHistory`,
+            // language on `!showDrawer`.
+            if !FarmerChat.shared.config.showDrawer {
+                if FarmerChat.shared.config.showHistory {
+                    appBarAction(symbol: "clock.arrow.circlepath", label: "history") {
+                        router.push(.chatHistory)
+                    }
+                }
+                appBarAction(symbol: "globe", label: "language") {
+                    router.push(.settingsLanguage)
+                }
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 56)
+    }
+
+    private func appBarAction(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(theme.content.foregroundPrimary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     /// CHAT_ONLY exit: dismiss the modally-presented SDK (present(from:)) back to

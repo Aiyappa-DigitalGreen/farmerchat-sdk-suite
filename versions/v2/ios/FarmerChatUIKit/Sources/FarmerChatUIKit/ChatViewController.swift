@@ -142,6 +142,7 @@ final class FCUIChatViewController: UIViewController {
             back.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
             navigationItem.leftBarButtonItem = UIBarButtonItem(customView: back)
         }
+        configureDrawerOffActions()
 
         buildCollectionView()
         buildInputBar()
@@ -170,6 +171,40 @@ final class FCUIChatViewController: UIViewController {
             viewModel.onAction(.clearMessages)
             FarmerChat.shared.analytics.screenExited(ScreenNames.chat)
         }
+    }
+
+    /// Drawer off (the CHAT_ONLY default): the chat bar carries the only routes to Past Advice
+    /// and Language. Gated as on Android: history on `!showDrawer && showHistory`, language on
+    /// `!showDrawer`. Both screens are pushed, so their back button returns here.
+    private func configureDrawerOffActions() {
+        let config = FarmerChat.shared.config
+        guard !config.showDrawer else { return }
+        var items: [UIBarButtonItem] = []
+        // UIKit lays rightBarButtonItems out right-to-left: language rightmost, history beside it.
+        let language = UIBarButtonItem(
+            image: UIImage(systemName: "globe"),
+            primaryAction: UIAction { [weak self] _ in
+                self?.navigationController?.pushViewController(
+                    FCUILanguageViewController(mode: .settings), animated: true
+                )
+            }
+        )
+        language.accessibilityLabel = "language"
+        items.append(language)
+        if config.showHistory {
+            let history = UIBarButtonItem(
+                image: UIImage(systemName: "clock.arrow.circlepath"),
+                primaryAction: UIAction { [weak self] _ in
+                    self?.navigationController?.pushViewController(
+                        FCUIChatHistoryViewController(), animated: true
+                    )
+                }
+            )
+            history.accessibilityLabel = "history"
+            items.append(history)
+        }
+        items.forEach { $0.tintColor = FCUITheme.foregroundPrimary }
+        navigationItem.rightBarButtonItems = items
     }
 
     private func close() {

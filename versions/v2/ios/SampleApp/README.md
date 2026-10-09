@@ -42,13 +42,12 @@ environment (language onboarding, home feed, chat answer) on 2026-07-17.
 
 ## Configuration notes
 
-- `guestApiKey: nil` uses the SDK's built-in guest-init key; pass your own to
-  override.
-- `geoApiKey` is set to the app's dev Google Geolocation key. On the **dev**
-  backend this matters: the server only resolves your country (which the
-  language endpoint requires) from the lat/long sent on `initialize_user` —
-  without coordinates a fresh guest gets no country and the language list
-  request is rejected.
+- `farmerChatApiKey` and `geoApiKey` are **built into the SDK** and optional —
+  the sample passes neither. Pass either only to override the built-in key.
+- Mode: the SDK defaults to **chat-only** (lands directly in a fresh chat, no
+  drawer; the chat bar carries the history and language icons). Launch with
+  `-fcFullJourney` for onboarding + Home + drawer — the onboarding/drawer
+  automation hooks below assume it.
 - Environment: `.dev`/`.stage`/`.demo`/`.prod`/`.eks` in `SampleApp.swift`.
 
 ## Automation hooks (launch arguments)

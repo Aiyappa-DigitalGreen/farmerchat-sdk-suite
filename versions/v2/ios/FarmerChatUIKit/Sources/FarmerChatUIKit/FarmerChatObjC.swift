@@ -117,8 +117,10 @@ public final class FCFarmerChatConfiguration: NSObject {
     // --- Environment / networking
     @objc public var environment: FCEnvironment = .prod
     @objc public var customBaseURL: String?
+    /// OPTIONAL override; nil/blank = the SDK's built-in Google Geolocation key.
     @objc public var geoApiKey: String?
-    @objc public var guestApiKey: String?
+    /// OPTIONAL override; nil/blank = the SDK's built-in FarmerChat API key (`API-Key` header).
+    @objc public var farmerChatApiKey: String?
 
     // --- Appearance / theming
     @objc public var appearance: FCAppearance = .auto
@@ -154,10 +156,19 @@ public final class FCFarmerChatConfiguration: NSObject {
     @objc public var enableAnalytics: Bool = false
 
     // --- Journey scope
-    @objc public var mode: FCMode = .fullJourney
+    /// Default `FCModeChatOnly` (lands directly in chat); `FCModeFullJourney` opts in to
+    /// onboarding + Home + drawer.
+    @objc public var mode: FCMode = .chatOnly
     @objc public var showSettings: Bool = true
     @objc public var showHistory: Bool = true
-    @objc public var showDrawer: Bool = true
+    /// The host's explicit value, or nil when never set.
+    private var showDrawerOverride: Bool?
+    /// Unset by default, resolving to `mode == FCModeFullJourney` (no drawer in chat-only, where
+    /// the chat bar carries the history and language icons). Setting it pins the value.
+    @objc public var showDrawer: Bool {
+        get { showDrawerOverride ?? (mode == .fullJourney) }
+        set { showDrawerOverride = newValue }
+    }
     @objc public var showNameScreen: Bool = true
 
     // --- Identity
@@ -222,7 +233,7 @@ public final class FCFarmerChatConfiguration: NSObject {
             environment: environment.swiftValue,
             customBaseURL: customBaseURL,
             geoApiKey: geoApiKey,
-            guestApiKey: guestApiKey,
+            farmerChatApiKey: farmerChatApiKey,
             appearance: appearance.swiftValue,
             languageCode: languageCode,
             defaultCountryCode: defaultCountryCode,
@@ -248,7 +259,7 @@ public final class FCFarmerChatConfiguration: NSObject {
             mode: mode.swiftValue,
             showSettings: showSettings,
             showHistory: showHistory,
-            showDrawer: showDrawer,
+            showDrawer: showDrawerOverride,
             showNameScreen: showNameScreen,
             enableAnalytics: enableAnalytics,
             enableSsfr: enableSsfr,

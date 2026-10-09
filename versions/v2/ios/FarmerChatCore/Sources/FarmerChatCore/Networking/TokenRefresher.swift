@@ -47,7 +47,7 @@ actor TokenRefresher {
 
     private let tokenStore: KeychainTokenStore
     private let baseURL: URL
-    private let guestApiKey: String?
+    private let farmerChatApiKey: String?
     private let session: URLSession
     private let deviceInfo: DeviceInfoProvider
     private let authMode: FarmerChatAuthMode
@@ -83,7 +83,7 @@ actor TokenRefresher {
     init(
         tokenStore: KeychainTokenStore,
         baseURL: URL,
-        guestApiKey: String?,
+        farmerChatApiKey: String?,
         session: URLSession = .shared,
         deviceInfo: DeviceInfoProvider,
         authMode: FarmerChatAuthMode = .sdkOtp,
@@ -95,7 +95,7 @@ actor TokenRefresher {
     ) {
         self.tokenStore = tokenStore
         self.baseURL = baseURL
-        self.guestApiKey = guestApiKey
+        self.farmerChatApiKey = farmerChatApiKey
         self.session = session
         self.deviceInfo = deviceInfo
         self.authMode = authMode
@@ -249,8 +249,8 @@ actor TokenRefresher {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(FarmerChatSDK.buildVersionHeader, forHTTPHeaderField: "Build-Version")
         request.setValue(deviceInfo.deviceInfoHeaderValue(), forHTTPHeaderField: "Device-Info")
-        if includeApiKey, let guestApiKey, !guestApiKey.isEmpty {
-            request.setValue(guestApiKey, forHTTPHeaderField: "API-Key")
+        if includeApiKey, let farmerChatApiKey, !farmerChatApiKey.isEmpty {
+            request.setValue(farmerChatApiKey, forHTTPHeaderField: "API-Key")
         }
         request.httpBody = try? JSONEncoder().encode(body)
         do {

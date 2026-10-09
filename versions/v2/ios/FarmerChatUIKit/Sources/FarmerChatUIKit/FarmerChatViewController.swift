@@ -51,6 +51,17 @@ public final class FarmerChatViewController: UINavigationController {
             .sink { [weak self] screen in
                 guard let self, !(self.topViewController is FCUISplashViewController) else { return }
                 _ = FarmerChat.shared.consumePendingScreenTarget()
+                // CHAT_ONLY has no Home: push over the chat instead of rebuilding on a Home root.
+                if FarmerChat.shared.config.mode == .chatOnly {
+                    switch screen {
+                    case .home: self.popToRootViewController(animated: true)
+                    case .chatHistory: self.pushViewController(FCUIChatHistoryViewController(), animated: true)
+                    case .settings: self.pushViewController(FCUISettingsViewController(), animated: true)
+                    case .help: self.pushViewController(FCUIHelpViewController(), animated: true)
+                    case .language: self.pushViewController(FCUILanguageViewController(mode: .settings), animated: true)
+                    }
+                    return
+                }
                 switch screen {
                 case .home: self.navigateDrawerRoute("home")
                 case .chatHistory: self.navigateDrawerRoute("chatHistory")
@@ -306,6 +317,10 @@ final class FCUISplashViewController: UIViewController {
         env.analytics.screenViewed(ScreenNames.splash)
         env.analytics.track(AnalyticsEvents.appOpened, props: ["build_version": "V2"])
         env.prefs.setBool(true, .isProfileLoaded)
+        // CHAT_ONLY: every journey start is a fresh conversation (unless opening a thread).
+        if env.config.mode == .chatOnly {
+            env.beginChatOnlyJourney()
+        }
 
         Task { @MainActor in
             let result = await env.session.ensureGuestSession()
@@ -321,14 +336,26 @@ final class FCUISplashViewController: UIViewController {
                     retry: { [weak self] in
                         Task { @MainActor in
                             _ = await FarmerChat.shared.session.ensureGuestSession()
+                            await Self.bootstrapChatOnlyIfNeeded()
                             (self?.navigationController as? FarmerChatViewController)?.routeFromSplash()
                         }
                     }
                 )
                 return
             }
+            await Self.bootstrapChatOnlyIfNeeded()
             nav?.routeFromSplash()
         }
+    }
+
+    /// CHAT_ONLY skips onboarding, so run its label/language work headlessly — only once a
+    /// guest session exists, so a failed init goes straight to the error route. Best-effort,
+    /// no-op once server labels exist.
+    @MainActor
+    private static func bootstrapChatOnlyIfNeeded() async {
+        let env = FarmerChat.shared
+        guard env.config.mode == .chatOnly, env.session.userId != nil else { return }
+        await env.ensureChatOnlyBootstrap()
     }
 }
 

@@ -16,8 +16,9 @@ struct ChatHistoryView: View {
         VStack(spacing: 0) {
             FCAppBar(
                 title: fcLabel(FCLabels.recentChats, "Recent chats"),
-                leading: .menu,
-                onLeadingTap: openDrawer
+                // Drawer off: back instead of a dead hamburger.
+                leading: FarmerChat.shared.config.showDrawer ? .menu : .back,
+                onLeadingTap: FarmerChat.shared.config.showDrawer ? openDrawer : { router.pop() }
             )
 
             if viewModel.state.isLoading && viewModel.state.items.isEmpty {

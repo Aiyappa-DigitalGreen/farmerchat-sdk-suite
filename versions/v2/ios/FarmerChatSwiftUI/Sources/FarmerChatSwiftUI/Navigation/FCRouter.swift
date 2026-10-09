@@ -144,6 +144,18 @@ public final class FCRouter: ObservableObject {
             .sink { [weak self] screen in
                 guard let self, self.root != .splash else { return }
                 _ = self.env.consumePendingScreenTarget()
+                // CHAT_ONLY has no Home: the drawer routes would rebuild the stack on a Home the
+                // host switched off, so push the screen over the chat (back returns to it).
+                if self.env.config.mode == .chatOnly {
+                    switch screen {
+                    case .home: self.navigateHomeOrChat()
+                    case .chatHistory: self.push(.chatHistory)
+                    case .settings: self.push(.settings)
+                    case .help: self.push(.help)
+                    case .language: self.push(.settingsLanguage)
+                    }
+                    return
+                }
                 switch screen {
                 case .home: self.navigateDrawerRoute("home")
                 case .chatHistory: self.navigateDrawerRoute("chatHistory")
@@ -245,6 +257,20 @@ public final class FCRouter: ObservableObject {
             )))
         case .home:
             setRoot(.home)
+        }
+    }
+
+    /// Port of Android `navigateHomeOrChat()`: CHAT_ONLY has no Home, so return to the chat
+    /// (pop to it, or a fresh chat-only root when nothing is beneath); otherwise Home.
+    public func navigateHomeOrChat() {
+        guard env.config.mode == .chatOnly else {
+            setRoot(.home)
+            return
+        }
+        if path.isEmpty {
+            setRoot(.chat(FCDestination.ChatArgs(source: "chatOnly")))
+        } else {
+            popToRoot()
         }
     }
 

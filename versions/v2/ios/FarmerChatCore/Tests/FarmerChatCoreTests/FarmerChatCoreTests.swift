@@ -162,13 +162,68 @@ final class FarmerChatCoreTests: XCTestCase {
     func testConfigFeatureDefaults() {
         let c = FarmerChatConfig(environment: .dev)
         XCTAssertEqual(c.authMode, .sdkOtp)
-        XCTAssertEqual(c.mode, .fullJourney)
+        // Chat-only by default (2026-10-09); the drawer resolves from the mode when unset.
+        XCTAssertEqual(c.mode, .chatOnly)
         XCTAssertTrue(c.showSettings)
         XCTAssertTrue(c.showHistory)
-        XCTAssertTrue(c.showDrawer)
+        XCTAssertFalse(c.showDrawer)
         XCTAssertTrue(c.enableSsfr)
         XCTAssertTrue(c.stringOverrides.isEmpty)
         XCTAssertNil(c.locale)
         XCTAssertNil(c.theme)
+    }
+
+    func testShowDrawerResolvesFromModeUnlessExplicit() {
+        XCTAssertTrue(FarmerChatConfig(mode: .fullJourney).showDrawer)
+        XCTAssertFalse(FarmerChatConfig(mode: .chatOnly).showDrawer)
+        XCTAssertTrue(FarmerChatConfig(mode: .chatOnly, showDrawer: true).showDrawer)
+        XCTAssertFalse(FarmerChatConfig(mode: .fullJourney, showDrawer: false).showDrawer)
+
+        // Unset follows a later mode change; an explicit assignment then pins it.
+        var c = FarmerChatConfig()
+        c.mode = .fullJourney
+        XCTAssertTrue(c.showDrawer)
+        c.showDrawer = false
+        XCTAssertFalse(c.showDrawer)
+    }
+
+    func testBuiltInKeysUsedWhenHostPassesNothingOrBlank() {
+        let unset = FarmerChatConfig()
+        XCTAssertEqual(unset.resolvedFarmerChatApiKey, FarmerChatConfig.defaultFarmerChatApiKey)
+        XCTAssertEqual(unset.resolvedGeoApiKey, FarmerChatConfig.defaultGeoApiKey)
+        XCTAssertFalse(FarmerChatConfig.defaultFarmerChatApiKey.isEmpty)
+        XCTAssertFalse(FarmerChatConfig.defaultGeoApiKey.isEmpty)
+
+        let blank = FarmerChatConfig(geoApiKey: "  ", farmerChatApiKey: "")
+        XCTAssertEqual(blank.resolvedFarmerChatApiKey, FarmerChatConfig.defaultFarmerChatApiKey)
+        XCTAssertEqual(blank.resolvedGeoApiKey, FarmerChatConfig.defaultGeoApiKey)
+
+        let custom = FarmerChatConfig(geoApiKey: "host-geo", farmerChatApiKey: "host-key")
+        XCTAssertEqual(custom.resolvedFarmerChatApiKey, "host-key")
+        XCTAssertEqual(custom.resolvedGeoApiKey, "host-geo")
+    }
+
+    func testBeginChatOnlyJourneyStartsFreshConversationUnlessOpeningThread() {
+        let suiteName = "fc_sdk_test_chatonly_journey"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let prefs = PreferenceStore(defaults: defaults)
+
+        // Fresh journey (no target): the stored id is dropped so #15 runs on first send.
+        prefs.setString("old-conv", .newConversationId)
+        FarmerChat.beginChatOnlyJourney(prefs: prefs, pendingTarget: nil)
+        XCTAssertNil(prefs.string(.newConversationId)?.nonBlank)
+
+        // A question-only openChat is still a fresh journey.
+        prefs.setString("old-conv", .newConversationId)
+        FarmerChat.beginChatOnlyJourney(prefs: prefs, pendingTarget: .init(question: "hi"))
+        XCTAssertNil(prefs.string(.newConversationId)?.nonBlank)
+
+        // Opening a specific history thread keeps the stored id untouched.
+        prefs.setString("old-conv", .newConversationId)
+        FarmerChat.beginChatOnlyJourney(prefs: prefs, pendingTarget: .init(conversationId: "thread-1"))
+        XCTAssertEqual(prefs.string(.newConversationId), "old-conv")
+
+        defaults.removePersistentDomain(forName: suiteName)
     }
 }

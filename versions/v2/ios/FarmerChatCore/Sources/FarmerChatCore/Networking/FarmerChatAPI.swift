@@ -5,16 +5,16 @@ import Foundation
 /// follow-ups, synthesise, transcribe, chat/thread history); P2 = the rest.
 public final class FarmerChatAPI: @unchecked Sendable {
     private let client: APIClient
-    private let guestApiKey: String?
+    private let farmerChatApiKey: String?
     private let geoApiKey: String?
     private let session: URLSession
     /// #27a agentic streaming source (2.0.0). Constructed unconditionally — it is free; the
     /// `FarmerChatConfig.enableAgenticChat` flag decides whether the chat path uses it.
     private let agentic: AgenticChatDataSource
 
-    init(client: APIClient, guestApiKey: String?, geoApiKey: String?) {
+    init(client: APIClient, farmerChatApiKey: String?, geoApiKey: String?) {
         self.client = client
-        self.guestApiKey = guestApiKey
+        self.farmerChatApiKey = farmerChatApiKey
         self.geoApiKey = geoApiKey
         self.session = URLSession(configuration: .default)
         self.agentic = AgenticChatDataSource(client: client)
@@ -28,7 +28,7 @@ public final class FarmerChatAPI: @unchecked Sendable {
             path: "api/user/initialize_user/",
             body: client.encodeBody(body, apiName: "initialize_user"),
             priority: .p2,
-            apiKey: guestApiKey,
+            apiKey: farmerChatApiKey,
             name: "initialize_user"
         ), as: InitializeGuestUserResponse.self)
     }

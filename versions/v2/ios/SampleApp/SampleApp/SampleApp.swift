@@ -26,22 +26,22 @@ struct SampleApp: App {
         // so chat answers, OTP, voice transcribe/synthesise and the SSFR feed
         // resolve deterministically for e2e verification. Otherwise use dev.
         let mockURL = args.contains("-fcMock") ? "http://localhost:8899/" : nil
-        // C3 CHAT_ONLY demonstration.
-        let chatOnly = args.contains("-fcChatOnly")
+        // C3: the SDK defaults to CHAT_ONLY. `-fcFullJourney` opts in to onboarding + Home +
+        // drawer; the onboarding/drawer automation hooks in HostHomeView need it.
+        let fullJourney = args.contains("-fcFullJourney")
 
         // 1. Initialize the SDK once, as early as possible.
         FarmerChat.initialize(config: FarmerChatConfig(
             environment: .dev,
             customBaseURL: mockURL,
-            geoApiKey: "AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo", // Google Geolocation key (the dev server needs coords to resolve your country)
-            guestApiKey: nil,                  // nil = SDK built-in guest key; set to override
+            // farmerChatApiKey / geoApiKey: both built in — pass only to override.
             appearance: .auto,
             theme: theme,
             languageCode: nil,                 // preselect to skip language screen
             enableVoice: true,
             enableImages: true,
             enableWeather: true,
-            mode: chatOnly ? .chatOnly : .fullJourney,
+            mode: fullJourney ? .fullJourney : .chatOnly,
             stringOverrides: args.contains("-fcOverride")
                 ? ["fc_v2_app_label_farmerchat_tagline": "HOST OVERRIDE tagline"]
                 : [:],

@@ -168,8 +168,8 @@ public struct FarmerChatView: View {
             LanguageChooserView(
                 settingsVM: settingsVM,
                 openDrawer: openDrawer,
-                onLanguageSaved: { router.setRoot(.home) },
-                onFetchLabelsFailure: { router.setRoot(.home) }
+                onLanguageSaved: { router.navigateHomeOrChat() },
+                onFetchLabelsFailure: { router.navigateHomeOrChat() }
             )
         case .chatHistory:
             ChatHistoryView(viewModel: chatHistoryVM, openDrawer: openDrawer)

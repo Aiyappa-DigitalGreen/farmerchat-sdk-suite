@@ -25,6 +25,10 @@ FarmerChat.updateTokens(accessToken, refreshToken?)  // HOST_TOKEN: push a fresh
 FarmerChat.logout()
 FarmerChat.isAuthenticated / onAuthStateChanged
 FarmerChat.setAnalyticsListener(listener)
+FarmerChat.ensureChatOnlyBootstrap() / FarmerChat.beginChatOnlyJourney()
+                                  // iOS public (2.2.0); internal on Android (FarmerChatGraph), RN (sdk.ts) and
+                                  // web (chatOnlyBootstrap.ts): headless guest init + languages + labels, and a
+                                  // fresh conversation per chat-only journey (a history thread keeps its id).
 
 // Floating launcher (host drop-in, opens/reveals the SDK on tap):
 //   Android Compose: FarmerChatFab(question?, label?) composable
@@ -36,8 +40,14 @@ FarmerChat.setAnalyticsListener(listener)
 
 FarmerChatConfig {
   environment: dev|stage|demo|prod|eks
-  geoApiKey?                      // Google geolocation (language auto-detect fallback)
-  guestApiKey?                    // overrides built-in guest init API key
+  // v2 2.2.0 (2026-10-09): both keys are BUILT IN on every platform; hosts are not asked for keys.
+  farmerChatApiKey?               // optional override of the built-in FarmerChat guest-init API-Key
+                                  //   (renamed from guestApiKey — the old name was removed, no alias)
+  geoApiKey?                      // optional override of the built-in Google geolocation key
+  mode = CHAT_ONLY                // v2 default (was FULL_JOURNEY): opens straight into chat with a headless
+                                  //   guest bootstrap. FULL_JOURNEY (onboarding → Home → chat …) still ships.
+  showDrawer?                     // unset → (mode == FULL_JOURNEY); chat-only puts history + language in the chat bar
+  showHistory = true, showSettings = true, showNameScreen = true
   appearance: day|night|auto
   languageCode?                   // preselect, skips language screen if valid
   enableVoice = true, enableImages = true, enableWeather = true
