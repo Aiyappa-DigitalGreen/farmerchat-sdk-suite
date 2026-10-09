@@ -1,8 +1,11 @@
 # @digitalgreenorg/farmerchat-widget
 
 An Intercom-style widget for the **complete** FarmerChat web SDK. It adds a launcher bubble pinned
-to a corner of the page. Clicking it opens the whole FarmerChat journey (onboarding, Home, chat,
-voice, photos, history, settings) in a floating panel. On phones the panel becomes a full-screen sheet.
+to a corner of the page. Clicking it opens FarmerChat in a floating panel: by default straight into
+the chat (the SDK's `CHAT_ONLY` default — voice, photos, history and language from the chat bar);
+pass `mode: 'FULL_JOURNEY'` for the whole journey (onboarding, Home, drawer, settings). On phones
+the panel becomes a full-screen sheet. In chat-only mode each page load starts a new conversation; closing and
+reopening the panel keeps the current one (the panel stays mounted).
 
 It wraps the v2 web SDK (`../packages/farmerchat-web`, a `file:` dependency, so no source is copied).
 Every SDK config field works unchanged, including `enableAgenticChat`.
@@ -17,8 +20,8 @@ stage backend (agentic chat on, answers stream). Version 2.2.0, the same as ever
   window.farmerChatWidgetSettings = {
     config: {
       environment: 'prod',
-      guestApiKey: 'YOUR_GUEST_KEY',
-      geoApiKey: 'YOUR_GOOGLE_GEO_KEY',
+      // No keys needed: the FarmerChat API key and the geolocation key are built into the SDK
+      // (optional overrides: farmerChatApiKey, geoApiKey).
       onEvent: function (name, props) { /* forward to your analytics */ },
     },
     // optional: position: 'bottom-left', launcherLabel: 'Ask FarmerChat', panelWidth: 420
@@ -66,7 +69,8 @@ rebuilds the SDK services and remounts the panel, so pass `config` only when it 
 import { FarmerChatWidget, type FarmerChatConfig } from '@digitalgreenorg/farmerchat-widget';
 
 // A module constant (or useMemo): a new config object rebuilds the SDK and remounts the panel.
-const FC_CONFIG: FarmerChatConfig = { environment: 'prod', guestApiKey: GUEST_KEY, geoApiKey: GEO_KEY };
+// No keys needed: farmerChatApiKey and geoApiKey are built in (pass them only to override).
+const FC_CONFIG: FarmerChatConfig = { environment: 'prod' };
 
 export function App() {
   return <FarmerChatWidget config={FC_CONFIG} launcherLabel="Ask FarmerChat" />;
@@ -163,8 +167,9 @@ FC_GUEST_API_KEY=<key> node versions/v2/web/widget/demo/stage-proxy.mjs   # :889
 - `http://localhost:5182/demo/fidelity.html` — 411×914 harness (`?appearance=night`, `?theme=blue`, `?agentic=0`)
 
 The stage proxy is needed because the backend's CORS preflight rejects the SDK's custom headers.
-`FC_GUEST_API_KEY` is the guest key the Android SDK carries (`ApiConstants.DEFAULT_GUEST_USER_API_KEY`);
-it is injected server-side so it never lands in a page.
+`FC_GUEST_API_KEY` is the FarmerChat API key the SDKs carry (`DEFAULT_FARMERCHAT_API_KEY`); the
+proxy adds it only when the request has no `API-Key`. The SDK now sends its built-in key itself, so
+the proxy's injection is a fallback.
 
 Demo against the local mock backend:
 
@@ -175,8 +180,8 @@ open http://localhost:5182/demo/index.html           # desktop
 open http://localhost:5182/demo/mobile.html          # 390×760 phone frame (fullscreen layout)
 ```
 
-`demo/index.html` reads `?env=`, `?base=`, `?guestKey=`, `?geoKey=`, `?mode=CHAT_ONLY`, `?left=1`
-and `?label=` from the URL. Do not commit keys into the page.
+`demo/index.html` reads `?env=`, `?base=`, `?geoKey=` (optional override; a key is built in),
+`?mode=FULL_JOURNEY` (default is the SDK's `CHAT_ONLY`), `?left=1` and `?label=` from the URL.
 
 ## Hosted demo on Vercel
 

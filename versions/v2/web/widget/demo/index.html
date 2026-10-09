@@ -317,11 +317,12 @@
     // Demo wiring. Query params:
     //   ?base=<url>   API base (default: the local mock, tools/mock-server → :8899)
     //   ?env=<env>    dev | stage | demo | prod | eks (ignored when base is set)
-    //   ?guestKey=…   guest init API key (never hardcode one in a page you commit)
-    //   ?geoKey=…     Google geolocation key
+    //   ?geoKey=…     optional Google geolocation key override (the SDK has one built in;
+    //                 the FarmerChat API key is built in too, so none is passed here)
     //   ?stage=1      the app's real stage backend via demo/stage-proxy.mjs (:8898) + agentic chat
     //   ?agentic=1    enableAgenticChat (2.0.0 composer + streaming)
-    //   ?appearance=day|night|auto (default day)   ?mode=CHAT_ONLY   ?left=1   ?label=none
+    //   ?appearance=day|night|auto (default day)   ?mode=FULL_JOURNEY (default: the SDK's CHAT_ONLY)
+    //   ?left=1   ?label=none
     var q = new URLSearchParams(location.search);
     var useEnv = q.get('env');
     // Hosted (the Vercel demo): stage through the same-origin /stage/ function (vercel/api/stage.js),
@@ -356,9 +357,8 @@
           environment: useEnv || 'dev',
           customBaseUrl: base || undefined,
           enableAgenticChat: stage || q.get('agentic') === '1',
-          guestApiKey: q.get('guestKey') || undefined,
           geoApiKey: q.get('geoKey') || undefined,
-          mode: q.get('mode') || 'FULL_JOURNEY',
+          mode: q.get('mode') || undefined,
           appearance: q.get('appearance') || 'day',
           onEvent: function (name, props) { console.log('[fc-event]', name, props); },
         },

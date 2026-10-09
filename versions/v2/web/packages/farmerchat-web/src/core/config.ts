@@ -25,11 +25,19 @@ export const BASE_URLS: Record<FarmerChatEnvironment, string> = {
 export const GEOLOCATE_URL = 'https://www.googleapis.com/geolocation/v1/geolocate';
 
 /**
- * Built-in guest-init API key. Ships blank on web (the key is provisioned per
- * host); pass `guestApiKey` in the config to authenticate guest initialisation
- * (`api/user/initialize_user/`) and the guest-token fallback (`api/user/send_tokens/`).
+ * Bundled FarmerChat `API-Key` (guest initialisation `api/user/initialize_user/` and the
+ * guest-token fallback `api/user/send_tokens/`), used when the host passes no
+ * `farmerChatApiKey` (unset or blank). Same value as Android
+ * `ApiConstants.DEFAULT_FARMERCHAT_API_KEY`. Hosts are not asked to supply one.
  */
-export const DEFAULT_GUEST_API_KEY = '';
+export const DEFAULT_FARMERCHAT_API_KEY = 'Y2K3kW5R9uQ0fL2X8zI7hT3aJ7';
+
+/**
+ * Bundled Google Geolocation key (language/location auto-detect fallback), used when the host
+ * passes no `geoApiKey` (unset or blank). Same value as Android `ApiConstants.DEFAULT_GEO_API_KEY`.
+ * Not a secret: it ships in the bundle; restrict it to the Geolocation API on the Google side.
+ */
+export const DEFAULT_GEO_API_KEY = 'AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo';
 
 /**
  * Sentinel meaning "no country configured — derive it from the device locale".
@@ -176,10 +184,18 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
    * widget's script-tag build defaults it to its own folder.
    */
   assetBaseUrl?: string;
-  /** Google Geolocation API key (language auto-detect fallback). */
+  /**
+   * OPTIONAL. Google Geolocation API key (language/location auto-detect fallback). The SDK ships
+   * a built-in key (`DEFAULT_GEO_API_KEY`), used when this is unset or blank; pass one only to
+   * override it.
+   */
   geoApiKey?: string;
-  /** Overrides the built-in guest init API key. */
-  guestApiKey?: string;
+  /**
+   * OPTIONAL. FarmerChat `API-Key` for guest initialisation and the guest-token fallback. The SDK
+   * ships a built-in key (`DEFAULT_FARMERCHAT_API_KEY`), used when this is unset or blank; hosts
+   * do not need to supply one.
+   */
+  farmerChatApiKey?: string;
   appearance?: AppearanceMode;
   /** Preselect a language; skips the language screen when the code is valid. */
   languageCode?: string;
@@ -279,10 +295,19 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   tokenProvider?: TokenProvider;
 
   // --- C3 screen/feature toggles ---
-  /** `FULL_JOURNEY` (default) or `CHAT_ONLY` (skip onboarding/home; land in chat). */
+  /**
+   * `CHAT_ONLY` (default since 2026-10-09: skip onboarding/home and land in chat, bootstrapping a
+   * guest session headlessly) or `FULL_JOURNEY` (onboarding, Home, drawer, settings).
+   */
   mode?: FarmerChatMode;
   showSettings?: boolean;
+  /** History button in the chat app bar / drawer entry. Default true. */
   showHistory?: boolean;
+  /**
+   * Navigation drawer. Unset by default, which resolves to `mode === 'FULL_JOURNEY'`: so
+   * CHAT_ONLY has no drawer and the chat app bar shows the history and language buttons instead.
+   * An explicit host value wins.
+   */
   showDrawer?: boolean;
   /**
    * Mirrors the app's `show_name_screen` RemoteConfig flag and Android's
@@ -316,7 +341,7 @@ export interface ResolvedConfig {
   baseUrl: string;
   assetBaseUrl: string;
   geoApiKey: string;
-  guestApiKey: string;
+  farmerChatApiKey: string;
   appearance: AppearanceMode;
   languageCode?: string;
   defaultCountryCode: string;
@@ -366,12 +391,14 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     config.customBaseUrl && config.customBaseUrl.length > 0
       ? config.customBaseUrl
       : envBaseUrl;
+  const mode: FarmerChatMode = config.mode ?? 'CHAT_ONLY';
   return {
     environment: config.environment,
     baseUrl,
     assetBaseUrl: config.assetBaseUrl ?? '',
-    geoApiKey: config.geoApiKey ?? '',
-    guestApiKey: config.guestApiKey ?? DEFAULT_GUEST_API_KEY,
+    // Unset or blank ⇒ the bundled keys (parity with Android ApiConstants defaults).
+    geoApiKey: config.geoApiKey?.trim() || DEFAULT_GEO_API_KEY,
+    farmerChatApiKey: config.farmerChatApiKey?.trim() || DEFAULT_FARMERCHAT_API_KEY,
     appearance: config.appearance ?? 'auto',
     languageCode: config.languageCode,
     // All four default to "unset" — resolved from the device locale at use time, the way the app
@@ -392,10 +419,11 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     accessToken: config.accessToken,
     refreshToken: config.refreshToken,
     tokenProvider: config.tokenProvider,
-    mode: config.mode ?? 'FULL_JOURNEY',
+    mode,
     showSettings: config.showSettings ?? true,
     showHistory: config.showHistory ?? true,
-    showDrawer: config.showDrawer ?? true,
+    // Unset ⇒ follows the mode: drawer in FULL_JOURNEY only. An explicit host value wins.
+    showDrawer: config.showDrawer ?? mode === 'FULL_JOURNEY',
     showNameScreen: config.showNameScreen ?? true,
     enableAnalytics: config.enableAnalytics ?? false,
     enableSsfr: config.enableSsfr ?? true,

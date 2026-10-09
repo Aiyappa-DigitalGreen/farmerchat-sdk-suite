@@ -23,6 +23,8 @@
       inline: true,
       config: {
         environment: 'dev',
+        // The harness compares the full app journey (onboarding, Home), not the chat-only default.
+        mode: q.get('mode') || 'FULL_JOURNEY',
         customBaseUrl: q.get('base') || 'http://localhost:8898/',
         enableAgenticChat: q.get('agentic') !== '0',
         assetBaseUrl: new URL('../dist/illustrations/', location.href).href,
@@ -33,7 +35,8 @@
           shape: { cardCornerRadius: 16, buttonCornerRadius: 12, inputCornerRadius: 12 },
         } : undefined,
         appearance: q.get('appearance') || 'day',
-        // Same data as the Android device (India): its geoApiKey resolves IN, a headless browser cannot.
+        // Same data as the Android device (India). Only a FALLBACK: the bundled geo key now
+        // geolocates the browser by IP first, so these apply when that call fails.
         defaultCountryCode: q.get('country') || 'IN',
         defaultLatitude: Number(q.get('lat') || 12.9716),
         defaultLongitude: Number(q.get('lng') || 77.5946),

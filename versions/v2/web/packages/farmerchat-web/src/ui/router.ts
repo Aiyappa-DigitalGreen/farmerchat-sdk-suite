@@ -78,6 +78,8 @@ export interface Navigator {
   routeFromSplash: () => void;
   setPendingTarget: (target: PendingTarget | null) => void;
   consumePendingTarget: () => PendingTarget | null;
+  /** Reads the pending target without consuming it (CHAT_ONLY journey start). */
+  peekPendingTarget: () => PendingTarget | null;
 }
 
 /**
@@ -95,15 +97,18 @@ export function computeRouteFromSplash(
   mode: FarmerChatMode = 'FULL_JOURNEY',
   showNameScreen: boolean = true,
 ): Route {
-  const languageDone = store.getBool(PrefKeys.LANGUAGE_DONE, false);
-  if (!languageDone) return { name: 'language' };
-
-  // CHAT_ONLY (docs/07 C3): skip Enter-Name/Home; land directly in a fresh chat.
+  // CHAT_ONLY (docs/07 C3): no language/name/home screens — land directly in a fresh chat. The
+  // splash has already bootstrapped the guest session and labels headlessly
+  // (core/chatOnlyBootstrap.ts, port of Android ensureChatOnlySession), so this branch sits
+  // ABOVE the LANGUAGE_DONE gate, as Android's CHAT_ONLY path does.
   if (mode === 'CHAT_ONLY') {
     if (pending?.type === 'chat') return { name: 'chat', params: { source: 'history', conversationId: pending.chatId } };
     if (pending?.type === 'chatQuery') return { name: 'chat', params: { source: 'home', question: pending.question, channel: pending.channel } };
     return { name: 'chat', params: { source: 'home' } };
   }
+
+  const languageDone = store.getBool(PrefKeys.LANGUAGE_DONE, false);
+  if (!languageDone) return { name: 'language' };
 
   const nameDone = store.getBool(PrefKeys.KEY_NAME_DONE, false);
   const nameSeen = store.getBool(PrefKeys.KEY_NAME_SCREEN_SEEN, false);
@@ -175,6 +180,8 @@ export function useNavigator(
     pendingRef.current = target;
   }, []);
 
+  const peekPendingTarget = useCallback((): PendingTarget | null => pendingRef.current, []);
+
   const consumePendingTarget = useCallback((): PendingTarget | null => {
     const t = pendingRef.current;
     pendingRef.current = null;
@@ -200,7 +207,8 @@ export function useNavigator(
       routeFromSplash,
       setPendingTarget,
       consumePendingTarget,
+      peekPendingTarget,
     }),
-    [stack, push, pushSingleTop, replaceAll, popUpToAndPush, pop, routeFromSplash, setPendingTarget, consumePendingTarget],
+    [stack, push, pushSingleTop, replaceAll, popUpToAndPush, pop, routeFromSplash, setPendingTarget, consumePendingTarget, peekPendingTarget],
   );
 }

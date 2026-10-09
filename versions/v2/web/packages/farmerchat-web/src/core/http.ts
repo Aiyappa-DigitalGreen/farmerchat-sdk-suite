@@ -70,7 +70,7 @@ export interface RequestOptions {
 
 export interface HttpClientDeps {
   baseUrl: string;
-  guestApiKey: string;
+  farmerChatApiKey: string;
   store: SessionStore;
   labels: LabelManager;
   onSessionExpired?: () => void;
@@ -319,7 +319,7 @@ export class HttpClient {
       const fallback = await this.tokenCallWithStatus(
         'api/user/send_tokens/',
         { device_id: deviceId, user_id: userId },
-        this.deps.guestApiKey,
+        this.deps.farmerChatApiKey,
       );
       if (fallback?.data?.access_token) {
         store.setString(PrefKeys.ACCESS_TOKEN, fallback.data.access_token);
@@ -351,7 +351,7 @@ export class HttpClient {
         body.lat = coords.lat;
         body.long = coords.lng;
       }
-      const reinit = await this.tokenCallWithStatus('api/user/initialize_user/', body, this.deps.guestApiKey);
+      const reinit = await this.tokenCallWithStatus('api/user/initialize_user/', body, this.deps.farmerChatApiKey);
       const data = reinit?.data as
         | (RefreshTokenResponse & {
             user_id?: string | null;

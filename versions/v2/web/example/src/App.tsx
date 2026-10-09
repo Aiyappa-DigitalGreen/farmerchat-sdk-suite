@@ -48,7 +48,7 @@ const baseConfig: FarmerChatConfig = {
   mode: 'FULL_JOURNEY',
   showSettings: true,
   showHistory: true,
-  showDrawer: true,
+  // showDrawer left unset: it follows the mode (drawer in FULL_JOURNEY, none in the CHAT_ONLY scenario).
   enableSsfr: true,
 
   onChatOpened: () => console.log('[fc] chat opened'),

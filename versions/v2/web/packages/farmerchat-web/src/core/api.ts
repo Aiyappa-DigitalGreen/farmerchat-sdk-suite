@@ -66,7 +66,7 @@ import type {
 export class FarmerChatApi {
   constructor(
     private http: HttpClient,
-    private guestApiKey: string,
+    private farmerChatApiKey: string,
     private geoApiKey: string,
   ) {}
 
@@ -91,7 +91,7 @@ export class FarmerChatApi {
       method: 'POST',
       path: 'api/user/initialize_user/',
       body,
-      apiKey: this.guestApiKey,
+      apiKey: this.farmerChatApiKey,
       priority: 'P2',
     });
   }

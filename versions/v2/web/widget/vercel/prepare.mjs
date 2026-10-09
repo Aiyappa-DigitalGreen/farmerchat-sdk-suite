@@ -20,6 +20,10 @@ for (const f of ['farmerchat-widget.iife.js', 'farmerchat-widget.iife.js.map']) 
   const src = path.join(widget, 'dist', f);
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join(site, 'dist', f));
 }
+// The widget loads its full-screen farmer illustrations from illustrations/ beside the script.
+if (fs.existsSync(path.join(widget, 'dist', 'illustrations'))) {
+  fs.cpSync(path.join(widget, 'dist', 'illustrations'), path.join(site, 'dist', 'illustrations'), { recursive: true });
+}
 if (!fs.existsSync(path.join(site, 'dist', 'farmerchat-widget.iife.js'))) throw new Error('Run npm run build first');
 for (const f of ['stage.js', '_replay.js']) fs.copyFileSync(path.join(here, 'api', f), path.join(site, 'api', f));
 fs.copyFileSync(path.join(here, 'vercel.json'), path.join(site, 'vercel.json'));

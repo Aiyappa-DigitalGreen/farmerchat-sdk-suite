@@ -38,7 +38,7 @@ function setup(routes: Record<string, Route>, seed: (s: SessionStore) => void, e
   let expired = 0;
   const http = new HttpClient({
     baseUrl: 'https://api.test/',
-    guestApiKey: 'guest-key',
+    farmerChatApiKey: 'guest-key',
     store,
     labels: new LabelManager(store),
     onSessionExpired: () => {

@@ -6,6 +6,12 @@ voice, image) → chat history → settings/help — plus phone + OTP auth, insi
 single component you drop into any page. TypeScript strict, zero runtime
 dependencies beyond React.
 
+**By default it opens straight into the chat** (`mode: 'CHAT_ONLY'`): no onboarding, Home or
+drawer; the guest session and labels are set up headlessly and the chat app bar carries the
+history and language buttons. Pass `mode: 'FULL_JOURNEY'` for the whole journey. No API keys are
+needed: the FarmerChat API key and the Google geolocation key are built in (optional overrides
+`farmerChatApiKey` / `geoApiKey`).
+
 ## Install
 
 ```bash
@@ -26,8 +32,7 @@ export function SupportPage() {
         config={{
           environment: 'prod',
           appearance: 'auto',
-          geoApiKey: 'GOOGLE_GEOLOCATION_KEY',
-          guestApiKey: 'GUEST_INIT_API_KEY',
+          // No API keys needed: the FarmerChat API key and the geolocation key are built in.
           onEvent: (name, props) => myAnalytics.track(name, props),
           onSessionExpired: () => console.warn('FarmerChat session expired'),
         }}
@@ -74,9 +79,9 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `environment` | `'dev' \| 'stage' \| 'demo' \| 'prod' \| 'eks'` | — (required) | Selects the API base URL. |
-| `geoApiKey` | `string` | `''` | Google Geolocation key for the language auto-detect fallback. Without it, geolocate is skipped and the server infers location from IP at guest init. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
+| `geoApiKey` | `string` | built in | OPTIONAL. Google Geolocation key for the language/location auto-detect fallback. **Built in** (`DEFAULT_GEO_API_KEY`, the same key the Android SDK bundles) and used when this is unset or blank; pass one only to override it. The coordinates it resolves are passed to `initialize_user`, which also feeds the **home feed** (endpoint #12 returns an empty `sections` list until the backend has a resolved location). |
 | `assetBaseUrl` | `string` | `''` | Web only. URL of the `illustrations/` folder shipped in `dist/` (serve it beside the bundle), ending in `/`. Unset → sign-up / error / location screens render without the farmer picture. |
-| `guestApiKey` | `string` | `''` | API key for guest initialization (`initialize_user`) and the guest-token refresh fallback (`send_tokens`). Required for the SDK to work — provisioned per host. |
+| `farmerChatApiKey` | `string` | built in | OPTIONAL. FarmerChat `API-Key` for guest initialization (`initialize_user`) and the guest-token refresh fallback (`send_tokens`). **Built in** (`DEFAULT_FARMERCHAT_API_KEY`) and used when this is unset or blank — hosts do not need to supply one. |
 | `appearance` | `'day' \| 'night' \| 'auto'` | `'auto'` | `auto` follows `prefers-color-scheme` live. |
 | `languageCode` | `string` | — | Preselects the UI language code. |
 | `defaultCountryCode` | `string` | `''` (derive) | OPTIONAL override for the endpoint #2 `country_code` when `initialize_user` cannot resolve one (a fresh guest often gets `country_code: null`). **Leave it unset and the SDK derives the country from the browser locale**, exactly as the Android app does. Endpoint #2 returns HTTP 400 for a blank value, so if the locale carries no region either (e.g. a plain `en` browser), `'KE'` — the app's own last-resort literal — is sent. Set it only to pin the SDK to one region. |
@@ -90,8 +95,9 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `authMode` | `'SDK_OTP' \| 'HOST_TOKEN'` | `'SDK_OTP'` | `HOST_TOKEN` trusts host tokens and skips the phone/OTP UI. |
 | `accessToken` / `refreshToken` | `string` | — | HOST_TOKEN seed tokens. |
 | `tokenProvider` | `() => HostToken \| null \| Promise<…>` | — | HOST_TOKEN: (re)supply a token; called on 401. |
-| `mode` | `'FULL_JOURNEY' \| 'CHAT_ONLY'` | `'FULL_JOURNEY'` | `CHAT_ONLY` skips onboarding/home and lands in chat. |
-| `showSettings` / `showHistory` / `showDrawer` | `boolean` | `true` | Hide the drawer entirely, or its Settings/History entries. |
+| `mode` | `'FULL_JOURNEY' \| 'CHAT_ONLY'` | `'CHAT_ONLY'` | `CHAT_ONLY` (default) skips onboarding/home and lands in chat; the splash bootstraps the guest session and labels headlessly, and each journey (SDK boot) starts a new conversation unless it opens a specific history conversation. `FULL_JOURNEY` runs onboarding, Home, drawer and settings. |
+| `showDrawer` | `boolean` | follows `mode` | Unset → `true` in `FULL_JOURNEY`, `false` in `CHAT_ONLY` (the chat app bar then shows the history and language buttons instead of the menu). An explicit value wins. |
+| `showSettings` / `showHistory` | `boolean` | `true` | Hide the Settings / History entries (drawer items, and the chat-bar history button when the drawer is off). |
 | `enableSsfr` | `boolean` | `true` | Home SSFR (fertilizer) card. |
 | `stringOverrides` | `Record<labelKey, string>` | — | Highest-precedence label overrides (host wins over server + English). |
 | `locale` | `string` | — | Force a language code regardless of device/onboarding. |

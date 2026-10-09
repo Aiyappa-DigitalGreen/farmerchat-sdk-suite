@@ -118,8 +118,8 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
 
     if (lat === null || lng === null) {
       // GEO-FAILURE FALLBACK (port of OnboardingSharedViewModel's ApiResult.Error branch).
-      // geolocate is a tolerated P1 failure — and on web it may never have been called at all,
-      // when the host configured no `geoApiKey`. Either way the app does NOT then proceed with no
+      // geolocate is a tolerated P1 failure (the SDK always has a key: the host's `geoApiKey` or
+      // the bundled DEFAULT_GEO_API_KEY). On failure the app does NOT then proceed with no
       // coordinates: it falls back to the DEVICE LOCALE's country centroid
       // (`CountryLatLngProvider.getLatLngFromDeviceLocale`) and accepts it ONLY when
       // `lat != 0 && lng != 0`. A browser language such as plain `en` carries no region and

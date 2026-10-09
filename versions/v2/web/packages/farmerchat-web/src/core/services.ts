@@ -40,7 +40,7 @@ export function createServices(config: FarmerChatConfig): SdkServices {
   });
   const http = new HttpClient({
     baseUrl: resolved.baseUrl,
-    guestApiKey: resolved.guestApiKey,
+    farmerChatApiKey: resolved.farmerChatApiKey,
     store,
     labels,
     onSessionExpired: resolved.onSessionExpired,
@@ -53,12 +53,18 @@ export function createServices(config: FarmerChatConfig): SdkServices {
     // `session` is created below; this only runs on a 401, long after construction.
     onGuestReplaced: () => session.notifyGuestReplaced(),
   });
-  const api = new FarmerChatApi(http, resolved.guestApiKey, resolved.geoApiKey);
+  const api = new FarmerChatApi(http, resolved.farmerChatApiKey, resolved.geoApiKey);
   const analytics = new Analytics(resolved.onEvent, resolved.callbacks, resolved.enableAnalytics);
   const session = new SessionManager(store, api, analytics, resolved.authMode);
 
-  // Preselect language from config: skips the language screen when provided.
-  if (resolved.languageCode && !store.getBool(PrefKeys.LANGUAGE_DONE, false)) {
+  // Preselect language from config: skips the language screen when provided. CHAT_ONLY never sets
+  // LANGUAGE_DONE, so there it applies only until a language has been chosen — otherwise every
+  // reload would overwrite the farmer's chat-bar language choice with the host's code.
+  if (
+    resolved.languageCode &&
+    !store.getBool(PrefKeys.LANGUAGE_DONE, false) &&
+    (resolved.mode !== 'CHAT_ONLY' || store.getInt(PrefKeys.SELECTED_LANGUAGE_ID) === null)
+  ) {
     labels.setLanguageCode(resolved.languageCode);
   }
 

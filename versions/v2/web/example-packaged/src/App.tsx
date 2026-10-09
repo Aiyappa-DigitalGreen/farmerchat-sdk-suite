@@ -37,7 +37,7 @@ const config: FarmerChatConfig = {
   mode,
   showSettings: true,
   showHistory: true,
-  showDrawer: true,
+  // showDrawer left unset: it follows the mode (drawer only in FULL_JOURNEY).
   enableSsfr: true,
   stringOverrides: { app_name: 'AgriAssist' },
   onChatOpened: () => console.log('[fc] chat opened'),

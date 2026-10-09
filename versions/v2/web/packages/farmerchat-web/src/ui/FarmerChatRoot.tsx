@@ -181,7 +181,11 @@ export function FarmerChatRoot(props: {
         : question
           ? { type: 'chatQuery', question, source: 'deeplink' }
           : { type: 'home' };
-      const onboardingDone = services.store.getBool(PrefKeys.LANGUAGE_DONE, false);
+      // CHAT_ONLY has no onboarding: once past the splash (which bootstraps it headlessly) the
+      // chat is live even though LANGUAGE_DONE was never set.
+      const onboardingDone =
+        services.store.getBool(PrefKeys.LANGUAGE_DONE, false) ||
+        (services.config.mode === 'CHAT_ONLY' && navigator.current.name !== 'splash');
       if (!onboardingDone) {
         // Onboarding incomplete → save pending target (docs/01 §1 captureIntentTarget).
         navigator.setPendingTarget(target);
@@ -189,9 +193,10 @@ export function FarmerChatRoot(props: {
       }
       if (target.type === 'chat') openChat({ source: 'history', conversationId: target.chatId });
       else if (target.type === 'chatQuery') openChat({ source: 'home', question: target.question });
-      else navigator.replaceAll({ name: 'home' });
+      // CHAT_ONLY has no Home; the chat is already the landing screen.
+      else if (services.config.mode !== 'CHAT_ONLY') navigator.replaceAll({ name: 'home' });
     },
-    [navigator, openChat, services.store],
+    [navigator, openChat, services.config.mode, services.store],
   );
 
   /** C4 — map a destination name to a navigation edge. */
@@ -354,7 +359,12 @@ export function FarmerChatRoot(props: {
   function renderScreen() {
     switch (current.name) {
       case 'splash':
-        return <SplashScreen onReady={() => navigator.routeFromSplash()} />;
+        return (
+          <SplashScreen
+            onReady={() => navigator.routeFromSplash()}
+            peekPendingTarget={navigator.peekPendingTarget}
+          />
+        );
       case 'language':
         return (
           <LanguageSelectionScreen
