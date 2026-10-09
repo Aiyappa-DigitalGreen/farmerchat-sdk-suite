@@ -41,8 +41,10 @@ public enum FarmerChatAuthMode: String, Sendable {
     case hostToken
 }
 
-/// Journey scope (docs/07 C3). `chatOnly` (default) = skip onboarding/home, land
-/// directly in chat. `fullJourney` = onboarding + home + chat (opt in).
+/// Journey scope (docs/07 C3). `chatOnly` (default) = no Name/Home; land directly in chat,
+/// except on a first launch (`LANGUAGE_DONE` unset, no host `languageCode`/`locale`) which
+/// shows the language onboarding screen once, then the chat. `fullJourney` = onboarding +
+/// home + chat (opt in).
 public enum FarmerChatMode: String, Sendable {
     case fullJourney
     case chatOnly
@@ -153,8 +155,8 @@ public struct FarmerChatConfig: Sendable {
     public var appearance: FarmerChatAppearance
     /// Optional host theme (docs/07 Part B). Nil = built-in green brand.
     public var theme: FarmerChatTheme?
-    /// Preselect a language; skips the language screen when it resolves to a
-    /// supported language.
+    /// Preselect a language. In `.chatOnly` a non-blank value (or `locale`) also skips the
+    /// first-launch language screen.
     public var languageCode: String?
     /// OPTIONAL override for the country used in the language list when `initialize_user` returns
     /// a null/blank `country_code` (the normal case for a fresh guest on an IP the backend cannot
@@ -221,8 +223,9 @@ public struct FarmerChatConfig: Sendable {
 
     // MARK: - C3 Screen/feature toggles
     /// Journey scope. Default **`.chatOnly`**: the SDK lands directly in a fresh chat (guest
-    /// init + new conversation + labels run headlessly). Pass `.fullJourney` for onboarding +
-    /// Home + drawer.
+    /// init + new conversation + labels run headlessly). On a first launch with no
+    /// `languageCode`/`locale` configured it shows the language onboarding screen once before the
+    /// chat. Pass `.fullJourney` for onboarding + Home + drawer.
     public var mode: FarmerChatMode
     public var showSettings: Bool
     /// History entry point. Default true: in the drawer (full journey) or, when the drawer is

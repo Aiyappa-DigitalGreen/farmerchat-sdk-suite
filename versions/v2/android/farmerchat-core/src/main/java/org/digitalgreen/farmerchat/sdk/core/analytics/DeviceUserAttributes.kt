@@ -17,8 +17,9 @@ import org.digitalgreen.farmerchat.sdk.core.device.DeviceTypeProvider
  * pairs to the host instead.
  *
  * Called at the two points where the SDK resolves a session: onboarding's guest-init success
- * (the app's own site) and the CHAT_ONLY bootstrap (an SDK-only path that skips onboarding
- * entirely, so it would otherwise report nothing).
+ * (the app's own site) and the CHAT_ONLY bootstrap (an SDK-only path that skips onboarding on
+ * every launch but a first one without a host-configured language, so it would otherwise report
+ * nothing).
  *
  * Deviation from the app, deliberate: [FarmerChatAnalytics.setUserAttribute] drops a blank value,
  * so a device that reports no brand/model raises no attribute rather than an empty one. The app

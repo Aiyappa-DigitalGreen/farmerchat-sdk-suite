@@ -62,10 +62,12 @@ struct SplashView: View {
 
             // Bootstrap: guest session (idempotent) then min-duration delay.
             _ = await env.session.ensureGuestSession()
-            // CHAT_ONLY skips onboarding, so run its label/language work headlessly
-            // (best-effort, no-op once server labels exist).
+            // CHAT_ONLY going straight to chat skips onboarding, so run its label/language work
+            // headlessly (best-effort, no-op once server labels exist). Not when the first-launch
+            // language screen is about to show — that screen does this work itself.
             // Only once a guest session exists, so a failed init reaches the error route fast.
-            if env.config.mode == .chatOnly, env.session.userId != nil {
+            if env.config.mode == .chatOnly, env.session.userId != nil,
+               !SplashRouter.chatOnlyNeedsLanguageScreen(env: env) {
                 await env.ensureChatOnlyBootstrap()
             }
             try? await Task.sleep(nanoseconds: 200_000_000)

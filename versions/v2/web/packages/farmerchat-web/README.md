@@ -6,8 +6,9 @@ voice, image) → chat history → settings/help — plus phone + OTP auth, insi
 single component you drop into any page. TypeScript strict, zero runtime
 dependencies beyond React.
 
-**By default it opens straight into the chat** (`mode: 'CHAT_ONLY'`): no onboarding, Home or
-drawer; the guest session and labels are set up headlessly and the chat app bar carries the
+**By default it opens straight into the chat** (`mode: 'CHAT_ONLY'`): no Home or drawer, and the
+only onboarding is a one-time language screen on a first launch (skipped when you pass
+`languageCode` or `locale`). After that the guest session and labels are set up headlessly and the chat app bar carries the
 history and language buttons. Pass `mode: 'FULL_JOURNEY'` for the whole journey. No API keys are
 needed: the FarmerChat API key and the Google geolocation key are built in (optional overrides
 `farmerChatApiKey` / `geoApiKey`).
@@ -95,7 +96,7 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `authMode` | `'SDK_OTP' \| 'HOST_TOKEN'` | `'SDK_OTP'` | `HOST_TOKEN` trusts host tokens and skips the phone/OTP UI. |
 | `accessToken` / `refreshToken` | `string` | — | HOST_TOKEN seed tokens. |
 | `tokenProvider` | `() => HostToken \| null \| Promise<…>` | — | HOST_TOKEN: (re)supply a token; called on 401. |
-| `mode` | `'FULL_JOURNEY' \| 'CHAT_ONLY'` | `'CHAT_ONLY'` | `CHAT_ONLY` (default) skips onboarding/home and lands in chat; the splash bootstraps the guest session and labels headlessly, and each journey (SDK boot) starts a new conversation unless it opens a specific history conversation. `FULL_JOURNEY` runs onboarding, Home, drawer and settings. |
+| `mode` | `'FULL_JOURNEY' \| 'CHAT_ONLY'` | `'CHAT_ONLY'` | `CHAT_ONLY` (default) skips Home and lands in chat, after a one-time language screen on a first launch (skipped when `languageCode`/`locale` is set); the splash bootstraps the guest session and labels headlessly, and each journey (SDK boot) starts a new conversation unless it opens a specific history conversation. `FULL_JOURNEY` runs onboarding, Home, drawer and settings. |
 | `showDrawer` | `boolean` | follows `mode` | Unset → `true` in `FULL_JOURNEY`, `false` in `CHAT_ONLY` (the chat app bar then shows the history and language buttons instead of the menu). An explicit value wins. |
 | `showSettings` / `showHistory` | `boolean` | `true` | Hide the Settings / History entries (drawer items, and the chat-bar history button when the drawer is off). |
 | `enableSsfr` | `boolean` | `true` | Home SSFR (fertilizer) card. |

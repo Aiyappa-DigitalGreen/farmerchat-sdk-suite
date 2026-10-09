@@ -28,8 +28,28 @@ internal object NavRoutes {
         NavOptions.Builder().setLaunchSingleTop(true).build()
 
     /**
-     * C3 CHAT_ONLY: skip onboarding/home and land directly in a fresh chat,
-     * clearing the whole back stack (mirrors Compose FarmerChatRoot).
+     * C3 CHAT_ONLY entry, shared by the splash and the first-launch language screen: start a
+     * fresh journey (new conversation unless a history thread is pending), run the headless
+     * guest/labels/conversation bootstrap, then [navigateChatOnly] with the pending target.
+     * [beforeNavigate] runs just before navigating (the splash's minimum-duration floor).
+     *
+     * Never call it while [org.digitalgreen.farmerchat.sdk.core.navigation.RouteDecider.chatOnlyNeedsLanguage]
+     * is true — the language screen must run first and does that bootstrap work itself.
+     */
+    suspend fun enterChatOnly(navController: NavController, beforeNavigate: suspend () -> Unit = {}) {
+        val graph = FarmerChat.requireGraph()
+        // Each fresh journey = a new conversation (the app's per-Home-entry rule).
+        graph.beginChatOnlyJourney()
+        // Guest session + conversation bootstrap (shared with android-compose).
+        graph.ensureChatOnlySession()
+        beforeNavigate()
+        navigateChatOnly(navController, graph.routeDecider.consumePendingTarget())
+    }
+
+    /**
+     * C3 CHAT_ONLY: skip name/home and land directly in a fresh chat,
+     * clearing the whole back stack (mirrors Compose FarmerChatRoot). The first-launch language
+     * screen, when it shows, comes before this ([enterChatOnly]).
      */
     fun navigateChatOnly(navController: NavController, target: PendingTarget? = null) {
         // A screen the HOST asked for (FarmerChatLaunch.screen / openScreen) is the journey's

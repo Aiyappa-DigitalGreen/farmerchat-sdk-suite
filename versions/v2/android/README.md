@@ -86,7 +86,7 @@ Embedding instead of launching an Activity:
 | Option | Default | Notes |
 |---|---|---|
 | `environment` | required | dev/demo base `farmerchat.farmstack.co/mobile-app-*/`; **stage `demo.agent.farmer.chat` in 2.0.0** (debug and release alike — see `../README.md`); prod `v2.api.farmer.chat`; eks `api.farmerchat.in` |
-| `mode` | `CHAT_ONLY` | `CHAT_ONLY` lands straight in chat and bootstraps the guest session, conversation and labels headlessly. `FULL_JOURNEY` opts in to the app's whole journey (onboarding, Home, drawer, settings). |
+| `mode` | `CHAT_ONLY` | `CHAT_ONLY` lands straight in chat and bootstraps the guest session, conversation and labels headlessly — except on a first launch with no `languageCode`/`locale`, where it shows the language onboarding screen once and then the chat. `FULL_JOURNEY` opts in to the app's whole journey (onboarding, Home, drawer, settings). |
 | `showDrawer` | unset → `mode == FULL_JOURNEY` | Navigation drawer. Unset, CHAT_ONLY has no drawer (the chat app bar then shows the history and language buttons) and FULL_JOURNEY has one. An explicit `showDrawer(true/false)` always wins. |
 | `showHistory` / `showSettings` | true | History button / Settings entry. |
 | `geoApiKey` | built-in | **Optional override; hosts do not need to supply it.** Google Geolocation (`geolocate`, P1: 5 s / 1 retry). The SDK bundles a default key, used when this is null or blank. Coordinates are passed to `initialize_user`; endpoint #12 (home feed) returns an empty `sections` list until the backend has a resolved location. |

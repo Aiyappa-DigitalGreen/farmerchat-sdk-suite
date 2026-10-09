@@ -44,8 +44,10 @@ FarmerChatConfig {
   farmerChatApiKey?               // optional override of the built-in FarmerChat guest-init API-Key
                                   //   (renamed from guestApiKey — the old name was removed, no alias)
   geoApiKey?                      // optional override of the built-in Google geolocation key
-  mode = CHAT_ONLY                // v2 default (was FULL_JOURNEY): opens straight into chat with a headless
-                                  //   guest bootstrap. FULL_JOURNEY (onboarding → Home → chat …) still ships.
+  mode = CHAT_ONLY                // v2 default (was FULL_JOURNEY): first launch shows the language screen
+                                  //   once (skipped if languageCode/locale is set), then chat; later launches
+                                  //   open straight into chat with a headless guest bootstrap.
+                                  //   FULL_JOURNEY (onboarding → Home → chat …) still ships.
   showDrawer?                     // unset → (mode == FULL_JOURNEY); chat-only puts history + language in the chat bar
   showHistory = true, showSettings = true, showNameScreen = true
   appearance: day|night|auto

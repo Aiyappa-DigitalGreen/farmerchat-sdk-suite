@@ -109,7 +109,7 @@ Expose the journey/chat as a host-placeable component, in addition to `launch()`
 - `HOST_TOKEN`: host supplies `accessToken` (+ optional `refreshToken`) or a `tokenProvider` callback; SDK skips the phone/OTP UI, treats the user as authenticated, and calls `tokenProvider`/`onSessionExpired` on 401 instead of forcing OTP. `SDK_OTP` = today's behavior.
 
 ### C3. Screen/feature toggles
-- `mode = FULL_JOURNEY` (default) | `CHAT_ONLY` (skip onboarding/home; land in chat).
+- `mode = CHAT_ONLY` (v2 default since 2026-10-09; skip Home and the rest of onboarding and land in chat, after a one-time language screen on a first launch unless the host sets `languageCode`/`locale`) | `FULL_JOURNEY`.
 - `showSettings`, `showHistory`, `showDrawer`, `enableWeather`, `enableSsfr` (bool; default true). Existing `enableVoice/Images` stay.
 
 ### C4. Event hooks + programmatic API

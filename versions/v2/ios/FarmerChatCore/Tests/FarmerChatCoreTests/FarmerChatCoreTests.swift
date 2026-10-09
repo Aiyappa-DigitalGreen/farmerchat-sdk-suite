@@ -226,4 +226,28 @@ final class FarmerChatCoreTests: XCTestCase {
 
         defaults.removePersistentDomain(forName: suiteName)
     }
+
+    func testChatOnlyShowsLanguageScreenOnlyOnUnconfiguredFirstLaunch() {
+        let suiteName = "fc_sdk_test_chatonly_language"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let prefs = PreferenceStore(defaults: defaults)
+
+        // First launch, no host language → the language screen.
+        XCTAssertTrue(SplashRouter.chatOnlyNeedsLanguageScreen(prefs: prefs, config: FarmerChatConfig(mode: .chatOnly)))
+        // Blank host values do not count as configured.
+        XCTAssertTrue(SplashRouter.chatOnlyNeedsLanguageScreen(
+            prefs: prefs, config: FarmerChatConfig(languageCode: "  ", mode: .chatOnly, locale: "")))
+        // Host passed a language (languageCode or locale) → straight to chat.
+        XCTAssertFalse(SplashRouter.chatOnlyNeedsLanguageScreen(prefs: prefs, config: FarmerChatConfig(languageCode: "hi", mode: .chatOnly)))
+        XCTAssertFalse(SplashRouter.chatOnlyNeedsLanguageScreen(prefs: prefs, config: FarmerChatConfig(mode: .chatOnly, locale: "sw")))
+        // Full journey never takes this gate (routeFromSplash owns its own language step).
+        XCTAssertFalse(SplashRouter.chatOnlyNeedsLanguageScreen(prefs: prefs, config: FarmerChatConfig(mode: .fullJourney)))
+
+        // Later launches (language onboarding finished) → straight to chat.
+        prefs.setBool(true, .languageDone)
+        XCTAssertFalse(SplashRouter.chatOnlyNeedsLanguageScreen(prefs: prefs, config: FarmerChatConfig(mode: .chatOnly)))
+
+        defaults.removePersistentDomain(forName: suiteName)
+    }
 }

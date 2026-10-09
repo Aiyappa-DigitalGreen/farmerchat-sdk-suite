@@ -61,7 +61,12 @@ sealed interface SplashRoute {
 class RouteDecider(
     private val prefs: SdkPreferences,
     /** RemoteConfig `show_name_screen` equivalent; SDK default true. */
-    private val showNameScreen: () -> Boolean = { true }
+    private val showNameScreen: () -> Boolean = { true },
+    /**
+     * True when the host configured the language (a non-blank `languageCode` or `locale`).
+     * Only the CHAT_ONLY first-launch gate ([chatOnlyNeedsLanguage]) reads it.
+     */
+    private val hostLanguageConfigured: () -> Boolean = { false }
 ) {
 
     private var pendingTarget: PendingTarget? = null
@@ -74,12 +79,26 @@ class RouteDecider(
 
     /**
      * Takes the pending target without running the onboarding gates of [routeFromSplash].
-     * CHAT_ONLY has no language/name/home screens, so it consumes a deep-link target directly.
+     * CHAT_ONLY has no name/home screens (and shows the language screen only on a first launch,
+     * see [chatOnlyNeedsLanguage]), so it consumes a deep-link target directly once in chat.
      */
     fun consumePendingTarget(): PendingTarget? = pendingTarget.also { pendingTarget = null }
 
     fun isLanguageSelected(): Boolean =
         prefs.getBoolean(SdkPreferences.Keys.LANGUAGE_DONE, false)
+
+    /**
+     * CHAT_ONLY first-launch gate (2026-10-09): CHAT_ONLY shows the existing language onboarding
+     * screen once — when the language step was never completed (LANGUAGE_DONE false) AND the host
+     * configured no language (`languageCode` / `locale`). Otherwise CHAT_ONLY goes straight to
+     * chat. The pending target is NOT touched here, so it survives the language screen and is
+     * honoured when the CHAT_ONLY route runs again after the screen completes.
+     *
+     * Deliberately separate from [routeFromSplash], whose tree (docs/01 §2) is FULL_JOURNEY's and
+     * stays frozen.
+     */
+    fun chatOnlyNeedsLanguage(): Boolean =
+        !isLanguageSelected() && !hostLanguageConfigured()
 
     fun isProfileDone(): Boolean =
         prefs.getBoolean(SdkPreferences.Keys.KEY_NAME_DONE, false)

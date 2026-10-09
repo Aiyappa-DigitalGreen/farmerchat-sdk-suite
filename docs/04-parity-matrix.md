@@ -8163,3 +8163,42 @@ react-native `npx tsc --noEmit`; web `tsc` + build + tests (fail 0), widget buil
 stage: Q1 → Q2 (location surface) → typed Q3 — each new question lands at the top (scrollTop =
 question offset − 20) and the unanswered surface collapses. Android/iOS/RN were not re-run on a
 device for this change: UNVERIFIED on device.
+
+## CHAT_ONLY first launch: one-time language screen — all v2 platforms (2026-10-09)
+
+User decision: chat-only stays the default, but a first-time user picks a language before the chat.
+
+| Case | Route (all platforms) |
+|---|---|
+| First launch: `LANGUAGE_DONE` false, host `languageCode`/`locale` blank | Splash → existing Language onboarding screen (docs/01 §3.2, unchanged) → Chat. No Name, no Home. The headless bootstrap does not run first (the screen does guest init, #2, #3, #4 itself). A pending `openChat(question)` / conversation id survives the screen. |
+| Later launches (`LANGUAGE_DONE` true) | Splash → headless bootstrap → Chat (unchanged) |
+| Host set `languageCode` or `locale` | Splash → headless bootstrap → Chat (unchanged) |
+
+Existing CHAT_ONLY installs never set `LANGUAGE_DONE`, so they see the language screen once after
+upgrading (when the host sets no language).
+
+| Platform | Where |
+|---|---|
+| android core | `RouteDecider.chatOnlyNeedsLanguage()` (+ `hostLanguageConfigured` from `FarmerChatGraph`); test `ChatOnlyLanguageGateTest` (4) |
+| android compose | `FarmerChatRoot.navigateFromSplash`: gate → Language; the CHAT_ONLY branch now routes every pending type straight to chat (previously Chat/ChatQuery/Gps/Home fell through to `routeFromSplash`, which could land on Name/Home) and passes imageUri/audioUri, matching views. `openChat` while alive takes the same path |
+| android views | `SplashFragment` gate → `fc_dest_language`; `LanguageFragment` submit in CHAT_ONLY → `NavRoutes.enterChatOnly` |
+| ios Core | `SplashRouter.routeChatOnly` / `chatOnlyNeedsLanguageScreen`; test `testChatOnlyShowsLanguageScreenOnlyOnUnconfiguredFirstLaunch` |
+| ios SwiftUI / UIKit | `routeFromSplash` CHAT_ONLY branch uses `routeChatOnly`; bootstrap skipped behind the gate; pending targets held while the language root shows |
+| react-native | `sdk.chatOnlyNeedsLanguageScreen`; `AppNavigator.routeFromSplash`, `SplashScreen`, `AppNavGraph` onboarding-done check |
+| web | `chatOnlyNeedsLanguage` / `hostConfiguredLanguage` (core/chatOnlyBootstrap.ts); `computeRouteFromSplash`, `SplashScreen`, `FarmerChatRoot` onboarding-done check; test in `chatOnlyDefaults.test.ts` |
+
+Known gaps (pre-existing, not changed here):
+- android: a host that passes only `languageCode` never sets `LANGUAGE_DONE`, so the alive-activity
+  re-entry checks (compose `newIntentTick`, views `captureIntentTarget`) don't re-route `openChat`
+  in that case; views re-entry still uses `routeFromSplash()` in CHAT_ONLY.
+- ios: an `openScreen` issued while the CHAT_ONLY language screen shows is dropped (as during the
+  splash); in FULL_JOURNEY an `openChat` during Language/Name is pushed over onboarding.
+- react-native: FULL_JOURNEY's splash inits the guest without coordinates before the language screen.
+
+Verified: android compile (core/compose/views) + `:farmerchat-core:testDebugUnitTest` (exit 0); ios
+FarmerChatCore `swift build` + `swift test` (129 tests, 0 failures), `xcodebuild` FarmerChatSwiftUI and
+FarmerChatUIKit for the iOS Simulator (BUILD SUCCEEDED); react-native `tsc --noEmit` + `npm test`
+(10 pass; the new RN test checks source patterns, not runtime routing); web `tsc` + build + tests,
+widget build + tsc. Browser (web widget, live stage): clean storage → language screen → "Start using
+FarmerChat" → chat; reload → straight to chat; clean storage + `open('question')` → language screen →
+chat with the question answered. Android/iOS/RN not run on a device: UNVERIFIED on device.

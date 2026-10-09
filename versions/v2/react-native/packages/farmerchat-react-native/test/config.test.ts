@@ -67,6 +67,30 @@ test('CHAT_ONLY splash starts a fresh conversation before the bootstrap', () => 
   assert.match(sdk, /pendingTarget\?\.kind !== 'chat'\)\s*\{\s*this\.store\.remove\(StorageKeys\.NEW_CONVERSATION_ID\)/);
 });
 
+test('CHAT_ONLY first launch shows the language screen once, then the chat', () => {
+  // Decision: !LANGUAGE_DONE && no host languageCode/locale → Language; otherwise Chat.
+  const sdk = readFileSync('src/core/sdk.ts', 'utf8');
+  assert.match(
+    sdk,
+    /get chatOnlyNeedsLanguageScreen\(\): boolean \{\s*return !this\.store\.getBoolean\(StorageKeys\.LANGUAGE_DONE\) && !this\.hostLanguageConfigured;/,
+  );
+  assert.match(sdk, /this\.config\.locale\?\.trim\(\) \|\| this\.config\.languageCode\?\.trim\(\)/);
+  // The Language check is the first thing in the CHAT_ONLY branch, before the pending target is
+  // consumed (so the target survives the screen), and the screen's callback re-runs the decision.
+  const nav = readFileSync('src/ui/navigation/AppNavigator.ts', 'utf8');
+  const branch = nav.indexOf("if (this.sdk.config.mode === 'CHAT_ONLY') {", nav.indexOf('routeFromSplash(): void'));
+  const lang = nav.indexOf("if (this.sdk.chatOnlyNeedsLanguageScreen) {\n        this.resetTo([{ name: 'Language' }]);", branch);
+  const consume = nav.indexOf('this.sdk.consumePendingTarget()', branch);
+  assert.ok(branch > 0 && lang > branch && lang < consume);
+  const graph = readFileSync('src/ui/navigation/AppNavGraph.tsx', 'utf8');
+  assert.ok(graph.includes('onLanguageSubmitted={() => appNavigator.routeFromSplash()}'));
+  // openChat while the language screen is up stays pending.
+  assert.ok(graph.includes("route !== 'Splash' && route !== 'Language' && !sdk.chatOnlyNeedsLanguageScreen"));
+  // The headless bootstrap does not run ahead of the language screen.
+  const splash = readFileSync('src/ui/screens/SplashScreen.tsx', 'utf8');
+  assert.match(splash, /if \(!sdk\.chatOnlyNeedsLanguageScreen\) \{\s*await sdk\.ensureChatOnlySession\(\);/);
+});
+
 test('drawer off: chat bar has history (gated on showHistory) + language', () => {
   const src = readFileSync('src/ui/screens/ChatScreen.tsx', 'utf8');
   assert.ok(src.includes('sdk.config.showDrawer ? undefined : ('));

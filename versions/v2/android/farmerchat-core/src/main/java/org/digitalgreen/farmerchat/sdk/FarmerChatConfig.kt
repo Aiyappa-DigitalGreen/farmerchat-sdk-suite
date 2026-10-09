@@ -43,8 +43,10 @@ enum class FarmerChatAppearance { DAY, NIGHT, AUTO }
 enum class FarmerChatAuthMode { SDK_OTP, HOST_TOKEN }
 
 /**
- * Journey scope (C3). [CHAT_ONLY] (the DEFAULT since 2026-10-09) skips onboarding/home and lands
+ * Journey scope (C3). [CHAT_ONLY] (the DEFAULT since 2026-10-09) skips name/home and lands
  * directly in chat; the SDK bootstraps the guest session, conversation and labels headlessly.
+ * Exception: on a first launch (language step never completed) with no host-configured
+ * `languageCode`/`locale`, CHAT_ONLY shows the language onboarding screen once, then the chat.
  * [FULL_JOURNEY] = the app's whole journey (splash → language → name → home → chat, drawer,
  * settings…) for a host that opts in with `mode(FULL_JOURNEY)`.
  */

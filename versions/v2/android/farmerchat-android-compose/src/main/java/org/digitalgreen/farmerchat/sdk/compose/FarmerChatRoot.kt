@@ -174,39 +174,69 @@ fun FarmerChatRoot(
     }
 
     fun navigateFromSplash() {
-        // C3: CHAT_ONLY skips onboarding/home and lands directly in a fresh chat.
-        // Onboarding is normally where the guest session is established, so in
+        // C3: CHAT_ONLY skips name/home and lands directly in a fresh chat — except on a first
+        // launch with no host-configured language (LANGUAGE_DONE false, no languageCode/locale),
+        // where it shows the existing language onboarding screen once. That screen does the guest
+        // init, labels and preferred language itself, so the headless bootstrap below must NOT
+        // run first; the pending target is only peeked, so it survives the screen. The screen's
+        // onLanguageSubmitted re-runs this function, which then takes the chat branch.
+        val isChatOnly = graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY
+        if (isChatOnly && graph.routeDecider.chatOnlyNeedsLanguage()) {
+            scope.launch {
+                holdSplash()
+                navigateClearingStack(Destination.Language)
+            }
+            return
+        }
+        // Otherwise onboarding is normally where the guest session is established, so in
         // CHAT_ONLY we must guest-init here (idempotent) before entering chat —
         // otherwise the first authed call 401s ("Authorization credentials were
         // not provided"). Best-effort: navigate even if init fails (chat shows
-        // its own retry); the splash stays up until this completes.
-        val chatOnlyPending = graph.routeDecider.peekPendingTarget()
-        if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY &&
-            (chatOnlyPending == null ||
-                chatOnlyPending is org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget.Screen)
-        ) {
+        // its own retry); the splash stays up until this completes. Every pending target is
+        // honoured here, without routeFromSplash(): its name gate and Home-first back stack
+        // would surface exactly the screens CHAT_ONLY hides (views parity, navigateChatOnly).
+        if (isChatOnly) {
             scope.launch {
                 // Each fresh journey = a new conversation (the app's per-Home-entry rule).
                 graph.beginChatOnlyJourney()
                 // Guest session + conversation bootstrap (shared with android-views).
                 graph.ensureChatOnlySession()
                 holdSplash()
-                // A screen the HOST asked for (openScreen) is the journey's root: leaving it returns
-                // to the host screen that opened it, not into a chat (views parity).
-                val screen = (graph.routeDecider.consumePendingTarget()
-                    as? org.digitalgreen.farmerchat.sdk.core.navigation.PendingTarget.Screen)?.screen
-                val screenDestination: Destination? = when (screen) {
-                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HISTORY -> Destination.ChatHistory
-                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP -> Destination.Help
-                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE -> Destination.SettingsLanguage
-                    org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.SETTINGS -> Destination.Settings
-                    else -> null
-                }
-                if (screenDestination != null) {
-                    screenOpenedByHost = true
-                    navigateClearingStack(screenDestination)
-                } else {
-                    navigateClearingStack(Destination.Chat(source = "chat_only"))
+                when (val target = graph.routeDecider.consumePendingTarget()) {
+                    // "history" is what makes the chat load the thread.
+                    is PendingTarget.Chat -> navigateClearingStack(
+                        Destination.Chat(source = "history", conversationId = target.chatId)
+                    )
+                    is PendingTarget.ChatQuery -> navigateClearingStack(
+                        Destination.Chat(
+                            source = target.source,
+                            question = target.question,
+                            preGeneratedAnswer = target.preGeneratedAnswer,
+                            followUpQuestions = target.followUpQuestions ?: emptyList(),
+                            channel = target.channel,
+                            imageUri = target.imageUri,
+                            audioUri = target.audioUri
+                        )
+                    )
+                    else -> {
+                        // A screen the HOST asked for (openScreen) is the journey's root: leaving
+                        // it returns to the host screen that opened it, not into a chat (views
+                        // parity).
+                        val screen = (target as? PendingTarget.Screen)?.screen
+                        val screenDestination: Destination? = when (screen) {
+                            org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HISTORY -> Destination.ChatHistory
+                            org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.HELP -> Destination.Help
+                            org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.LANGUAGE -> Destination.SettingsLanguage
+                            org.digitalgreen.farmerchat.sdk.core.navigation.FarmerChatScreens.SETTINGS -> Destination.Settings
+                            else -> null
+                        }
+                        if (screenDestination != null) {
+                            screenOpenedByHost = true
+                            navigateClearingStack(screenDestination)
+                        } else {
+                            navigateClearingStack(Destination.Chat(source = "chat_only"))
+                        }
+                    }
                 }
             }
             return

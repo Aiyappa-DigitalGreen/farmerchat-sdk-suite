@@ -128,6 +128,9 @@ public final class FCRouter: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] target in
                 guard let self, self.root != .splash else { return }
+                // CHAT_ONLY's first-launch language screen is still onboarding: keep the target
+                // pending; the screen's submit → routeFromSplash consumes it into the chat.
+                if self.env.config.mode == .chatOnly, self.root == .language { return }
                 _ = self.env.consumePendingChatTarget()
                 self.push(.chat(FCDestination.ChatArgs(
                     source: "deeplink",
@@ -143,6 +146,8 @@ public final class FCRouter: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] screen in
                 guard let self, self.root != .splash else { return }
+                // Not over CHAT_ONLY's first-launch language screen (still onboarding).
+                if self.env.config.mode == .chatOnly, self.root == .language { return }
                 _ = self.env.consumePendingScreenTarget()
                 // CHAT_ONLY has no Home: the drawer routes would rebuild the stack on a Home the
                 // host switched off, so push the screen over the chat (back returns to it).
@@ -233,14 +238,19 @@ public final class FCRouter: ObservableObject {
     // MARK: - routeFromSplash (AppNavigator)
 
     public func routeFromSplash() {
-        // C3 CHAT_ONLY: skip onboarding/home, land directly in Chat.
+        // C3 CHAT_ONLY: no Name/Home. The language screen once on a first launch (its submit
+        // re-runs this), otherwise straight to Chat with the pending openChat target.
         if env.config.mode == .chatOnly {
-            let target = env.consumePendingChatTarget()
-            setRoot(.chat(FCDestination.ChatArgs(
-                source: "chatOnly",
-                question: target?.question,
-                conversationId: target?.conversationId
-            )))
+            switch SplashRouter.routeChatOnly(env: env) {
+            case .chat(let question, let conversationId):
+                setRoot(.chat(FCDestination.ChatArgs(
+                    source: "chatOnly",
+                    question: question,
+                    conversationId: conversationId
+                )))
+            default:
+                setRoot(.language)
+            }
             return
         }
         switch SplashRouter.routeFromSplash(env: env) {

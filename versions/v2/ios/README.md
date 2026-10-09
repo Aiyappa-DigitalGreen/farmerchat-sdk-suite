@@ -2,7 +2,9 @@
 
 Full app-as-SDK. **By default (`mode: .chatOnly`) one entry point lands directly in a fresh AI
 chat** — guest init, the conversation and the server labels are bootstrapped headlessly, there is
-no drawer, and the chat bar carries the history and language icons. Hosts that opt in with
+no drawer, and the chat bar carries the history and language icons. The one exception is a first
+launch with no `languageCode`/`locale` configured: the language onboarding screen shows once, then
+the chat (later launches, or a host-set language, go straight to chat). Hosts that opt in with
 `mode: .fullJourney` get the complete FarmerChat journey — splash → language → name → home feed →
 AI chat (text/voice/image) → history → settings, with OTP auth reachable from the drawer/settings.
 Neither the FarmerChat API key nor the Google Geolocation key needs to be supplied: both are

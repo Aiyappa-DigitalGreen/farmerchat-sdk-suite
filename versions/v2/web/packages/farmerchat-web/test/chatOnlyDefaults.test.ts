@@ -17,7 +17,7 @@ import {
 } from '../src/core/config';
 import { computeRouteFromSplash } from '../src/ui/router';
 import { PrefKeys, SessionStore } from '../src/core/storage';
-import { beginChatOnlyJourney } from '../src/core/chatOnlyBootstrap';
+import { beginChatOnlyJourney, chatOnlyNeedsLanguage } from '../src/core/chatOnlyBootstrap';
 
 test('mode defaults to CHAT_ONLY and showDrawer then resolves to false', () => {
   const c = resolveConfig({ environment: 'prod' });
@@ -54,13 +54,28 @@ test('unset or blank keys fall back to the bundled defaults; a host value overri
   assert.equal(custom.geoApiKey, 'host-geo');
 });
 
-test('CHAT_ONLY with no language chosen lands in chat, FULL_JOURNEY on the language screen', () => {
+test('CHAT_ONLY first launch shows the language screen once, then lands in chat', () => {
   const store = new SessionStore();
-  assert.deepEqual(computeRouteFromSplash(store, null, 'CHAT_ONLY'), {
+  // First launch: no language chosen, none configured by the host.
+  assert.deepEqual(computeRouteFromSplash(store, null, 'CHAT_ONLY'), { name: 'language' });
+  assert.equal(chatOnlyNeedsLanguage(store, {}), true);
+  // Host-configured language skips the screen.
+  assert.deepEqual(computeRouteFromSplash(store, null, 'CHAT_ONLY', true, true), {
     name: 'chat',
     params: { source: 'home' },
   });
-  assert.deepEqual(computeRouteFromSplash(store, null, 'FULL_JOURNEY'), { name: 'language' });
+  assert.equal(chatOnlyNeedsLanguage(store, { languageCode: 'hi' }), false);
+  assert.equal(chatOnlyNeedsLanguage(store, { locale: 'kn' }), false);
+  assert.equal(chatOnlyNeedsLanguage(store, { languageCode: '  ' }), true);
+  // After the screen sets LANGUAGE_DONE: straight to chat, honouring a pending question.
+  store.setBool(PrefKeys.LANGUAGE_DONE, true);
+  assert.deepEqual(
+    computeRouteFromSplash(store, { type: 'chatQuery', question: 'q', source: 'deeplink' }, 'CHAT_ONLY'),
+    { name: 'chat', params: { source: 'home', question: 'q', channel: undefined } },
+  );
+  assert.equal(chatOnlyNeedsLanguage(store, {}), false);
+  // FULL_JOURNEY is unchanged.
+  assert.deepEqual(computeRouteFromSplash(new SessionStore(), null, 'FULL_JOURNEY'), { name: 'language' });
 });
 
 test('a CHAT_ONLY journey start clears the stored conversation unless opening a history chat', () => {

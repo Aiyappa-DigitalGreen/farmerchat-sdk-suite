@@ -109,10 +109,18 @@ export class AppNavigator {
    *     `RouteDecider.routeFromSplash`.
    *  3. else consume PendingTarget → Chat / ChatQuery / Gps(Home) / Home
    * All with popUpTo(0){inclusive} (reset).
+   *
+   * CHAT_ONLY (C3): no Name / Home. The language screen shows once, on a first launch
+   * (`LANGUAGE_DONE` false and no host `languageCode`/`locale`); its "submitted" callback re-runs
+   * this decision, which then lands in chat. The pending target is not consumed while routing to
+   * Language, so it survives the screen and is honoured on the way to chat.
    */
   routeFromSplash(): void {
-    // CHAT_ONLY (C3): skip onboarding + home and land straight in chat.
     if (this.sdk.config.mode === 'CHAT_ONLY') {
+      if (this.sdk.chatOnlyNeedsLanguageScreen) {
+        this.resetTo([{ name: 'Language' }]);
+        return;
+      }
       const target = this.sdk.consumePendingTarget();
       if (target && target.kind !== 'home' && target.kind !== 'gps') {
         this.routePendingTarget(target);

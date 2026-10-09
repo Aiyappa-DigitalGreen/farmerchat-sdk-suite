@@ -330,7 +330,15 @@ class FarmerChatGraph internal constructor(
 
     // showNameScreen mirrors the app's `show_name_screen` RemoteConfig flag. When false,
     // routeFromSplash() marks the profile step done and falls through to Home.
-    val routeDecider = RouteDecider(prefs) { config.showNameScreen }
+    // hostLanguageConfigured feeds the CHAT_ONLY first-launch language gate: a host-configured
+    // language (the same pair ensureLabelsLoaded reads) keeps CHAT_ONLY going straight to chat.
+    val routeDecider = RouteDecider(
+        prefs,
+        showNameScreen = { config.showNameScreen },
+        hostLanguageConfigured = {
+            !config.languageCode.isNullOrBlank() || !config.locale.isNullOrBlank()
+        }
+    )
 
     val locationPromptManager = LocationPromptManager(
         prefs = prefs,
@@ -415,13 +423,6 @@ class FarmerChatGraph internal constructor(
     )
 
     /**
-     * CHAT_ONLY bootstrap. Onboarding + Home normally establish the guest session
-     * and create the conversation; CHAT_ONLY skips both, so do them here before
-     * entering chat — otherwise the first query is sent unauthenticated (401) or
-     * with an empty conversation_id (500). Idempotent + best-effort: callers should
-     * proceed to chat even if this throws (chat shows its own retry).
-     */
-    /**
      * Completes onboarding's API work when the language SCREEN was skipped.
      *
      * `config.locale` sets LANGUAGE_DONE so routeFromSplash() goes straight past the language
@@ -444,9 +445,11 @@ class FarmerChatGraph internal constructor(
 
     /**
      * Fetches server labels (and sets the preferred language) when no onboarding screen has
-     * done it. Shared by the skipped-onboarding path and CHAT_ONLY — CHAT_ONLY never shows the
-     * language screen either, so without this the chat runs entirely on hardcoded English
-     * fallbacks and the backend never learns the user's language.
+     * done it. Shared by the skipped-onboarding path and CHAT_ONLY — CHAT_ONLY shows the
+     * language screen only on a first launch without a host-configured language
+     * ([RouteDecider.chatOnlyNeedsLanguage]); on every other CHAT_ONLY open (and whenever the host
+     * configured the language) no screen has loaded labels, so without this the chat runs
+     * entirely on hardcoded English fallbacks and the backend never learns the user's language.
      *
      * Best-effort and idempotent: no-ops once labels exist, and any failure leaves the English
      * fallbacks in place, which is the pre-existing behaviour.
@@ -520,9 +523,21 @@ class FarmerChatGraph internal constructor(
         }
     }
 
+    /**
+     * CHAT_ONLY bootstrap. Onboarding + Home normally establish the guest session
+     * and create the conversation; CHAT_ONLY skips Home (and the language screen on every launch
+     * but a first one without a host-configured language), so do them here before entering
+     * chat — otherwise the first query is sent unauthenticated (401) or with an empty
+     * conversation_id (500). Idempotent + best-effort: callers should proceed to chat even if
+     * this throws (chat shows its own retry).
+     *
+     * Do NOT call it while [RouteDecider.chatOnlyNeedsLanguage] is true: the language screen does
+     * the guest init, labels and preferred language itself. Call it after that screen completes
+     * (its session + labels make this a cheap conversation-only pass).
+     */
     suspend fun ensureChatOnlySession() {
         if (!sessionManager.hasSession()) {
-            // Resolve coordinates FIRST. CHAT_ONLY skips onboarding, which is where the geo
+            // Resolve coordinates FIRST. CHAT_ONLY usually skips onboarding, which is where the geo
             // pipeline normally lives, so this path used to call initializeGuestUser() with
             // lat/long/accuracy all null — the backend then had only the request IP to go on, and
             // the device-locale fallback never ran at all on the one flow a host embedding just
@@ -539,8 +554,9 @@ class FarmerChatGraph internal constructor(
                 DeviceUserAttributes.report(appContext, analytics)
             }
         }
-        // CHAT_ONLY skips the language screen, which is the only other caller of #3
+        // CHAT_ONLY usually skips the language screen, which is the only other caller of #3
         // get_labels — without this the chat UI would render hardcoded English fallbacks.
+        // No-op after the first-launch language screen already loaded them.
         ensureLabelsLoaded()
         if (prefs.getString(SdkPreferences.Keys.NEW_CONVERSATION_ID, "").isBlank()) {
             val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "").trim()

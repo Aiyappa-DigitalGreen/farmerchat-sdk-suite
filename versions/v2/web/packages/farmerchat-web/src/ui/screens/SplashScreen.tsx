@@ -9,7 +9,7 @@ import { useLabel, useSdk } from '../context';
 import { LogoGlyph, Toast } from '../components/common';
 import { Assets } from '../assets';
 import { Events, Screens } from '../../core/analytics';
-import { beginChatOnlyJourney, ensureChatOnlySession } from '../../core/chatOnlyBootstrap';
+import { beginChatOnlyJourney, chatOnlyNeedsLanguage, ensureChatOnlySession } from '../../core/chatOnlyBootstrap';
 import type { PendingTarget } from '../router';
 
 const MIN_DURATION_MS = 200;
@@ -29,15 +29,18 @@ export function SplashScreen(props: {
     const toastTimer = window.setTimeout(() => setShowToast(true), TOAST_AFTER_MS);
     services.analytics.track(Events.APP_OPENED, { build_version: 'V2' });
     services.analytics.screenView(Screens.SPLASH);
-    // CHAT_ONLY skips the language screen, so the guest session and labels are bootstrapped
-    // headlessly here (Android FarmerChatGraph.ensureChatOnlySession) before routing to chat.
+    // CHAT_ONLY going straight to chat skips the language screen, so the guest session and labels
+    // are bootstrapped headlessly here (Android FarmerChatGraph.ensureChatOnlySession). A first
+    // launch shows the language screen instead, which does that work itself.
     let cancelled = false;
     // Each fresh CHAT_ONLY journey starts a new conversation (Android beginChatOnlyJourney).
     if (services.config.mode === 'CHAT_ONLY') {
       beginChatOnlyJourney(services.store, props.peekPendingTarget?.() ?? null);
     }
     const bootstrap =
-      services.config.mode === 'CHAT_ONLY' ? ensureChatOnlySession(services) : Promise.resolve();
+      services.config.mode === 'CHAT_ONLY' && !chatOnlyNeedsLanguage(services.store, services.config)
+        ? ensureChatOnlySession(services)
+        : Promise.resolve();
     let readyTimer: number | undefined;
     const minDuration = new Promise<void>((resolve) => {
       readyTimer = window.setTimeout(resolve, MIN_DURATION_MS);

@@ -45,7 +45,8 @@ environment (language onboarding, home feed, chat answer) on 2026-07-17.
 - `farmerChatApiKey` and `geoApiKey` are **built into the SDK** and optional —
   the sample passes neither. Pass either only to override the built-in key.
 - Mode: the SDK defaults to **chat-only** (lands directly in a fresh chat, no
-  drawer; the chat bar carries the history and language icons). Launch with
+  drawer; the chat bar carries the history and language icons; a first launch
+  without `languageCode`/`locale` shows the language screen once first). Launch with
   `-fcFullJourney` for onboarding + Home + drawer — the onboarding/drawer
   automation hooks below assume it.
 - Environment: `.dev`/`.stage`/`.demo`/`.prod`/`.eks` in `SampleApp.swift`.

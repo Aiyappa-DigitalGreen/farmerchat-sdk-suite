@@ -156,7 +156,8 @@ public final class FCFarmerChatConfiguration: NSObject {
     @objc public var enableAnalytics: Bool = false
 
     // --- Journey scope
-    /// Default `FCModeChatOnly` (lands directly in chat); `FCModeFullJourney` opts in to
+    /// Default `FCModeChatOnly` (lands directly in chat; the language screen once on a first
+    /// launch when no `languageCode`/`locale` is set); `FCModeFullJourney` opts in to
     /// onboarding + Home + drawer.
     @objc public var mode: FCMode = .chatOnly
     @objc public var showSettings: Bool = true

@@ -35,6 +35,11 @@ public final class FarmerChatViewController: UINavigationController {
             .compactMap { $0 }
             .sink { [weak self] target in
                 guard let self, !(self.topViewController is FCUISplashViewController) else { return }
+                // CHAT_ONLY's first-launch language screen (the stack root; the settings chooser is
+                // only ever pushed over the chat) is still onboarding: keep the target pending;
+                // its submit → routeFromSplash consumes it into the chat.
+                if FarmerChat.shared.config.mode == .chatOnly,
+                   self.viewControllers.first is FCUILanguageViewController { return }
                 _ = FarmerChat.shared.consumePendingChatTarget()
                 self.pushViewController(FCUIChatViewController(args: FCUIChatArgs(
                     source: "deeplink",
@@ -50,6 +55,9 @@ public final class FarmerChatViewController: UINavigationController {
             .compactMap { $0 }
             .sink { [weak self] screen in
                 guard let self, !(self.topViewController is FCUISplashViewController) else { return }
+                // Not over CHAT_ONLY's first-launch language screen (still onboarding).
+                if FarmerChat.shared.config.mode == .chatOnly,
+                   self.viewControllers.first is FCUILanguageViewController { return }
                 _ = FarmerChat.shared.consumePendingScreenTarget()
                 // CHAT_ONLY has no Home: push over the chat instead of rebuilding on a Home root.
                 if FarmerChat.shared.config.mode == .chatOnly {
@@ -205,14 +213,19 @@ public final class FarmerChatViewController: UINavigationController {
     /// `routeFromSplash()` — shared decision tree from Core (+ C3 chatOnly).
     @MainActor
     func routeFromSplash() {
-        // C3 CHAT_ONLY: skip onboarding/home, land directly in a fresh Chat.
+        // C3 CHAT_ONLY: no Name/Home. The language screen once on a first launch (its submit
+        // re-runs this), otherwise straight to a fresh Chat with the pending openChat target.
         if FarmerChat.shared.config.mode == .chatOnly {
-            let target = FarmerChat.shared.consumePendingChatTarget()
-            setViewControllers([FCUIChatViewController(args: FCUIChatArgs(
-                source: "chatOnly",
-                question: target?.question,
-                conversationId: target?.conversationId
-            ))], animated: true)
+            switch SplashRouter.routeChatOnly() {
+            case .chat(let question, let conversationId):
+                setViewControllers([FCUIChatViewController(args: FCUIChatArgs(
+                    source: "chatOnly",
+                    question: question,
+                    conversationId: conversationId
+                ))], animated: true)
+            default:
+                setViewControllers([FCUILanguageViewController(mode: .onboarding)], animated: true)
+            }
             return
         }
         switch SplashRouter.routeFromSplash() {
@@ -348,13 +361,15 @@ final class FCUISplashViewController: UIViewController {
         }
     }
 
-    /// CHAT_ONLY skips onboarding, so run its label/language work headlessly — only once a
-    /// guest session exists, so a failed init goes straight to the error route. Best-effort,
-    /// no-op once server labels exist.
+    /// CHAT_ONLY going straight to chat skips onboarding, so run its label/language work
+    /// headlessly — only once a guest session exists, so a failed init goes straight to the
+    /// error route. Not when the first-launch language screen is about to show (that screen
+    /// does this work itself). Best-effort, no-op once server labels exist.
     @MainActor
     private static func bootstrapChatOnlyIfNeeded() async {
         let env = FarmerChat.shared
-        guard env.config.mode == .chatOnly, env.session.userId != nil else { return }
+        guard env.config.mode == .chatOnly, env.session.userId != nil,
+              !SplashRouter.chatOnlyNeedsLanguageScreen(env: env) else { return }
         await env.ensureChatOnlyBootstrap()
     }
 }

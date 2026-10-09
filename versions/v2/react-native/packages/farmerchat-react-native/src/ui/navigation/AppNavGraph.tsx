@@ -108,7 +108,7 @@ export function AppNavGraph(): React.ReactElement {
         const route = navRef.isReady() ? navRef.getCurrentRoute()?.name : null;
         const onboardingDone =
           sdk.config.mode === 'CHAT_ONLY'
-            ? route !== 'Splash'
+            ? route !== 'Splash' && route !== 'Language' && !sdk.chatOnlyNeedsLanguageScreen
             : sdk.isLanguageSelected &&
               route !== 'Splash' &&
               route !== 'Language' &&

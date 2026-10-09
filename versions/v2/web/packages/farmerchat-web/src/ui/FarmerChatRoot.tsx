@@ -31,6 +31,7 @@ import { AccountBenefitsScreen, AccountSuccessScreen } from './screens/AccountSc
 import { AuthScreen } from './screens/AuthScreen';
 import { LocationPromptOverlay } from './screens/LocationPromptOverlay';
 import { Events } from '../core/analytics';
+import { hostConfiguredLanguage } from '../core/chatOnlyBootstrap';
 
 export interface FarmerChatController {
   openChat: (question?: string, conversationId?: string) => void;
@@ -52,7 +53,12 @@ export function FarmerChatRoot(props: {
   inline?: boolean;
 }) {
   const { services } = props;
-  const navigator = useNavigator(services.store, services.config.mode, services.config.showNameScreen);
+  const navigator = useNavigator(
+    services.store,
+    services.config.mode,
+    services.config.showNameScreen,
+    hostConfiguredLanguage(services.config),
+  );
   const toast = useToastState();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [legal, setLegal] = useState<{ url: string; title: string } | null>(null);
@@ -181,11 +187,13 @@ export function FarmerChatRoot(props: {
         : question
           ? { type: 'chatQuery', question, source: 'deeplink' }
           : { type: 'home' };
-      // CHAT_ONLY has no onboarding: once past the splash (which bootstraps it headlessly) the
-      // chat is live even though LANGUAGE_DONE was never set.
+      // CHAT_ONLY's only onboarding is the first-launch language screen: once past the splash and
+      // that screen the chat is live, even when LANGUAGE_DONE was never set (host-set language).
       const onboardingDone =
         services.store.getBool(PrefKeys.LANGUAGE_DONE, false) ||
-        (services.config.mode === 'CHAT_ONLY' && navigator.current.name !== 'splash');
+        (services.config.mode === 'CHAT_ONLY' &&
+          navigator.current.name !== 'splash' &&
+          navigator.current.name !== 'language');
       if (!onboardingDone) {
         // Onboarding incomplete → save pending target (docs/01 §1 captureIntentTarget).
         navigator.setPendingTarget(target);

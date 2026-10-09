@@ -32,12 +32,16 @@ export function SplashScreen(props: {
     const run = async () => {
       const startedAt = Date.now();
       await sdk.ready();
-      // Guest session bootstrap (issues tokens for all later calls). CHAT_ONLY skips onboarding,
-      // so it also bootstraps labels + the conversation headlessly (FarmerChatGraph parity).
+      // Guest session bootstrap (issues tokens for all later calls). CHAT_ONLY going straight to
+      // chat also bootstraps labels + the conversation headlessly (FarmerChatGraph parity). On a
+      // CHAT_ONLY first launch the language screen shows once instead and does that work itself
+      // (geolocate → guest init → #2/#3/#4), so nothing runs ahead of it here.
       if (sdk.config.mode === 'CHAT_ONLY') {
         // Each fresh journey = a new conversation (the app's per-Home-entry rule).
         sdk.beginChatOnlyJourney();
-        await sdk.ensureChatOnlySession();
+        if (!sdk.chatOnlyNeedsLanguageScreen) {
+          await sdk.ensureChatOnlySession();
+        }
       } else {
         await sdk.session.ensureGuestSession();
       }

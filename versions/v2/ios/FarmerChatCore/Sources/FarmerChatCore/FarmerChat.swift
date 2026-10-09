@@ -240,9 +240,12 @@ public final class FarmerChat: @unchecked Sendable {
     }
 
     /// CHAT_ONLY bootstrap — port of Android `FarmerChatGraph.ensureChatOnlySession()` /
-    /// `ensureLabelsLoaded()`. CHAT_ONLY skips onboarding, which is the only other caller of
-    /// #3 `get_labels` and #6 `set_preferred_language`; without this the chat renders hardcoded
-    /// English fallbacks and the backend never learns the language.
+    /// `ensureLabelsLoaded()`. CHAT_ONLY skips Name/Home, and skips the language screen too once
+    /// `LANGUAGE_DONE` is set or the host configured a language — and that screen is the only
+    /// other caller of #3 `get_labels` and #6 `set_preferred_language`; without this the chat
+    /// renders hardcoded English fallbacks and the backend never learns the language. NOT run on
+    /// a CHAT_ONLY first launch that shows the language screen
+    /// (`SplashRouter.chatOnlyNeedsLanguageScreen`): the screen does this work itself.
     ///
     /// Runs: guest init (#1, idempotent) → #2 languages → resolve the stored/configured code
     /// (else `en`) → #3 labels → #6 preferred language. The conversation (#15) is created by

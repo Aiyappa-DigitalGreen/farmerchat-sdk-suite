@@ -260,8 +260,9 @@ export interface FarmerChatConfig {
 
   /**
    * Journey mode (C3). **`CHAT_ONLY` (the default)** lands straight in a fresh chat, bootstrapping
-   * the guest session, labels and conversation headlessly. Pass `FULL_JOURNEY` for the full app
-   * journey (onboarding, Home, drawer, settings…).
+   * the guest session, labels and conversation headlessly — except on a first launch with no
+   * `languageCode`/`locale`, where the language onboarding screen shows once and then goes to
+   * the chat. Pass `FULL_JOURNEY` for the full app journey (onboarding, Home, drawer, settings…).
    */
   mode?: FarmerChatMode;
 

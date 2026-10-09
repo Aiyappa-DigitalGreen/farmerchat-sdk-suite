@@ -125,8 +125,11 @@ export class FarmerChatSdk {
   private labelBootstrapUnavailable = false;
 
   /**
-   * CHAT_ONLY skips onboarding and Home, which are where the guest session, the UI labels and the
-   * conversation are normally established. Port of Android's `FarmerChatGraph.ensureChatOnlySession`:
+   * CHAT_ONLY skips Home (and, after the first launch or when the host configured a language, the
+   * language screen), which are where the guest session, the UI labels and the conversation are
+   * normally established. NOT called before a first-launch CHAT_ONLY language screen
+   * ({@link chatOnlyNeedsLanguageScreen}) — that screen does guest init, labels and the preferred
+   * language itself, and the chat creates its conversation lazily. Port of Android's `FarmerChatGraph.ensureChatOnlySession`:
    *
    *  1. guest init (#1) with coordinates resolved FIRST — geolocate, then the device-locale
    *     centroid, then nothing — exactly as onboarding does;
@@ -286,6 +289,23 @@ export class FarmerChatSdk {
       this.config.languageCode !== null &&
       this.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE) !== null
     );
+  }
+
+  /**
+   * True when the host configured the UI language itself (a non-blank `locale` or `languageCode`
+   * — the values {@link ensureLabelsLoaded} already reads as the configured language).
+   */
+  get hostLanguageConfigured(): boolean {
+    return Boolean(this.config.locale?.trim() || this.config.languageCode?.trim());
+  }
+
+  /**
+   * CHAT_ONLY first launch: the language onboarding screen (docs/01 §3.2) shows once — when it
+   * has never completed (`LANGUAGE_DONE` false) and the host configured no language. Later
+   * launches, and hosts that pass `languageCode`/`locale`, go straight to chat.
+   */
+  get chatOnlyNeedsLanguageScreen(): boolean {
+    return !this.store.getBoolean(StorageKeys.LANGUAGE_DONE) && !this.hostLanguageConfigured;
   }
 
   get isProfileDone(): boolean {

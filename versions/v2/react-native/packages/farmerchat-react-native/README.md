@@ -117,7 +117,7 @@ FarmerChat.setAnalyticsListener(cb)            // replace onEvent after init
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `environment` | `'dev'\|'stage'\|'demo'\|'prod'\|'eks'` | — (required) | selects the backend base URL |
-| `mode` | `'CHAT_ONLY'\|'FULL_JOURNEY'` | `'CHAT_ONLY'` | `CHAT_ONLY` lands straight in a fresh chat and bootstraps the guest session, labels and conversation headlessly; `FULL_JOURNEY` runs onboarding → Home with drawer and settings |
+| `mode` | `'CHAT_ONLY'\|'FULL_JOURNEY'` | `'CHAT_ONLY'` | `CHAT_ONLY` lands straight in a fresh chat and bootstraps the guest session, labels and conversation headlessly — on a first launch with no `languageCode`/`locale` the language screen shows once first, then the chat; `FULL_JOURNEY` runs onboarding → Home with drawer and settings |
 | `showDrawer` | `boolean` | follows `mode` | unset → `mode === 'FULL_JOURNEY'` (no drawer in CHAT_ONLY). An explicit value wins |
 | `geoApiKey` | `string` | built-in | **Optional override — built in, hosts do not need to supply it.** Google Geolocation key used for language auto-detect and for the coordinates passed to `initialize_user` (endpoint #12 returns an empty home feed until the backend has a resolved location). Omitted or blank → the SDK's bundled key (the same one the Android SDK ships). |
 | `farmerChatApiKey` | `string` | built-in | **Optional override — built in, hosts do not need to supply it.** Sent as the `API-Key` header on guest init and the guest `send_tokens` fallback. Omitted or blank → the SDK's bundled key. |

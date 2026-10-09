@@ -24,6 +24,8 @@ buildable and publishable independently of v1.
   the Vercel deploy and the streaming replay switch). Mouse-wheel scrolling on Home was fixed.
 - **Chat-only by default, keys built in (all platforms).** `mode` defaults to `CHAT_ONLY` (history
   + language in the chat bar, a fresh conversation per journey); `FULL_JOURNEY` still works.
+  A first-time user picks a language once on the language screen, then lands in chat (skipped when
+  the host sets `languageCode`).
   `guestApiKey` was renamed `farmerChatApiKey` (no alias), and it and `geoApiKey` are built in.
 - **Verification:** web is checked in a browser against stage. Android is checked on the emulator
   (two-question pinning). iOS and React Native are build- and test-verified only.

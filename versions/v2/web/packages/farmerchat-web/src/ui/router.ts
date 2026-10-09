@@ -96,12 +96,15 @@ export function computeRouteFromSplash(
   pending: PendingTarget | null,
   mode: FarmerChatMode = 'FULL_JOURNEY',
   showNameScreen: boolean = true,
+  hostLanguageSet: boolean = false,
 ): Route {
-  // CHAT_ONLY (docs/07 C3): no language/name/home screens — land directly in a fresh chat. The
+  // CHAT_ONLY (docs/07 C3): no name/home screens — land directly in a fresh chat. A first launch
+  // (LANGUAGE_DONE unset, no host-configured language) shows the language screen once; its submit
+  // re-runs this decision, which then lands in chat with the pending target intact. Otherwise the
   // splash has already bootstrapped the guest session and labels headlessly
-  // (core/chatOnlyBootstrap.ts, port of Android ensureChatOnlySession), so this branch sits
-  // ABOVE the LANGUAGE_DONE gate, as Android's CHAT_ONLY path does.
+  // (core/chatOnlyBootstrap.ts, port of Android ensureChatOnlySession).
   if (mode === 'CHAT_ONLY') {
+    if (!hostLanguageSet && !store.getBool(PrefKeys.LANGUAGE_DONE, false)) return { name: 'language' };
     if (pending?.type === 'chat') return { name: 'chat', params: { source: 'history', conversationId: pending.chatId } };
     if (pending?.type === 'chatQuery') return { name: 'chat', params: { source: 'home', question: pending.question, channel: pending.channel } };
     return { name: 'chat', params: { source: 'home' } };
@@ -137,6 +140,7 @@ export function useNavigator(
   store: SessionStore,
   mode: FarmerChatMode = 'FULL_JOURNEY',
   showNameScreen: boolean = true,
+  hostLanguageSet: boolean = false,
 ): Navigator {
   const [stack, setStack] = useState<Route[]>([{ name: 'splash' }]);
   const pendingRef = useRef<PendingTarget | null>(null);
@@ -190,10 +194,10 @@ export function useNavigator(
 
   const routeFromSplash = useCallback(() => {
     const pending = pendingRef.current;
-    const route = computeRouteFromSplash(store, pending, mode, showNameScreen);
+    const route = computeRouteFromSplash(store, pending, mode, showNameScreen, hostLanguageSet);
     if (route.name === 'chat') pendingRef.current = null;
     setStack([route]);
-  }, [store, mode]);
+  }, [store, mode, showNameScreen, hostLanguageSet]);
 
   return useMemo(
     () => ({

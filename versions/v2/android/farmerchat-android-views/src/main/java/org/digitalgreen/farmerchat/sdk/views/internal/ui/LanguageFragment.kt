@@ -9,7 +9,9 @@ import android.text.style.ClickableSpan
 import android.view.View
 import androidx.core.view.isVisible
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
+import kotlinx.coroutines.launch
 import androidx.recyclerview.widget.LinearLayoutManager
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsEvents
 import org.digitalgreen.farmerchat.sdk.core.analytics.AnalyticsScreens
@@ -108,7 +110,16 @@ internal class LanguageFragment : BaseFragment(R.layout.fc_fragment_language) {
             if (state.languageSubmitSuccess && !navigatedOnSuccess) {
                 navigatedOnSuccess = true
                 vm.onAction(OnboardingAction.ConsumeLanguageResult)
-                NavRoutes.navigateFromSplash(findNavController(), graph.routeDecider.routeFromSplash())
+                if (graph.config.mode == org.digitalgreen.farmerchat.sdk.FarmerChatMode.CHAT_ONLY) {
+                    // CHAT_ONLY's first-launch language screen: on to the chat (never Name/Home),
+                    // honouring any pending openChat target. ensureChatOnlySession is required —
+                    // this screen never creates the conversation (new_conversation); its session
+                    // and labels make the rest of that bootstrap a no-op.
+                    val nav = findNavController()
+                    viewLifecycleOwner.lifecycleScope.launch { NavRoutes.enterChatOnly(nav) }
+                } else {
+                    NavRoutes.navigateFromSplash(findNavController(), graph.routeDecider.routeFromSplash())
+                }
             }
 
             if (state.shouldNavigateToError) {
