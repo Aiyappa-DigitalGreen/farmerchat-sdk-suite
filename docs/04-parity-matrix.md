@@ -8065,3 +8065,30 @@ scroll container, so the wheel latched onto the card and could not chain to the 
 four wheel events, zero scroll events). Chat chips and code blocks had the same problem. Contain
 now sits on `.fcw-panel` only. The feed scrolls 0 → end, and the host page (868px scrollable)
 stays at scrollY 0. Touch scrolling was not affected.
+
+## Answers did not stream on stage: streaming_required was never sent — web / RN / iOS (2026-10-09)
+
+Reported: "still response loads at once in web intercom ui like not typing format check android
+code & fix it". The app (`TextPromptRequest.streaming_required`, default true) sends the selected
+language's `streaming_required` on every text query. Android v2 already did. Web, RN and iOS did
+not (row 6 of the 2026-09 agentic table marked them ⛔), and docs/02 claimed the field did not gate
+the stream. On stage it does:
+
+| Request | What stage sent |
+|---|---|
+| without `streaming_required` | `done` + `metadata` only, after 11–19 s (16 answers today) |
+| with `"streaming_required": true` | `status` ~2 s, then six `text_delta` chunks over ~1.3 s, then `done` + `metadata` |
+
+Now on all v2 platforms: `SupportedLanguage.streaming_required` (default true), persisted as
+`fc_sdk_is_streaming_required` at onboarding language selection and settings save (settings seeded
+from storage), and sent on every `TextPromptRequest`.
+
+| Platform | Verified |
+|---|---|
+| web v2 | tsc, tests, build. Live on stage (local proxy and https://farmerchat-widget.vercel.app): the widget types the answer, 55 → 311 → 557 → 617 chars |
+| RN v2 | tsc + tests. Not run on a device |
+| iOS v2 | core build + 125 tests (3 new: decode, encode, pref default); SwiftUI + UIKit simulator builds. Not run on a simulator |
+| Android v2 | already sent it (unchanged) |
+
+Stage's `status` event is `{"stage":"thinking"}` with no `status_text`, so the loader stays on
+"Getting your answer…" until text arrives. That is correct (the app does the same).
