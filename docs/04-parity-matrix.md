@@ -8092,3 +8092,41 @@ from storage), and sent on every `TextPromptRequest`.
 
 Stage's `status` event is `{"stage":"thinking"}` with no `status_text`, so the loader stays on
 "Getting your answer…" until text arrives. That is correct (the app does the same).
+
+## Chat-only by default; `guestApiKey` → `farmerChatApiKey`; keys built in — all v2 platforms (2026-10-09)
+
+Requested: "make only chat screen openable in all platforms, dont delete code"; "guestapikey change
+it to farmerchatapikey & geoapikey use ours for all sdk dont ask other parties to put theirs".
+Decided with the user:
+- chat-only is the **default**, and hosts can still pass `FULL_JOURNEY`;
+- the chat bar keeps history and language;
+- the old key name is **removed** (no alias).
+
+| | Android | iOS | RN | web + widget |
+|---|---|---|---|---|
+| `mode` default `CHAT_ONLY`; `showDrawer` unset → `mode == FULL_JOURNEY` | ✅ | ✅ (Swift + ObjC) | ✅ | ✅ |
+| Headless chat-only bootstrap (guest init, languages, labels, preferred language) | ✅ already | ✅ **new**, public `ensureChatOnlyBootstrap()` | ✅ **new** | ✅ **new**: first visit used to hit the language screen |
+| Fresh conversation per chat-only journey (a history thread keeps its id) | ✅ already | ✅ **new**, public `beginChatOnlyJourney()` | ✅ **new** | ✅ **new** (widget: per page load, not per panel reopen) |
+| Drawer off: history + language in the chat bar; drawer-level screens show back | ✅ already (views); compose via `showDrawer` | ✅ **new** | ✅ **new** | ✅ already |
+| `farmerChatApiKey` (built in, optional) | ✅ | ✅ | ✅ | ✅ (web shipped a **blank** guest key before) |
+| `geoApiKey` built in (same value as Android) | ✅ already | ✅ **new** | ✅ **new** | ✅ **new** |
+
+Verified:
+- **web:** in a browser on stage, a first open lands in chat (close / history / language), and the
+  answer streams. A plain HTML page on another origin with only the two widget tags (script from
+  Vercel, `customBaseUrl` = the Vercel stage proxy) does the same.
+- **Android:** core 232 tests (6 new), compose, views and the three samples build.
+- **iOS:** core 128 tests, SwiftUI, UIKit, SampleApp, ConsumerApp and the ObjC smoke target build.
+- **RN:** tsc and 19 tests.
+- **Device and simulator runs:** none for iOS or RN. Android chat-only was device-verified before
+  this change (LastCheck hosts).
+
+Known exposure, recorded in docs/05: the FarmerChat guest key and the Google geolocation key now
+ship inside every SDK bundle (npm, widget script, iOS binary), as they already did in the Android
+AAR. The Google key is **unrestricted** (geolocate accepted it from an arbitrary web origin), so it
+should be restricted to the Geolocation API in Google Cloud.
+
+Plain websites: the backends' CORS preflight allows any origin, but not the SDK headers (`API-Key`,
+`Build-Version`, `Device-Info`, `X-Request-ID`) on stage, prod or EKS. A page on another site
+therefore needs a proxy until the backend adds them to `CORS_ALLOW_HEADERS`. This is an ask for the
+backend team.
