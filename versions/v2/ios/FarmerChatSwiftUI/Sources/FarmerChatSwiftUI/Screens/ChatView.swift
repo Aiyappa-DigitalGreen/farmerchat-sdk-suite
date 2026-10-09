@@ -30,9 +30,14 @@ struct ChatView: View {
     @State private var showGallery = false
     @State private var shareImage: UIImage?
     @State private var isLoadingMoreHistory = false
-    /// Tracks the newest message so auto-scroll-to-bottom fires only on new
-    /// turns, not when older history is prepended at the top.
-    @State private var lastBottomMessageId: String?
+    /// History entry: true once the opened conversation has been scrolled to its FIRST message.
+    @State private var historyInitialScrollDone = false
+    /// History entry: the thread's tail when it was opened. No auto-scroll happens while the tail
+    /// is still this id (older pages only prepend); the first NEW tail re-enables the pin.
+    @State private var historyOpenedTailId: String?
+    /// Coalesces the pin triggers (tail id / isLoading / first history load) of one update into a
+    /// single scroll, applied on the next main-queue turn so the reserve has been laid out.
+    @State private var pinScheduled = false
     /// The message that was at the top before a "load earlier" fetch — pinned
     /// back to the top after the older page is prepended to preserve position.
     @State private var pendingScrollAnchorId: String?
@@ -266,8 +271,29 @@ struct ChatView: View {
                         .padding(.top, 8)
                     }
 
+                    let reserve = reserveRows
                     ForEach(viewModel.state.messages) { message in
-                        messageRow(message).id(message.id)
+                        // The reserve (Android core ChatReserve.kt): a row holding it is at least a
+                        // viewport tall, so the row above it — the farmer's question — can sit at
+                        // the TOP of the screen while the answer grows into the space below. The
+                        // follow-ups live INSIDE the last answer's block (compose/web parity), so
+                        // they are never pushed a screen below a short answer.
+                        VStack(spacing: 16) {
+                            messageRow(message)
+                            if message.id == lastAiRowId {
+                                followUpSection
+                            }
+                            if message.id == reserve.finalHolderId {
+                                // Real-content end, ABOVE the reserve's empty space.
+                                threadEndMarker(viewportHeight: viewport.size.height)
+                            }
+                        }
+                        .frame(
+                            minHeight: reserve.holderIds.contains(message.id) ? viewport.size.height : nil,
+                            alignment: .top
+                        )
+                        .background(alignment: .top) { pinMarker(for: message.id) }
+                        .id(message.id)
                     }
 
                     // An error not tied to a question bubble (e.g. a history page) keeps a
@@ -277,49 +303,14 @@ struct ChatView: View {
                         FCInlineErrorContent(onRetry: retry)
                     }
 
-                    // Follow-up section — appears only after the last answer's
-                    // reveal completes (fresh, history and pre-generated all
-                    // mark their last answer revealed; see FCAiAnswerText). App parity
-                    // (ChatResponseActions.kt): NOT hidden by an error, but hidden when an additive
-                    // alignment surface with chips owns the next action.
-                    if let suggestions = viewModel.state.suggestedQuestions, !suggestions.isEmpty,
-                       !viewModel.state.isLoading, lastAnswerRevealed, !additiveSurfaceOpen {
-                        FCFollowUpChips(
-                            title: viewModel.state.clarificationRequired
-                                ? fcLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
-                                : fcLabel(FCLabels.relatedQuestions, "You can also ask"),
-                            questions: suggestions,
-                            // App: a pre-generated answer's follow-ups never use the clarify accent.
-                            clarificationRequired: viewModel.state.clarificationRequired
-                                && lastAiMessage?.isPreGenerated != true,
-                            onTap: { question in
-                                viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil))
-                            }
-                        )
-                        // ChatResponseActions.kt: 28 + 12 below the follow-ups.
-                        .padding(.bottom, 40)
-                        // App parity (ChatResponseActions.kt 0456f364): a 300ms fade, and fade
-                        // ONLY. The block used to also slide up from the bottom edge, which moves
-                        // the thread under it while it settles; the app is explicit that no
-                        // size/position animation may run here. `.animation` on the transition
-                        // overrides the container's 0.35s easeOut for this insertion alone, so the
-                        // answer-actions row above keeps its own timing.
-                        .transition(.opacity.animation(.easeOut(duration: 0.3)))
+                    // No AI answer to host the follow-ups (not expected, but never drop them).
+                    if lastAiRowId == nil {
+                        followUpSection
                     }
 
-                    // Trailing marker: its distance past the viewport's bottom edge IS the
-                    // `hiddenBelow` compose computes from `layoutInfo`.
-                    Color.clear
-                        .frame(height: 1)
-                        .background(
-                            GeometryReader { marker in
-                                Color.clear.preference(
-                                    key: FCHiddenBelowKey.self,
-                                    value: marker.frame(in: .named(Self.threadSpace)).minY
-                                        - viewport.size.height
-                                )
-                            }
-                        )
+                    if reserve.finalHolderId == nil {
+                        threadEndMarker(viewportHeight: viewport.size.height)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -331,24 +322,32 @@ struct ChatView: View {
             .overlay(alignment: .bottom) {
                 // App parity (ChatScreen.kt:1325-1355): only when there is REAL content
                 // below, and at least two lines' worth of it — android's threshold is
-                // 48dp = 2 × 24dp. Compose additionally suppresses the indicator when the
-                // last answer fits inside its reserved viewport, because everything under
-                // the text is then empty reserved space; iOS has no chat reserve yet (see
-                // docs/04), so that clause has nothing to guard against here.
+                // 48dp = 2 × 24dp. Compose also suppresses the indicator when the last answer
+                // fits inside its reserved viewport; here that falls out of where the marker
+                // sits — at the end of the real content, above the reserve's empty space — so
+                // `hiddenBelow` never counts reserved space.
                 // ScrollIndicator.kt is also suppressed while an error is showing.
                 if let lastAi = lastAiMessageId,
                    !viewModel.state.isLoading,
                    viewModel.state.errorMessage == nil,
                    hiddenBelow >= 48 {
                     FCScrollIndicator(triggerKey: lastAi) {
-                        if let last = viewModel.state.messages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                        }
+                        // To the end of the real content — never the bottom of the reserve.
+                        withAnimation { proxy.scrollTo(Self.threadEndId, anchor: .bottom) }
                     }
                     // ChatThreadContent.kt: 16 above the input area (here the thread's bottom edge).
                     .padding(.bottom, 16)
                 }
             }
+            .onAppear { schedulePin(proxy) }
+            // ChatScreen.kt's auto-scroll LaunchedEffect keys: the tail id (a placeholder → answer
+            // swap changes it without changing the count; a history prepend changes the count
+            // without changing it), `isLoading` (a settling answer starts holding the reserve) and
+            // the first history load. Streaming deltas change none of them, so the question stays
+            // put while the answer grows.
+            .onChange(of: viewModel.state.messages.last?.id) { _ in schedulePin(proxy) }
+            .onChange(of: viewModel.state.isLoading) { _ in schedulePin(proxy) }
+            .onChange(of: viewModel.state.isInitialHistoryLoaded) { _ in schedulePin(proxy) }
             .onChange(of: viewModel.state.messages.count) { _ in
                 if let anchor = pendingScrollAnchorId {
                     // Older history was just prepended (load-earlier): keep the
@@ -356,24 +355,8 @@ struct ChatView: View {
                     // top, rather than jumping to the newest message.
                     pendingScrollAnchorId = nil
                     isLoadingMoreHistory = false
-                    lastBottomMessageId = viewModel.state.messages.last?.id
                     proxy.scrollTo(anchor, anchor: .top)
-                    return
                 }
-                // Content appended at the bottom (a new turn) → scroll to it.
-                // A prepend leaves `last` unchanged, so this won't fire for it.
-                let newLastId = viewModel.state.messages.last?.id
-                if newLastId != lastBottomMessageId {
-                    lastBottomMessageId = newLastId
-                    if let last = viewModel.state.messages.last {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
-                }
-            }
-            .onChange(of: viewModel.state.isInitialHistoryLoaded) { loaded in
-                guard loaded, let last = viewModel.state.messages.last else { return }
-                lastBottomMessageId = last.id
-                proxy.scrollTo(last.id, anchor: .bottom)
             }
             .onChange(of: viewModel.state.errorMessage) { message in
                 // A failed "load earlier" won't change the message count, so
@@ -385,6 +368,155 @@ struct ChatView: View {
             }
         }
             }
+    }
+
+    /// Follow-up section — appears only after the last answer's reveal completes (fresh, history
+    /// and pre-generated all mark their last answer revealed; see FCAiAnswerText). App parity
+    /// (ChatResponseActions.kt): NOT hidden by an error, but hidden when an additive alignment
+    /// surface with chips owns the next action.
+    @ViewBuilder
+    private var followUpSection: some View {
+        if let suggestions = viewModel.state.suggestedQuestions, !suggestions.isEmpty,
+           !viewModel.state.isLoading, lastAnswerRevealed, !additiveSurfaceOpen {
+            FCFollowUpChips(
+                title: viewModel.state.clarificationRequired
+                    ? fcLabel(FCLabels.chooseAFollowupOptionBelow, "Choose an option from the below")
+                    : fcLabel(FCLabels.relatedQuestions, "You can also ask"),
+                questions: suggestions,
+                // App: a pre-generated answer's follow-ups never use the clarify accent.
+                clarificationRequired: viewModel.state.clarificationRequired
+                    && lastAiMessage?.isPreGenerated != true,
+                onTap: { question in
+                    viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: question, transcriptionId: nil, audioURL: nil))
+                }
+            )
+            // ChatResponseActions.kt: 28 + 12 below the follow-ups.
+            .padding(.bottom, 40)
+            // App parity (ChatResponseActions.kt 0456f364): a 300ms fade, and fade
+            // ONLY. The block used to also slide up from the bottom edge, which moves
+            // the thread under it while it settles; the app is explicit that no
+            // size/position animation may run here. `.animation` on the transition
+            // overrides the container's 0.35s easeOut for this insertion alone, so the
+            // answer-actions row above keeps its own timing.
+            .transition(.opacity.animation(.easeOut(duration: 0.3)))
+        }
+    }
+
+    /// Trailing marker at the end of the REAL content: its distance past the viewport's bottom
+    /// edge IS the `hiddenBelow` compose computes from `layoutInfo`, and it is the scroll
+    /// indicator's target. Exactly one is emitted per thread.
+    private func threadEndMarker(viewportHeight: CGFloat) -> some View {
+        Color.clear
+            .frame(height: 1)
+            .background(
+                GeometryReader { marker in
+                    Color.clear.preference(
+                        key: FCHiddenBelowKey.self,
+                        value: marker.frame(in: .named(Self.threadSpace)).minY - viewportHeight
+                    )
+                }
+            )
+            .id(Self.threadEndId)
+    }
+
+    /// A zero-size scroll target 20pt ABOVE a row, so `scrollTo(_, anchor: .top)` leaves the
+    /// thread's 20pt top content padding visible above the pinned row (ChatScreen.kt anchors the
+    /// item with `contentPadding top = 20` showing) instead of pressing the row flush to the edge.
+    private func pinMarker(for messageId: String) -> some View {
+        Color.clear
+            .frame(height: 1)
+            .alignmentGuide(.top) { $0[.top] + Self.pinTopGap }
+            .id(Self.pinId(messageId))
+    }
+
+    private static func pinId(_ messageId: String) -> String { "fc_pin_\(messageId)" }
+    private static let threadEndId = "fc_thread_end"
+    private static let pinTopGap: CGFloat = 20
+
+    // MARK: - Reserve + pinning (port of Android core ChatReserve.kt)
+
+    /// `holdsChatReserve` (Android core `ui/chat/ChatReserve.kt`; web `holdsReserve`): whether the
+    /// newest AI response holds a viewport of minimum height. `isLoading` here stays true for the
+    /// whole of a stream and for a blocking alignment surface, so both extra clauses are
+    /// load-bearing (see the Kotlin KDoc). Kept private to each iOS flavour rather than in Core so
+    /// no public API is added; FarmerChatUIKit `FCUIChatViewController.holdsReserve` mirrors it.
+    private func holdsReserve(_ ai: ChatMessage.AiResponse) -> Bool {
+        ai.isStreaming
+            || ai.isInterrupted
+            || !viewModel.state.isLoading
+            || (ai.alignmentKind != nil && ai.alignmentSelectedValues.isEmpty)
+    }
+
+    /// Whether the FINAL row holds the reserve: a reserve-holding last answer, the in-flight
+    /// loading placeholder, or a failed last question with its inline error under it.
+    private func finalRowHoldsReserve(_ last: ChatMessage) -> Bool {
+        switch last {
+        case .aiResponse(let ai): return holdsReserve(ai)
+        case .loadingPlaceholder: return true
+        case .user: return failedUserRowId == last.id
+        case .location: return false
+        }
+    }
+
+    /// The rows rendered at viewport minimum height this frame. `finalHolderId` is the final row
+    /// when it holds the reserve (it then also hosts the real-content-end marker).
+    private var reserveRows: (holderIds: Set<String>, finalHolderId: String?) {
+        var ids: Set<String> = []
+        if let lastAi = lastAiMessage, holdsReserve(lastAi) {
+            ids.insert(ChatMessage.aiResponse(lastAi).id)
+        }
+        var finalId: String?
+        if let last = viewModel.state.messages.last, finalRowHoldsReserve(last) {
+            ids.insert(last.id)
+            finalId = last.id
+        }
+        return (ids, finalId)
+    }
+
+    /// `chatScrollAnchorIndex` (Android core ChatReserve.kt): when the final row holds space, the
+    /// row ABOVE it (the farmer's question) goes to the top; otherwise the final row itself. A
+    /// failed last question holds space but IS the question, so it anchors itself.
+    private func scrollAnchorId() -> String? {
+        let messages = viewModel.state.messages
+        guard let last = messages.last else { return nil }
+        let holdsSpace: Bool
+        switch last {
+        case .aiResponse(let ai): holdsSpace = holdsReserve(ai)
+        case .loadingPlaceholder: holdsSpace = true
+        case .user, .location: holdsSpace = false
+        }
+        return holdsSpace && messages.count > 1 ? messages[messages.count - 2].id : last.id
+    }
+
+    private func schedulePin(_ proxy: ScrollViewProxy) {
+        guard !pinScheduled else { return }
+        pinScheduled = true
+        DispatchQueue.main.async {
+            pinScheduled = false
+            pinTail(proxy)
+        }
+    }
+
+    /// The auto-scroll (ChatScreen.kt LaunchedEffect(lastMessageId, isLoading,
+    /// isInitialHistoryLoaded)). Pins the anchor row's top 20pt below the viewport's top — never
+    /// the bottom of the reserve.
+    private func pinTail(_ proxy: ScrollViewProxy) {
+        let state = viewModel.state
+        // A load-earlier fetch is in flight: its prepend restores the position itself.
+        guard pendingScrollAnchorId == nil, let last = state.messages.last else { return }
+        if isHistoryEntry && !historyInitialScrollDone {
+            // A conversation opened from Chat History starts at its FIRST message, once
+            // (product decision shared with compose/web).
+            guard state.isInitialHistoryLoaded, let first = state.messages.first else { return }
+            historyInitialScrollDone = true
+            historyOpenedTailId = last.id
+            proxy.scrollTo(Self.pinId(first.id), anchor: .top)
+            return
+        }
+        // Nothing new since the history thread was opened (only older pages prepended): stay put.
+        if isHistoryEntry && last.id == historyOpenedTailId { return }
+        guard let anchor = scrollAnchorId() else { return }
+        withAnimation { proxy.scrollTo(Self.pinId(anchor), anchor: .top) }
     }
 
     /// Name for the thread's coordinate space, so the trailing marker can report its
@@ -406,6 +538,12 @@ struct ChatView: View {
     /// animate). Matches the Android `isHistoryEntry` predicate.
     private var isHistoryEntry: Bool {
         !(args.conversationId ?? "").isEmpty
+    }
+
+    /// The newest AI answer's ROW id (the prefixed `ChatMessage.id` the `ForEach` rows carry —
+    /// `lastAiMessageId` is the raw `AiResponse.id`). Hosts the follow-up section.
+    private var lastAiRowId: String? {
+        lastAiMessage.map { ChatMessage.aiResponse($0).id }
     }
 
     private var lastAiMessage: ChatMessage.AiResponse? {

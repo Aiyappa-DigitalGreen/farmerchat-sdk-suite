@@ -81,6 +81,21 @@ final class FCUIChatViewController: UIViewController {
     private var prevMessagesById: [String: ChatMessage] = [:]
     private var prevIsLoading = false
     private var prevLastAiRowId: String?
+    private var prevIsInitialHistoryLoaded = false
+    // Reserve + pinning (port of Android core ChatReserve.kt; see `updateReserveInset`).
+    /// `ChatMessage.id` of the row the reserve keeps reachable at the TOP of the viewport (the
+    /// farmer's question above a reserve-holding final row). Nil when the final row holds none.
+    private var reserveAnchorMessageId: String?
+    /// History entry: true once the opened conversation has been scrolled to its FIRST message.
+    private var historyInitialScrollDone = false
+    /// History entry: the thread's tail when it was opened. No auto-scroll while it is unchanged.
+    private var historyOpenedTailId: String?
+    /// Coalesces the pin triggers of one burst of state emissions into a single scroll.
+    private var pinScheduled = false
+    private var contentSizeObservation: NSKeyValueObservation?
+    /// The list's resting bottom inset (ChatThreadContent.kt bottom 16 less each row's own 8).
+    /// The reserve only ever ADDS to it.
+    private static let baseBottomInset: CGFloat = 8
     /// `ChatMessage.id` of the last `.aiResponse` — SwiftUI's `lastAiMessage` predicate. Gates the
     /// stream error card's retry and an alignment surface's escape hatch.
     private var lastAiRowId: String?
@@ -139,6 +154,12 @@ final class FCUIChatViewController: UIViewController {
         observeLocationOutcomes()
         initialize()
         FarmerChat.shared.analytics.screenViewed(ScreenNames.chat, extra: ["source": args.source])
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The viewport height (keyboard, rotation) is an input to the reserve.
+        updateReserveInset()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -222,8 +243,13 @@ final class FCUIChatViewController: UIViewController {
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         // ChatThreadContent.kt contentPadding: top 20, bottom 16 — less the 8 every row keeps
         // above / below itself (rows are 16 apart: 8 + 8).
-        collectionView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: 8, right: 0)
+        collectionView.contentInset = UIEdgeInsets(top: 12, left: 0, bottom: Self.baseBottomInset, right: 0)
         view.addSubview(collectionView)
+        // The reserve tracks the real content: as a streamed answer grows the extra bottom space
+        // shrinks by the same amount, so the pinned question never moves.
+        contentSizeObservation = collectionView.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
+            self?.updateReserveInset()
+        }
 
         let bubbleCell = UICollectionView.CellRegistration<FCUIChatBubbleCell, String> { [weak self] cell, _, messageId in
             guard let self, let message = self.messagesById[messageId] else { return }
@@ -401,7 +427,13 @@ final class FCUIChatViewController: UIViewController {
         let newCount = state.messages.count
         let newLastId = state.messages.last?.id
         let isPrepend = newLastId != nil && newLastId == prevLastMessageId && newCount > prevMessageCount
-        let isNewBottom = newLastId != prevLastMessageId
+        // ChatScreen.kt's auto-scroll keys: the tail id (a placeholder → answer swap changes it
+        // without changing the count; a prepend changes the count but not it), `isLoading` (a
+        // settling answer starts holding the reserve) and the first history load. A streamed
+        // delta changes none of them, so the question stays put while the answer grows.
+        let shouldPin = newLastId != prevLastMessageId
+            || state.isLoading != prevIsLoading
+            || state.isInitialHistoryLoaded != prevIsInitialHistoryLoaded
         let beforeOffsetY = collectionView.contentOffset.y
         let beforeHeight = collectionView.contentSize.height
 
@@ -472,8 +504,11 @@ final class FCUIChatViewController: UIViewController {
                 // UICollectionView, so adjust the offset by the height delta).
                 let delta = self.collectionView.contentSize.height - beforeHeight
                 self.collectionView.contentOffset.y = beforeOffsetY + delta
-            } else if isNewBottom {
-                self.scrollToBottom()
+            }
+            self.reserveAnchorMessageId = self.reserveAnchorId(in: state)
+            self.updateReserveInset()
+            if !isPrepend && shouldPin {
+                self.schedulePin()
             }
         }
         prevMessageCount = newCount
@@ -482,6 +517,7 @@ final class FCUIChatViewController: UIViewController {
         prevMessagesById = messagesById
         prevIsLoading = state.isLoading
         prevLastAiRowId = lastAiRowId
+        prevIsInitialHistoryLoaded = state.isInitialHistoryLoaded
 
         inputBar.alpha = state.isLoading ? 0.5 : 1
         inputBar.isUserInteractionEnabled = !state.isLoading
@@ -502,7 +538,10 @@ final class FCUIChatViewController: UIViewController {
                 scrollIndicator.trigger { [weak self] in
                     guard let self else { return false }
                     let cv = self.collectionView!
-                    let visibleBottom = cv.contentOffset.y + cv.bounds.height - cv.adjustedContentInset.bottom
+                    // Measured against the REAL content: the reserve's extra bottom inset is empty
+                    // space, never "content below" (compose suppresses the indicator there too).
+                    let systemBottom = cv.adjustedContentInset.bottom - cv.contentInset.bottom
+                    let visibleBottom = cv.contentOffset.y + cv.bounds.height - systemBottom - Self.baseBottomInset
                     // ScrollIndicator threshold: at least two lines' worth (48pt) below the fold.
                     return cv.contentSize.height - visibleBottom >= 48
                 }
@@ -705,10 +744,140 @@ final class FCUIChatViewController: UIViewController {
         ))
     }
 
+    /// The scroll indicator's tap: to the end of the REAL content, never the bottom of the reserve
+    /// (`scrollToItem(.bottom)` would honour the reserve inset and overshoot by a screen).
     private func scrollToBottom() {
-        let count = collectionView.numberOfItems(inSection: 0)
-        guard count > 0 else { return }
-        collectionView.scrollToItem(at: IndexPath(item: count - 1, section: 0), at: .bottom, animated: true)
+        let cv = collectionView!
+        let systemBottom = cv.adjustedContentInset.bottom - cv.contentInset.bottom
+        let end = cv.contentSize.height + systemBottom + Self.baseBottomInset - cv.bounds.height
+        cv.setContentOffset(CGPoint(x: cv.contentOffset.x, y: max(-cv.adjustedContentInset.top, end)), animated: true)
+    }
+
+    // MARK: - Reserve + pinning (port of Android core ChatReserve.kt)
+
+    /// `holdsChatReserve` (Android core `ui/chat/ChatReserve.kt`; web `holdsReserve`): whether the
+    /// newest AI response holds a viewport of space. `isLoading` stays true for the whole of a
+    /// stream and for a blocking alignment surface, so both extra clauses are load-bearing.
+    /// Private per flavour (no new Core API); SwiftUI `ChatView.holdsReserve` mirrors it.
+    private func holdsReserve(_ ai: ChatMessage.AiResponse, isLoading: Bool) -> Bool {
+        ai.isStreaming
+            || ai.isInterrupted
+            || !isLoading
+            || (ai.alignmentKind != nil && ai.alignmentSelectedValues.isEmpty)
+    }
+
+    /// Whether the final row holds space the way `chatScrollAnchorIndex` counts it: a
+    /// reserve-holding answer or the in-flight loading placeholder.
+    private func finalRowHoldsSpace(in state: ChatState) -> Bool {
+        switch state.messages.last {
+        case .aiResponse(let ai)?: return holdsReserve(ai, isLoading: state.isLoading)
+        case .loadingPlaceholder?: return true
+        default: return false
+        }
+    }
+
+    /// `chatScrollAnchorIndex` (Android core ChatReserve.kt): when the final row holds space, the
+    /// row ABOVE it (the farmer's question) goes to the top; otherwise the final row itself.
+    private func scrollAnchorId(in state: ChatState) -> String? {
+        let messages = state.messages
+        guard let last = messages.last else { return nil }
+        return finalRowHoldsSpace(in: state) && messages.count > 1 ? messages[messages.count - 2].id : last.id
+    }
+
+    /// The row the reserve must keep reachable at the viewport's top, or nil when the final row
+    /// holds no reserve. A failed LAST question (inline error row under it) holds it too, and is
+    /// itself the anchor.
+    private func reserveAnchorId(in state: ChatState) -> String? {
+        guard let last = state.messages.last else { return nil }
+        if finalRowHoldsSpace(in: state) { return scrollAnchorId(in: state) }
+        if case .user = last, state.errorMessage != nil, !state.isLoading,
+           let failed = state.failedMessageId, last.id == "user_\(failed)" {
+            return last.id
+        }
+        return nil
+    }
+
+    private func indexPath(forMessageId id: String) -> IndexPath? {
+        guard let item = dataSource.snapshot().itemIdentifiers.firstIndex(where: { $0.messageId == id }) else {
+            return nil
+        }
+        return IndexPath(item: item, section: 0)
+    }
+
+    /// Content offset that puts `indexPath`'s row 20pt below the viewport's top: the 12pt top
+    /// inset plus the row's own 8pt — ChatThreadContent.kt's `contentPadding top = 20`.
+    private func pinOffset(for indexPath: IndexPath) -> CGFloat? {
+        guard let attributes = collectionView.layoutAttributesForItem(at: indexPath) else { return nil }
+        return attributes.frame.minY - collectionView.adjustedContentInset.top
+    }
+
+    /// The reserve. Compose / SwiftUI give the final holder a viewport of minimum height; a
+    /// self-sizing list cannot size one cell to "whatever is left", and the follow-up chips here
+    /// are separate rows that must stay directly under the answer — so the same space is added as
+    /// bottom inset instead: just enough that the anchor row can reach the top of the viewport.
+    /// It shrinks as the answer grows, so the pinned question never moves.
+    private func updateReserveInset() {
+        guard let cv = collectionView else { return }
+        var bottom = Self.baseBottomInset
+        if let id = reserveAnchorMessageId, let indexPath = indexPath(forMessageId: id),
+           let target = pinOffset(for: indexPath) {
+            let systemBottom = cv.adjustedContentInset.bottom - cv.contentInset.bottom
+            bottom = max(bottom, target + cv.bounds.height - cv.contentSize.height - systemBottom)
+        }
+        if abs(cv.contentInset.bottom - bottom) > 0.5 {
+            cv.contentInset.bottom = bottom
+        }
+    }
+
+    private func schedulePin() {
+        guard !pinScheduled else { return }
+        pinScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pinScheduled = false
+            self.pinTail()
+        }
+    }
+
+    /// The auto-scroll (ChatScreen.kt LaunchedEffect(lastMessageId, isLoading,
+    /// isInitialHistoryLoaded)): the anchor row's top goes 20pt below the viewport's top —
+    /// never the bottom of the reserve.
+    private func pinTail() {
+        let state = viewModel.state
+        guard let last = state.messages.last else { return }
+        let isHistoryEntry = !(args.conversationId ?? "").isEmpty
+        let anchorId: String
+        var animated = true
+        if isHistoryEntry && !historyInitialScrollDone {
+            // A conversation opened from Chat History starts at its FIRST message, once (shared
+            // product decision with compose/web). The load-earlier row stays just above it.
+            guard state.isInitialHistoryLoaded, let first = state.messages.first else { return }
+            historyInitialScrollDone = true
+            historyOpenedTailId = last.id
+            anchorId = first.id
+            animated = false
+        } else {
+            // Nothing new since the history thread was opened (only older pages): stay put.
+            if isHistoryEntry && last.id == historyOpenedTailId { return }
+            guard let id = scrollAnchorId(in: state) else { return }
+            anchorId = id
+        }
+        guard let indexPath = indexPath(forMessageId: anchorId) else { return }
+        collectionView.layoutIfNeeded()
+        if collectionView.cellForItem(at: indexPath) == nil {
+            // Off-screen: its frame may still be an estimate. Realize it first so the reserve and
+            // the offset are computed from its measured height.
+            collectionView.scrollToItem(at: indexPath, at: .top, animated: false)
+            collectionView.layoutIfNeeded()
+            animated = false
+        }
+        // The inset must exist BEFORE the offset is set, or the pin clamps short of the top.
+        updateReserveInset()
+        guard let target = pinOffset(for: indexPath) else { return }
+        let maxOffset = collectionView.contentSize.height + collectionView.adjustedContentInset.bottom
+            - collectionView.bounds.height
+        let y = max(-collectionView.adjustedContentInset.top, min(target, maxOffset))
+        collectionView.setContentOffset(CGPoint(x: collectionView.contentOffset.x, y: y), animated: animated)
     }
 
     private func loadMoreHistory() {
