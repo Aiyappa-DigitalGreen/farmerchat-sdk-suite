@@ -2,11 +2,14 @@
  * Production server for the hosted widget demo on Railway (deployed by GitHub → Railway, never
  * by hand; see the repo CLAUDE.md §8). Zero dependencies: Node's http module only.
  *
- *   /                      → 302 /demo/
- *   /demo/*                → widget/demo (index.html, mobile.html)
+ *   /                      → the showcase landing page (railway/home/index.html)
+ *   /app/*                 → demo-app/dist: the web SDK as a full-page app (npm + React host)
+ *   /demo/*                → widget/demo (index.html, mobile.html): the one-script-tag widget
  *   /dist/*                → widget/dist (farmerchat-widget.iife.js + illustrations/)
  *   /stage/*, /stage-replay/*  → the stage proxy, the SAME handler the Vercel deploy used
- *                            (widget/vercel/api/stage.js), so there is one copy of the logic
+ *                            (widget/vercel/api/stage.js), so there is one copy of the logic.
+ *                            The OTP endpoints are refused here: this proxy is public, and it must
+ *                            not become a way to send login codes to arbitrary phone numbers.
  *   /guide/                → the SDK integration guide (railway/guide/index.html)
  *   /healthz               → 200 "ok"
  */
@@ -19,9 +22,12 @@ import stageHandler from '../widget/vercel/api/stage.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const widget = path.resolve(here, '../widget');
 const ROOTS = {
+  '/app/': path.resolve(here, '../demo-app/dist'),
   '/demo/': path.join(widget, 'demo'),
   '/dist/': path.join(widget, 'dist'),
 };
+// generate_otp, verify_otp, verify_otp_less_android_sdk_token (docs/02 #17, #19, #21).
+const OTP_PATHS = /\/api\/user\/(generate_otp|verify_otp)/;
 const SERVED_DEMO = new Set(['index.html', 'mobile.html']);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -50,6 +56,7 @@ const server = http.createServer((req, res) => {
   const p = decodeURIComponent(url.pathname);
   if (p === '/healthz') { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('ok'); }
   if (p.startsWith('/stage/') || p.startsWith('/stage-replay/')) {
+    if (OTP_PATHS.test(p)) { res.writeHead(403, { 'content-type': 'text/plain' }); return res.end('Phone login is disabled on this demo'); }
     return Promise.resolve(stageHandler(req, res)).catch(() => {
       if (!res.headersSent) { res.writeHead(502, { 'content-type': 'text/plain' }); }
       res.end('Proxy error');
@@ -57,7 +64,8 @@ const server = http.createServer((req, res) => {
   }
   if (p === '/guide' || p === '/guide/index.html') { res.writeHead(301, { location: '/guide/' }); return res.end(); }
   if (p === '/guide/') return sendFile(res, path.join(here, 'guide', 'index.html'), req.method === 'HEAD');
-  if (p === '/' || p === '/demo') { res.writeHead(302, { location: '/demo/' + url.search }); return res.end(); }
+  if (p === '/' || p === '/index.html') return sendFile(res, path.join(here, 'home', 'index.html'), req.method === 'HEAD');
+  if (p === '/demo' || p === '/app') { res.writeHead(301, { location: p + '/' + url.search }); return res.end(); }
   for (const [prefix, root] of Object.entries(ROOTS)) {
     if (!p.startsWith(prefix)) continue;
     let rel = p.slice(prefix.length) || 'index.html';

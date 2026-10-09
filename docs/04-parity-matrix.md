@@ -8290,3 +8290,21 @@ core/compose/views compile + core tests (241, 0 failures) + samples compile, emu
 SDK Activity (compose + views); ios Core build + test (134, 0 failures), SwiftUI + UIKit + SampleApp
 simulator builds. iOS runtime (incl. FAB → X → reopen) and Android/iOS/RN embedded `onExit` paths:
 UNVERIFIED on device.
+
+## Hosted showcase: web app + widget + guide (2026-10-09, site only)
+
+The Railway site (`versions/v2`, `web/railway/server.mjs`) now shows both web integrations. Not an SDK
+behaviour change, so no other platform is affected.
+
+| Path | What | Source |
+|---|---|---|
+| `/` | Landing page: the two integration styles side by side, each with its code | `web/railway/home/index.html` |
+| `/app/` | The web SDK as a full-page app (npm + React host, `FULL_JOURNEY`, `inline`) on stage | `web/demo-app/` (built by the root `npm run build`) |
+| `/demo/` | The one-script-tag widget on a host page (unchanged) | `web/widget/demo/` |
+| `/guide/` | The integration guide (copy of the shared artifact) | `web/railway/guide/index.html` |
+
+**Security:** the public `/stage/` proxy now refuses `generate_otp`, `verify_otp` and
+`verify_otp_less_android_sdk_token` (403), so the hosted site cannot be used to send login codes to
+arbitrary numbers. Phone login therefore fails on the hosted demos; guest mode is unaffected.
+Browser-verified locally against stage: `/app/` goes Language → Name → Home (location + weather), no
+console errors; the OTP paths return 403.

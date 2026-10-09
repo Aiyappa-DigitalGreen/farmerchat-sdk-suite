@@ -22,6 +22,9 @@ buildable and publishable independently of v1.
   (Android and web already did this; iOS and React Native were ported).
 - **Web widget:** live at https://farmerchat-sdk-suite-production.up.railway.app (see `web/widget/README.md` for
   the Railway deploy and the streaming replay switch). Mouse-wheel scrolling on Home was fixed.
+- **Showcase site:** https://farmerchat-sdk-suite-production.up.railway.app/ links the full-page web app
+  (`/app/`, source `web/demo-app/`), the widget demo (`/demo/`) and the guide. The public stage proxy
+  refuses the OTP endpoints, so the hosted demos are guest-only.
 - **Integration guide:** live at https://farmerchat-sdk-suite-production.up.railway.app/guide/ — the same
   page as the shared Claude artifact, served by `web/railway/server.mjs` from `web/railway/guide/index.html`.
 - **Chat-only by default, keys built in (all platforms).** `mode` defaults to `CHAT_ONLY` (only the
