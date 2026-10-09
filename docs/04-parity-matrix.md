@@ -8308,3 +8308,8 @@ behaviour change, so no other platform is affected.
 arbitrary numbers. Phone login therefore fails on the hosted demos; guest mode is unaffected.
 Browser-verified locally against stage: `/app/` goes Language → Name → Home (location + weather), no
 console errors; the OTP paths return 403.
+
+Follow-up (same day): the widget demo's bottom-left "Test controls" panel (open/close/toggle/shutdown/
+boot, reset session, streaming-replay toggle, status readout) was removed so the page reads as a real
+host site; the URL switches (`?replay=1`, `?mode=`, `?base=`, …) still work. The guide (artifact v16
+and `/guide/`) gained "Live demo" links in its top bar and hero, pointing at the showcase landing page.

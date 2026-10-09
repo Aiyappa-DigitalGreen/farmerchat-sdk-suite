@@ -225,8 +225,7 @@ host. The `vercel/` folder stays because the Railway server reuses its proxy han
 | `/stage/*` → `vercel/api/stage.js` | the hosted twin of `demo/stage-proxy.mjs`. It forwards to the fixed stage host only, adds the guest `API-Key` on the two guest endpoints from the `FC_GUEST_API_KEY` env var (set in the Vercel project, never in a file), and streams responses through |
 | `/stage-replay/*` | the same, except the agentic answer endpoint plays a recorded streaming answer (`vercel/api/_replay.js`, sanitized) |
 
-On a non-localhost host the demo page uses `/stage/` with agentic chat on. **Test controls →
-Streaming replay** (or `?replay=1`) switches to `/stage-replay/`: whatever is asked, the answer
+On a non-localhost host the demo page uses `/stage/` with agentic chat on. `?replay=1` switches to `/stage-replay/`: whatever is asked, the answer
 replays one recorded stream (progress steps "Loading your farms" → "Farms loaded", then text). Locally
 the switch uses the replay proxy on :8896 (`REPLAY_SSE=<capture> PORT=8896 node demo/stage-proxy.mjs`).
 

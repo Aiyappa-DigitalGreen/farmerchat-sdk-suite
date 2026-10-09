@@ -191,20 +191,6 @@
       .bars { gap: 6px; height: 160px; }
       .callout { bottom: 112px; }
     }
-    details.devtools { position: fixed; left: 16px; bottom: 16px; z-index: 10; font: 500 13px/1.4 var(--body);
-      background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 20px rgba(30, 58, 76, 0.12); max-width: 300px; }
-    details.devtools summary { cursor: pointer; padding: 10px 14px; list-style: none; color: var(--slate-soft); }
-    details.devtools summary::-webkit-details-marker { display: none; }
-    details.devtools[open] summary { border-bottom: 1px solid var(--line); }
-    .devtools .body { padding: 12px 14px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
-    .devtools .replay { flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; padding: 10px 12px;
-      border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
-    .devtools .replay input { margin: 2px 0 0; accent-color: #1F8A53; }
-    .devtools .replay b { display: block; color: var(--slate); }
-    .devtools .replay span { color: var(--slate-soft); font-weight: 400; max-width: 34ch; }
-    .devtools button { font: 500 12.5px/1 var(--body); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--water); color: var(--slate); cursor: pointer; }
-    .devtools .state { width: 100%; margin-top: 4px; color: var(--slate-soft); }
-    .devtools .state b { color: var(--slate); }
   </style>
 </head>
 <body class="fc-attn">
@@ -387,23 +373,6 @@
     <svg class="arrow" viewBox="0 0 40 36" aria-hidden="true"><path d="M4 2c2 16 10 25 24 29" fill="none" stroke="#F2B132" stroke-width="3" stroke-linecap="round"/><path d="M20 24.5l9 6.8-11 3" fill="none" stroke="#F2B132" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </aside>
 
-  <details class="devtools">
-    <summary>Test controls</summary>
-    <div class="body">
-      <button type="button" onclick="FarmerChatWidget.open()">open()</button>
-      <button type="button" onclick="FarmerChatWidget.close()">close()</button>
-      <button type="button" onclick="FarmerChatWidget.toggle()">toggle()</button>
-      <button type="button" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
-      <button type="button" onclick="bootWidget()">boot()</button>
-      <button type="button" onclick="resetSession()" title="Forget the stored FarmerChat session and start as a new guest">Reset session</button>
-      <label class="replay" for="fc-replay">
-        <input type="checkbox" id="fc-replay">
-        <span><b>Streaming replay</b>Stage sends each answer in one piece today. On: every question plays back one recorded streaming answer (maize storage) with its progress steps. Reloads the page.</span>
-      </label>
-      <div class="state">Widget: <b id="status">closed</b></div>
-      <div class="state" style="margin-top:0">Backend: <b id="backend"></b></div>
-    </div>
-  </details>
 
   <script>
     // Demo wiring. Query params:
@@ -427,19 +396,6 @@
     var stageBase = hosted ? location.origin + (replay ? '/stage-replay/' : '/stage/')
       : (replay ? 'http://localhost:8896/' : 'http://localhost:8898/');
     var base = useEnv ? null : (q.get('base') || (stage ? stageBase : 'http://localhost:8899/'));
-    document.getElementById('backend').textContent = useEnv ? useEnv : stage ? (replay ? 'stage + streaming replay' : 'stage (proxy)') : 'mock';
-    (function wireReplay() {
-      var box = document.getElementById('fc-replay');
-      box.checked = replay;
-      box.disabled = !stage;
-      if (replay) document.querySelector('details.devtools').open = true;
-      box.addEventListener('change', function () {
-        var next = new URLSearchParams(location.search);
-        if (box.checked) next.set('replay', '1'); else next.delete('replay');
-        var qs = next.toString();
-        location.search = qs ? '?' + qs : '';
-      });
-    })();
 
     function bootWidget() {
       FarmerChatWidget.boot({
@@ -454,19 +410,8 @@
           appearance: q.get('appearance') || 'day',
           onEvent: function (name, props) { console.log('[fc-event]', name, props); },
         },
-        onOpen: function () { document.getElementById('status').textContent = 'open'; settleAttention(); },
-        onClose: function () { document.getElementById('status').textContent = 'closed'; },
+        onOpen: function () { settleAttention(); },
       });
-    }
-
-    // Drops everything the SDK stored in this browser (all fc_sdk_ keys) and reloads, so the
-    // widget starts as a brand-new guest. Useful after switching between the mock and stage.
-    function resetSession() {
-      try {
-        Object.keys(localStorage).filter(function (k) { return k.indexOf('fc_sdk_') === 0; })
-          .forEach(function (k) { localStorage.removeItem(k); });
-      } catch (e) {}
-      location.reload();
     }
 
     // Page buttons that open the widget, optionally with the question already asked.
