@@ -8312,4 +8312,4 @@ console errors; the OTP paths return 403.
 Follow-up (same day): the widget demo's bottom-left "Test controls" panel (open/close/toggle/shutdown/
 boot, reset session, streaming-replay toggle, status readout) was removed so the page reads as a real
 host site; the URL switches (`?replay=1`, `?mode=`, `?base=`, …) still work. The guide (artifact v16
-and `/guide/`) gained "Live demo" links in its top bar and hero, pointing at the showcase landing page.
+and `/guide/`) gained "Live demo" links in its top bar and hero, pointing straight at the widget demo (`/demo/`).
