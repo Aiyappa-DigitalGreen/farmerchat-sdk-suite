@@ -7,7 +7,9 @@ import path from 'node:path';
 const here = path.dirname(new URL(import.meta.url).pathname);
 const widget = path.resolve(here, '..');
 const site = path.join(here, '.site');
-fs.rmSync(site, { recursive: true, force: true });
+// Clear the previous build but keep .vercel (the link to the farmerchat-widget project);
+// wiping it makes the next deploy create a brand-new project.
+if (fs.existsSync(site)) for (const f of fs.readdirSync(site)) if (f !== '.vercel') fs.rmSync(path.join(site, f), { recursive: true, force: true });
 fs.mkdirSync(path.join(site, 'demo'), { recursive: true });
 fs.mkdirSync(path.join(site, 'dist'), { recursive: true });
 fs.mkdirSync(path.join(site, 'api'), { recursive: true });
@@ -19,7 +21,7 @@ for (const f of ['farmerchat-widget.iife.js', 'farmerchat-widget.iife.js.map']) 
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join(site, 'dist', f));
 }
 if (!fs.existsSync(path.join(site, 'dist', 'farmerchat-widget.iife.js'))) throw new Error('Run npm run build first');
-fs.copyFileSync(path.join(here, 'api', 'stage.js'), path.join(site, 'api', 'stage.js'));
+for (const f of ['stage.js', '_replay.js']) fs.copyFileSync(path.join(here, 'api', f), path.join(site, 'api', f));
 fs.copyFileSync(path.join(here, 'vercel.json'), path.join(site, 'vercel.json'));
 fs.writeFileSync(path.join(site, 'package.json'), JSON.stringify({ name: 'farmerchat-widget-demo', private: true, type: 'module' }, null, 2));
 console.log('site ready:', site);

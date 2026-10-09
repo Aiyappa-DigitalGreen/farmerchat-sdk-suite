@@ -122,6 +122,11 @@
     details.devtools summary::-webkit-details-marker { display: none; }
     details.devtools[open] summary { border-bottom: 1px solid var(--line); }
     .devtools .body { padding: 12px 14px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .devtools .replay { flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; padding: 10px 12px;
+      border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+    .devtools .replay input { margin: 2px 0 0; accent-color: #1F8A53; }
+    .devtools .replay b { display: block; color: var(--slate); }
+    .devtools .replay span { color: var(--slate-soft); font-weight: 400; max-width: 34ch; }
     .devtools button { font: 500 12.5px/1 var(--body); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--water); color: var(--slate); cursor: pointer; }
     .devtools .state { width: 100%; margin-top: 4px; color: var(--slate-soft); }
     .devtools .state b { color: var(--slate); }
@@ -299,6 +304,10 @@
       <button type="button" onclick="FarmerChatWidget.shutdown()">shutdown()</button>
       <button type="button" onclick="bootWidget()">boot()</button>
       <button type="button" onclick="resetSession()" title="Forget the stored FarmerChat session and start as a new guest">Reset session</button>
+      <label class="replay" for="fc-replay">
+        <input type="checkbox" id="fc-replay">
+        <span><b>Streaming replay</b>Stage sends each answer in one piece today. On: every question plays back one recorded streaming answer (maize storage) with its progress steps. Reloads the page.</span>
+      </label>
       <div class="state">Widget: <b id="status">closed</b></div>
       <div class="state" style="margin-top:0">Backend: <b id="backend"></b></div>
     </div>
@@ -319,9 +328,25 @@
     // which adds the guest key server-side. Locally the stage proxy runs on :8898.
     var hosted = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     var stage = q.get('stage') === '1' || (hosted && !q.get('base') && !useEnv);
-    var stageBase = hosted ? location.origin + '/stage/' : 'http://localhost:8898/';
+    // ?replay=1: the agentic answer endpoint plays back a recorded streaming answer (hosted:
+    // /stage-replay/ in vercel/api/stage.js; locally the REPLAY_SSE proxy on :8896).
+    var replay = stage && q.get('replay') === '1';
+    var stageBase = hosted ? location.origin + (replay ? '/stage-replay/' : '/stage/')
+      : (replay ? 'http://localhost:8896/' : 'http://localhost:8898/');
     var base = useEnv ? null : (q.get('base') || (stage ? stageBase : 'http://localhost:8899/'));
-    document.getElementById('backend').textContent = useEnv ? useEnv : stage ? 'stage (proxy)' : 'mock';
+    document.getElementById('backend').textContent = useEnv ? useEnv : stage ? (replay ? 'stage + streaming replay' : 'stage (proxy)') : 'mock';
+    (function wireReplay() {
+      var box = document.getElementById('fc-replay');
+      box.checked = replay;
+      box.disabled = !stage;
+      if (replay) document.querySelector('details.devtools').open = true;
+      box.addEventListener('change', function () {
+        var next = new URLSearchParams(location.search);
+        if (box.checked) next.set('replay', '1'); else next.delete('replay');
+        var qs = next.toString();
+        location.search = qs ? '?' + qs : '';
+      });
+    })();
 
     function bootWidget() {
       FarmerChatWidget.boot({
