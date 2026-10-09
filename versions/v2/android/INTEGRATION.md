@@ -243,8 +243,8 @@ class MyApp : Application() {
         FarmerChat.initialize(
             this,
             FarmerChatConfig.Builder(FarmerChatEnvironment.STAGE)
-                .guestApiKey(BuildConfig.FC_GUEST_API_KEY)
-                .geoApiKey(BuildConfig.FC_GEO_API_KEY)      // see the warning below
+                // No keys to pass: the FarmerChat API key and the geolocation key are
+                // built in (see "API keys" below). Default mode is CHAT_ONLY.
                 .languageCode("en")
                 .defaultCountryCode("IN")
                 .enableAgenticChat(true)                     // 2.0.0 streaming answers
@@ -278,15 +278,17 @@ overrides the selected environment. A custom URL **must end in a trailing slash*
 joined as `baseUrl + "api/..."`, so without it the first request resolves to
 `...farmer.chatapi/user/...` and fails.
 
-### ⚠ `geoApiKey` is effectively required — in every mode
+### API keys are built in — you do not supply any
 
-Without a resolvable location, endpoint #12 returns **empty feed sections**: Home renders, with
-nothing in it. That looks exactly like a broken SDK and is almost always a missing `geoApiKey`.
+The SDK bundles both keys it needs: the FarmerChat `API-Key` (guest `initialize_user` /
+`send_tokens`) and the Google Geolocation key. `farmerChatApiKey(String?)` and `geoApiKey(String?)`
+exist only as **optional overrides**; null or blank means "use the bundled one".
 
-`CHAT_ONLY` is **not** exempt, even though it never shows a feed. It resolves coordinates before
-the guest bootstrap precisely because it skips onboarding, which is where the geo pipeline normally
-runs (`FarmerChatGraph.kt:440-450`); without it the backend gets nothing but the request IP and the
-answers degrade accordingly. Supply the key regardless of mode.
+Location still matters: without a resolvable location, endpoint #12 returns **empty feed
+sections** (FULL_JOURNEY Home renders with nothing in it), and CHAT_ONLY resolves coordinates
+before its guest bootstrap because it skips onboarding, where the geo pipeline normally runs. The
+bundled geolocation key covers both; override it only if you want geolocate billed to your own
+Google project.
 
 ---
 
@@ -295,8 +297,9 @@ answers degrade accordingly. Supply the key regardless of mode.
 Four ways, all valid. Pick by how much of the journey you want.
 
 ```kotlin
-// 1. Full-screen, from wherever the farmer is. Routes through splash into the
-//    right screen (onboarding / home / resumed chat) based on stored state.
+// 1. Full-screen, from wherever the farmer is. CHAT_ONLY (default) lands in a
+//    fresh chat; FULL_JOURNEY routes through splash into the right screen
+//    (onboarding / home / resumed chat) based on stored state.
 FarmerChat.launch(context)
 
 // 2. Straight into chat with a question already asked.
@@ -427,8 +430,9 @@ Grouped by what you are actually deciding.
 
 | Setter | Notes |
 |---|---|
-| `mode(FarmerChatMode)` | `FULL_JOURNEY` (default) or `CHAT_ONLY` |
-| `showDrawer` / `showHistory` / `showSettings` | Chrome toggles |
+| `mode(FarmerChatMode)` | `CHAT_ONLY` (default) or `FULL_JOURNEY` (onboarding, Home, drawer, settings) |
+| `showDrawer(Boolean?)` | Unset by default → resolves to `mode == FULL_JOURNEY`. An explicit value wins |
+| `showHistory` / `showSettings` | Chrome toggles (default true) |
 | `showNameScreen(Boolean)` | Skip the name step |
 | `enableSsfr(Boolean)` | The fertilizer-advisory card |
 | `enableVoice` / `enableImages` / `enableWeather` | Feature switches |
@@ -437,9 +441,9 @@ Grouped by what you are actually deciding.
 | `simulateAgenticStream(Boolean)` | Default false. Agentic chat UI (status, word-by-word reveal, agentic action row, stream error card) over the synchronous #27 endpoint, for a backend without #27a; also turns the composer on when `enableComposerUi` is null. Ignored when `enableAgenticChat` is true |
 | `minSplashDurationMs(Long)` | Splash floor |
 
-For **`CHAT_ONLY`**, pair it with `showDrawer(false)`, `showHistory(false)`,
-`showSettings(false)` — otherwise you ship chrome that navigates into a journey the mode does not
-include. The mode also bootstraps headlessly, because it skips the screens that normally do this work:
+**`CHAT_ONLY`** (the default) has no drawer unless you set `showDrawer(true)`: with the drawer off
+the chat app bar carries the history and language buttons instead (`showHistory(false)` hides the
+history one). The mode also bootstraps headlessly, because it skips the screens that normally do this work:
 it resolves coordinates, opens a guest session, identifies the user and raises device attributes,
 loads labels (endpoint #3 — otherwise the chat renders hardcoded English), and creates the
 conversation (`FarmerChatGraph.kt:440-470`). So the farmer lands straight in chat with none of it
@@ -452,7 +456,7 @@ visible.
 | `authMode(FarmerChatAuthMode)` | `SDK_OTP` — the SDK runs its own phone/OTP flow. `HOST_TOKEN` — you supply tokens |
 | `accessToken` / `refreshToken` | For `HOST_TOKEN` |
 | `tokenProvider(() -> String?)` | Called when a token is needed |
-| `guestApiKey(String?)` | Guest bootstrap |
+| `farmerChatApiKey(String?)` | Optional override of the built-in `API-Key` for the guest bootstrap |
 
 `FarmerChat.isAuthenticated` is **true only after OTP verification** — a working guest session
 reads `false`. `FarmerChat.authState` is the `StateFlow`, `onAuthStateChanged { }` the callback
@@ -462,7 +466,7 @@ and `FarmerChat.logout { success -> }` clears everything except appearance and d
 **Location and locale**
 
 `languageCode`, `locale`, `defaultCountryCode` (default `"IN"`), `defaultStateCode`,
-`defaultLocation(lat, lng)`, `geoApiKey`.
+`defaultLocation(lat, lng)`, `geoApiKey` (optional override of the built-in key).
 
 **Look and feel**
 
@@ -705,7 +709,8 @@ In order — each step rules out the failures below it.
    minted. No token means the API key or the base URL is wrong, not the UI.
 2. **Language selection appears with a language preselected** and the CTA enabled. A dead-looking
    CTA on a fresh install means language preselection is not running.
-3. **Home shows feed sections.** Empty sections = location did not resolve → `geoApiKey`.
+3. **(FULL_JOURNEY) Home shows feed sections.** Empty sections = location did not resolve → check
+   the `geolocate` call in the logs (and any `geoApiKey` override).
 4. **Ask a question.** With `enableAgenticChat(true)` the answer streams in; the question should
    stay pinned while it grows.
 5. **Force-stop and relaunch.** This is the check that catches `initialize` being called from an
@@ -721,7 +726,7 @@ loads" is far more often a blank parameter or a wrong environment than an SDK fa
 
 | Symptom | Cause |
 |---|---|
-| Home renders but the feed is empty | No resolved location — supply `geoApiKey` |
+| Home renders but the feed is empty | No resolved location — check `geolocate` in the logs; a blank/wrong `geoApiKey` override |
 | `VerifyError` at launch | Host AGP below 8.13 |
 | Views integration behaves like Compose | Both UI artifacts on the classpath; compose is resolved first |
 | Build fails on JVM target | Host not on `jvmTarget = 17` |

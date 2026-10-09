@@ -48,8 +48,9 @@ Transitive footprint hosts inherit (conservative):
 FarmerChat.initialize(
     this,
     FarmerChatConfig.builder(FarmerChatEnvironment.PROD)   // DEV | STAGE | DEMO | PROD | EKS
-        .geoApiKey("YOUR_GOOGLE_GEOLOCATION_KEY")          // optional: language auto-detect fallback
-        .guestApiKey("YOUR_GUEST_API_KEY")                 // optional: overrides built-in guest key
+        // No API keys to supply: the FarmerChat API key and the Google Geolocation key are
+        // built in. `farmerChatApiKey(...)` / `geoApiKey(...)` exist only as optional overrides.
+        // .mode(FarmerChatMode.FULL_JOURNEY)              // default CHAT_ONLY; opt in to onboarding/Home/drawer
         .appearance(FarmerChatAppearance.AUTO)             // DAY | NIGHT | AUTO
         .languageCode("sw")                                // optional preselect
         .enableVoice(true)
@@ -67,7 +68,7 @@ FarmerChat.initialize(
 ## Launch
 
 ```kotlin
-FarmerChat.launch(context)                                  // full journey from splash
+FarmerChat.launch(context)                                  // chat (CHAT_ONLY default) or full journey from splash
 FarmerChat.openChat(context, question = "…")                // deep-link style: ask immediately
 FarmerChat.openChat(context, conversationId = "…")          // open an existing thread
 FarmerChat.logout { success -> }                            // server logout + clears all fc_sdk_ state
@@ -85,8 +86,11 @@ Embedding instead of launching an Activity:
 | Option | Default | Notes |
 |---|---|---|
 | `environment` | required | dev/demo base `farmerchat.farmstack.co/mobile-app-*/`; **stage `demo.agent.farmer.chat` in 2.0.0** (debug and release alike — see `../README.md`); prod `v2.api.farmer.chat`; eks `api.farmerchat.in` |
-| `geoApiKey` | null | Google Geolocation (`geolocate`, P1: 5 s / 1 retry). Without it, language detection falls back to guest-init IP data. Also gates the **home feed**: coordinates are passed to `initialize_user`, and endpoint #12 returns an empty `sections` list until the backend has a resolved location. Without this key the SDK relies on backend IP geolocation, which can return a null `country_code` and an empty home screen. |
-| `guestApiKey` | built-in | `API-Key` header for `initialize_user` / `send_tokens`. |
+| `mode` | `CHAT_ONLY` | `CHAT_ONLY` lands straight in chat and bootstraps the guest session, conversation and labels headlessly. `FULL_JOURNEY` opts in to the app's whole journey (onboarding, Home, drawer, settings). |
+| `showDrawer` | unset → `mode == FULL_JOURNEY` | Navigation drawer. Unset, CHAT_ONLY has no drawer (the chat app bar then shows the history and language buttons) and FULL_JOURNEY has one. An explicit `showDrawer(true/false)` always wins. |
+| `showHistory` / `showSettings` | true | History button / Settings entry. |
+| `geoApiKey` | built-in | **Optional override; hosts do not need to supply it.** Google Geolocation (`geolocate`, P1: 5 s / 1 retry). The SDK bundles a default key, used when this is null or blank. Coordinates are passed to `initialize_user`; endpoint #12 (home feed) returns an empty `sections` list until the backend has a resolved location. |
+| `farmerChatApiKey` | built-in | **Optional override; hosts do not need to supply it.** `API-Key` header for `initialize_user` / `send_tokens`. The SDK bundles a default key, used when this is null or blank. |
 | `appearance` | AUTO | Day/Night/Auto; user can change it in Settings (persisted, survives logout). |
 | `languageCode` | null | Preselects a language; the language screen is skipped only once labels are confirmed for it. |
 | `defaultCountryCode` | `"IN"` | Fallback country for the language list (endpoint #2) when `initialize_user` cannot resolve one — a fresh guest often gets `country_code: null`, and the endpoint returns HTTP 400 for a blank value. Set this to your deployment country. |

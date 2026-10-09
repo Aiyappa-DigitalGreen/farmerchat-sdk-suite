@@ -74,8 +74,11 @@ object ApiConstants {
     const val GEOLOCATION = "geolocate"
     const val GOOGLE_GEO_BASE_URL = "https://www.googleapis.com/"
 
-    /** Default guest-init API-Key; overridable via [FarmerChatConfig.guestApiKey]. */
-    const val DEFAULT_GUEST_USER_API_KEY = "Y2K3kW5R9uQ0fL2X8zI7hT3aJ7"
+    /**
+     * Bundled FarmerChat `API-Key` (initialize_user / send_tokens), used when the host passes no
+     * [FarmerChatConfig.farmerChatApiKey] (null or blank). Hosts are not asked to supply one.
+     */
+    const val DEFAULT_FARMERCHAT_API_KEY = "Y2K3kW5R9uQ0fL2X8zI7hT3aJ7"
 
     /**
      * Default Google Geolocation key, so an integrator gets a working location fallback without

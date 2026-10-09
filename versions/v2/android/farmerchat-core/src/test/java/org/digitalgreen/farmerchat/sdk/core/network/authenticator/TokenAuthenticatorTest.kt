@@ -94,7 +94,7 @@ class TokenAuthenticatorTest {
     ) = TokenAuthenticator(
         tokenStore = store,
         authApiProvider = { backend.api },
-        guestApiKey = "guest-key",
+        farmerChatApiKey = "guest-key",
         onSessionExpired = expired,
         isPhoneVerified = { phoneVerified },
         deviceIdSupplier = { store.device },

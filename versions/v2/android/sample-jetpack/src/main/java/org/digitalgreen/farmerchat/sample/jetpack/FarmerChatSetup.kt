@@ -20,9 +20,12 @@ object FarmerChatSetup {
     fun config(): FarmerChatConfig =
         FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
 
-            // ── Chat-only: the FAB opens straight into the chat screen (no
-            //    onboarding/home). The SDK bootstraps the guest session +
-            //    conversation for this mode. Remove for the full journey. ──
+            // ── Chat-only (the SDK default, spelled out here): the FAB opens
+            //    straight into the chat screen (no onboarding/home/drawer). The
+            //    SDK bootstraps the guest session + conversation for this mode.
+            //    Use FarmerChatMode.FULL_JOURNEY for the full journey. ──
+            //    No API keys needed: the FarmerChat API key and the geolocation
+            //    key are built in (farmerChatApiKey/geoApiKey only override them).
             .mode(FarmerChatMode.CHAT_ONLY)
 
             // ── Your brand theme ─────────────────────────────────────────────

@@ -43,8 +43,10 @@ enum class FarmerChatAppearance { DAY, NIGHT, AUTO }
 enum class FarmerChatAuthMode { SDK_OTP, HOST_TOKEN }
 
 /**
- * Journey scope (C3). [FULL_JOURNEY] = today's behavior (splash → language → name
- * → home → chat). [CHAT_ONLY] skips onboarding/home and lands directly in chat.
+ * Journey scope (C3). [CHAT_ONLY] (the DEFAULT since 2026-10-09) skips onboarding/home and lands
+ * directly in chat; the SDK bootstraps the guest session, conversation and labels headlessly.
+ * [FULL_JOURNEY] = the app's whole journey (splash → language → name → home → chat, drawer,
+ * settings…) for a host that opts in with `mode(FULL_JOURNEY)`.
  */
 enum class FarmerChatMode { FULL_JOURNEY, CHAT_ONLY }
 
@@ -84,10 +86,19 @@ class FarmerChatConfig private constructor(
      * Must end with `/` (Retrofit requirement).
      */
     val customBaseUrl: String?,
-    /** Google Geolocation API key used for the language auto-detect fallback (geolocate). */
+    /**
+     * OPTIONAL override for the Google Geolocation key (geolocate). The SDK bundles a default
+     * ([org.digitalgreen.farmerchat.sdk.core.remote.ApiConstants.DEFAULT_GEO_API_KEY]), used when
+     * this is null or blank — hosts do not need to supply one.
+     */
     val geoApiKey: String?,
-    /** Overrides the built-in guest-init / send_tokens `API-Key` header value. */
-    val guestApiKey: String?,
+    /**
+     * OPTIONAL override for the FarmerChat `API-Key` header (initialize_user / send_tokens). The
+     * SDK bundles a default
+     * ([org.digitalgreen.farmerchat.sdk.core.remote.ApiConstants.DEFAULT_FARMERCHAT_API_KEY]),
+     * used when this is null or blank — hosts do not need to supply one.
+     */
+    val farmerChatApiKey: String?,
     val appearance: FarmerChatAppearance,
     /** Preselect a language code; when it matches a supported language the language screen is skipped. */
     val languageCode: String?,
@@ -243,10 +254,17 @@ class FarmerChatConfig private constructor(
     val tokenProvider: (() -> String?)?,
 
     // --- C3: screen/feature toggles ---------------------------------------
+    /** Journey scope. Default [FarmerChatMode.CHAT_ONLY]; pass FULL_JOURNEY for the whole app. */
     val mode: FarmerChatMode,
     val showSettings: Boolean,
+    /** History entry point (the chat app bar's history button when the drawer is off). Default true. */
     val showHistory: Boolean,
-    val showDrawer: Boolean,
+    /**
+     * The host's explicit drawer choice, or null = "not set" (the default). Read [showDrawer],
+     * never this: it exists only so [newBuilder] round-trips "unset" instead of freezing the
+     * mode-derived value.
+     */
+    private val showDrawerSetting: Boolean?,
     /**
      * Whether onboarding shows the "What should we call you?" screen.
      *
@@ -309,10 +327,18 @@ class FarmerChatConfig private constructor(
     val resolvedComposerUi: Boolean
         get() = enableComposerUi ?: (enableAgenticChat || simulateAgenticStream)
 
+    /**
+     * Whether the navigation drawer is shown: the host's explicit `showDrawer(...)` when set,
+     * else `mode == FULL_JOURNEY`. So CHAT_ONLY (the default) has no drawer — the chat app bar
+     * then carries the history and language buttons instead — and FULL_JOURNEY keeps it.
+     */
+    val showDrawer: Boolean
+        get() = showDrawerSetting ?: (mode == FarmerChatMode.FULL_JOURNEY)
+
     fun newBuilder(): Builder = Builder(environment)
         .customBaseUrl(customBaseUrl)
         .geoApiKey(geoApiKey)
-        .guestApiKey(guestApiKey)
+        .farmerChatApiKey(farmerChatApiKey)
         .appearance(appearance)
         .languageCode(languageCode)
         .enableVoice(enableVoice)
@@ -338,7 +364,7 @@ class FarmerChatConfig private constructor(
         .mode(mode)
         .showSettings(showSettings)
         .showHistory(showHistory)
-        .showDrawer(showDrawer)
+        .showDrawer(showDrawerSetting)
         .enableSsfr(enableSsfr)
         .fabLabel(fabLabel)
         .fabBackgroundColor(fabBackgroundColor)
@@ -362,7 +388,7 @@ class FarmerChatConfig private constructor(
     class Builder(private val environment: FarmerChatEnvironment) {
         private var customBaseUrl: String? = null
         private var geoApiKey: String? = null
-        private var guestApiKey: String? = null
+        private var farmerChatApiKey: String? = null
         private var appearance: FarmerChatAppearance = FarmerChatAppearance.AUTO
         private var languageCode: String? = null
         // All four default to "unset" — resolved from the device locale at use time, the way the
@@ -391,10 +417,10 @@ class FarmerChatConfig private constructor(
         private var refreshToken: String? = null
         private var tokenProvider: (() -> String?)? = null
 
-        private var mode: FarmerChatMode = FarmerChatMode.FULL_JOURNEY
+        private var mode: FarmerChatMode = FarmerChatMode.CHAT_ONLY
         private var showSettings: Boolean = true
         private var showHistory: Boolean = true
-        private var showDrawer: Boolean = true
+        private var showDrawer: Boolean? = null
         private var showNameScreen: Boolean = true
         private var enableSsfr: Boolean = true
 
@@ -422,8 +448,10 @@ class FarmerChatConfig private constructor(
 
         /** Override the environment base URL (e.g. a local mock or a host backend). Must end with `/`. */
         fun customBaseUrl(url: String?) = apply { customBaseUrl = url }
+        /** Optional: overrides the bundled Google Geolocation key. Null/blank = bundled default. */
         fun geoApiKey(key: String?) = apply { geoApiKey = key }
-        fun guestApiKey(key: String?) = apply { guestApiKey = key }
+        /** Optional: overrides the bundled FarmerChat `API-Key`. Null/blank = bundled default. */
+        fun farmerChatApiKey(key: String?) = apply { farmerChatApiKey = key }
         fun appearance(mode: FarmerChatAppearance) = apply { appearance = mode }
         fun languageCode(code: String?) = apply { languageCode = code }
         /** Fallback country for the language list when the backend cannot resolve one. Blank values are ignored. */
@@ -485,10 +513,16 @@ class FarmerChatConfig private constructor(
         fun tokenProvider(provider: (() -> String?)?) = apply { tokenProvider = provider }
 
         // C3 -------------------------------------------------------------
+        /** Journey scope. Default [FarmerChatMode.CHAT_ONLY]; FULL_JOURNEY opts in to the whole app. */
         fun mode(mode: FarmerChatMode) = apply { this.mode = mode }
         fun showSettings(show: Boolean) = apply { showSettings = show }
+        /** History button / entry point. Default true. */
         fun showHistory(show: Boolean) = apply { showHistory = show }
-        fun showDrawer(show: Boolean) = apply { showDrawer = show }
+        /**
+         * Navigation drawer. Unset by default, which resolves to `mode == FULL_JOURNEY` (no
+         * drawer in CHAT_ONLY). An explicit value always wins; `null` returns to "unset".
+         */
+        fun showDrawer(show: Boolean?) = apply { showDrawer = show }
         /** Show the onboarding name screen. False + [locale] lands a fresh install on Home. */
         fun showNameScreen(show: Boolean) = apply { showNameScreen = show }
         fun enableSsfr(enabled: Boolean) = apply { enableSsfr = enabled }
@@ -532,7 +566,7 @@ class FarmerChatConfig private constructor(
             environment = environment,
             customBaseUrl = customBaseUrl,
             geoApiKey = geoApiKey,
-            guestApiKey = guestApiKey,
+            farmerChatApiKey = farmerChatApiKey,
             appearance = appearance,
             languageCode = languageCode,
             defaultCountryCode = defaultCountryCode,
@@ -560,7 +594,7 @@ class FarmerChatConfig private constructor(
             mode = mode,
             showSettings = showSettings,
             showHistory = showHistory,
-            showDrawer = showDrawer,
+            showDrawerSetting = showDrawer,
             showNameScreen = showNameScreen,
             enableSsfr = enableSsfr,
             fabLabel = fabLabel,

@@ -129,7 +129,7 @@ class FetchGeoLocationUseCase(
 
 class InitializeGuestUserUseCase(
     private val repo: GuestAuthRepository,
-    private val guestApiKey: () -> String
+    private val farmerChatApiKey: () -> String
 ) : BaseUseCase() {
 
     fun initializeGuestUser(body: InitializeGuestUserRequest): Flow<ApiResult<InitializeGuestUserResponse>> = flow {
@@ -137,7 +137,7 @@ class InitializeGuestUserUseCase(
             executeApiCall(
                 apiName = "initialize_guest_user",
                 priority = ApiPriority.PRIORITY_2_NO_FALLBACK
-            ) { repo.initializeGuestUser(guestApiKey(), body) }
+            ) { repo.initializeGuestUser(farmerChatApiKey(), body) }
         )
     }
 }

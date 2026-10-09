@@ -48,6 +48,9 @@ object SampleConfig {
     fun build(profile: String): FarmerChatConfig {
         val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
             .appearance(FarmerChatAppearance.AUTO)
+            // The SDK defaults to CHAT_ONLY; this harness exercises the whole journey (onboarding,
+            // Home, drawer, settings), so it opts in here. The "chatonly" profile switches back.
+            .mode(FarmerChatMode.FULL_JOURNEY)
             .debugLogging(true)
             // The verification harness must still SEE events — enableAnalytics defaults to false
             // in 2.0.0 so a host emits no telemetry until it opts in.

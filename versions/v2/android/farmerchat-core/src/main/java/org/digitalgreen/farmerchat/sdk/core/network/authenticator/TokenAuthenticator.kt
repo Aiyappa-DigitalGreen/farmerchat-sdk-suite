@@ -43,7 +43,7 @@ import org.digitalgreen.farmerchat.sdk.core.model.SendNewTokenRequest
 class TokenAuthenticator(
     private val tokenStore: TokenStore,
     private val authApiProvider: () -> AuthApi,
-    private val guestApiKey: String,
+    private val farmerChatApiKey: String,
     private val onSessionExpired: (() -> Unit)? = null,
     /** C2: when true, refresh delegates to [hostTokenProvider] instead of the OTP/guest flow. */
     private val hostTokenMode: Boolean = false,
@@ -155,7 +155,7 @@ class TokenAuthenticator(
                 identityRejected = true
             } else {
                 val sendTokenRes = authApi.sendUserTokens(
-                    guestApiKey,
+                    farmerChatApiKey,
                     SendNewTokenRequest(device_id = deviceId, user_id = userId)
                 ).execute()
 
@@ -200,7 +200,7 @@ class TokenAuthenticator(
                 return null
             }
             val initRes = authApi.initializeGuestUser(
-                guestApiKey,
+                farmerChatApiKey,
                 InitializeGuestUserRequest(device_id = deviceId, lat = lat, long = long)
             ).execute()
             val body = if (initRes.isSuccessful) initRes.body() else null

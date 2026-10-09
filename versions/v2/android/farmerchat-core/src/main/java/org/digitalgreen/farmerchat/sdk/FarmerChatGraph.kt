@@ -119,8 +119,9 @@ class FarmerChatGraph internal constructor(
     )
     val errorNavigationManager: ErrorNavigationManager = ErrorNavigationManager()
 
-    private val guestApiKey: String =
-        config.guestApiKey ?: ApiConstants.DEFAULT_GUEST_USER_API_KEY
+    // Bundled default unless the host overrides it; blank counts as "no override".
+    private val farmerChatApiKey: String =
+        config.farmerChatApiKey?.takeIf { it.isNotBlank() } ?: ApiConstants.DEFAULT_FARMERCHAT_API_KEY
 
     // ------------------------------------------------------------------ networking
 
@@ -147,7 +148,7 @@ class FarmerChatGraph internal constructor(
     private val tokenAuthenticator = TokenAuthenticator(
         tokenStore = tokenStore,
         authApiProvider = { authApi },
-        guestApiKey = guestApiKey,
+        farmerChatApiKey = farmerChatApiKey,
         onSessionExpired = { config.onSessionExpired?.invoke() },
         hostTokenMode = config.authMode == org.digitalgreen.farmerchat.sdk.FarmerChatAuthMode.HOST_TOKEN,
         hostTokenProvider = config.tokenProvider,
@@ -285,7 +286,7 @@ class FarmerChatGraph internal constructor(
 
     // ------------------------------------------------------------------ use cases
 
-    // Mirrors the guestApiKey fallback above: a host that supplies nothing still gets a working
+    // Mirrors the farmerChatApiKey fallback above: a host that supplies nothing still gets a working
     // location fallback. Blank is treated as absent — a host passing "" (e.g. an unset Gradle
     // property piped straight through, which is exactly how RationSmart wires FC_GEO_API_KEY)
     // means "I have no key", not "use an empty one".
@@ -293,7 +294,7 @@ class FarmerChatGraph internal constructor(
         config.geoApiKey?.takeIf { it.isNotBlank() } ?: ApiConstants.DEFAULT_GEO_API_KEY
 
     val fetchGeoLocationUseCase = FetchGeoLocationUseCase(geoRepository) { geoApiKey }
-    val initializeGuestUserUseCase = InitializeGuestUserUseCase(guestAuthRepository) { guestApiKey }
+    val initializeGuestUserUseCase = InitializeGuestUserUseCase(guestAuthRepository) { farmerChatApiKey }
     val getSupportedLanguagesUseCase = GetSupportedLanguagesUseCase(languageRepository)
     val getLanguageLabelsUseCase = GetLanguageLabelsUseCase(languageRepository)
     val updateUserNameUseCase = UpdateUserNameUseCase(nameRepository)
