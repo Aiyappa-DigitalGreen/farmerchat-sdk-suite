@@ -37,6 +37,8 @@ export const StorageKeys = {
   SELECTED_LANGUAGE_DISPLAY_NAME: 'SELECTED_LANGUAGE_DISPLAY_NAME',
   LANGUAGE_LABELS_JSON: 'LANGUAGE_LABELS_JSON',
   LANGUAGE_LABELS_LOADED: 'LANGUAGE_LABELS_LOADED',
+  /** App PreferenceKeys.STREAMING_REQUIRED: the selected language's streaming_required. */
+  STREAMING_REQUIRED: 'is_streaming_required',
 
   // --- profile ---
   USER_NAME: 'USER_NAME',

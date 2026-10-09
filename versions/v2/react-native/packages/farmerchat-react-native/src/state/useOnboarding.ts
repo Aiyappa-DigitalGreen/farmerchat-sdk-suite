@@ -318,6 +318,8 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
           if (!selected) break;
           patch({ selectedLanguageId: action.languageId, languageCode: selected.code });
           sdk.store.set(StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME, selected.display_name);
+          // App OnboardingSharedViewModel: persisted on language selection, default true.
+          sdk.store.set(StorageKeys.STREAMING_REQUIRED, selected.streaming_required ?? true);
           void fetchLabelsFor(selected.id, selected.code);
           break;
         }

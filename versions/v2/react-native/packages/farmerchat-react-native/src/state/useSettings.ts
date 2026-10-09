@@ -20,6 +20,8 @@ export interface LanguageSettingsState {
   expandedLanguages: boolean;
   selectedLanguageId: number | null;
   selectedLanguageCode: string | null;
+  /** The picked language's streaming_required, saved with it (app SettingsViewModel). */
+  selectedStreamingRequired: boolean;
   fetchingLabelsForId: number | null;
   isSubmitting: boolean;
   submitSuccess: boolean;
@@ -33,6 +35,7 @@ const initialLanguageSettingsState: LanguageSettingsState = {
   expandedLanguages: false,
   selectedLanguageId: null,
   selectedLanguageCode: null,
+  selectedStreamingRequired: true,
   fetchingLabelsForId: null,
   isSubmitting: false,
   submitSuccess: false,
@@ -43,7 +46,12 @@ const initialLanguageSettingsState: LanguageSettingsState = {
 export interface UseLanguageSettingsResult {
   state: LanguageSettingsState;
   loadLanguages: () => void;
-  selectLanguage: (id: number, code: string, displayName?: string) => void;
+  selectLanguage: (
+    id: number,
+    code: string,
+    displayName?: string,
+    streamingRequired?: boolean | null,
+  ) => void;
   submitLanguage: () => void;
   consumeLanguageResult: () => void;
   toggleExpanded: () => void;
@@ -56,6 +64,8 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
       ? sdk.store.getInt(StorageKeys.SELECTED_LANGUAGE_ID, -1)
       : null,
     selectedLanguageCode: sdk.store.getString(StorageKeys.SELECTED_LANGUAGE_CODE),
+    // Seeded from the stored flag so re-saving the current language keeps it.
+    selectedStreamingRequired: sdk.store.getBoolean(StorageKeys.STREAMING_REQUIRED, true),
   }));
   const mounted = useRef(true);
   const stateRef = useRef(state);
@@ -93,10 +103,11 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
   }, [patch, sdk]);
 
   const selectLanguage = useCallback(
-    (id: number, code: string, displayName?: string) => {
+    (id: number, code: string, displayName?: string, streamingRequired?: boolean | null) => {
       patch({
         selectedLanguageId: id,
         selectedLanguageCode: code,
+        selectedStreamingRequired: streamingRequired ?? true,
         fetchingLabelsForId: id,
         labelsFetchFailed: false,
       });
@@ -128,6 +139,8 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
       .then((result) => {
         if (!mounted.current) return;
         if (result.ok) {
+          // App SettingsViewModel: the language's streaming_required is saved with it.
+          sdk.store.set(StorageKeys.STREAMING_REQUIRED, s.selectedStreamingRequired);
           sdk.analytics.track(AnalyticsEvents.SAVE_LANGUAGE_CLICK, {
             language_id: s.selectedLanguageId,
             language_code: s.selectedLanguageCode,

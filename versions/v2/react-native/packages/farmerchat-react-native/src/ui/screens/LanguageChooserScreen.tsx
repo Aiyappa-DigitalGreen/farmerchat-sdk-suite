@@ -87,7 +87,7 @@ export function LanguageChooserScreen(props: {
                 sublabel={lang.name !== lang.display_name ? lang.name : null}
                 selected={state.selectedLanguageId === lang.id}
                 loading={state.fetchingLabelsForId === lang.id}
-                onPress={() => settings.selectLanguage(lang.id, lang.code, lang.display_name)}
+                onPress={() => settings.selectLanguage(lang.id, lang.code, lang.display_name, lang.streaming_required)}
               />
             ))}
             {languageGroups.some((g) => g.expanded_view.length > 0) ? (

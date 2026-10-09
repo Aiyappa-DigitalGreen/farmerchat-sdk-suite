@@ -944,6 +944,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         use_entity_extraction: true,
         transcription_id: params.transcriptionId ?? null,
         retry: params.isRetry === true,
+        // App parity: the selected language's flag (default true); the store is hydrated in memory.
+        streaming_required: sdk.store.getBoolean(StorageKeys.STREAMING_REQUIRED, true),
       };
       const ctx = {
         userMessageId,
