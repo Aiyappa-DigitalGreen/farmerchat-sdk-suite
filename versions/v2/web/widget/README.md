@@ -7,6 +7,9 @@ voice, photos, history, settings) in a floating panel. On phones the panel becom
 It wraps the v2 web SDK (`../packages/farmerchat-web`, a `file:` dependency, so no source is copied).
 Every SDK config field works unchanged, including `enableAgenticChat`.
 
+**Live demo:** https://farmerchat-widget.vercel.app, a sample host page with the widget against the
+stage backend (agentic chat on, answers stream). Version 2.2.0, the same as every v2 platform.
+
 ## Drop-in: one script tag (any website, no React needed)
 
 ```html
@@ -174,6 +177,36 @@ open http://localhost:5182/demo/mobile.html          # 390×760 phone frame (ful
 
 `demo/index.html` reads `?env=`, `?base=`, `?guestKey=`, `?geoKey=`, `?mode=CHAT_ONLY`, `?left=1`
 and `?label=` from the URL. Do not commit keys into the page.
+
+## Hosted demo on Vercel
+
+`vercel/` turns the demo into a static site plus one serverless function:
+
+| Path | What |
+|---|---|
+| `/demo/` (`/` redirects here) | `demo/index.html` and `demo/mobile.html` |
+| `/dist/` | the built widget (`farmerchat-widget.iife.js`) |
+| `/stage/*` → `vercel/api/stage.js` | the hosted twin of `demo/stage-proxy.mjs`. It forwards to the fixed stage host only, adds the guest `API-Key` on the two guest endpoints from the `FC_GUEST_API_KEY` env var (set in the Vercel project, never in a file), and streams responses through |
+| `/stage-replay/*` | the same, except the agentic answer endpoint plays a recorded streaming answer (`vercel/api/_replay.js`, sanitized) |
+
+On a non-localhost host the demo page uses `/stage/` with agentic chat on. **Test controls →
+Streaming replay** (or `?replay=1`) switches to `/stage-replay/`: whatever is asked, the answer
+replays one recorded stream (progress steps "Loading your farms" → "Farms loaded", then text). Locally
+the switch uses the replay proxy on :8896 (`REPLAY_SSE=<capture> PORT=8896 node demo/stage-proxy.mjs`).
+
+Deploy (Vercel project `farmerchat-widget`):
+
+```bash
+npm run build                      # after building ../packages/farmerchat-web
+node vercel/prepare.mjs            # assembles vercel/.site (gitignored; keeps .site/.vercel)
+npx vercel --cwd "$PWD/vercel/.site" --prod --yes
+```
+
+`prepare.mjs` keeps `.site/.vercel`, the link to the project. If that folder is lost, run
+`vercel link --yes --project farmerchat-widget --cwd vercel/.site` first, or the deploy creates a new
+project. One-time setup: `vercel env add FC_GUEST_API_KEY production --cwd vercel/.site`.
+The rewrite uses `/stage/:path(.*)` because `:path*` does not match URLs ending in `/`, and every
+FarmerChat endpoint ends in `/`.
 
 ## Verification (2026-10-08)
 

@@ -220,7 +220,7 @@ cd android
 ./gradlew :farmerchat-android-views:compileDebugKotlin
 ./gradlew :sample-compose:assembleDebug :sample-views:assembleDebug
 ./gradlew :sample-jetpack:assembleDebug
-./gradlew publishToMavenLocal      # com.digitalgreen:* 1.0.0
+./gradlew publishToMavenLocal      # org.digitalgreen.farmerchat:* 2.2.0 (all v2 platforms are 2.2.0)
 ```
 
 `sample-compose` / `sample-views` are minimal hosts: initialize + analytics-listener logging + launch/openChat/logout buttons.

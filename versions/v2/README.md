@@ -1,7 +1,30 @@
-# v2.0.0 — Agentic streaming chat
+# v2 (2.2.0) — Agentic streaming chat
 
 A complete, self-contained SDK: `android/`, `ios/`, `react-native/`, `web/` in this folder are
 buildable and publishable independently of v1.
+
+## Current state — 2026-10-09
+
+- **Version 2.2.0 on every platform.** Android core/compose/views, iOS (`FarmerChatSDK.version`,
+  podspec, tag `ios-v2.2.0`), React Native, the web SDK and the web widget all report 2.2.0,
+  including lockfiles and the packaged examples.
+- **Reference app:** `fc-compose-agentic`, origin `dev/v2.5` @ `393c5bb0`. A local checkout at
+  `31a789e0` differs only in `useChips`; the SDKs follow origin.
+- **Answers stream.** Stage streams the agentic answer (`status`, then `text_delta` chunks) only
+  when `TextPromptRequest.streaming_required` is true. Every platform now sends the selected
+  language's flag (language API `streaming_required`, default true), persisted as
+  `fc_sdk_is_streaming_required`, as the app does. Verified live: the widget types the answer out.
+- **Chat screen re-synced with the app line by line** (padding 20/20, inline error under the
+  failed question, follow-ups inside the answer, stream error card, alignment surfaces, spinner,
+  header, scroll indicator, composer shimmer). The web emulates Android's ~1% narrower text so
+  lines break where the app breaks them.
+- **The latest question is pinned to the top** while its answer grows below, on every platform
+  (Android and web already did this; iOS and React Native were ported).
+- **Web widget:** live at https://farmerchat-widget.vercel.app (see `web/widget/README.md` for
+  the Vercel deploy and the streaming replay switch). Mouse-wheel scrolling on Home was fixed.
+- **Verification:** web is checked in a browser against stage. Android is checked on the emulator
+  (two-question pinning). iOS and React Native are build- and test-verified only.
+  `docs/04-parity-matrix.md` has the per-change detail.
 
 Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at **`919e5b2f`**
 (re-baselined 2026-09-21 from `1b0553d2`; the 13-commit `1b0553d2..919e5b2f` delta — composer
@@ -155,7 +178,13 @@ not a feature until something produces its input. See "The capability-chip gap" 
 
 ## Not verified
 
-**The wire framing has never been exercised.** The endpoint opens correctly — 200,
+**Update 2026-10-09: the wire has now been exercised on stage.** A guest gets a real stream:
+`event:` + `data:` SSE frames, with `status`, `tool_call` / `tool_result` (when tools run),
+`text_delta`, `surface`, `done` and `metadata`. The text deltas come only when the request carries
+`streaming_required: true` (see "Current state"). The web widget renders it live. The notes below
+are kept for history; the empty-stream finding was from before that.
+
+**(Historical) The wire framing has never been exercised.** The endpoint opens correctly — 200,
 `text/event-stream`, chunked — but delivers **0 bytes to a guest on dev, stage and prod**. Agentic
 answers are likely gated on an OTP-verified user or a server flag (`docs/05`).
 
