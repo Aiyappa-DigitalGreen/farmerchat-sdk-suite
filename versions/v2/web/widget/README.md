@@ -76,8 +76,8 @@ npm install @digitalgreenorg/farmerchat-widget @digitalgreenorg/farmerchat-web r
 
 The ESM build keeps `react`, `react-dom` and `@digitalgreenorg/farmerchat-web` external, so it
 uses your app's copies (they are peer dependencies). The widget is built and verified against the
-**v2** web SDK. Both web lines currently publish as `1.0.0`, so the peer range cannot enforce
-that; see docs/05.
+**v2** web SDK, which now publishes as `2.2.0` (the same version as every v2 platform); the
+peer range is `^2.2.0`. See docs/05.
 
 ## Options
 

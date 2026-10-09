@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FarmerChatUIKit'
-  s.version          = '1.0.0'
+  s.version          = '2.2.0'
   s.summary          = 'FarmerChat full app-as-SDK — UIKit entry (iOS 15+).'
   s.description      = <<-DESC
     Embeddable FarmerChat journey (onboarding, home feed, AI chat with voice

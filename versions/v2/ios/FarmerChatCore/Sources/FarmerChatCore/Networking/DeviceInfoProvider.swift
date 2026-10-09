@@ -64,6 +64,6 @@ struct DeviceInfoProvider: Sendable {
 }
 
 public enum FarmerChatSDK {
-    public static let version = "1.0.0"
+    public static let version = "2.2.0"
     public static let buildVersionHeader = "v2"
 }

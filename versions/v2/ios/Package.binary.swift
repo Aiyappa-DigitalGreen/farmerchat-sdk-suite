@@ -12,7 +12,7 @@
 // For a remote binary release, swap `path:` for `url:` + `checksum:` on each
 // binaryTarget (checksum via `swift package compute-checksum X.xcframework.zip`).
 //
-// Version: 1.0.0 (FarmerChatCore FarmerChatSDK.version).
+// Version: 2.2.0 (FarmerChatCore FarmerChatSDK.version).
 import PackageDescription
 
 let package = Package(

@@ -381,7 +381,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
 
 /** SDK build version reported in the Build-Version header. */
 export const BUILD_VERSION_HEADER_VALUE = 'v2';
-export const SDK_VERSION = '1.0.0';
+export const SDK_VERSION = '2.2.0';
 
 /**
  * Built-in guest API key (app's `RemoteConfigKeys.GUEST_USER_API_KEY`),

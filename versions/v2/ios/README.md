@@ -60,8 +60,8 @@ dynamically link `FarmerChatCore.framework`, so link Core alongside them.
 `ios/ConsumerApp` is a worked example that links only the built `.xcframework`s
 (not the source packages) and builds/runs on the simulator.
 
-The version is single-sourced from `FarmerChatSDK.version` (currently `1.0.0`);
-SPM package versions come from the git tag (`ios-v1.0.0`).
+The version is single-sourced from `FarmerChatSDK.version` (currently `2.2.0`, the same as
+Android, React Native and web); SPM package versions come from the git tag (`ios-v2.2.0`).
 
 ## Initialize + launch
 

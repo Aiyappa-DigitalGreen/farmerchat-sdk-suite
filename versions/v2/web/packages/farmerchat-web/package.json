@@ -1,6 +1,6 @@
 {
   "name": "@digitalgreenorg/farmerchat-web",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "FarmerChat embeddable web SDK (React 18). Full app-as-SDK: onboarding, home feed, AI chat, voice, images, OTP auth.",
   "license": "MIT",
   "type": "module",

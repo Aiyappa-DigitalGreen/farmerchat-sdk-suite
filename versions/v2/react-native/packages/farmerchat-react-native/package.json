@@ -1,6 +1,6 @@
 {
   "name": "@digitalgreenorg/farmerchat-react-native",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "FarmerChat full-app SDK for React Native / Expo \u2014 AI agronomy chatbot for farmers by Digital Green.",
   "main": "dist/index.js",
   "module": "dist/index.js",

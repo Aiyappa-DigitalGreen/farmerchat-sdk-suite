@@ -1,1 +1,1 @@
-export const FARMERCHAT_WIDGET_VERSION = '1.0.0';
+export const FARMERCHAT_WIDGET_VERSION = '2.2.0';
