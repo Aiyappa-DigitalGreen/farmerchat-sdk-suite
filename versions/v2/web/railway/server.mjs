@@ -7,6 +7,7 @@
  *   /dist/*                → widget/dist (farmerchat-widget.iife.js + illustrations/)
  *   /stage/*, /stage-replay/*  → the stage proxy, the SAME handler the Vercel deploy used
  *                            (widget/vercel/api/stage.js), so there is one copy of the logic
+ *   /guide/                → the SDK integration guide (railway/guide/index.html)
  *   /healthz               → 200 "ok"
  */
 import http from 'node:http';
@@ -54,6 +55,8 @@ const server = http.createServer((req, res) => {
       res.end('Proxy error');
     });
   }
+  if (p === '/guide' || p === '/guide/index.html') { res.writeHead(301, { location: '/guide/' }); return res.end(); }
+  if (p === '/guide/') return sendFile(res, path.join(here, 'guide', 'index.html'), req.method === 'HEAD');
   if (p === '/' || p === '/demo') { res.writeHead(302, { location: '/demo/' + url.search }); return res.end(); }
   for (const [prefix, root] of Object.entries(ROOTS)) {
     if (!p.startsWith(prefix)) continue;
