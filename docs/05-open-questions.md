@@ -493,6 +493,12 @@ the app should catch up.
 
 ### 2. Alignment chip labels are bold in every state
 
+> **Superseded for v2 on 2026-10-09.** The chat screen was re-synced line by line on the request
+> "i need ui to be exactly same pixel to pixel" as the app. Every v2 platform therefore went back to
+> the app's rule: `labelMedium` 600, Bold only when selected. To restore the divergence, change one
+> line per platform: web `.fcsdk-c-chip-label`, compose `Chip.kt` label weight, SwiftUI/UIKit
+> `Chip` label font, RN chip label style. v1 is unchanged.
+
 The app bolds only the **selected** chip and leaves the rest at `labelMedium`'s weight 600
 (`components/chips/Chip.kt:127`). The SDK now uses `FontWeight.Bold` unconditionally.
 

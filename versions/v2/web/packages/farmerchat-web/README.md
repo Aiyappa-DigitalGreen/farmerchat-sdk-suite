@@ -130,6 +130,13 @@ Color keys mirror the other platforms: `brandPrimary`, `brandPrimaryDark`,
 `brandAccent`, `onBrand`, `background`, `readingSurface`, `cardSurface`,
 `error`, `onBackground`, `onSurface`.
 
+Text metrics follow the Android app, not the browser's defaults. The SDK root
+sets a small negative `letter-spacing` per weight, because Android lays out the same
+Roboto about 1% narrower than Chrome does. Without it, lines that fit on the app
+wrap on the web. It also trims line leading the way Compose does. Both live in
+`src/ui/theme.ts`. A custom `typography.fontFamily` keeps the tracking. Tracking
+was measured for Roboto only, so check how lines wrap if you change the font.
+
 ## Inline embedding
 
 `<FarmerChat inline/>` (or `FarmerChat.mount(el, { inline: true })`) fills its

@@ -7957,7 +7957,7 @@ Reported from the widget: the chat loader "doesn't change text as per the API" a
 | iOS v2 SwiftUI + UIKit | `swift build` + `swift test` (122) + simulator `xcodebuild` for both, exit 0. Not run on a simulator. UIKit gained Read full advice (closes the HIGH gap above for v2) and a conic sweep border |
 | RN v2 | tsc + tests. Not run on a device |
 
-**Gaps left (UNVERIFIED on device everywhere except web):**
+**Gaps left (UNVERIFIED on device everywhere except web):** _(several closed 2026-10-09: wobble, Listen dimmed, compose follow-up header — see the line-by-line re-sync below)_
 - ~~RN: no shimmer, 4-solid-side Share border~~ — closed the same day, see below.
 - All platforms: no attention wobble on Read full advice. Listen is hidden when TTS is off; the app shows it disabled. The placeholder is not hidden while a voice question is still transcribing (app `isTranscribing`).
 - Compose: the follow-up header keeps the accent dot + `titleSmall` secondary; the app uses `titleMedium` primary. The Read-full predicate is `== null` vs the app's `!= message.id`.
@@ -7981,3 +7981,57 @@ Reduce Motion stops the rotation and the shimmer.
 Verified with `tsc` + package tests, and by rendering `Gradients.tsx` through react-native-web in headless Chrome: sweep orientation (cyan right, green bottom, yellow left), rounded pill ring, aura rotating between frames, shimmer band passing. **Not run on a device**; Expo Go on the emulator was not set up this pass.
 
 Remaining deltas: the aura has no faint bloom strokes; the placeholder's base colour switches rather than fading over 220ms; there is no low-RAM fallback (the app shows static text on low-RAM devices).
+
+## Chat screen, line-by-line re-sync with the app's ChatThreadContent — all v2 platforms (2026-10-09)
+
+Reported: "the ui in chat screen does not resemble exactly as android sdk or orginal android code
+… i need ui to be exactly same pixel to pixel". **The 2026-10-08 re-sync above was incomplete.**
+It fixed the action row and the loader. It did not touch layout, because the SDK chat screens were
+ported from the app's older single-file `ChatScreen.kt`. That file predates the split into
+`ChatThreadContent.kt` / `ChatLoadingContent.kt` / `ChatErrorContent.kt` /
+`InlineErrorContent.kt`, which changed padding, error placement and follow-up placement.
+
+**Method.** The app (fc-compose-agentic, built from a scratch clone of origin `dev/v2.5`
+@393c5bb0, stage) and the widget (`demo/index.html?stage=1` at 411×914 @2.625) were captured on
+the same questions. Three read-only agents produced value tables for every composable the chat
+screen draws. Web was fixed first and re-captured; Android, iOS and RN were then ported from one
+spec. The local `fc-compose-agentic` checkout (31a789e0) is 9 commits behind origin. The only
+chat-UI difference between them is `useChips` (`isAgentic && !isPreGenerated` locally, `true` on
+origin). The SDKs follow origin (`true`).
+
+| App source | Was | Now (all v2) |
+|---|---|---|
+| `ChatThreadContent.kt:300-309`: LazyColumn padding h20 / top 20; bottom = composer height + 16 | 16 / 16; bottom = composer height | 20 / 20; + 16 |
+| User row `padding(start = 64)` + bubble `widthIn(max 290)`; item fades in 500ms | 290 cap only | both |
+| `InlineErrorContent.kt`: 48dp red disc + X, fixed "Something went wrong" label, grey radius-12 "↻ Try again" pill; inside the failed user item (spacedBy 12), holding a viewport reserve when last | raw error text in red + full-width pill button, appended after all messages | as the app. Voice failure: right-aligned retry pill |
+| `ChatResponseActions.kt`: Column(top 24); follow-ups INSIDE it (16, titleMedium, 10, chips 8 apart), then 28 + 12 | follow-ups a separate list item after the last answer's full-viewport reserve, so off screen until scrolled; dot + titleSmall secondary title; 10 between chips; 12 above | as the app; not hidden by an error |
+| `ListenButton(enabled = isTtsEnabled)`: alpha 0.4 when off | hidden | dimmed, inert |
+| `Chip.kt`: labelMedium 600, Bold only when selected; escalate badge white with red number | always 700 (requested divergence, docs/05 §2) | as the app; docs/05 §2 marked superseded |
+| `StreamErrorCard.kt`: 24dp icon, gap 12, bold title, radius-12 button, padding v14, green Refresh 20, bold label | 20dp icon, regular title, pill PrimaryButton | as the app |
+| `AlignmentSurface.kt`: MarkdownText message, Listen on the live prompt, capability card (16 radius, 1dp border), one-run escape hatch, radius-16 escalate | bodyLarge plain text, no Listen, no card, radius 12 | as the app |
+| `LogoSpinnerHorizontal.kt`: Material3 1.4.0 ring (6s, 10→87%, round caps), mark turns every 3s, ShimmerText black → #00C950 | 1.33s arc (10→75%, square caps), static mark, grey → black shimmer (web) | as the app |
+| `LogoAppBar.kt`: glow clipped to the bar; Home entry uses `leftbutton.xml` (stroked arrow); logo fades out over 300ms | 16px of glow under the header (web); filled Material arrow | as the app |
+| `ScrollIndicator.kt`: #00C950 disc, white arrow, composer + 16 up, bounce `IntOffset(0, 14)` = 14 device px | grey disc, black arrow, 14dp bounce | as the app |
+| `InputComposer.kt`: placeholder ShimmerText band 1.2W, no wrap; hide offset 400dp, FastOutSlowIn | band 0.55W with a wrap-around copy; 160% offset, `ease` (web) | as the app |
+| Android core: #27 error → `failedMessageId = last user message` | the dropped placeholder's id, so the error could not sit under the question | as the app |
+
+**Text width (web only).** Android lays the same Roboto file out narrower than Chrome at 420dpi
+(hinted advances). Measured on matched strings: regular 98.4–98.7%, semibold 99.3–99.6%, bold
+99.0%. The web root now carries per-weight `letter-spacing` (-0.0066em / -0.0026em / -0.0052em),
+emulating the reference device the same way the line-height trim does. It closes the user's own
+example: "How to control aphids in mustard?" is 255.6dp on the device vs 259dp in Chrome, and wrapped
+in the 258dp bubble. It is now 669 vs 671 device px and stays on one line.
+
+| Platform | Verified |
+|---|---|
+| web v2 | tsc, package + widget build. Headless captures on `?stage=1` at phone size and desktop panel size: loading, answer, follow-ups, stream-error card, inline error (forced failure). Inline error measured against the app: disc 53→157 vs 53→158, pill 633→855 vs 633→855 |
+| Android v2 compose + views | `compileDebugKotlin` core/compose/views; unit tests core 226 (forced rerun) + compose/views parity tests, 0 failures. Not run on a device |
+| iOS v2 SwiftUI + UIKit | `swift build`, `swift test` 122/0, `xcodebuild` both schemes BUILD SUCCEEDED. Not run on a simulator |
+| RN v2 | tsc 0, tests 10/0. Not run on a device |
+
+**Gaps left:**
+- **Header glow on web.** In the app the glow's bright top sits behind the status bar, so the 64dp bar shows only its tail. The widget has no status bar, so the whole band shows in the bar, which looks brighter. Left as is.
+- **iOS:** no question-pinning scroll or viewport reserve; answers still sit in a grey card (follow-ups follow the card); no branded app bar/glow (UIKit uses the system nav bar); no composer. **UIKit only:** the alignment message is plain text, the bubble is still brand green, and there is no 500ms fade.
+- **RN:** no question-pinning scroll / finished-answer reserve (still `scrollToEnd`); the stream card uses the info icon (no wifi-off/warning assets); the invented "Not sent" caption and `chat_clarification_required` banner remain.
+- **Views:** the error is its own row (it looks the same); no wobble; no user fade; the Material Components ring animation differs from Compose's 6s cycle.
+- **All platforms:** the wobble always runs (the app gates it on remote config and a once-per-day rule).
