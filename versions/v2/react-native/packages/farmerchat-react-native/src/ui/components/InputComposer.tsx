@@ -99,7 +99,7 @@ const FIELD_FADE_MS = 220;
 /** Compact shrink/grow animation. */
 const SIZE_ANIM_MS = 250;
 
-/** Slide distance used to park the bar off-screen when `visible` is false. */
+/** InputComposer.kt `offset(y = 400.dp)`: parks the bar off-screen when `visible` is false. */
 const SLIDE_OFF = 400;
 const SLIDE_MS = 300;
 
@@ -402,6 +402,8 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
       Animated.timing(slide, {
         toValue: visible ? 0 : SLIDE_OFF,
         duration: SLIDE_MS,
+        // InputComposer.kt: tween(300) = FastOutSlowInEasing (RN's default is ease-in-out).
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
         useNativeDriver: true,
       }).start();
     }, [visible, slide]);
@@ -540,6 +542,7 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                         key={displayedPlaceholder}
                         text={displayedPlaceholder}
                         numberOfLines={1}
+                        ellipsizeMode="clip"
                         style={typography.bodyMedium}
                         baseColor={placeholderBaseColor}
                         highlightColor={c.borderActive}
@@ -558,6 +561,7 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                           key={displayedPlaceholder}
                           text={displayedPlaceholder}
                           numberOfLines={1}
+                          ellipsizeMode="clip"
                           style={typography.bodyMedium}
                           baseColor={placeholderBaseColor}
                           highlightColor={c.borderActive}

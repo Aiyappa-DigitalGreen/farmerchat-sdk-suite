@@ -221,8 +221,15 @@ export function ShimmerText(props: {
   highlightColor: string;
   durationMs?: number;
   numberOfLines?: number;
+  /**
+   * Compose `ShimmerText(overflow = TextOverflow.Clip)` is the default: a long label is cut at the
+   * edge, not ellipsized. RN's own default with `numberOfLines` is 'tail', hence this pass-through
+   * (defaulting to 'clip' to match the app).
+   */
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
 }) {
   const [width, setWidth] = useState(0);
+  const ellipsizeMode = props.ellipsizeMode ?? 'clip';
   const reduceMotion = useReduceMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const duration = props.durationMs ?? 1200;
@@ -241,7 +248,11 @@ export function ShimmerText(props: {
   const band = width * 1.2;
   return (
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      <Text style={[props.style, { color: props.baseColor }]} numberOfLines={props.numberOfLines}>
+      <Text
+        style={[props.style, { color: props.baseColor }]}
+        numberOfLines={props.numberOfLines}
+        ellipsizeMode={ellipsizeMode}
+      >
         {props.text}
       </Text>
       {animate
@@ -271,6 +282,7 @@ export function ShimmerText(props: {
                 <Animated.Text
                   style={[props.style, { color: props.highlightColor, width, transform: [{ translateX: counter }] }]}
                   numberOfLines={props.numberOfLines}
+                  ellipsizeMode={ellipsizeMode}
                 >
                   {props.text}
                 </Animated.Text>

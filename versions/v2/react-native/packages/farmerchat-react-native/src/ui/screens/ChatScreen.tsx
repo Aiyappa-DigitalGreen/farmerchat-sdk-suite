@@ -10,7 +10,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   FlatList,
+  type LayoutChangeEvent,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -34,10 +36,11 @@ import {
   type LocationMessage,
   type UserMessage,
 } from '../../state/useChat';
-import { PrimaryButton, ScrollToBottomButton } from '../components/Buttons';
+import { PrimaryButton, ScrollIndicator } from '../components/Buttons';
 import { AiAnswerBlock } from '../components/AiAnswer';
 import {
   AlignmentSurface,
+  InlineErrorContent,
   NumberedChip,
   StreamErrorCard,
   StreamStallHint,
@@ -53,7 +56,7 @@ import type { AlignmentChip, AlignmentKind } from '../../core/types';
 import { StorageKeys } from '../../core/sessionStore';
 import { isLocationObtained, isTerminalLocationOutcome } from '../../core/locationOutcome';
 import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
-import { LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
+import { INLINE_SPINNER_STYLE, LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
 import {
   captureImageFromCamera,
   fileUriToBase64,
@@ -98,7 +101,23 @@ export function ChatScreen(props: {
   const [voiceInputVisible, setVoiceInputVisible] = useState(false);
   const [photoInputVisible, setPhotoInputVisible] = useState(false);
   const [permissionDialog, setPermissionDialog] = useState<'camera' | 'microphone' | null>(null);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  // ChatThreadContent.kt `reserveHeightDp`: the reserve below a pinned question is the LIST's
+  // measured viewport, not the screen height (which ignores the app bar and insets and would
+  // over-reserve). Falls back to the window height before the first layout pass.
+  const windowHeight = useWindowDimensions().height;
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const reserveHeight = viewportHeight > 0 ? viewportHeight : windowHeight;
+
+  // ChatThreadContent.kt `showIndicator`: is there content (≥ two 24dp lines) hidden below the
+  // viewport? Tracked from scroll / layout / content-size events.
+  const scrollMetrics = useRef({ content: 0, offset: 0, viewport: 0 });
+  const [contentBelow, setContentBelow] = useState(false);
+  const updateContentBelow = useCallback(() => {
+    const { content, offset, viewport } = scrollMetrics.current;
+    // THREAD_BOTTOM_GAP is the content padding after the last item, not hidden content.
+    setContentBelow(content - offset - viewport - THREAD_BOTTOM_GAP >= 2 * 24);
+  }, []);
 
   const isHistoryEntry = props.params.source === 'history';
 
@@ -483,10 +502,36 @@ export function ChatScreen(props: {
     [attachedImage],
   );
 
+  const retryLastRequest = () => onAction({ type: 'RetryLastRequest' });
+  // ChatScreen.kt onRetry: a failed VOICE question is not resent — the voice input reopens so
+  // the farmer can record again.
+  const retryVoice = () => setVoiceInputVisible(true);
+
+  // An error that is not attached to a question bubble (e.g. a history load) still gets the inline
+  // row at the end of the thread; an interrupted stream shows its own StreamErrorCard instead.
+  const standaloneError =
+    state.errorMessage !== null &&
+    !state.isLoading &&
+    lastAi?.isInterrupted !== true &&
+    !state.messages.some((m) => m.id === state.failedMessageId);
+
   const renderMessage = ({ item }: { item: ChatMessage }): React.ReactElement | null => {
     switch (item.kind) {
-      case 'user':
-        return <UserBubble message={item} />;
+      case 'user': {
+        // ChatThreadContent.kt: the failed question carries InlineErrorContent beneath it, and a
+        // failed LAST message reserves a viewport of height (the fail reserve).
+        const failed = state.failedMessageId === item.id && state.errorMessage !== null;
+        const isLastMessage = state.messages[state.messages.length - 1]?.id === item.id;
+        return (
+          <UserItem
+            message={item}
+            failed={failed}
+            minHeight={failed && isLastMessage ? reserveHeight : null}
+            onRetry={retryLastRequest}
+            onVoiceRetry={retryVoice}
+          />
+        );
+      }
       // 2.0.0: the farmer's resolved location, standing in for the text bubble they would
       // otherwise have sent. Right-aligned because it is their reply to a GPS_PROMPT chip
       // (Compose ChatScreen.kt:699).
@@ -515,6 +560,18 @@ export function ChatScreen(props: {
                 isLatest={isLast}
                 onChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
                 onTypeInstead={() => setTextInputVisible(true)}
+                // AlignmentSurface.kt Listen pill: ListenButton(light, enabled = isTtsEnabled).
+                listen={
+                  sdk.config.enableVoice && item.hideTtsSpeaker !== true ? (
+                    <ActionChip
+                      icon={state.isAudioPlaying ? 'pause' : 'speaker'}
+                      text={label(Labels.LISTEN, 'Listen')}
+                      isLoading={state.isLoadingSynthesiseAudio}
+                      enabled={state.isTtsEnabled}
+                      onPress={toggleListen}
+                    />
+                  ) : null
+                }
               />
             </View>
           );
@@ -527,7 +584,10 @@ export function ChatScreen(props: {
             revealed={revealed}
             onRevealComplete={() => markRevealed(item.id)}
             clarificationRequired={state.clarificationRequired && isLast}
-            isTtsEnabled={state.isTtsEnabled && sdk.config.enableVoice}
+            // Host `enableVoice = false` removes the Listen pill; the server's TTS flag only dims
+            // it (ListenButton.kt: enabled = isTtsEnabled → alpha 0.4, not clickable).
+            ttsAvailable={sdk.config.enableVoice}
+            isTtsEnabled={state.isTtsEnabled}
             isLoadingTts={state.isLoadingSynthesiseAudio}
             isPlayingTts={state.isAudioPlaying}
             onListen={toggleListen}
@@ -546,9 +606,14 @@ export function ChatScreen(props: {
                     })
                 : undefined
             }
+            followUps={state.suggestedQuestions}
+            // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
+            // clarification treatment.
+            followUpsClarification={state.clarificationRequired && item.isPreGenerated !== true}
             onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
             onAlignmentChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
             isThreadLoading={state.isLoading}
+            reserveHeight={reserveHeight}
             onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
           />
         );
@@ -559,7 +624,10 @@ export function ChatScreen(props: {
           // answer…" — the same spinner the streaming status uses (no shimmer on RN; see
           // LogoSpinner).
           <View style={styles.loadingBubble} accessibilityLiveRegion="polite">
-            <LogoSpinner message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')} />
+            <LogoSpinner
+              message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')}
+              style={INLINE_SPINNER_STYLE}
+            />
           </View>
         );
       default:
@@ -570,7 +638,9 @@ export function ChatScreen(props: {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.surfaceReading }]}>
       <LogoAppBar
-        navIcon={isHistoryEntry ? 'menu' : 'close'}
+        // ChatScreen.kt: History → Menu; Home → the self-contained R.drawable.leftbutton back
+        // arrow. CHAT_ONLY has no Home behind it, so it keeps the close glyph (as on web).
+        navIcon={isHistoryEntry ? 'menu' : sdk.config.mode === 'CHAT_ONLY' ? 'close' : 'homeBack'}
         onNavPress={() => {
           if (isHistoryEntry) {
             props.onOpenDrawer();
@@ -583,7 +653,8 @@ export function ChatScreen(props: {
       />
 
       {uiState.kind === 'loading' ? (
-        <View style={styles.centerBody}>
+        // ChatLoadingContent.kt: Column(padding h20 / top 20, spacedBy 16) — top-aligned.
+        <View style={styles.initialColumn}>
           {uiState.questionText || uiState.imageUri || uiState.audioUri ? (
             <UserBubble
               message={{
@@ -598,11 +669,16 @@ export function ChatScreen(props: {
             />
           ) : null}
           <View accessibilityLiveRegion="polite">
-            <LogoSpinner message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')} />
+            <LogoSpinner
+              message={label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')}
+              style={INLINE_SPINNER_STYLE}
+            />
           </View>
         </View>
       ) : uiState.kind === 'error' ? (
-        <View style={styles.centerBody}>
+        // ChatErrorContent.kt: same column; the question bubble, then InlineErrorContent (fixed
+        // "Something went wrong" label — never the raw error).
+        <View style={styles.initialColumn}>
           {uiState.questionText || uiState.imageUri || uiState.audioUri ? (
             <UserBubble
               message={{
@@ -616,66 +692,74 @@ export function ChatScreen(props: {
               }}
             />
           ) : null}
-          <Text style={[typography.body, { color: theme.textPrimary, textAlign: 'center' }]}>
-            {uiState.message}
-          </Text>
-          <PrimaryButton
-            label={label('fc_v2_app_label_try_again', 'Try again')}
-            onPress={() => onAction({ type: 'RetryLastRequest' })}
-            style={{ minWidth: 180 }}
-          />
+          {uiState.audioUri ? (
+            <VoiceRetryPill onPress={retryVoice} />
+          ) : (
+            <InlineErrorContent onRetry={retryLastRequest} />
+          )}
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <FlatList
-            ref={listRef}
-            data={state.messages}
-            renderItem={renderMessage}
-            keyExtractor={(m) => m.id}
-            contentContainerStyle={styles.thread}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-            onStartReached={onScrollNearTop}
-            onStartReachedThreshold={0.2}
-            onScroll={(e) => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              const distanceToBottom =
-                contentSize.height - contentOffset.y - layoutMeasurement.height;
-              setShowScrollToBottom(distanceToBottom > 400);
-            }}
-            scrollEventThrottle={100}
-            ListHeaderComponent={
-              state.isLoadingMoreHistory ? (
-                <LogoSpinner message={label('chat_loading_older', 'Loading older messages…')} />
-              ) : null
-            }
-            ListFooterComponent={
-              <ThreadFooter
-                // App parity (ChatThreadContent.kt:100 / ChatScreen.kt:675): the composer UI
-                // reserves the composer bar's height at the bottom so the last bubble is not
-                // hidden behind it; the legacy input keeps the 96 that fits the
-                // Photo/Speak/Type row. The RN composer is a flow element rather than an
-                // overlay (see InputComposer's header), so it already occupies that space —
-                // only the small breathing gap is reserved here.
-                bottomPadding={isComposerUi ? spacing.xl : 96}
-                suggestedQuestions={state.suggestedQuestions}
-                // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
-                // clarification treatment.
-                clarificationRequired={state.clarificationRequired && lastAi?.isPreGenerated !== true}
-                // An interrupted agentic stream renders its own inline StreamErrorCard (with
-                // kind- and partial-aware copy) on the answer bubble; showing the footer error
-                // too would give the farmer two retry buttons for one failure.
-                errorMessage={lastAi?.isInterrupted === true ? null : state.errorMessage}
-                isLoading={state.isLoading}
-                revealed={lastAi == null || revealedIds.has(lastAi.id)}
-                onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
-                onRetry={() => onAction({ type: 'RetryLastRequest' })}
-              />
-            }
-          />
-          <ScrollToBottomButton
-            visible={showScrollToBottom}
-            onPress={() => listRef.current?.scrollToEnd({ animated: true })}
-          />
+          <View style={{ flex: 1 }}>
+            <FlatList
+              ref={listRef}
+              data={state.messages}
+              renderItem={renderMessage}
+              keyExtractor={(m) => m.id}
+              contentContainerStyle={styles.thread}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              onStartReached={onScrollNearTop}
+              onStartReachedThreshold={0.2}
+              onLayout={(e: LayoutChangeEvent) => {
+                const h = e.nativeEvent.layout.height;
+                scrollMetrics.current.viewport = h;
+                setViewportHeight((prev) => (prev === h ? prev : h));
+                updateContentBelow();
+              }}
+              onContentSizeChange={(_w, h) => {
+                scrollMetrics.current.content = h;
+                updateContentBelow();
+              }}
+              onScroll={(e) => {
+                const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                scrollMetrics.current = {
+                  content: contentSize.height,
+                  offset: contentOffset.y,
+                  viewport: layoutMeasurement.height,
+                };
+                updateContentBelow();
+              }}
+              scrollEventThrottle={100}
+              ListHeaderComponent={
+                state.isLoadingMoreHistory ? (
+                  <LogoSpinner message={label('chat_loading_older', 'Loading older messages…')} />
+                ) : null
+              }
+              // ChatThreadContent.kt:239 — contentPadding bottom = inputButtonsHeight + 16. Both
+              // RN input surfaces (the InputComposer and the legacy Photo/Speak/Type row) are flow
+              // siblings BELOW this list, not overlays, so they already take their own height;
+              // the 16 is the list's spacedBy gap before this (zero-height) footer.
+              ListFooterComponent={
+                <ThreadFooter
+                  showError={standaloneError}
+                  onRetry={retryLastRequest}
+                />
+              }
+            />
+            {/* ChatThreadContent.kt:576 — only with no error, not loading, and content below;
+                padding(bottom = inputButtonsHeight + 16) = 16 above this list's bottom edge,
+                since the input surface is a flow sibling here. */}
+            <ScrollIndicator
+              triggerKey={
+                !state.isLoading && state.errorMessage === null
+                  ? state.messages.filter((m) => m.kind === 'ai').length
+                  : null
+              }
+              available={contentBelow && !state.isLoading && state.errorMessage === null}
+              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+              style={styles.scrollIndicator}
+            />
+          </View>
           {/* App parity (ChatThreadContent.kt:243 / ChatScreen.kt:1048): the composer UI drops
               this row entirely — the InputComposer below already carries camera and mic. */}
           {!isComposerUi &&
@@ -863,18 +947,27 @@ function AiBubble(props: {
   revealed: boolean;
   onRevealComplete: () => void;
   clarificationRequired: boolean;
+  /** Host `enableVoice`: false removes the Listen pill entirely. */
+  ttsAvailable: boolean;
+  /** Server TTS flag: false keeps the pill but dims it (alpha 0.4) and disables it. */
   isTtsEnabled: boolean;
   isLoadingTts: boolean;
   isPlayingTts: boolean;
   onListen: () => void;
   onShare: () => void;
   onReadFullAdvice?: () => void;
+  /** Endpoint #29 follow-ups (`ChatState.suggestedQuestions`). */
+  followUps: string[] | null;
+  /** "Choose an option from the below" title + agentic chips instead of "You can also ask". */
+  followUpsClarification: boolean;
   onFollowUp: (question: string) => void;
   // ---- agentic (2.0.0) ----
   /** Tapped chip on an ADDITIVE alignment surface rendered below this answer. */
   onAlignmentChipPress?: (chip: AlignmentChip) => void;
   /** ChatState.isLoading — locks alignment chips while another query is in flight. */
   isThreadLoading?: boolean;
+  /** The list viewport height (ChatThreadContent.kt `reserveHeightDp`). */
+  reserveHeight: number;
   /** Retry after an interrupted stream. */
   onRetryStream?: () => void;
 }): React.ReactElement {
@@ -884,21 +977,38 @@ function AiBubble(props: {
   const { message } = props;
   const isStreaming = message.isStreaming === true;
   const isInterrupted = message.isInterrupted === true;
-  // While a stream is live the answer grows in place, so reserve a screen's height to pin the
+  const isThreadLoading = props.isThreadLoading === true;
+  // While a stream is live the answer grows in place, so reserve a viewport's height to pin the
   // question at the top instead of letting the list clamp it downward as text arrives. Also held
   // for the interrupted state so the error card sits near the top. Port of the Compose
-  // `streamReserve` (Modifier.heightIn(min = screenHeightDp)).
-  const windowHeight = useWindowDimensions().height;
+  // `streamReserveModifier` (Modifier.heightIn(min = reserveHeightDp)).
+  //
+  // DEVIATION (parity gap): the app also holds this reserve for a FINISHED last answer
+  // (`!isLoading`), because it pins the new question to the top with an anchor scroll. This
+  // screen still follows new messages with scrollToEnd, under which a finished-answer reserve
+  // would push the question off screen — so it is not extended until the anchor scroll is ported.
   const streamReserve =
-    props.isLast && (isStreaming || isInterrupted) ? { minHeight: windowHeight } : null;
+    props.isLast && (isStreaming || isInterrupted) ? { minHeight: props.reserveHeight } : null;
   const additiveAlignmentKind =
     message.alignmentKind != null && isAdditiveAlignment(message.alignmentKind)
       ? message.alignmentKind
       : null;
-  // Action row appears only once the answer has finished revealing — and never while a stream is
-  // still running or after it broke. (AiAnswerBlock reports "revealed" immediately when
-  // animate=false, which is every delta of a stream, so `revealed` alone is not enough.)
-  const showActions = props.isLast && props.revealed && !isStreaming && !isInterrupted;
+  // ChatThreadContent.kt:500 — the action block belongs to the last response once the thread is
+  // idle (`isLastResponse && !isLoading`), and here also only once the typewriter has finished
+  // and never while a stream is running or after it broke. (AiAnswerBlock reports "revealed"
+  // immediately when animate=false, which is every delta of a stream.)
+  const showActions =
+    props.isLast && props.revealed && !isStreaming && !isInterrupted && !isThreadLoading;
+  // ChatResponseActions.kt `showFollowUps`: false only when an additive alignment surface with
+  // chips renders below and owns the next action. NOT hidden by an error.
+  const showFollowUps = !(
+    additiveAlignmentKind !== null && (message.alignmentChips ?? []).length > 0
+  );
+  const followUps = props.followUps ?? [];
+  const streamStatusText =
+    message.streamingStatus != null && message.streamingStatus.trim().length > 0
+      ? message.streamingStatus
+      : null;
   return (
     <View style={[styles.aiRow, streamReserve]}>
       {props.clarificationRequired ? (
@@ -932,50 +1042,25 @@ function AiBubble(props: {
           </Text>
         ) : null}
 
-        {/* Tool progress, or the initial "getting your answer" state before any text arrives. */}
-        {isStreaming &&
-        (message.text.length === 0 ||
-          (message.streamingStatus != null && message.streamingStatus.trim().length > 0)) ? (
-          <View style={styles.streamStatus}>
-            <LogoSpinner
-              message={
-                message.streamingStatus != null && message.streamingStatus.trim().length > 0
-                  ? message.streamingStatus
-                  : label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')
-              }
-            />
-          </View>
+        {/* Tool progress, or the initial "getting your answer" state before any text arrives.
+            ChatThreadContent.kt places it directly under the MarkdownText (no spacer). */}
+        {isStreaming && (message.text.length === 0 || streamStatusText !== null) ? (
+          <LogoSpinner
+            message={streamStatusText ?? label(Labels.GETTING_YOUR_ANSWER, 'Getting your answer…')}
+            style={INLINE_SPINNER_STYLE}
+          />
         ) : null}
 
         {/* Text is flowing but has stalled with no tool status: a transient client-side hint,
             NOT a failure. Keyed on text length so the next delta clears it automatically. */}
-        {isStreaming &&
-        message.text.length > 0 &&
-        (message.streamingStatus == null || message.streamingStatus.trim().length === 0) ? (
-          <View style={styles.streamStatus}>
-            <StreamStallHint messageId={message.id} textLength={message.text.length} />
-          </View>
+        {isStreaming && message.text.length > 0 && streamStatusText === null ? (
+          <StreamStallHint messageId={message.id} textLength={message.text.length} />
         ) : null}
       </View>
 
-      {/* ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
-          Single-tap; the answer above keeps its own action row. */}
-      {additiveAlignmentKind !== null ? (
-        <AlignmentSurface
-          kind={additiveAlignmentKind}
-          message={message.alignmentMessage ?? ''}
-          chips={message.alignmentChips ?? []}
-          selectedValues={message.alignmentSelectedValues ?? []}
-          isLoading={props.isThreadLoading === true}
-          isLatest={props.isLast}
-          additive
-          onChipPress={(chip) => props.onAlignmentChipPress?.(chip)}
-        />
-      ) : null}
-
       {/* Interrupted terminal state: keep any partial answer above and offer retry. Only the
           latest answer shows the card — an older failed question keeps its partial text but
-          drops the retry action. */}
+          drops the retry action. StreamErrorCard carries its own 16dp top offset. */}
       {isInterrupted && props.isLast ? (
         <StreamErrorCard
           errorKind={message.streamErrorKind ?? StreamErrorKinds.UNKNOWN}
@@ -984,16 +1069,23 @@ function AiBubble(props: {
         />
       ) : null}
       {showActions ? (
-        <FadeIn style={styles.aiActions}>
+        // ChatResponseActions.kt: Column(padding top 24). Its AnimatedVisibility enter is
+        // fadeIn() only — no slide.
+        <FadeIn style={styles.aiActions} rise={false}>
           {/* ChatResponseActions.kt (app dev/v2.5): the branches are EXCLUSIVE. A pre-generated
-              answer with "Read full advice" available shows ONLY that button; every other
-              answer (agentic, legacy, pre-generated after the tap) gets the agentic row —
+              answer with "Read full advice" available shows ONLY that button (+16); every other
+              answer (agentic, legacy, pre-generated after the tap) gets the agentic row (+1) —
               ChatThreadContent.kt passes `useChips = true` for all of them. */}
           {message.isPreGenerated && props.onReadFullAdvice ? (
-            <PrimaryButton
-              label={label(Labels.READ_FULL_ADVICE, 'Read full advice')}
-              onPress={props.onReadFullAdvice}
-            />
+            <>
+              <AttentionWobble delayMs={1800}>
+                <PrimaryButton
+                  label={label(Labels.READ_FULL_ADVICE, 'Read full advice')}
+                  onPress={props.onReadFullAdvice}
+                />
+              </AttentionWobble>
+              <View style={{ height: 16 }} />
+            </>
           ) : (
             <>
               <View style={styles.aiWarning}>
@@ -1019,18 +1111,68 @@ function AiBubble(props: {
                     onPress={props.onShare}
                   />
                 ) : null}
-                {props.isTtsEnabled && message.hideTtsSpeaker !== true ? (
+                {props.ttsAvailable && message.hideTtsSpeaker !== true ? (
                   <ActionChip
                     icon={props.isPlayingTts ? 'pause' : 'speaker'}
                     text={label(Labels.LISTEN, 'Listen')}
                     isLoading={props.isLoadingTts}
+                    enabled={props.isTtsEnabled}
                     onPress={props.onListen}
                   />
                 ) : null}
               </View>
+              <View style={{ height: 1 }} />
             </>
           )}
+          {/* The follow-ups live INSIDE the last answer's column (so inside its reserve), not as
+              a separate list item after it: [fadeIn 300: 16, titleMedium title, 10, chips 8
+              apart] + 28 + 12. */}
+          {showFollowUps ? (
+            <>
+              {followUps.length > 0 ? (
+                <FadeIn durationMs={300} rise={false}>
+                  <View style={{ height: 16 }} />
+                  <Text style={[typography.titleMedium, { color: theme.content.foregroundPrimary }]}>
+                    {props.followUpsClarification
+                      ? label(Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW, 'Choose an option from the below')
+                      : label(Labels.RELATED_QUESTIONS, 'You can also ask')}
+                  </Text>
+                  <View style={{ height: 10 }} />
+                  <View style={styles.followUpChips}>
+                    {followUps.map((q, index) => (
+                      <NumberedChip
+                        key={`${index}-${q}`}
+                        label={q}
+                        number={index + 1}
+                        visual={props.followUpsClarification ? 'agentic' : 'suggested'}
+                        onPress={() => props.onFollowUp(q)}
+                      />
+                    ))}
+                  </View>
+                </FadeIn>
+              ) : null}
+              <View style={{ height: 28 + 12 }} />
+            </>
+          ) : null}
         </FadeIn>
+      ) : null}
+
+      {/* ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm),
+          16dp under it, and only once the message is no longer streaming. Single-tap; the
+          answer above keeps its own action row. */}
+      {additiveAlignmentKind !== null && !isStreaming ? (
+        <View style={styles.additiveSurface}>
+          <AlignmentSurface
+            kind={additiveAlignmentKind}
+            message={message.alignmentMessage ?? ''}
+            chips={message.alignmentChips ?? []}
+            selectedValues={message.alignmentSelectedValues ?? []}
+            isLoading={isThreadLoading}
+            isLatest={props.isLast}
+            additive
+            onChipPress={(chip) => props.onAlignmentChipPress?.(chip)}
+          />
+        </View>
       ) : null}
     </View>
   );
@@ -1041,17 +1183,22 @@ function AiBubble(props: {
  * background = surfaceReadingSecondary)` for Share and `ListenButton(light = true)` for Listen:
  * 42dp tall, foregroundPrimary 23dp icon + labelMedium. Share carries the 3dp
  * `brand.accentSweepBorder` sweep gradient ({@link SweepBorder}).
+ *
+ * `enabled = false` is ListenButton.kt's TTS-off treatment: still drawn, at alpha 0.4, and not
+ * clickable.
  */
 function ActionChip(props: {
   icon: React.ComponentProps<typeof FcIcon>['name'];
   text: string;
   isLoading?: boolean;
+  enabled?: boolean;
   /** Share only: the 3dp accent sweep border. */
   accentBorder?: boolean;
   onPress: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   const c = theme.content;
+  const enabled = props.enabled !== false;
   const content = (
     <>
       {props.isLoading ? (
@@ -1066,9 +1213,9 @@ function ActionChip(props: {
     return (
       <Pressable
         onPress={props.onPress}
-        disabled={props.isLoading === true}
+        disabled={props.isLoading === true || !enabled}
         accessibilityRole="button"
-        style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
+        style={({ pressed }) => ({ opacity: !enabled ? 0.4 : pressed ? 0.75 : 1 })}
       >
         <SweepBorder
           width={ACCENT_BORDER_WIDTH}
@@ -1086,11 +1233,17 @@ function ActionChip(props: {
   return (
     <Pressable
       onPress={props.onPress}
-      disabled={props.isLoading === true}
+      disabled={props.isLoading === true || !enabled}
       accessibilityRole="button"
+      accessibilityState={{ disabled: !enabled }}
       style={({ pressed }) => [
         styles.actionChip,
-        { paddingHorizontal: 12, gap: 6, backgroundColor: c.surfaceReadingSecondary, opacity: pressed ? 0.75 : 1 },
+        {
+          paddingHorizontal: 12,
+          gap: 6,
+          backgroundColor: c.surfaceReadingSecondary,
+          opacity: !enabled ? 0.4 : pressed ? 0.75 : 1,
+        },
       ]}
     >
       {content}
@@ -1102,15 +1255,16 @@ function ActionChip(props: {
 const ACTION_CHIP_HEIGHT = 42;
 const ACCENT_BORDER_WIDTH = 3;
 
-/** Fade + slight rise, used for the reveal-gated action row and follow-ups. */
+/** ChatThreadContent.kt: LazyColumn spacedBy(16) — also the gap after the last item. */
+const THREAD_BOTTOM_GAP = 16;
+
 /**
  * Reveal animation for the answer actions and the related-questions block.
  *
- * `rise` (the default) is the answer-actions treatment: a 350ms fade that also lifts the block
- * 8px into place. The related-questions block opts out of the lift — app parity
- * (`ChatResponseActions.kt` 0456f364) is a 300ms fade and explicitly "fade only (no size
- * animation) so surrounding content doesn't shift", and that block sits directly under the
- * answer a farmer is still reading.
+ * `rise` (the default) adds an 8px lift to the fade. Both chat call sites opt out: app parity
+ * (`ChatThreadContent.kt` AnimatedVisibility(enter = fadeIn()) for the action block, and
+ * `ChatResponseActions.kt` fadeIn(tween(300)) for the follow-ups) is a fade only, "so surrounding
+ * content doesn't shift".
  */
 function FadeIn(props: {
   children: React.ReactNode;
@@ -1141,79 +1295,131 @@ function FadeIn(props: {
   );
 }
 
-function ThreadFooter(props: {
-  suggestedQuestions: string[] | null;
-  clarificationRequired: boolean;
-  errorMessage: string | null;
-  isLoading: boolean;
-  revealed: boolean;
-  /** Space kept below the thread so the input surface never covers the last bubble. */
-  bottomPadding: number;
-  onFollowUp: (question: string) => void;
+/**
+ * AttentionWobble.kt `attentionWobble(delayMs)` with its defaults: after the delay, one bounce
+ * (scale → 0.95 on spring(ζ 0.7, k 800), back → 1 on spring(ζ 0.35, k 400)), then 2 rotation
+ * cycles of +1.5° (60ms) → −1.5° (120ms) → 0 (60ms), EaseInOut. RN spring damping = 2ζ√k.
+ *
+ * DEVIATION: the app gates this on Remote Config (`v2_wobble_animation_enabled`) and a
+ * once-per-day card-click rule; the SDK has neither (and may not add storage keys), so it always
+ * plays.
+ */
+function AttentionWobble(props: { delayMs: number; children: React.ReactNode }): React.ReactElement {
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const easeInOut = Easing.bezier(0.42, 0, 0.58, 1);
+    const turn = (toValue: number, duration: number) =>
+      Animated.timing(rotation, { toValue, duration, easing: easeInOut, useNativeDriver: true });
+    const cycle = () => Animated.sequence([turn(1.5, 60), turn(-1.5, 120), turn(0, 60)]);
+    const anim = Animated.sequence([
+      Animated.delay(props.delayMs),
+      Animated.spring(scale, { toValue: 0.95, stiffness: 800, damping: 2 * 0.7 * Math.sqrt(800), mass: 1, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, stiffness: 400, damping: 2 * 0.35 * Math.sqrt(400), mass: 1, useNativeDriver: true }),
+      cycle(),
+      cycle(),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [props.delayMs, scale, rotation]);
+  const rotate = rotation.interpolate({ inputRange: [-1.5, 1.5], outputRange: ['-1.5deg', '1.5deg'] });
+  return (
+    <Animated.View style={{ transform: [{ scale }, { rotate }] }}>{props.children}</Animated.View>
+  );
+}
+
+/**
+ * ChatThreadContent.kt user item: Column(spacedBy 12) [bubble row (start padding 64, End), the
+ * InlineErrorContent of a failed question], faded in over 500ms. A failed LAST question holds
+ * `minHeight` (the viewport) so it stays pinned with the retry row beneath it.
+ */
+function UserItem(props: {
+  message: UserMessage;
+  failed: boolean;
+  minHeight: number | null;
   onRetry: () => void;
-}): React.ReactElement | null {
+  onVoiceRetry: () => void;
+}): React.ReactElement {
+  const alpha = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(alpha, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+  }, [alpha]);
+  return (
+    <Animated.View
+      style={[
+        styles.userItem,
+        { opacity: alpha },
+        props.minHeight != null ? { minHeight: props.minHeight } : null,
+      ]}
+    >
+      <UserBubble message={props.message} />
+      {props.failed ? (
+        props.message.audioUri ? (
+          <VoiceRetryPill onPress={props.onVoiceRetry} />
+        ) : (
+          <InlineErrorContent onRetry={props.onRetry} />
+        )
+      ) : null}
+    </Animated.View>
+  );
+}
+
+/**
+ * ChatThreadContent.kt:314 / ChatErrorContent.kt: a failed VOICE question gets
+ * LogoSpinnerHorizontal(state = Retry) right-aligned instead of InlineErrorContent — a
+ * surfaceTertiary radius-12 pill (padding s10 e14 v10, spacedBy 6) with a 23dp Refresh and a
+ * labelMedium "Try again". (No analytics on this branch in the app.)
+ */
+function VoiceRetryPill(props: { onPress: () => void }): React.ReactElement {
   const theme = useTheme();
   const label = useLabel();
-  if (props.isLoading) return null;
-  const hasFollowUps =
-    props.revealed && props.suggestedQuestions != null && props.suggestedQuestions.length > 0;
+  const c = theme.content;
   return (
-    <View style={[styles.footer, { paddingBottom: props.bottomPadding }]}>
-      {props.errorMessage ? (
-        <View style={styles.inlineError}>
-          <Text style={[typography.bodySmall, { color: theme.error, textAlign: 'center' }]}>
-            {props.errorMessage}
-          </Text>
-          <PrimaryButton
-            label={label('fc_v2_app_label_try_again', 'Try again')}
-            onPress={props.onRetry}
-            style={{ alignSelf: 'center', minWidth: 160 }}
-          />
-        </View>
-      ) : null}
-      {hasFollowUps ? (
-        <FadeIn style={styles.followUpSection} durationMs={300} rise={false}>
-          <View style={styles.followUpTitleRow}>
-            <View
-              style={[styles.followUpDot, { backgroundColor: theme.brand.foregroundSecondary }]}
-            />
-            <Text
-              style={[typography.titleSmall, { color: theme.textSecondary }]}
-            >
-              {props.clarificationRequired
-                ? label('chat_clarification_suggestions', 'Choose a follow-up option below')
-                : label('fc_v2_app_label_related_questions', 'You can also ask')}
-            </Text>
-          </View>
-          {/* ChatResponseActions.kt `useChips = true` for every answer: numbered chips, the
-              green Agentic accent for a clarify moment, the neutral Suggested one otherwise. */}
-          {(props.suggestedQuestions ?? []).map((q, index) => (
-            <NumberedChip
-              key={`${index}-${q}`}
-              label={q}
-              number={index + 1}
-              visual={props.clarificationRequired ? 'agentic' : 'suggested'}
-              onPress={() => props.onFollowUp(q)}
-            />
-          ))}
-        </FadeIn>
-      ) : null}
+    <View style={styles.voiceRetryRow}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={props.onPress}
+        style={({ pressed }) => [
+          styles.voiceRetryPill,
+          { backgroundColor: c.surfaceTertiary, opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <FcIcon name="refresh" size={23} tint={c.foregroundPrimary} />
+        <Text style={[typography.labelMedium, { color: c.foregroundPrimary }]}>
+          {label(Labels.TRY_AGAIN, 'Try again')}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** The thread's (zero-height) footer: only an error that is not tied to a question bubble. */
+function ThreadFooter(props: { showError: boolean; onRetry: () => void }): React.ReactElement {
+  return (
+    <View style={styles.footer}>
+      {props.showError ? <InlineErrorContent onRetry={props.onRetry} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centerBody: {
+  // ChatLoadingContent.kt / ChatErrorContent.kt: Column(padding h20, top 20, spacedBy 16).
+  initialColumn: {
     flex: 1,
-    justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.xl,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 16,
   },
-  thread: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xl },
-  userRow: { alignItems: 'flex-end', gap: spacing.xs, marginVertical: spacing.xs },
+  // ChatThreadContent.kt: padding(horizontal 20), contentPadding(top 20), spacedBy(16); the
+  // bottom 16 is the gap before the footer (see ListFooterComponent).
+  thread: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 0, gap: THREAD_BOTTOM_GAP },
+  userItem: { gap: 12 },
+  // Row(fillMaxWidth, padding(start = 64), Arrangement.End).
+  userRow: { alignItems: 'flex-end', gap: spacing.xs, paddingLeft: 64 },
   userBubble: {
-    maxWidth: 300,
+    // UserChatBubble.kt widthIn(max = 290.dp).
+    maxWidth: 290,
     // Asymmetric tail — three corners rounded, bottom-right sharp.
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
@@ -1225,13 +1431,17 @@ const styles = StyleSheet.create({
   wideBanner: { width: '100%', maxWidth: '100%' },
   bannerImage: { width: '100%', height: 160, borderRadius: radius.md },
   thumbImage: { width: 96, height: 96, borderRadius: radius.md },
-  aiRow: { alignItems: 'flex-start', gap: spacing.md, marginVertical: spacing.xs },
+  // The item is a plain Column: children stretch, and every gap is an explicit app spacer.
+  aiRow: { alignItems: 'stretch' },
   // The AI answer reads directly on the reading surface (no bordered bubble) to
   // match the redesign; markdown + optional source note only.
   aiBubble: { width: '100%', paddingRight: spacing.xs },
-  aiActions: { gap: spacing.md, width: '100%' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  streamStatus: { marginTop: spacing.sm },
+  // ChatResponseActions.kt Column(padding top = 24).
+  aiActions: { width: '100%', paddingTop: 24 },
+  // ChatResponseActions.kt: Share + Listen spacedBy(8), 12dp under the AI note.
+  actionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  additiveSurface: { marginTop: 16 },
+  followUpChips: { gap: 8 },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1244,24 +1454,28 @@ const styles = StyleSheet.create({
     gap: 10,
     height: ACTION_CHIP_HEIGHT - 2 * ACCENT_BORDER_WIDTH,
   },
-  // ChatResponseActions.kt: info icon + "AI may be wrong" note, 6dp apart; the 12dp gap above the
-  // pills is aiActions' own gap.
+  // ChatResponseActions.kt: info icon + "AI may be wrong" note, 6dp apart.
   aiWarning: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   clarification: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   loadingBubble: { alignItems: 'flex-start' },
-  footer: { gap: spacing.lg, paddingTop: spacing.sm, paddingBottom: 96 },
-  followUpSection: { gap: spacing.sm },
-  followUpTitleRow: {
+  footer: { paddingTop: 0 },
+  voiceRetryRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  voiceRetryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    gap: 6,
+    paddingLeft: 10,
+    paddingRight: 14,
+    paddingVertical: 10,
+    borderRadius: radius.md,
   },
-  followUpDot: { width: 6, height: 6, borderRadius: 3 },
-  inlineError: { gap: spacing.md },
+  // 40dp disc, bottom-centred, 16 above the list's bottom edge.
+  scrollIndicator: { position: 'absolute', bottom: 16, left: '50%', marginLeft: -20 },
 });

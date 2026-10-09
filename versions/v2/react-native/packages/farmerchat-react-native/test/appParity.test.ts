@@ -104,5 +104,5 @@ test('the unserved allowlist has not silently grown', () => {
   // A ratchet, not a ceiling: lowering it as keys get mapped is the point. Raising it means a new
   // invented key was accepted.
   const allow: string[] = JSON.parse(read('test/fixtures/unservedLabelKeys.json'));
-  assert.ok(allow.length <= 37, `allowlist grew to ${allow.length} (was 37)`);
+  assert.ok(allow.length <= 36, `allowlist grew to ${allow.length} (was 36)`);
 });

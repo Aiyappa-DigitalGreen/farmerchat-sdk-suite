@@ -6,10 +6,13 @@
  * (Green800 pill with icon + temp + green chevron), ScrollToBottomButton,
  * ListenButton.
  */
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Image,
+  PixelRatio,
   Pressable,
   StyleSheet,
   Text,
@@ -285,6 +288,85 @@ export function ScrollToBottomButton(props: {
   );
 }
 
+/**
+ * ScrollIndicator.kt: a 40dp buttonPrimaryAccent disc with a 20dp `icon_arrow_down` tinted
+ * buttonPrimaryForeground (white). Keyed on `triggerKey` (the AI-answer count): 1500ms after it
+ * changes the disc fades in (200ms); 300ms later it bounces 3× (280ms down EaseInOut, 320ms up,
+ * 150ms rest); 400ms after the last bounce it fades out (300ms). The bounce is
+ * `IntOffset(0, 14)` — 14 device PIXELS, not dp — hence `14 / PixelRatio.get()`.
+ *
+ * `available` mirrors the app's composition gate (no error, not loading, content below); when it
+ * drops the indicator disappears at once, as the composable leaving the tree does in Compose.
+ * Position it with `style` (absolute, bottom-centred).
+ */
+export function ScrollIndicator(props: {
+  triggerKey: string | number | null;
+  available: boolean;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+}): React.ReactElement | null {
+  const theme = useTheme();
+  const [shown, setShown] = useState(false);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const bounce = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    setShown(false);
+    opacity.setValue(0);
+    bounce.setValue(0);
+    if (props.triggerKey === null) return;
+    const depth = 14 / PixelRatio.get();
+    const easeInOut = Easing.bezier(0.42, 0, 0.58, 1);
+    const oneBounce = () =>
+      Animated.sequence([
+        Animated.timing(bounce, { toValue: depth, duration: 280, easing: easeInOut, useNativeDriver: true }),
+        Animated.timing(bounce, { toValue: 0, duration: 320, easing: easeInOut, useNativeDriver: true }),
+        Animated.delay(150),
+      ]);
+    const run = Animated.sequence([
+      Animated.delay(1500),
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.delay(300),
+          oneBounce(),
+          oneBounce(),
+          oneBounce(),
+          Animated.delay(400),
+        ]),
+      ]),
+      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]);
+    const showTimer = setTimeout(() => setShown(true), 1500);
+    run.start(({ finished }) => {
+      if (finished) setShown(false);
+    });
+    return () => {
+      clearTimeout(showTimer);
+      run.stop();
+    };
+  }, [props.triggerKey, opacity, bounce]);
+
+  if (!shown || !props.available) return null;
+  return (
+    <Animated.View
+      style={[props.style, { opacity, transform: [{ translateY: bounce }] }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Scroll for more"
+        onPress={() => {
+          setShown(false);
+          props.onPress();
+        }}
+        style={[styles.scrollIndicator, { backgroundColor: theme.content.buttonPrimaryAccent }]}
+      >
+        <FcIcon name="arrowDown" size={20} tint={theme.content.buttonPrimaryForeground} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 /** Listen (TTS) pill under the latest answer. */
 export function ListenButton(props: {
   label: string;
@@ -362,6 +444,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
+  },
+  scrollIndicator: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listen: {
     flexDirection: 'row',

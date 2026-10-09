@@ -9,6 +9,7 @@ import {
   Animated,
   Easing,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -156,15 +157,184 @@ function useCyclingLabel(message: string | null | undefined, messages?: string[]
   return message ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// LogoSpinnerHorizontal ring — Material3 1.4.0 indeterminate CircularProgressIndicator, from Views
+// ---------------------------------------------------------------------------
+
+/** Material3 1.4.0 (compose-bom 2026.02.01) indeterminate cycle. */
+const M3_CYCLE_MS = 6000;
+const M3_ARC_MIN = 0.1;
+const M3_ARC_MAX = 0.87;
+
+/**
+ * Sweep fraction over one cycle: 10% → 87% linearly over the first half, then back to 10% with
+ * cubic-bezier(0.2, 0, 0, 1) over the second (the same curve the web port's keyframes use).
+ * Sampled into an interpolation table so a single native-driven value drives everything.
+ */
+const M3_SWEEP_TABLE: { input: number[]; output: number[] } = (() => {
+  const ease = Easing.bezier(0.2, 0, 0, 1);
+  const input: number[] = [0, 0.5];
+  const output: number[] = [M3_ARC_MIN, M3_ARC_MAX];
+  const steps = 24;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    input.push(0.5 + t * 0.5);
+    output.push(M3_ARC_MAX - (M3_ARC_MAX - M3_ARC_MIN) * ease(t));
+  }
+  return { input, output };
+})();
+
+/**
+ * Global rotation over one cycle: 1080° linear plus a +90° step (300ms) at 0 / 1500 / 3000 /
+ * 4500ms — 1440° per cycle, so the loop restart is seamless.
+ */
+const M3_ROTATION_INPUT = [0, 0.05, 0.25, 0.3, 0.5, 0.55, 0.75, 0.8, 1];
+const M3_ROTATION_OUTPUT = [0, 144, 360, 504, 720, 864, 1080, 1224, 1440].map((d) => `${d}deg`);
+
+/**
+ * The indeterminate ring with ROUND caps, built from plain Views (this package has no SVG):
+ * - two half-width clip windows, each holding a full ring whose top + right borders are the only
+ *   coloured sides (an arc covering [-45°, 135°] from 12 o'clock); rotating each ring fills its
+ *   half up to the sweep angle θ — right half [0, min(θ, 180)], left half [180, θ];
+ * - a stroke-wide dot at 0° and another at θ for the round caps;
+ * - the whole assembly turning with the M3 global rotation.
+ * Every animated property is a transform/opacity, so it runs on the native driver.
+ */
+function MaterialIndeterminateRing(props: {
+  size: number;
+  strokeWidth: number;
+  color: string;
+}): React.ReactElement {
+  const { size, strokeWidth: w, color } = props;
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: M3_CYCLE_MS,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [progress]);
+
+  const sweep = progress.interpolate({
+    inputRange: M3_SWEEP_TABLE.input,
+    outputRange: M3_SWEEP_TABLE.output,
+  });
+  const rightRotate = sweep.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['-135deg', '45deg', '45deg'],
+  });
+  const leftRotate = sweep.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['45deg', '45deg', '225deg'],
+  });
+  const endCapRotate = sweep.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const globalRotate = progress.interpolate({
+    inputRange: M3_ROTATION_INPUT,
+    outputRange: M3_ROTATION_OUTPUT,
+  });
+
+  const half = size / 2;
+  const ring = {
+    position: 'absolute' as const,
+    top: 0,
+    width: size,
+    height: size,
+    borderRadius: half,
+    borderWidth: w,
+    borderColor: 'transparent',
+    borderTopColor: color,
+    borderRightColor: color,
+  };
+  const cap = {
+    position: 'absolute' as const,
+    top: 0,
+    left: half - w / 2,
+    width: w,
+    height: w,
+    borderRadius: w / 2,
+    backgroundColor: color,
+  };
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{ width: size, height: size, transform: [{ rotate: globalRotate }] }}
+    >
+      <View style={{ position: 'absolute', top: 0, left: half, width: half, height: size, overflow: 'hidden' }}>
+        <Animated.View style={[ring, { left: -half, transform: [{ rotate: rightRotate }] }]} />
+      </View>
+      <View style={{ position: 'absolute', top: 0, left: 0, width: half, height: size, overflow: 'hidden' }}>
+        <Animated.View style={[ring, { left: 0, transform: [{ rotate: leftRotate }] }]} />
+      </View>
+      <View style={StyleSheet.absoluteFill}>
+        <View style={cap} />
+      </View>
+      <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: endCapRotate }] }]}>
+        <View style={cap} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+/**
+ * LogoSpinnerHorizontal.kt `LogoWithSpinner`: a 40dp Green500 ring (stroke 2.5, round caps)
+ * around a 23dp Green500 mark that turns 360° every 3s (600ms EaseOut).
+ */
+function LogoWithMaterialSpinner(): React.ReactElement {
+  // The app hard-codes Green500; `content.borderActive` IS Green500 in day and night, and keeps a
+  // host brand override (high-contrast / custom accent) working on every LogoSpinner call site.
+  const color = useTheme().content.borderActive;
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(3000),
+        Animated.timing(turn, {
+          toValue: 1,
+          duration: 600,
+          // Compose EaseOut = CubicBezierEasing(0, 0, 0.58, 1).
+          easing: Easing.bezier(0, 0, 0.58, 1),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [turn]);
+  const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={StyleSheet.absoluteFill}>
+        <MaterialIndeterminateRing size={40} strokeWidth={2.5} color={color} />
+      </View>
+      <Animated.View style={{ transform: [{ rotate }] }}>
+        <LogoMark size={23} color={color} />
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * LogoSpinnerHorizontal.kt (Loading): ring + mark, 12dp, then a labelMedium ShimmerText.
+ *
+ * `style` overrides the row: the app's Row has no padding and is start-aligned; the 16dp padding
+ * + centring kept here is what the non-chat call sites (history, drawer, legal…) were laid out
+ * against, so chat passes {@link INLINE_SPINNER_STYLE} instead of moving those screens.
+ */
 export function LogoSpinner(props: {
   message?: string | null;
   messages?: string[];
+  style?: StyleProp<ViewStyle>;
 }): React.ReactElement {
   const theme = useTheme();
   const label = useCyclingLabel(props.message, props.messages);
   return (
-    <View style={styles.spinnerRow}>
-      <LogoWithSpinner spinnerSize={40} logoSize={23} />
+    <View style={[styles.spinnerRow, props.style]}>
+      <LogoWithMaterialSpinner />
       {label ? (
         // LogoSpinnerHorizontal.kt LabelTextMedium: a labelMedium ShimmerText in
         // foregroundPrimary, highlight = ShimmerText's default borderActive.
@@ -179,6 +349,9 @@ export function LogoSpinner(props: {
     </View>
   );
 }
+
+/** The app's bare LogoSpinnerHorizontal Row: no padding, start-aligned. */
+export const INLINE_SPINNER_STYLE: ViewStyle = { padding: 0, justifyContent: 'flex-start' };
 
 export function LogoSpinnerVertical(props: {
   message?: string | null;
@@ -207,7 +380,11 @@ export function LogoSpinnerVertical(props: {
 // App bars — brand green surface + yellow glow + 42dp chip buttons
 // ---------------------------------------------------------------------------
 
-export type AppBarNavIcon = 'menu' | 'back' | 'close' | 'none';
+/**
+ * `homeBack` is LogoAppBar's `leftPainter = R.drawable.leftbutton` (chat entered from Home): a
+ * self-contained 42dp #08361B disc with a stroked white arrow, drawn by {@link LeftButtonGlyph}.
+ */
+export type AppBarNavIcon = 'menu' | 'back' | 'close' | 'none' | 'homeBack';
 
 function navIconName(icon: AppBarNavIcon): IconName | null {
   switch (icon) {
@@ -218,6 +395,7 @@ function navIconName(icon: AppBarNavIcon): IconName | null {
     case 'close':
       return 'close';
     case 'none':
+    case 'homeBack':
       return null;
   }
 }
@@ -361,6 +539,45 @@ export function HomeAppBar(props: {
   );
 }
 
+/**
+ * res/drawable/leftbutton.xml, drawn with Views: a 42dp #08361B circle and the white arrow
+ * `M27.708 21.261H14.292 M21 27.97L14.292 21.261L21 14.553` (42×42 viewport) stroked 2dp with
+ * round caps/joins. Each segment is a bar of length L + 2 (the round caps add half the stroke at
+ * each end) centred on the segment's midpoint and rotated to its angle, with radius 1.
+ */
+function LeftButtonGlyph(): React.ReactElement {
+  // #08361B is Green800 = `brand.surfaceSecondary`; the token keeps host theming working.
+  const disc = useTheme().brand.surfaceSecondary;
+  const stroke = 2;
+  const bar = (cx: number, cy: number, length: number, angleDeg: number) => {
+    const l = length + stroke;
+    return (
+      <View
+        style={{
+          position: 'absolute',
+          left: cx - l / 2,
+          top: cy - stroke / 2,
+          width: l,
+          height: stroke,
+          borderRadius: stroke / 2,
+          backgroundColor: '#FFFFFF',
+          transform: [{ rotate: `${angleDeg}deg` }],
+        }}
+      />
+    );
+  };
+  // Shaft (27.708,21.261)→(14.292,21.261); heads (21,27.97)→(14.292,21.261) and
+  // (14.292,21.261)→(21,14.553), each 9.487 long at ±45°.
+  const head = Math.hypot(21 - 14.292, 27.97 - 21.261);
+  return (
+    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: disc }}>
+      {bar((27.708 + 14.292) / 2, 21.261, 27.708 - 14.292, 0)}
+      {bar((21 + 14.292) / 2, (27.97 + 21.261) / 2, head, 45)}
+      {bar((14.292 + 21) / 2, (21.261 + 14.553) / 2, head, -45)}
+    </View>
+  );
+}
+
 export function LogoAppBar(props: {
   navIcon: AppBarNavIcon;
   onNavPress?: () => void;
@@ -369,9 +586,35 @@ export function LogoAppBar(props: {
   const theme = useTheme();
   const brand = theme.brand;
   const icon = navIconName(props.navIcon);
+  // LogoAppBar.kt: the centre mark fades in over 600ms EaseOut and out over 300ms EaseOut, and is
+  // only composed while its alpha is above zero.
+  const logoAlpha = useRef(new Animated.Value(0)).current;
+  const [logoMounted, setLogoMounted] = useState(props.showLogo);
+  useEffect(() => {
+    if (props.showLogo) setLogoMounted(true);
+    const anim = Animated.timing(logoAlpha, {
+      toValue: props.showLogo ? 1 : 0,
+      duration: props.showLogo ? 600 : 300,
+      easing: Easing.bezier(0, 0, 0.58, 1),
+      useNativeDriver: true,
+    });
+    anim.start(({ finished }) => {
+      if (finished && !props.showLogo) setLogoMounted(false);
+    });
+    return () => anim.stop();
+  }, [props.showLogo, logoAlpha]);
   return (
     <AppBarShell>
-      {icon ? (
+      {props.navIcon === 'homeBack' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="back"
+          onPress={props.onNavPress}
+          hitSlop={4}
+        >
+          <LeftButtonGlyph />
+        </Pressable>
+      ) : icon ? (
         <ActionButton
           onPress={props.onNavPress ?? (() => undefined)}
           icon={icon}
@@ -382,7 +625,11 @@ export function LogoAppBar(props: {
         <View style={{ width: 42 }} />
       )}
       <View style={{ flex: 1, alignItems: 'center' }}>
-        {props.showLogo ? <LogoMark size={36} color={brand.foregroundPrimary} /> : null}
+        {logoMounted ? (
+          <Animated.View style={{ opacity: logoAlpha }}>
+            <LogoMark size={36} color={brand.foregroundPrimary} />
+          </Animated.View>
+        ) : null}
       </View>
       <View style={{ width: 42 }} />
     </AppBarShell>

@@ -7,7 +7,6 @@
 "auth_send_sms",
 "auth_send_whatsapp",
 "chat_clarification_required",
-"chat_clarification_suggestions",
 "chat_failed_to_send",
 "chat_loading",
 "chat_loading_older",
