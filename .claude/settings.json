@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(railway up*)",
+      "Bash(railway deploy*)",
+      "Bash(railway redeploy*)",
+      "Bash(railway down*)",
+      "Bash(npx railway up*)",
+      "Bash(npx @railway/cli up*)",
+      "Bash(vercel deploy*)",
+      "Bash(vercel --prod*)",
+      "Bash(vercel * --prod*)",
+      "Bash(vercel redeploy*)",
+      "Bash(vercel promote*)",
+      "Bash(npx vercel deploy*)",
+      "Bash(npx vercel --prod*)",
+      "Bash(npx vercel * --prod*)"
+    ]
+  }
+}

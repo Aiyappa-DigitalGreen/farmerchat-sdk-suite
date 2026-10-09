@@ -74,3 +74,14 @@ If an environment prevents a check, say so explicitly in the platform README and
 ## 7. Keeping docs up to date
 
 Every substantive code change ends with: docs/01–03 still accurate? docs/04 updated? platform README updated? If any answer is no, the change is not finished.
+
+## 8. Deployment — GitHub CI/CD only
+
+- The website (the web widget demo, and any site in this repo) is deployed **exclusively by GitHub
+  CI/CD**: a push or merge to the configured branch triggers the pipeline, which deploys to Railway.
+- Claude Code must **never deploy directly** — no `railway up` / `railway deploy` / `railway redeploy`,
+  no `vercel --prod` / `vercel deploy` / `vercel promote`. These are denied in `.claude/settings.json`.
+- To ship a change: commit, push, and let the pipeline run; then check the pipeline's status
+  (`gh run list` / `gh run watch`) and the live site. If the pipeline fails, fix it in the repo.
+- The Railway CLI may be used read-only (`railway status`, `railway logs`, `railway variables`), and
+  for one-time project setup only with the user's explicit go-ahead.
