@@ -208,6 +208,16 @@ const css = `
 .fcsdk-root .fc-t-labelMedium { font: var(--fc-t-labelMedium); }
 .fcsdk-root .fc-t-labelSmall { font: var(--fc-t-labelSmall); }
 .fcsdk-root .fc-t-caption { font: var(--fc-t-caption); }
+/* Android text is narrower than Chrome's for the SAME Roboto file: at 420dpi (the rs_qa
+   reference, 2.625x) Android lays glyphs out on hinted advances. Measured on matched app/web
+   strings (uiautomator bounds vs DOM rects, 2026-10-09): weight 400 is 98.4-98.7% of Chrome's
+   width, 600 is 99.3-99.6%, 700 is 99.0%. Without this, lines that just fit on the device wrap
+   on the web (e.g. a 255.6dp question in the 258dp bubble). Like the line-height trim below, it
+   emulates the reference device's rasterizer, not a design value. */
+.fcsdk-root { letter-spacing: -0.0066em; }
+.fcsdk-root .fc-t-labelLarge, .fcsdk-root .fc-t-labelMedium, .fcsdk-root .fc-t-labelSmall { letter-spacing: -0.0026em; }
+.fcsdk-root .fc-t-displayLarge, .fcsdk-root .fc-t-displayMedium, .fcsdk-root .fc-t-displaySmall,
+.fcsdk-root .fc-t-titleLarge, .fcsdk-root .fc-t-titleMedium, .fcsdk-root .fc-t-titleSmall { letter-spacing: -0.0052em; }
 /* Compose's default LineHeightStyle (Alignment.Proportional, Trim.Both) trims the extra
    leading above the first line and below the last: a text block is natural + (n-1)*lineHeight,
    where CSS gives n*lineHeight. CSS splits leading evenly, so pulling (L - natural)/2 off both
