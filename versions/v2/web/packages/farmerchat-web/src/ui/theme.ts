@@ -846,24 +846,25 @@ const css = `
    animateDpAsState(tween(250)). */
 .fcsdk-screen--composer { position: relative; }
 .fcsdk-composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 14;
-  transition: transform 300ms ease; pointer-events: none; }
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
 .fcsdk-composer > * { pointer-events: auto; }
 /* InputComposer.kt: the floating wrapper paints an opaque surfacePrimary slab from the sheet's
    top edge to the bottom, so no feed content shows in the gutters or below the pill. */
 .fcsdk-composer--floating { padding-bottom: max(var(--fc-inset-bottom), 20px); background: var(--fc-c-surface-primary); }
 .fcsdk-composer--anchored { padding-bottom: var(--fc-inset-bottom); background: var(--fc-bg); }
-.fcsdk-composer--hidden { transform: translateY(160%); }
+/* InputComposer.kt: offset(y = 400.dp), tween(300). */
+.fcsdk-composer--hidden { transform: translateY(400px); }
 .fcsdk-composer--hidden > * { pointer-events: none; }
 .fcsdk-composer-sheet { background: var(--fc-c-brand-surface-primary);
-  transition: padding 250ms ease, border-radius 250ms ease; }
+  transition: padding 250ms cubic-bezier(0.4, 0, 0.2, 1), border-radius 250ms cubic-bezier(0.4, 0, 0.2, 1); }
 .fcsdk-composer-row { display: flex; align-items: flex-end; }
 .fcsdk-composer-btn { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%; background: #08361B; line-height: 1; padding: 0;
-  transition: width 250ms ease, height 250ms ease, font-size 250ms ease; }
+  transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1), height 250ms cubic-bezier(0.4, 0, 0.2, 1), font-size 250ms cubic-bezier(0.4, 0, 0.2, 1); }
 .fcsdk-composer-field { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center; cursor: text;
   background: var(--fc-c-surface-secondary);
-  transition: background 220ms ease, min-height 250ms ease; }
+  transition: background 220ms cubic-bezier(0.4, 0, 0.2, 1), min-height 250ms cubic-bezier(0.4, 0, 0.2, 1); }
 .fcsdk-composer-field--active { background: var(--fc-c-reading-tertiary); }
 .fcsdk-composer-thumbs, .fcsdk-composer-fieldrow { position: relative; z-index: 2; }
 .fcsdk-composer-thumbs { display: flex; gap: 5px; padding: 10px 0; }
@@ -877,23 +878,26 @@ const css = `
   border: none; outline: none; resize: none; background: transparent; color: var(--fc-c-fg-primary);
   caret-color: var(--fc-c-fg-primary); font: var(--fc-t-bodyMedium); padding: 0; overflow-y: auto; }
 .fcsdk-composer-placeholder { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
-  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: var(--fc-c-placeholder); font: var(--fc-t-bodyMedium); transition: color 220ms ease; }
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: clip;
+  color: var(--fc-c-placeholder); font: var(--fc-t-bodyMedium); transition: color 220ms cubic-bezier(0.4, 0, 0.2, 1); }
 .fcsdk-composer-field:not(.fcsdk-composer-field--active) .fcsdk-composer-placeholder { color: var(--fc-c-fg-primary); }
 .fcsdk-composer-placeholder--in { animation: fcsdk-ph-in 400ms ease both; }
 .fcsdk-composer-placeholder--out { animation: fcsdk-ph-out 400ms ease both; }
-/* Placeholder shimmer sweep — Compose ShimmerText, 2250ms, idle only. */
+/* Placeholder shimmer sweep — Compose ShimmerText.kt, 2250ms linear, idle only. The band is 1.2x
+   the text width (ramp 0-35%, plateau 35-65%, ramp 65-100%) and travels from fully off the left
+   edge to fully off the right. Tile = 3.2W laid out base [0,W] band [W,2.2W] base [2.2W,3.2W],
+   no repeat, so position 100% -> 0% sweeps the band across once with no wrap-around copy. */
 .fcsdk-composer-placeholder--shimmer {
-  background-image: linear-gradient(100deg, currentColor 0%, currentColor 32.5%,
-    var(--fc-c-border-active) 41.25%, var(--fc-c-border-active) 48.75%, currentColor 57.5%, currentColor 100%);
-  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
-  color: transparent; -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(95deg, currentColor 0%, currentColor 31.25%,
+    var(--fc-c-border-active) 44.375%, var(--fc-c-border-active) 55.625%, currentColor 68.75%, currentColor 100%);
+  background-size: 320% 100%; background-repeat: no-repeat; -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
   animation: fcsdk-ph-shimmer 2250ms linear infinite; }
 .fcsdk-root[data-fc-theme="day"] .fcsdk-composer-placeholder--shimmer,
 .fcsdk-root[data-fc-theme="night"] .fcsdk-composer-placeholder--shimmer { -webkit-text-fill-color: transparent; }
 @keyframes fcsdk-ph-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fcsdk-ph-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes fcsdk-ph-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes fcsdk-ph-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
 /* Ambient "aura": a conic gradient rotating behind the field, with an inset panel of the
    field's own background drawn over it so only a ~2.4px ring shows. Home-only, idle-only.
    Colours are InputComposer.kt AuraColors; 7s rotation; the opacity keyframes replay the
@@ -972,18 +976,23 @@ const css = `
    comments name the source.
    =========================================================================== */
 
-/* M3 indeterminate CircularProgressIndicator: 1332ms rotation, arc 10%..75% sweep. */
-.fcsdk-c-progress { display: block; flex: 0 0 auto; animation: fcsdk-c-rotate 1568ms linear infinite; }
+/* Material3 1.4.0 (compose-bom 2026.02.01) indeterminate CircularProgressIndicator, round caps:
+   one 6000ms cycle — the arc grows 10% -> 87% linearly over 3000ms, then shrinks back with
+   cubic-bezier(.2,0,0,1); the whole ring turns 1080deg linearly plus a +90deg step (300ms) at
+   0/1500/3000/4500ms = 1440deg per cycle. Most frames read as a near-full ring. */
+.fcsdk-c-progress { display: block; flex: 0 0 auto; animation: fcsdk-c-rotate 6000ms linear infinite; }
 .fcsdk-c-progress circle {
   stroke-dasharray: calc(var(--fc-c-circ) * 1px) calc(var(--fc-c-circ) * 1px);
-  transform-origin: 50% 50%;
-  animation: fcsdk-c-arc 1333ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: fcsdk-c-arc 6000ms infinite;
 }
-@keyframes fcsdk-c-rotate { to { transform: rotate(360deg); } }
+@keyframes fcsdk-c-rotate {
+  0% { transform: rotate(0deg); } 5% { transform: rotate(144deg); } 25% { transform: rotate(360deg); }
+  30% { transform: rotate(504deg); } 50% { transform: rotate(720deg); } 55% { transform: rotate(864deg); }
+  75% { transform: rotate(1080deg); } 80% { transform: rotate(1224deg); } 100% { transform: rotate(1440deg); } }
 @keyframes fcsdk-c-arc {
-  0%   { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); transform: rotate(0deg); }
-  50%  { stroke-dashoffset: calc(var(--fc-c-circ) * 0.25px); transform: rotate(45deg); }
-  100% { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); transform: rotate(360deg); }
+  0%   { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); animation-timing-function: linear; }
+  50%  { stroke-dashoffset: calc(var(--fc-c-circ) * 0.13px); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  100% { stroke-dashoffset: calc(var(--fc-c-circ) * 0.9px); }
 }
 
 /* Buttons.kt PrimaryButton */
@@ -1111,6 +1120,13 @@ const css = `
 }
 .fcsdk-c-appbar > :not(.fcsdk-c-appbar-glow) { position: relative; }
 .fcsdk-c-appbar-glow { position: absolute; left: 0; top: 0; width: 100%; height: 80px; pointer-events: none; }
+/* LogoAppBar.kt: the glow's 80dp is clamped by the bar's own box (64 + status-bar inset), so it
+   never paints below the bar; the bar takes the status-bar inset as top padding. */
+.fcsdk-c-chat > .fcsdk-c-appbar { overflow: hidden; flex-basis: calc(64px + var(--fc-inset-top, 0px));
+  height: calc(64px + var(--fc-inset-top, 0px)); padding-top: var(--fc-inset-top, 0px); }
+.fcsdk-c-appbar-leftbutton { flex: 0 0 42px; width: 42px; height: 42px; margin: 0; padding: 0; border: none;
+  background: none; border-radius: 50%; cursor: pointer; }
+.fcsdk-c-appbar-leftbutton > svg { display: block; }
 .fcsdk-c-appbar-title { flex: 1; min-width: 0; text-align: center; color: var(--fc-c-brand-fg-primary); }
 .fcsdk-c-appbar-spacer { flex: 0 0 42px; width: 42px; height: 42px; }
 
@@ -1155,11 +1171,14 @@ const css = `
   background: var(--fc-c-reading-primary); }
 
 .fcsdk-c-logospinner--h { flex-direction: row; gap: 12px; }
-/* ShimmerText.kt: a 1200ms highlight sweep across the label. */
+/* ShimmerText.kt as LogoSpinnerHorizontal uses it: base foregroundPrimary, highlight borderActive
+   (#00C950), a 1.2W band (ramp 0-35%, plateau 35-65%, ramp 65-100%) swept from fully off the left
+   to fully off the right every 1200ms, linear. Same tile geometry as the composer placeholder. */
 .fcsdk-c-shimmer {
-  color: transparent; -webkit-background-clip: text; background-clip: text;
-  background-image: linear-gradient(90deg, var(--fc-c-fg-secondary) 0%, var(--fc-c-fg-secondary) 35%, var(--fc-c-shine) 50%, var(--fc-c-fg-secondary) 65%, var(--fc-c-fg-secondary) 100%);
-  background-size: 300% 100%; animation: fcsdk-c-shimmer 1200ms linear infinite;
+  color: transparent; -webkit-text-fill-color: transparent; -webkit-background-clip: text; background-clip: text;
+  background-image: linear-gradient(95deg, var(--fc-c-fg-primary) 0%, var(--fc-c-fg-primary) 31.25%,
+    var(--fc-c-border-active) 44.375%, var(--fc-c-border-active) 55.625%, var(--fc-c-fg-primary) 68.75%, var(--fc-c-fg-primary) 100%);
+  background-size: 320% 100%; background-repeat: no-repeat; animation: fcsdk-c-shimmer 1200ms linear infinite;
 }
 @keyframes fcsdk-c-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .fcsdk-c-btn-wrap { width: auto; }
@@ -1277,14 +1296,30 @@ const css = `
 .fcsdk-c-chat { position: relative; background: var(--fc-c-reading-primary); }
 .fcsdk-c-appbar-logo { flex: 1; display: flex; justify-content: center; transition: opacity 600ms cubic-bezier(0, 0, .58, 1); }
 .fcsdk-c-chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.fcsdk-c-chat-scroll { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 16px 16px 0; }
+/* ChatThreadContent.kt: LazyColumn padding(horizontal = 20.dp), contentPadding top 20, spacedBy 16. */
+.fcsdk-c-chat-scroll { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 20px 20px 0; }
 .fcsdk-c-chat-scroll > * { flex: 0 0 auto; }
 .fcsdk-c-row-end { display: flex; justify-content: flex-end; }
 .fcsdk-c-ai { display: flex; flex-direction: column; gap: 12px; color: var(--fc-c-fg-primary); }
-.fcsdk-c-settle { display: flex; flex-direction: column; gap: 12px; animation: fcsdk-c-settle 350ms ease-out both; }
-@keyframes fcsdk-c-settle { from { opacity: 0; transform: translateY(25%); } to { opacity: 1; transform: none; } }
+/* ChatResponseActions.kt Column(padding top 24) — 12 here + the .fcsdk-c-ai gap of 12. Its
+   AnimatedVisibility enter is fadeIn() only (no slide). */
+.fcsdk-c-settle { display: flex; flex-direction: column; margin-top: 12px; animation: fcsdk-c-settle 350ms ease-out both; }
+@keyframes fcsdk-c-settle { from { opacity: 0; } to { opacity: 1; } }
+/* Read full advice: attentionWobble(delayMs = 1800) on a full-width button. */
+.fcsdk-c-wobble--block { display: block; animation-delay: 1800ms; }
 .fcsdk-c-fadein300 { animation: fcsdk-c-fadein 300ms ease both; }
-.fcsdk-c-inlineerror { display: flex; flex-direction: column; gap: 10px; }
+/* InlineErrorContent.kt — Row(fillMaxWidth, padding start 4, CenterVertically). */
+.fcsdk-c-inlineerror { display: flex; align-items: center; width: 100%; box-sizing: border-box; padding-left: 4px; }
+.fcsdk-c-inlineerror-icon { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; background: var(--fc-c-feedback-fail); }
+.fcsdk-c-inlineerror-text { flex: 1 1 auto; min-width: 0; margin: 0 8px 0 12px; color: var(--fc-c-fg-primary); }
+.fcsdk-c-inlineerror-retry { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; margin: 0;
+  padding: 12px 10px; border: none; border-radius: 12px; background: var(--fc-c-surface-tertiary);
+  color: var(--fc-c-fg-primary); cursor: pointer; }
+/* ChatThreadContent.kt: the user item is a Column(spacedBy 12) — bubble row (start padding 64, End)
+   then the inline error of a failed question. Bubbles fade in over 500ms. */
+.fcsdk-c-usercol { display: flex; flex-direction: column; gap: 12px; animation: fcsdk-c-fadein 500ms ease both; }
+.fcsdk-c-row-user { padding-left: 64px; }
 .fcsdk-c-btn-secondary--reading { background: var(--fc-c-reading-secondary); }
 /* UserChatBubble.kt */
 .fcsdk-root[data-fc-theme] { --fc-bubble-user: var(--fc-c-reading-secondary); }
@@ -1310,9 +1345,9 @@ const css = `
 .fcsdk-c-wave { display: inline-flex; align-items: center; justify-content: space-between; width: 54px; height: 26px; }
 .fcsdk-c-wave span { width: 2px; border-radius: 8px; background: var(--fc-c-button-accent); transition: height 120ms cubic-bezier(.4, 0, .2, 1); }
 /* FollowUpSection / SuggestedCard */
-.fcsdk-c-followups { display: flex; flex-direction: column; gap: 10px; }
-.fcsdk-c-followups-title { display: flex; align-items: center; gap: 8px; color: var(--fc-c-fg-secondary); }
-.fcsdk-c-followups-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fc-c-brand-fg-secondary); flex: 0 0 auto; }
+.fcsdk-c-followups { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; }
+.fcsdk-c-followups-title { color: var(--fc-c-fg-primary); }
+.fcsdk-c-followups-list { display: flex; flex-direction: column; gap: 8px; }
 .fcsdk-c-suggested { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; margin: 0; padding: 12px 10px 12px 16px;
   border: none; border-radius: 16px; background: var(--fc-c-surface-secondary); text-align: left;
   box-shadow: inset 0 0 0 1px rgba(0, 201, 80, 0.35); }
@@ -1322,30 +1357,39 @@ const css = `
 /* Chip.kt */
 .fcsdk-c-chip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 14px 10px 14px 14px; border: none;
   border-radius: 12px; text-align: left; background: var(--fc-c-reading-secondary); color: var(--fc-c-fg-primary); }
-.fcsdk-c-chip-label { flex: 1; min-width: 0; font-weight: 700; }
+/* Chip.kt: labelMedium (600); Bold only when selected. */
+.fcsdk-c-chip-label { flex: 1; min-width: 0; }
+.fcsdk-c-chip--selected .fcsdk-c-chip-label { font-weight: 700; }
 .fcsdk-c-chip-badge { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: var(--fc-c-button-accent); color: #FFFFFF; }
 .fcsdk-c-chip-chevron { color: var(--fc-c-fg-secondary); }
 .fcsdk-c-chip--agentic { background: var(--fc-c-surface-active); }
 .fcsdk-c-chip--agentic .fcsdk-c-chip-chevron { color: var(--fc-c-button-accent); }
 .fcsdk-c-chip--escalate { background: var(--fc-c-feedback-fail); color: var(--fc-c-button-fg); }
-.fcsdk-c-chip--escalate .fcsdk-c-chip-badge { background: rgba(255, 255, 255, 0.22); }
+/* Chip.kt escalate: white badge with a red number; selected = Red500_8 fill, red badge. */
+.fcsdk-c-chip--escalate .fcsdk-c-chip-badge { background: #FFFFFF; color: #E5533D; }
 .fcsdk-c-chip--escalate .fcsdk-c-chip-chevron { color: #FFFFFF; }
 .fcsdk-c-chip--selected { background: var(--fc-c-surface-active); color: var(--fc-c-fg-primary); box-shadow: inset 0 0 0 1.5px var(--fc-c-button-accent); }
-.fcsdk-c-chip--escalate.fcsdk-c-chip--selected { background: rgba(229, 83, 61, 0.12); box-shadow: inset 0 0 0 1.5px #E5533D; }
+.fcsdk-c-chip--escalate.fcsdk-c-chip--selected { background: rgba(229, 83, 61, 0.08); box-shadow: inset 0 0 0 1.5px #E5533D; }
+.fcsdk-c-chip--escalate.fcsdk-c-chip--selected .fcsdk-c-chip-badge { background: #E5533D; color: #FFFFFF; }
 .fcsdk-c-chip--disabled { background: var(--fc-c-surface-tertiary); color: var(--fc-c-fg-secondary); box-shadow: inset 0 0 0 0.5px var(--fc-c-border-default); }
 .fcsdk-c-chip--disabled .fcsdk-c-chip-badge { background: var(--fc-c-fg-secondary); color: var(--fc-c-surface-tertiary); }
 .fcsdk-c-chip:disabled { cursor: default; }
 /* AlignmentSurface.kt */
 .fcsdk-c-align { display: flex; flex-direction: column; }
-.fcsdk-c-align--escalate { padding: 16px; border-radius: 12px; background: rgba(229, 83, 61, 0.08); box-shadow: inset 0 0 0 1px rgba(229, 83, 61, 0.16); }
+.fcsdk-c-align--escalate { padding: 16px; border-radius: 16px; background: rgba(229, 83, 61, 0.08); box-shadow: inset 0 0 0 1px rgba(229, 83, 61, 0.16); }
 .fcsdk-c-align-chips { display: flex; flex-direction: column; gap: 8px; }
-.fcsdk-c-align-hatch { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+/* Capability prompts: header + chips in a 16-radius card, 1dp borderDefault, padding 16. */
+.fcsdk-c-align-card { padding: 16px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--fc-c-border-default); }
+.fcsdk-c-align-hatch { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
 .fcsdk-c-align-hatch-action { margin: 0; padding: 0; border: none; background: none; font-weight: 600; color: var(--fc-c-button-accent); }
 /* StreamErrorCard.kt */
-.fcsdk-c-streamerror { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 16px; border-radius: 12px;
+/* 16dp above the card: the .fcsdk-c-ai gap (12) + 4. */
+.fcsdk-c-streamerror { display: flex; flex-direction: column; gap: 16px; margin-top: 4px; padding: 16px; border-radius: 12px;
   background: rgba(229, 83, 61, 0.08); box-shadow: inset 0 0 0 1px rgba(229, 83, 61, 0.16); }
-.fcsdk-c-streamerror-head { display: flex; align-items: center; gap: 10px; color: var(--fc-c-fg-primary); }
+.fcsdk-c-streamerror-head { display: flex; align-items: center; gap: 12px; color: var(--fc-c-fg-primary); }
+.fcsdk-c-streamerror-retry { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 0;
+  padding: 14px 0; border: none; border-radius: 12px; background: var(--fc-c-button-surface); color: var(--fc-c-button-fg); cursor: pointer; }
 /* Tips.kt */
 .fcsdk-c-tips { position: absolute; left: 0; right: 0; bottom: 0; z-index: 12; pointer-events: none; }
 .fcsdk-c-tips-fade { height: 24px; background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--fc-c-reading-primary)); }
@@ -1365,16 +1409,19 @@ const css = `
 .fcsdk-c-tips-dots { display: flex; gap: 10px; margin-top: 14px; }
 .fcsdk-c-tips-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--fc-c-surface-active); }
 .fcsdk-c-tips-dot--active { width: 24px; overflow: hidden; }
-.fcsdk-c-tips-dot--active span { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--fc-c-feedback-success);
+.fcsdk-c-tips-dot--active span { display: block; height: 100%; width: 0; background: var(--fc-c-feedback-success);
   animation: fcsdk-c-tipprogress 8000ms linear forwards; }
 @keyframes fcsdk-c-tipprogress { to { width: 100%; } }
 /* ScrollIndicator (Feed.kt) */
-.fcsdk-c-scrollind { position: absolute; left: 50%; bottom: calc(12px + 92px); z-index: 13; width: 40px; height: 40px; margin: 0 0 0 -20px;
-  padding: 0; border: none; border-radius: 50%; background: var(--fc-c-reading-secondary); display: flex; align-items: center; justify-content: center;
-  animation: fcsdk-c-fadein 200ms ease both, fcsdk-c-bounce 750ms ease-in-out 500ms 3; }
-@keyframes fcsdk-c-bounce { 0% { transform: translateY(0); } 37% { transform: translateY(14px); } 80% { transform: translateY(0); } 100% { transform: translateY(0); } }
+.fcsdk-c-scrollind { position: absolute; left: 50%; bottom: 108px; z-index: 13; width: 40px; height: 40px; margin: 0 0 0 -20px;
+  padding: 0; border: none; border-radius: 50%; background: var(--fc-c-button-accent); display: flex; align-items: center; justify-content: center;
+  animation: fcsdk-c-fadein 200ms ease both, fcsdk-c-bounce 750ms ease-in-out 300ms 3; }
+.fcsdk-c-scrollind--hiding { animation: fcsdk-c-fadeout 300ms ease forwards; }
+@keyframes fcsdk-c-fadeout { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fcsdk-c-bounce { 0% { transform: translateY(0); } 37% { transform: translateY(var(--fc-c-bounce, 14px)); } 80% { transform: translateY(0); } 100% { transform: translateY(0); } }
 /* ---------------------------------------------------------------- MarkdownText.kt */
 .fcsdk-md { font: var(--fc-t-bodyMedium); color: inherit; }
+.fcsdk-md strong { font-weight: 700; }
 .fcsdk-md h1, .fcsdk-md h2, .fcsdk-md h3 { margin: 0; line-height: inherit; }
 .fcsdk-md ul, .fcsdk-md ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .fcsdk-md li + li { margin-top: 0; }

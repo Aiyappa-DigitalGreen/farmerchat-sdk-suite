@@ -14,9 +14,10 @@
 
 import { useEffect, useState } from 'react';
 import { useLabel } from '../context';
-import { LogoSpinner, PrimaryButton } from './common';
+import { LogoSpinner } from './common';
 import { FcIcon } from './FcIcon';
-import { Chip } from './chatParts';
+import { Chip, ListenButton } from './chatParts';
+import { MarkdownText } from './markdown';
 import type { AlignmentChip } from '../../core/types';
 import type { AlignmentKind } from '../../core/alignment';
 import { isAdditiveAlignment } from '../../core/alignment';
@@ -95,15 +96,19 @@ export function StreamErrorCard(props: {
       ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
       : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
 
-  // StreamErrorCard.kt: 16dp above, a 12-radius red-tinted card (8% fill, 16% border), icon + title,
-  // then a full-width "Try again" PrimaryButton.
+  // StreamErrorCard.kt: 16dp above, a 12-radius red-tinted card (8% fill, 16% border, padding 16):
+  // [24dp icon, 12dp, bold bodyMedium title], 16dp, then a full-width radius-12 button (14dp
+  // vertical padding) holding a green 20dp Refresh, 8dp, and a bold labelLarge "Try again".
   return (
     <div className="fcsdk-c-streamerror" role="alert">
       <div className="fcsdk-c-streamerror-head">
-        <FcIcon name={props.errorKind === 'NETWORK' ? 'm_wifi_off' : 'm_warning'} size={20} tint="#E5533D" />
-        <span className="fc-t-bodyMedium">{title}</span>
+        <FcIcon name={props.errorKind === 'NETWORK' ? 'm_wifi_off' : 'm_warning'} size={24} tint="#E5533D" />
+        <span className="fc-t-bodyMedium" style={{ fontWeight: 700 }}>{title}</span>
       </div>
-      <PrimaryButton label={label('fc_v2_app_label_try_again', 'Try again')} onClick={props.onRetry} />
+      <button type="button" className="fcsdk-c-streamerror-retry" onClick={props.onRetry}>
+        <FcIcon name="m_refresh" size={20} tint="var(--fc-c-button-accent)" />
+        <span className="fc-t-labelLarge" style={{ fontWeight: 700 }}>{label('fc_v2_app_label_try_again', 'Try again')}</span>
+      </button>
     </div>
   );
 }
@@ -132,6 +137,8 @@ export function AlignmentSurface(props: {
   onTypeInstead?: () => void;
   /** True when rendering below a real answer; suppresses the heading and escape hatch. */
   additive?: boolean;
+  /** AlignmentSurface.kt Listen pill (live, non-escalate, non-additive prompt only). */
+  tts?: { enabled: boolean; loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void } | null;
 }) {
   const label = useLabel();
   const { kind, chips, selectedValues, isLoading, isLatest } = props;
@@ -154,22 +161,19 @@ export function AlignmentSurface(props: {
   const hasMessage = props.message.trim().length > 0;
   const showHeading = !isEscalate && !additive;
 
-  // AlignmentSurface.kt: bodyLarge message, titleMedium heading, full-width numbered Chips 8 apart,
-  // and the "Don't see your option? Type or say it." escape hatch. Only escalate gets a card.
-  return (
-    <div className={`fcsdk-c-align${isEscalate ? ' fcsdk-c-align--escalate' : ''}`}>
-      {hasMessage ? (
-        <div className="fc-t-bodyLarge" style={{ color: 'var(--fc-c-fg-primary)', marginBottom: isEscalate || additive ? 12 : 16 }}>
-          {props.message}
-        </div>
-      ) : null}
+  // AlignmentSurface.kt body: MarkdownText message (bodyMedium), [16dp + Listen pill on the live
+  // prompt], 16dp, then the options — inside a 16-radius 1dp-bordered card for capability prompts —
+  // then the escape hatch. Escalate wraps the whole body in a 16-radius red-tinted card.
+  const showListen = !isEscalate && !additive && isLatest && !isLoading && !!props.tts;
+  const options = (
+    <>
       {showHeading ? (
-        <div className="fc-t-titleMedium" style={{ color: 'var(--fc-c-fg-primary)', marginBottom: 16 }}>
+        <div className="fc-t-titleMedium" style={{ color: 'var(--fc-c-fg-primary)' }}>
           {heading}
         </div>
       ) : null}
       {chips.length > 0 ? (
-        <div className="fcsdk-c-align-chips">
+        <div className="fcsdk-c-align-chips" style={showHeading ? { marginTop: 16 } : undefined}>
           {chips.map((chip, index) => {
             const isSelected =
               (!!chip.value && selectedValues.includes(chip.value)) || (!!chip.label && selectedValues.includes(chip.label));
@@ -190,15 +194,33 @@ export function AlignmentSurface(props: {
           })}
         </div>
       ) : null}
+    </>
+  );
+  return (
+    <div className={`fcsdk-c-align${isEscalate ? ' fcsdk-c-align--escalate' : ''}`}>
+      {hasMessage ? <MarkdownText text={props.message} /> : null}
+      {showListen && props.tts ? (
+        <div style={{ marginTop: 16 }}>
+          <ListenButton
+            enabled={props.tts.enabled}
+            loading={props.tts.loading}
+            playing={props.tts.playing}
+            hasAudio={props.tts.hasAudio}
+            onClick={props.tts.onClick}
+          />
+        </div>
+      ) : null}
+      <div style={{ height: 16 }} />
+      {isCapabilityPrompt ? <div className="fcsdk-c-align-card">{options}</div> : options}
       {chips.length > 0 && !isEscalate && !isCapabilityPrompt && !additive && !hasPick && isLatest && !isLoading ? (
         <div className="fcsdk-c-align-hatch">
-          <FcIcon name="m_info" size={16} tint="var(--fc-c-button-accent)" />
+          <FcIcon name="icon_info" size={16} tint="var(--fc-c-button-accent)" />
           <span className="fc-t-bodySmall" style={{ color: 'var(--fc-c-fg-secondary)' }}>
-            {label('fc_v2_app_label_dont_see_your_option', "Don't see your option?")}
+            {label('fc_v2_app_label_dont_see_your_option', "Don't see your option?")}{' '}
+            <button type="button" className="fc-t-bodySmall fcsdk-c-align-hatch-action" onClick={props.onTypeInstead}>
+              {label('fc_v2_app_label_type_or_say_it', 'Type or say it.')}
+            </button>
           </span>
-          <button type="button" className="fc-t-bodySmall fcsdk-c-align-hatch-action" onClick={props.onTypeInstead}>
-            {label('fc_v2_app_label_type_or_say_it', 'Type or say it.')}
-          </button>
         </div>
       ) : null}
     </div>

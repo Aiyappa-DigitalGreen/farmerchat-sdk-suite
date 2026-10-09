@@ -89,7 +89,7 @@ export function CircularProgress(props: { size: number; stroke: number; color: s
         fill="none"
         stroke={props.color}
         strokeWidth={props.stroke}
-        strokeLinecap="square"
+        strokeLinecap="round"
       />
     </svg>
   );
@@ -277,7 +277,10 @@ export function LogoSpinner(props: {
       <div className="fcsdk-c-logospinner fcsdk-c-logospinner--h" role="status">
         <div className="fcsdk-c-logospinner-mark" style={{ width: 40, height: 40 }}>
           <CircularProgress size={40} stroke={2.5} color="#00C950" />
-          <FcIcon name="logo_mark" size={23} tint="#00C950" className="fcsdk-c-logospinner-logo" style={{ left: 8.5, top: 8.5 }} />
+          {/* LogoSpinnerHorizontal.kt: the mark turns 360° every 3s (600ms EaseOut). */}
+          <span className="fcsdk-c-logospinner-logo fcsdk-c-logospinner-logo--spin" style={{ left: 8.5, top: 8.5 }}>
+            <FcIcon name="logo_mark" size={23} tint="#00C950" />
+          </span>
         </div>
         {text ? <span className="fcsdk-c-shimmer fc-t-labelMedium">{text}</span> : null}
       </div>

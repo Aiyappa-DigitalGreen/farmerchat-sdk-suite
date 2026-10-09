@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabel, useSdk } from '../context';
 import { LogoSpinner, PrimaryButton, Toast } from '../components/common';
 import { ActionButton } from '../components/common';
+import { FcIcon } from '../components/FcIcon';
 import { ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
 import { AiAnswerBlock } from '../components/AiAnswerBlock';
 import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
@@ -249,7 +250,7 @@ export function ChatScreen(props: {
 
   // ------------------------------------------------------------------ reserve + pinning
   // ChatScreen.kt: the last response holds a min-height equal to the scroller's viewport, and the
-  // farmer's question is scrolled to the TOP (16dp content padding) so the answer grows into the
+  // farmer's question is scrolled to the TOP (20dp content padding) so the answer grows into the
   // reserve below it — the screen never follows the stream's tail. Keyed on the last message id,
   // isLoading and the first history load, exactly like Compose's LaunchedEffect.
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -299,7 +300,7 @@ export function ChatScreen(props: {
       }
     }
     const anchor = rowRefs.current.get(msgs[anchorIdx].id);
-    if (anchor) el.scrollTo({ top: Math.max(0, anchor.offsetTop - 16), behavior: 'smooth' });
+    if (anchor) el.scrollTo({ top: Math.max(0, anchor.offsetTop - 20), behavior: 'smooth' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage?.id, chat.isLoading, chat.isInitialHistoryLoaded]);
 
@@ -361,7 +362,7 @@ export function ChatScreen(props: {
   const followUps = chat.suggestedQuestions ?? [];
   const additiveSurfaceOpen = !!lastAi?.alignmentKind && isAdditiveAlignment(lastAi.alignmentKind) && (lastAi.alignmentChips ?? []).length > 0;
   const showFollowUps =
-    followUps.length > 0 && !chat.isLoading && !chat.errorMessage && lastAnswerRevealed && !additiveSurfaceOpen && !lastAi?.hideFollowUpQuestion;
+    followUps.length > 0 && !chat.isLoading && lastAnswerRevealed && !additiveSurfaceOpen && !lastAi?.hideFollowUpQuestion;
   const showTips = chat.isLoading && !(lastAi?.isStreaming && lastAi.text.trim().length > 0);
   const reserveStyle = viewportHeight > 0 ? { minHeight: viewportHeight } : undefined;
   const isChatOnly = services.config.mode === 'CHAT_ONLY';
@@ -377,20 +378,53 @@ export function ChatScreen(props: {
       ? { icon: 'm_close' as const, radius: 'md' as const, ariaLabel: 'close', onClick: props.onClose }
       : { icon: 'm_arrow_back' as const, radius: 'rounded' as const, ariaLabel: 'back', onClick: props.onClose };
 
+  // InlineErrorContent.kt: [48dp red circle + white Close 24] 12dp ["Something went wrong" bodyMedium,
+  // foregroundPrimary, weight 1] 8dp [Try again pill: surfaceTertiary, radius MD 12, padding 10/12,
+  // Refresh 16 + 4dp + labelMedium]. The text is always the fixed label, never the raw error.
+  const retry = () => {
+    services.analytics.track(Events.CONTENT_TRY_AGAIN_CLICKED, { screen_name: Screens.CHAT });
+    actions.clearError();
+    void actions.retryLastRequest();
+  };
+  // ListenButton enabled = isTtsEnabled (ChatResponseActions.kt / AlignmentSurface.kt): when TTS is
+  // off the pill is still drawn, dimmed. Server hide flag and a missing message id still remove it.
+  const ttsFor = (ai: AiResponse) =>
+    !ai.hideTtsSpeaker && ai.messageId
+      ? {
+          enabled: chat.isTtsEnabled,
+          loading: chat.isLoadingSynthesiseAudio,
+          playing: chat.isAudioPlaying,
+          hasAudio: !!chat.audioPlaybackUrl,
+          onClick: () => void actions.synthesiseAudio(ai.messageId!, ai.text),
+        }
+      : null;
+  const followUpSection = (
+    <div className="fcsdk-c-fadein300">
+      <FollowUpSection
+        title={
+          chat.clarificationRequired
+            ? label('fc_v2_app_label_choose_a_followup_option_below', 'Choose an option from the below')
+            : label('fc_v2_app_label_related_questions', 'You can also ask')
+        }
+        questions={followUps}
+        useChips
+        clarificationRequired={chat.clarificationRequired}
+        onClick={(_, q) => void actions.sendFollowUpQuestion(q)}
+      />
+    </div>
+  );
+
   const inlineError = (
     <div className="fcsdk-c-inlineerror" role="alert">
-      <div className="fc-t-bodyMedium" style={{ color: 'var(--fc-c-feedback-fail)' }}>
-        {chat.errorMessage}
-      </div>
-      <button
-        type="button"
-        className="fcsdk-c-btn-secondary fcsdk-c-btn-secondary--reading"
-        onClick={() => {
-          actions.clearError();
-          void actions.retryLastRequest();
-        }}
-      >
-        <span className="fc-t-labelLarge">{label('fc_v2_app_label_try_again', 'Try again')}</span>
+      <span className="fcsdk-c-inlineerror-icon" aria-label="Error">
+        <FcIcon name="m_close" size={24} tint="#FFFFFF" />
+      </span>
+      <span className="fc-t-bodyMedium fcsdk-c-inlineerror-text">
+        {label('fc_v2_app_label_something_went_wrong', 'Something went wrong')}
+      </span>
+      <button type="button" className="fcsdk-c-inlineerror-retry" onClick={retry}>
+        <FcIcon name="m_refresh" size={16} tint="currentColor" />
+        <span className="fc-t-labelMedium">{label('fc_v2_app_label_try_again', 'Try again')}</span>
       </button>
     </div>
   );
@@ -425,7 +459,8 @@ export function ChatScreen(props: {
           onScroll={onScroll}
           style={{
             paddingBottom: isComposerUi
-              ? `calc(${composerBarHeight({ floating: true }) - 20 + (attachments.length > 0 ? 74 : 0)}px + max(var(--fc-inset-bottom), 20px))`
+              ? // ChatThreadContent.kt:307 — bottom = inputButtonsHeight (composerBarHeight(floating)) + 16.dp.
+                `calc(${composerBarHeight({ floating: true }) - 20 + 16}px + max(var(--fc-inset-bottom), 20px))`
               : 24,
           }}
         >
@@ -449,9 +484,21 @@ export function ChatScreen(props: {
               );
             }
             if (msg.kind === 'user') {
+              // ChatThreadContent.kt: Column(spacedBy 12) [bubble row, start padding 64] + the inline
+              // error under the failed question; a failed LAST question holds a viewport of height
+              // so it stays pinned at the top with the retry card beneath it.
+              const failedHere = chat.failedMessageId === msg.id && !!chat.errorMessage && !chat.isLoading;
               return (
-                <div key={msg.id} ref={setRowRef(msg.id)} className="fcsdk-c-row-end">
-                  <UserBubble message={msg} />
+                <div
+                  key={msg.id}
+                  ref={setRowRef(msg.id)}
+                  className="fcsdk-c-usercol"
+                  style={failedHere && isFinal ? reserveStyle : undefined}
+                >
+                  <div className="fcsdk-c-row-end fcsdk-c-row-user">
+                    <UserBubble message={msg} />
+                  </div>
+                  {failedHere ? inlineError : null}
                 </div>
               );
             }
@@ -481,6 +528,7 @@ export function ChatScreen(props: {
                     isLatest={isLastAi}
                     onChipClick={(chip) => handleAlignmentChip(ai.id, alignmentKind, chip)}
                     onTypeInstead={focusComposerOrTypeOverlay}
+                    tts={ttsFor(ai)}
                   />
                 </div>
               );
@@ -504,36 +552,38 @@ export function ChatScreen(props: {
                 ) : null}
                 {settled ? (
                   <div className="fcsdk-c-settle">
-                    {/* ChatResponseActions.kt (app dev/v2.5): "Read full advice" REPLACES the action
-                        row on a pre-generated answer; every other answer uses the agentic row
-                        (`useChips = true` for agentic, legacy and pre-generated alike). */}
+                    {/* ChatResponseActions.kt (app dev/v2.5): Column(padding top 24) — "Read full
+                        advice" (+16) REPLACES the action row on a pre-generated answer; every other
+                        answer gets the agentic row (+1). The follow-ups live INSIDE this column (so
+                        inside the last answer's viewport reserve), then 28 + 12 below. */}
                     {ai.isPreGenerated && chat.readFullAdviceRequestedForMessageId !== ai.id ? (
-                      <PrimaryButton
-                        label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
-                        onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
-                      />
+                      <div className="fcsdk-c-wobble fcsdk-c-wobble--block" style={{ marginBottom: 16 }}>
+                        <PrimaryButton
+                          label={label('fc_v2_app_label_read_full_advice', 'Read full advice')}
+                          onClick={() => void actions.replacePreGeneratedWithQuestion(lastUserQuestionBefore(chat.messages, ai.id), 'card')}
+                        />
+                      </div>
                     ) : (
-                    <ChatResponseActions
-                      agentic
-                      showShare={!ai.hideShareIcon}
-                      tts={
-                        chat.isTtsEnabled && !ai.hideTtsSpeaker && ai.messageId
-                          ? {
-                              enabled: true,
-                              loading: chat.isLoadingSynthesiseAudio,
-                              playing: chat.isAudioPlaying,
-                              hasAudio: !!chat.audioPlaybackUrl,
-                              onClick: () => void actions.synthesiseAudio(ai.messageId!, ai.text),
-                            }
-                          : null
-                      }
-                      onShare={() => void share(ai)}
-                      onSave={() => void download(ai)}
-                    />
+                      <div style={{ marginBottom: 1 }}>
+                        <ChatResponseActions
+                          agentic
+                          showShare={!ai.hideShareIcon}
+                          tts={ttsFor(ai)}
+                          onShare={() => void share(ai)}
+                          onSave={() => void download(ai)}
+                        />
+                      </div>
                     )}
+                    {!additiveSurfaceOpen ? (
+                      <>
+                        {showFollowUps ? followUpSection : null}
+                        <div style={{ height: 40 }} />
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
-                {alignmentKind && isAdditiveAlignment(alignmentKind) ? (
+                {alignmentKind && isAdditiveAlignment(alignmentKind) && !ai.isStreaming ? (
+                  <div style={{ marginTop: 4 }}>
                   <AlignmentSurface
                     kind={alignmentKind}
                     message={ai.alignmentMessage ?? ''}
@@ -543,32 +593,21 @@ export function ChatScreen(props: {
                     isLatest={isLastAi}
                     onChipClick={(chip) => handleAlignmentChip(ai.id, alignmentKind, chip)}
                   />
+                  </div>
                 ) : null}
               </div>
             );
           })}
 
-          {chat.errorMessage && !chat.isLoading ? inlineError : null}
+          {/* An error not tied to a question bubble (e.g. history) still gets the inline row. */}
+          {chat.errorMessage && !chat.isLoading && !chat.messages.some((m) => m.id === chat.failedMessageId) ? inlineError : null}
 
-          {showFollowUps ? (
-            <div className="fcsdk-c-fadein300">
-              <FollowUpSection
-                title={
-                  chat.clarificationRequired
-                    ? label('fc_v2_app_label_choose_a_followup_option_below', 'Choose an option from the below')
-                    : label('fc_v2_app_label_related_questions', 'You can also ask')
-                }
-                questions={followUps}
-                useChips
-                clarificationRequired={chat.clarificationRequired}
-                onClick={(_, q) => void actions.sendFollowUpQuestion(q)}
-              />
-            </div>
-          ) : null}
         </div>
 
         <ScrollIndicator
-          triggerKey={lastAi && !chat.isLoading ? lastAi.id : null}
+          triggerKey={lastAi && !chat.isLoading && !chat.errorMessage ? lastAi.id : null}
+          // ChatThreadContent.kt:669 — padding(bottom = inputButtonsHeight + 16.dp).
+          bottom={isComposerUi ? composerBarHeight({ floating: true }) + 16 : 72 + 8 + 16}
           hasContentBelow={() => {
             const el = scrollRef.current;
             return !!el && el.scrollHeight - el.scrollTop - el.clientHeight >= 48 + (isComposerUi ? 92 : 24);

@@ -65,7 +65,10 @@ export function SuggestedCard(props: { text: string; onClick: () => void }) {
   );
 }
 
-/** ChatScreen.kt FollowUpSection: green dot + titleSmall(600) muted title, then chips or cards. */
+/**
+ * ChatResponseActions.kt follow-ups: 16dp, a titleMedium foregroundPrimary title, 10dp, then the
+ * chips (or cards) 8dp apart.
+ */
 export function FollowUpSection(props: {
   title: string;
   questions: string[];
@@ -75,12 +78,8 @@ export function FollowUpSection(props: {
 }) {
   return (
     <div className="fcsdk-c-followups">
-      <div className="fcsdk-c-followups-title">
-        <span className="fcsdk-c-followups-dot" aria-hidden />
-        <span className="fc-t-titleSmall" style={{ fontWeight: 600 }}>
-          {props.title}
-        </span>
-      </div>
+      <div className="fc-t-titleMedium fcsdk-c-followups-title">{props.title}</div>
+      <div className="fcsdk-c-followups-list">
       {props.questions.map((q, i) =>
         props.useChips ? (
           <Chip
@@ -94,6 +93,7 @@ export function FollowUpSection(props: {
           <SuggestedCard key={i} text={q} onClick={() => props.onClick(i, q)} />
         ),
       )}
+      </div>
     </div>
   );
 }
@@ -141,11 +141,21 @@ function SoundWave(props: { playing: boolean }) {
   );
 }
 
-/** ListenButton.kt (light): Default / Loading / Playing (animated wave) / Paused (static wave). */
-export function ListenButton(props: { loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void }) {
+/**
+ * ListenButton.kt (light): Default / Loading / Playing (animated wave) / Paused (static wave).
+ * TTS off → still drawn, at alpha 0.4 and not clickable.
+ */
+export function ListenButton(props: { enabled?: boolean; loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void }) {
   const label = useLabel();
+  const enabled = props.enabled ?? true;
   return (
-    <button type="button" className="fcsdk-c-listen" onClick={props.onClick} disabled={props.loading}>
+    <button
+      type="button"
+      className="fcsdk-c-listen"
+      onClick={enabled ? props.onClick : undefined}
+      disabled={props.loading || !enabled}
+      style={enabled ? undefined : { opacity: 0.4 }}
+    >
       {props.loading ? (
         <>
           <CircularProgress size={20} stroke={2} color="var(--fc-c-fg-primary)" />
@@ -189,8 +199,14 @@ export function ChatResponseActions(props: {
   onSave: () => void;
 }) {
   const label = useLabel();
-  const listen = props.tts?.enabled ? (
-    <ListenButton loading={props.tts.loading} playing={props.tts.playing} hasAudio={props.tts.hasAudio} onClick={props.tts.onClick} />
+  const listen = props.tts ? (
+    <ListenButton
+      enabled={props.tts.enabled}
+      loading={props.tts.loading}
+      playing={props.tts.playing}
+      hasAudio={props.tts.hasAudio}
+      onClick={props.tts.onClick}
+    />
   ) : null;
   if (props.agentic) {
     return (
@@ -292,34 +308,44 @@ export function Tips() {
 
 // -------------------------------------------------------------------- ScrollIndicator (Feed.kt)
 
-/** 40dp circle, bottom-centre; appears 1.5s after an answer settles, bounces 3×, then hides. */
-export function ScrollIndicator(props: { triggerKey: string | null; hasContentBelow: () => boolean; onClick: () => void }) {
-  const [show, setShow] = useState(false);
+/**
+ * ScrollIndicator.kt: a 40dp accent circle with a white 20dp arrow, bottom-centre `bottom` px up.
+ * 1500ms after the trigger it fades in (200ms); 300ms later it bounces 3× (280 down / 320 up /
+ * 150 rest); 400ms after the last bounce it fades out (300ms). The bounce offset is
+ * `IntOffset(0, 14)` — 14 device PIXELS, not dp — so it is divided by the device pixel ratio.
+ */
+export function ScrollIndicator(props: { triggerKey: string | null; bottom: number; hasContentBelow: () => boolean; onClick: () => void }) {
+  const [phase, setPhase] = useState<'hidden' | 'shown' | 'hiding'>('hidden');
   useEffect(() => {
-    setShow(false);
+    setPhase('hidden');
     if (!props.triggerKey) return;
     const t1 = window.setTimeout(() => {
-      if (props.hasContentBelow()) setShow(true);
+      if (props.hasContentBelow()) setPhase('shown');
     }, 1500);
-    const t2 = window.setTimeout(() => setShow(false), 1500 + 200 + 300 + 3 * 750 + 400 + 300);
+    const hideAt = 1500 + 300 + 3 * 750 + 400;
+    const t2 = window.setTimeout(() => setPhase((p) => (p === 'shown' ? 'hiding' : p)), hideAt);
+    const t3 = window.setTimeout(() => setPhase('hidden'), hideAt + 300);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.triggerKey]);
-  if (!show) return null;
+  if (phase === 'hidden') return null;
+  const dpr = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
   return (
     <button
       type="button"
-      className="fcsdk-c-scrollind"
+      className={`fcsdk-c-scrollind${phase === 'hiding' ? ' fcsdk-c-scrollind--hiding' : ''}`}
+      style={{ bottom: props.bottom, ['--fc-c-bounce' as string]: `${14 / dpr}px` }}
       aria-label="Scroll for more"
       onClick={() => {
-        setShow(false);
+        setPhase('hidden');
         props.onClick();
       }}
     >
-      <FcIcon name="icon_arrow_down" size={20} tint="var(--fc-c-fg-primary)" />
+      <FcIcon name="icon_arrow_down" size={20} tint="var(--fc-c-button-fg)" />
     </button>
   );
 }
@@ -339,8 +365,23 @@ export function LogoAppBar(props: {
   return (
     <div className="fcsdk-c-appbar">
       <img className="fcsdk-c-appbar-glow" src={Assets.glowYellow} alt="" aria-hidden />
-      <ActionButton icon={props.leading.icon} radius={props.leading.radius} ariaLabel={props.leading.ariaLabel} onClick={props.leading.onClick} />
-      <div className="fcsdk-c-appbar-logo" style={{ opacity: props.showLogo ? 1 : 0 }}>
+      {props.leading.icon === 'm_arrow_back' && props.leading.radius === 'rounded' ? (
+        // Home entry: R.drawable.leftbutton — a 42dp #08361B disc with a STROKED white arrow
+        // (2dp, round caps), not the filled Material glyph the other entries use.
+        <button type="button" className="fcsdk-c-appbar-leftbutton" aria-label={props.leading.ariaLabel} onClick={props.leading.onClick}>
+          <svg width="42" height="42" viewBox="0 0 42 42" aria-hidden>
+            <circle cx="21" cy="21" r="21" fill="#08361B" />
+            <path d="M27.708 21.261H14.292M21 27.97L14.292 21.261L21 14.553" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+        </button>
+      ) : (
+        <ActionButton icon={props.leading.icon} radius={props.leading.radius} ariaLabel={props.leading.ariaLabel} onClick={props.leading.onClick} />
+      )}
+      {/* LogoAppBar.kt: fade in 600ms EaseOut, fade out 300ms EaseOut. */}
+      <div
+        className="fcsdk-c-appbar-logo"
+        style={{ opacity: props.showLogo ? 1 : 0, transitionDuration: props.showLogo ? '600ms' : '300ms' }}
+      >
         <FcIcon name="logo_mark" size={36} tint="#FFFFFF" />
       </div>
       {props.trailing ?? <span className="fcsdk-c-appbar-spacer" aria-hidden />}
