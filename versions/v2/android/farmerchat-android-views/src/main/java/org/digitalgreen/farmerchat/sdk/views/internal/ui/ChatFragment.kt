@@ -106,6 +106,11 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     private var restoreAnchorPage: Int? = null
     private var initialHistoryScrollDone = false
 
+    /** An input overlay panel (text / photo / voice) is up — hides the empty-chat placeholder. */
+    private var inputOverlayOpen = false
+    /** The 2.0.0 composer's text field has focus — same. */
+    private var composerFocused = false
+
     // History pagination anchors
     private var restoreAnchorKey: String? = null
     private var restoreAnchorOffset = 0
@@ -233,7 +238,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             }
         )
 
+        overlays?.onVisibilityChanged = { open ->
+            inputOverlayOpen = open
+            updateEmptyState(vm.state.value)
+        }
+
         if (isComposerUi) setUpComposer() else setUpLegacyInputRow()
+        setUpEmptyState()
 
         initializeIfNeeded()
         observeState()
@@ -287,6 +298,10 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             composer.setPhotoUris(emptyList())
         }
         composer.onSend = { text -> sendFromComposer(text) }
+        composer.onFocusChange = { focused ->
+            composerFocused = focused
+            updateEmptyState(vm.state.value)
+        }
 
         // The bar floats over the list, so the list must reserve its at-rest height. The
         // enclosing LinearLayout is fitsSystemWindows, so the nav-bar inset the bar folds in is
@@ -352,6 +367,50 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         // App ChatThreadContent.kt:300-309: contentPadding bottom = composer bar height + 16dp.
         val extra = (16 * resources.displayMetrics.density).toInt()
         binding.fcChatList.updatePadding(bottom = (barHeightPx - navBottom).coerceAtLeast(0) + extra)
+        binding.fcChatEmptyState.updatePadding(bottom = binding.fcChatList.paddingBottom)
+    }
+
+    /**
+     * Empty-chat placeholder (SDK addition, 2026-10-09; compose `ChatEmptyState` / web
+     * `chatParts.tsx` parity). The pills do exactly what the chat's own input controls do.
+     */
+    private fun setUpEmptyState() {
+        binding.fcChatEmptyState.updatePadding(bottom = binding.fcChatList.paddingBottom)
+        binding.fcChatEmptyState.bind(
+            titleText = label(
+                Labels.FARMERCHAT_TAGLINE,
+                "FarmerChat: Practical advice for your crops & livestock"
+            ),
+            subtitleText = label(
+                Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                "Tap a button to ask a question"
+            ),
+            photoLabel = label(Labels.PHOTO, "Photo"),
+            speakLabel = label(Labels.SPEAK, "Speak"),
+            typeLabel = label(Labels.TYPE, "Type"),
+            onPhoto = if (graph.config.enableImages) {
+                {
+                    // Composer mode offers the camera only while nothing is attached.
+                    if (!isComposerUi || attachedPhoto == null) overlays?.showPhotoInput()
+                }
+            } else null,
+            onSpeak = if (graph.config.enableVoice) {
+                { onSpeakClick() }
+            } else null,
+            onType = { onTypeInstead() }
+        )
+    }
+
+    /**
+     * Shown only on a blank, idle, non-history thread with no input surface up; gone with the
+     * first message.
+     */
+    private fun updateEmptyState(state: ChatState) {
+        if (view == null) return
+        binding.fcChatEmptyState.setShown(
+            state.messages.isEmpty() && !state.isLoading && source != "history" &&
+                !inputOverlayOpen && !composerFocused
+        )
     }
 
     /** One-of initialization per nav args (doc 01 §3.8). */
@@ -480,6 +539,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             }
 
             updateTips(state)
+            updateEmptyState(state)
 
             refreshRows(state)
             handleTtsPlayback(state)

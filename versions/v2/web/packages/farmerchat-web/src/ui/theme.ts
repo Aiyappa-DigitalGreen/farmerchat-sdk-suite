@@ -1596,6 +1596,20 @@ const css = `
   .fcsdk-c-drawer > * { flex-shrink: 0; }
   .fcsdk-c-drawer-historyscroll { flex: none; overflow: visible; }
 }
+
+/* Empty-chat placeholder (ChatEmptyState): centred in the space above the composer. */
+.fcsdk-c-empty { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 32px; text-align: center; pointer-events: none; animation: fcsdk-empty-in 360ms ease-out both; }
+.fcsdk-c-empty > * { pointer-events: auto; }
+.fcsdk-c-empty-mark { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 6px; background: radial-gradient(circle at 30% 25%, #2BD46B, var(--fc-c-brand-surface-primary) 70%); box-shadow: 0 0 0 8px color-mix(in srgb, var(--fc-c-brand-surface-primary) 12%, transparent), 0 10px 24px -10px var(--fc-c-brand-surface-primary); }
+.fcsdk-c-empty-title { margin: 0; max-width: 300px; font-size: 18px; line-height: 24px; font-weight: 600; color: var(--fc-c-fg-primary); text-wrap: balance; }
+.fcsdk-c-empty-sub { margin: 0; max-width: 280px; font-size: 14px; line-height: 20px; color: var(--fc-c-fg-secondary); text-wrap: balance; }
+.fcsdk-c-empty-ways { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.fcsdk-c-empty-way { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 8px; border-radius: 999px; border: 1px solid var(--fc-c-border-default); background: var(--fc-c-surface-primary); color: var(--fc-c-fg-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.fcsdk-c-empty-way:hover { border-color: var(--fc-c-brand-surface-primary); }
+.fcsdk-c-empty-way:focus-visible { outline: 2px solid var(--fc-c-brand-surface-primary); outline-offset: 2px; }
+.fcsdk-c-empty-way-ico { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--fc-c-brand-surface-primary) 12%, transparent); }
+@keyframes fcsdk-empty-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fcsdk-c-empty { animation: none; } }
 /* @@END-OF-STYLESHEET@@ */
 `;
 

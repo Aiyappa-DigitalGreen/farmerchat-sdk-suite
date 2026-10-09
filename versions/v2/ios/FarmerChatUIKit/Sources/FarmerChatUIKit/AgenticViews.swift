@@ -51,7 +51,7 @@ final class FCUIStreamStatusView: UIView {
 /// The FarmerChat logo mark — the 6-petal flower from the app's `logo_mark.xml` (12 petal paths
 /// on a 130×130 viewBox), the same data SwiftUI's `FCLogoMarkShape` draws. UIKit cannot import
 /// the SwiftUI package, so the path data is duplicated here.
-private enum FCUILogoMark {
+enum FCUILogoMark {
     static let pathData: [String] = [
         "M32.56,0C50.54,0 65.12,14.59 65.12,32.59C47.14,32.59 32.56,18 32.56,0Z",
         "M97.56,0C79.58,0 65,14.59 65,32.59C82.98,32.59 97.56,18 97.56,0Z",

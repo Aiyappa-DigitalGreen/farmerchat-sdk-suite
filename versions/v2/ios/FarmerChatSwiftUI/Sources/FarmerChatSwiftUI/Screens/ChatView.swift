@@ -279,7 +279,41 @@ struct ChatView: View {
             chatError(errorMessage)
         } else {
             thread
+                // SDK addition (no app equivalent — the app always enters chat with a question):
+                // an empty, idle, non-history chat gets a centred placeholder. Overlaid on the
+                // thread's frame — between the app bar and the input bar, never inside the
+                // scrolling content — and gone with the first message.
+                .overlay {
+                    if showEmptyState {
+                        FCChatEmptyState(
+                            onPhoto: FarmerChat.shared.config.enableImages ? { showPhotoSheet = true } : nil,
+                            onSpeak: FarmerChat.shared.config.enableVoice ? startVoice : nil,
+                            // The non-composer UI: Type opens the text-input overlay, as the
+                            // input bar's "Ask a follow-up question" field does.
+                            onType: { showTextInput = true }
+                        )
+                    }
+                }
         }
+    }
+
+    /// `messages.isEmpty && !isLoading && !isHistoryEntry && no input overlay open` (web
+    /// ChatScreen `ChatEmptyState` gate).
+    private var hasEntryPayload: Bool {
+        [args.question, args.preGeneratedAnswer, args.imagePath, args.audioPath]
+            .contains { !($0 ?? "").isEmpty }
+    }
+
+    private var showEmptyState: Bool {
+        // An entry that carries a question / answer / image / clip fills the thread itself; its
+        // send starts in a `Task`, so without this the placeholder would flash for a frame or two
+        // before `isLoading` lands.
+        didInitialize
+            && !hasEntryPayload
+            && viewModel.state.messages.isEmpty
+            && !viewModel.state.isLoading
+            && !isHistoryEntry
+            && !showTextInput && !showVoiceInput && !showPhotoSheet && !showCamera && !showGallery
     }
 
     private var thread: some View {
@@ -1011,5 +1045,122 @@ struct ChatView: View {
                 toast.show(.error, fcLabel("voice_start_failed", "Could not start recording."))
             }
         }
+    }
+}
+
+// MARK: - Empty-chat placeholder (SDK addition; web chatParts.tsx `ChatEmptyState`)
+
+/// Centred placeholder for a chat with no messages: the FarmerChat mark in a brand-green disc with
+/// a soft halo, the tagline, the "ask by…" hint and Photo / Speak / Type pills that do exactly what
+/// the chat's own input bar does. Labels only — existing keys, no new ones.
+private struct FCChatEmptyState: View {
+    @Environment(\.fcTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Nil hides the pill (images / voice disabled in config).
+    let onPhoto: (() -> Void)?
+    let onSpeak: (() -> Void)?
+    let onType: () -> Void
+
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 10) {
+            mark
+                .padding(.bottom, 6)
+            Text(fcLabel(FCLabels.farmerchatTagline, "FarmerChat: Practical advice for your crops & livestock"))
+                .font(theme.font(size: 18, weight: .semibold))
+                .lineSpacing(Self.extraLeading(size: 18 * theme.typeScale, lineHeight: 24 * theme.typeScale, weight: .semibold, fontName: theme.fontName))
+                .foregroundColor(theme.content.foregroundPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(fcLabel(
+                FCLabels.getStartedByClickingOnPhotoSpeakOrTypeToAskYourQuestion,
+                "Tap a button to ask a question"
+            ))
+                .font(theme.font(size: 14))
+                .lineSpacing(Self.extraLeading(size: 14 * theme.typeScale, lineHeight: 20 * theme.typeScale, weight: .regular, fontName: theme.fontName))
+                .foregroundColor(theme.content.foregroundSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+                .fixedSize(horizontal: false, vertical: true)
+            // 8 apart, wrapping: one row when it fits, else stacked.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { pills }
+                VStack(spacing: 8) { pills }
+            }
+            .padding(.top, 10)
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 360ms fade + 6pt rise on appear; none with Reduce Motion.
+        .opacity(appeared || reduceMotion ? 1 : 0)
+        .offset(y: appeared || reduceMotion ? 0 : 6)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeOut(duration: 0.36)) { appeared = true }
+        }
+    }
+
+    /// 64pt brand disc holding the white 34pt mark, with an 8pt halo ring at ~12% brand. The halo
+    /// is a background, so (like the web box-shadow spread) it takes no layout space.
+    private var mark: some View {
+        let brand = theme.brand.surfacePrimary
+        return Circle()
+            .fill(brand)
+            .frame(width: 64, height: 64)
+            .overlay(FCLogoMark(size: 34, tint: .white))
+            .background(Circle().fill(brand.opacity(0.12)).frame(width: 80, height: 80))
+            .shadow(color: brand.opacity(0.35), radius: 10, x: 0, y: 8)
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var pills: some View {
+        if let onPhoto {
+            pill(icon: "camera.fill", title: fcLabel(FCLabels.photo, "Photo"), action: onPhoto)
+        }
+        if let onSpeak {
+            pill(icon: "mic.fill", title: fcLabel(FCLabels.speak, "Speak"), action: onSpeak)
+        }
+        pill(icon: "keyboard", title: fcLabel(FCLabels.type, "Type"), action: onType)
+    }
+
+    /// 40pt fully-rounded pill: 1pt default border, surface fill, 14pt semibold label, leading
+    /// 28pt circle at ~12% brand holding a 20pt brand-green icon.
+    private func pill(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        let brand = theme.brand.surfacePrimary
+        return Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(brand)
+                    .frame(width: 20, height: 20)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(brand.opacity(0.12)))
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(theme.font(size: 14, weight: .semibold))
+                    .foregroundColor(theme.content.foregroundPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .frame(height: 40)
+            .background(Capsule().fill(theme.content.surfacePrimary))
+            .overlay(Capsule().strokeBorder(theme.content.borderDefault, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// `.lineSpacing` is ADDITIVE to the font's natural line height (see FCTypography.swift), so
+    /// the extra leading for a target pitch is `lineHeight - UIFont.lineHeight`.
+    /// A host font is measured by name (system metrics if it does not resolve), as
+    /// `FCTextStyle.naturalLineHeight` does.
+    private static func extraLeading(size: CGFloat, lineHeight: CGFloat, weight: UIFont.Weight, fontName: String?) -> CGFloat {
+        let natural = fontName.flatMap { UIFont(name: $0, size: size) }?.lineHeight
+            ?? UIFont.systemFont(ofSize: size, weight: weight).lineHeight
+        return max(0, lineHeight - natural)
     }
 }

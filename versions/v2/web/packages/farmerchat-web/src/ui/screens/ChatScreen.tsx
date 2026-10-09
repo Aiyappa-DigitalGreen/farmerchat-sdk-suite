@@ -11,7 +11,7 @@ import { useLabel, useSdk } from '../context';
 import { LogoSpinner, PrimaryButton, Toast } from '../components/common';
 import { ActionButton } from '../components/common';
 import { FcIcon } from '../components/FcIcon';
-import { ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
+import { ChatEmptyState, ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
 import { AiAnswerBlock } from '../components/AiAnswerBlock';
 import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
 import { capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
@@ -645,6 +645,18 @@ export function ChatScreen(props: {
         />
 
         {showTips ? <Tips /> : null}
+        {chat.messages.length === 0 && !chat.isLoading && !isHistoryEntry && overlay === null ? (
+          <ChatEmptyState
+            bottomInset={
+              isComposerUi
+                ? `calc(${composerBarHeight({ floating: true }) - 20 + 16}px + max(var(--fc-inset-bottom), 20px))`
+                : '0px'
+            }
+            onPhoto={services.config.enableImages ? () => setOverlay('photo') : undefined}
+            onSpeak={services.config.enableVoice ? () => setOverlay('speak') : undefined}
+            onType={isComposerUi ? focusComposerOrTypeOverlay : () => setOverlay('type')}
+          />
+        ) : null}
       </div>
 
       {/* 2.0.0 composer, or the v1 Photo/Speak/Type row. The row is hidden while an input overlay

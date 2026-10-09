@@ -206,6 +206,13 @@ internal class InputOverlaysController(
 
     val isVisible: Boolean get() = binding.fcOverlayRoot.isVisible
 
+    /**
+     * Fired whenever a panel opens or the overlay hides (including the internal scrim-tap /
+     * cancel paths), so a screen can hide content the sheet would cover — Chat's empty-state
+     * placeholder.
+     */
+    var onVisibilityChanged: ((Boolean) -> Unit)? = null
+
     // ------------------------------------------------------------------ show / hide
 
     fun showTextInput() {
@@ -243,6 +250,7 @@ internal class InputOverlaysController(
         binding.fcTextInputField.setText("")
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(binding.fcTextInputField.windowToken, 0)
+        onVisibilityChanged?.invoke(false)
     }
 
     fun setVoiceProcessing(processing: Boolean) {
@@ -281,6 +289,7 @@ internal class InputOverlaysController(
         binding.fcTextInputPanel.isVisible = text
         binding.fcVoicePanel.isVisible = voice
         binding.fcPhotoPanel.isVisible = photo
+        onVisibilityChanged?.invoke(true)
         if (text) binding.fcOverlayScrim.alpha = 1f
         // App VoiceInput.kt slides from 400dp, PhotoInput.kt from 300dp; both over 300 ms.
         if (voice && !wasShowingVoice) animateSheetIn(binding.fcVoicePanel, fromDp = 400f)

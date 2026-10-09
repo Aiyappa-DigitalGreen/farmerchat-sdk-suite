@@ -40,6 +40,16 @@
                 android:paddingTop="12dp"
                 android:paddingBottom="16dp" />
 
+            <!-- Empty-chat placeholder (SDK addition; compose ChatEmptyState / web parity):
+                 centred over the list's viewport, outside the list so it never scrolls. Its
+                 bottom padding tracks the list's (the floating composer's reserve) so the
+                 composer never overlaps it. Driven by ChatFragment.updateEmptyState. -->
+            <org.digitalgreen.farmerchat.sdk.views.internal.widgets.ChatEmptyStateView
+                android:id="@+id/fcChatEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
             <!-- App ScrollIndicator: after a new answer with more below, a 40dp accent circle
                  bounces three times above the composer, then fades. Tap = scroll to the end. -->
             <ImageView

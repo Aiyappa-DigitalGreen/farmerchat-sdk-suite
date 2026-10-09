@@ -64,6 +64,10 @@ final class FCUIChatViewController: UIViewController {
     /// ScrollIndicator.kt — bottom-centre, 16 above the thread's bottom edge (the input bar sits
     /// below the list here rather than over it, so the app's `inputButtonsHeight` is not added).
     private let scrollIndicator = FCUIScrollIndicator()
+    /// SDK addition: centred placeholder for an empty, idle, non-history chat (web
+    /// `ChatEmptyState`). A sibling of the list pinned to its frame, so it sits above the input bar
+    /// and never scrolls away.
+    private var emptyState: FCUIChatEmptyStateView!
     /// The answer id the indicator's timeline last started for (`remember(triggerKey)`).
     private var scrollIndicatorKey: String?
     /// "FarmerChat" title — LogoAppBar fades its centre mark in (600 ms) / out (300 ms) on `isLoading`.
@@ -426,7 +430,20 @@ final class FCUIChatViewController: UIViewController {
             self?.scrollToBottom()
         }, for: .touchUpInside)
         view.addSubview(scrollIndicator)
+        // Photo / Speak / Type do exactly what the input bar's own controls do; Photo / Speak are
+        // omitted when images / voice are disabled in config.
+        emptyState = FCUIChatEmptyStateView(
+            onPhoto: FarmerChat.shared.config.enableImages ? { [weak self] in self?.photoTapped() } : nil,
+            onSpeak: FarmerChat.shared.config.enableVoice ? { [weak self] in self?.speakTapped() } : nil,
+            onType: { [weak self] in self?.typeTapped() }
+        )
+        emptyState.isHidden = true
+        view.addSubview(emptyState)
         NSLayoutConstraint.activate([
+            emptyState.topAnchor.constraint(equalTo: collectionView.topAnchor),
+            emptyState.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor),
+            emptyState.leadingAnchor.constraint(equalTo: collectionView.leadingAnchor),
+            emptyState.trailingAnchor.constraint(equalTo: collectionView.trailingAnchor),
             scrollIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             scrollIndicator.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor, constant: -16),
             collectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -556,6 +573,22 @@ final class FCUIChatViewController: UIViewController {
 
         inputBar.alpha = state.isLoading ? 0.5 : 1
         inputBar.isUserInteractionEnabled = !state.isLoading
+
+        // Empty-chat placeholder: `messages.isEmpty && !isLoading && !isHistoryEntry`. The UIKit
+        // inputs are modal presentations (alert / sheet / picker) that cover it, so "no input
+        // overlay open" needs no extra state. An entry carrying a question / answer / image /
+        // clip fills the thread itself (its send starts in a Task), so it never shows there.
+        let hasEntryPayload = [args.question, args.preGeneratedAnswer, args.imagePath, args.audioPath]
+            .contains { !($0 ?? "").isEmpty }
+        // `errorMessage == nil`: parity with SwiftUI, whose chat-error screen takes precedence.
+        let showEmpty = state.messages.isEmpty && !state.isLoading && state.errorMessage == nil
+            && (args.conversationId ?? "").isEmpty && !hasEntryPayload
+        if showEmpty && emptyState.isHidden {
+            emptyState.isHidden = false
+            emptyState.playAppear()
+        } else if !showEmpty && !emptyState.isHidden {
+            emptyState.isHidden = true
+        }
 
         // LogoAppBar.kt: centre logo fades in 600 ms / out 300 ms (EaseOut) on `!isLoading`.
         let titleAlpha: CGFloat = state.isLoading ? 0 : 1
@@ -1050,6 +1083,252 @@ extension FCUIChatViewController: UICollectionViewDelegate {
         if case .loadEarlier = dataSource.itemIdentifier(for: indexPath) {
             loadMoreHistory()
         }
+    }
+}
+
+// MARK: - Empty-chat placeholder (SDK addition; web chatParts.tsx `ChatEmptyState`)
+
+/// The FarmerChat mark in a 64pt brand disc with an 8pt halo at ~12% brand, the tagline, the
+/// "ask by…" hint and Photo / Speak / Type pills. Existing label keys only. Pure UIKit (iOS 15).
+final class FCUIChatEmptyStateView: UIView {
+    private let stack = UIStackView()
+    private let pillRow = UIStackView()
+    private var pills: [FCUIEmptyStatePill] = []
+
+    init(onPhoto: (() -> Void)?, onSpeak: (() -> Void)?, onType: @escaping () -> Void) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+
+        let mark = Self.makeMark()
+
+        let title = UILabel()
+        title.numberOfLines = 0
+        title.textColor = FCUITheme.foregroundPrimary
+        title.textAlignment = .center
+        Self.setText(title, fcuiLabel(FCLabels.farmerchatTagline, "FarmerChat: Practical advice for your crops & livestock"),
+                     size: 18, lineHeight: 24, weight: .semibold)
+
+        let subtitle = UILabel()
+        subtitle.numberOfLines = 0
+        subtitle.textColor = FCUITheme.foregroundSecondary
+        subtitle.textAlignment = .center
+        Self.setText(subtitle, fcuiLabel(FCLabels.getStartedByClickingOnPhotoSpeakOrTypeToAskYourQuestion,
+                                         "Tap a button to ask a question"),
+                     size: 14, lineHeight: 20, weight: .regular)
+
+        if let onPhoto {
+            pills.append(FCUIEmptyStatePill(icon: "camera.fill", title: fcuiLabel(FCLabels.photo, "Photo"), action: onPhoto))
+        }
+        if let onSpeak {
+            pills.append(FCUIEmptyStatePill(icon: "mic.fill", title: fcuiLabel(FCLabels.speak, "Speak"), action: onSpeak))
+        }
+        pills.append(FCUIEmptyStatePill(icon: "keyboard", title: fcuiLabel(FCLabels.type, "Type"), action: onType))
+        pills.forEach { pillRow.addArrangedSubview($0) }
+        pillRow.axis = .horizontal
+        pillRow.spacing = 8
+        pillRow.alignment = .center
+
+        // 10 between items, +6 under the mark (the halo adds no layout), +10 above the pills.
+        [mark, title, subtitle, pillRow].forEach { stack.addArrangedSubview($0) }
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 10
+        stack.setCustomSpacing(16, after: mark)
+        stack.setCustomSpacing(20, after: subtitle)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -32),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            title.widthAnchor.constraint(lessThanOrEqualToConstant: 300),
+            subtitle.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Taps on the empty area fall through to the list below; only the content is interactive.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+
+    /// The pills wrap: one row when it fits within the 32pt side padding, otherwise stacked.
+    override func layoutSubviews() {
+        let available = bounds.width - 64
+        if available > 0 {
+            let rowWidth = pills.reduce(CGFloat(0)) {
+                $0 + $1.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
+            } + CGFloat(max(0, pills.count - 1)) * pillRow.spacing
+            let axis: NSLayoutConstraint.Axis = rowWidth > available ? .vertical : .horizontal
+            if pillRow.axis != axis { pillRow.axis = axis }
+        }
+        super.layoutSubviews()
+    }
+
+    /// 360ms fade + 6pt rise; none with Reduce Motion.
+    func playAppear() {
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            alpha = 1
+            transform = .identity
+            return
+        }
+        alpha = 0
+        transform = CGAffineTransform(translationX: 0, y: 6)
+        UIView.animate(withDuration: 0.36, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+            self.alpha = 1
+            self.transform = .identity
+        }
+    }
+
+    private static func makeMark() -> UIView {
+        let size: CGFloat = 64
+        let disc = UIView()
+        disc.backgroundColor = FCUITheme.brandSurfacePrimary
+        disc.layer.cornerRadius = size / 2
+        disc.layer.shadowColor = FCUITheme.brandSurfacePrimary.cgColor
+        disc.layer.shadowOpacity = 0.35
+        disc.layer.shadowRadius = 10
+        disc.layer.shadowOffset = CGSize(width: 0, height: 8)
+        disc.isAccessibilityElement = false
+        disc.translatesAutoresizingMaskIntoConstraints = false
+
+        // 8pt halo ring at ~12% brand. Drawn behind the disc without taking layout space.
+        let halo = UIView()
+        halo.backgroundColor = FCUITheme.brandSurfacePrimary.withAlphaComponent(0.12)
+        halo.layer.cornerRadius = size / 2 + 8
+        halo.isUserInteractionEnabled = false
+        halo.translatesAutoresizingMaskIntoConstraints = false
+
+        let glyphSize: CGFloat = 34
+        let glyph = CAShapeLayer()
+        glyph.path = FCUILogoMark.path(size: glyphSize)
+        glyph.fillColor = UIColor.white.cgColor
+        glyph.frame = CGRect(x: (size - glyphSize) / 2, y: (size - glyphSize) / 2, width: glyphSize, height: glyphSize)
+
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(halo)
+        container.addSubview(disc)
+        disc.layer.addSublayer(glyph)
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: size),
+            container.heightAnchor.constraint(equalToConstant: size),
+            disc.widthAnchor.constraint(equalToConstant: size),
+            disc.heightAnchor.constraint(equalToConstant: size),
+            disc.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            disc.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            halo.widthAnchor.constraint(equalToConstant: size + 16),
+            halo.heightAnchor.constraint(equalToConstant: size + 16),
+            halo.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            halo.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+        return container
+    }
+
+    /// Off-scale sizes (no type-scale slot is 18/24 semibold or 14/20): honours the host
+    /// `typeScale` / `fontName` the way `FCUITextStyle` does, with an exact line box.
+    static func font(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let host = FarmerChat.isInitialized ? FarmerChat.shared.config.theme : nil
+        let scaled = size * (host?.typeScale ?? 1.0)
+        if let name = host?.fontName, let custom = UIFont(name: name, size: scaled) {
+            let descriptor = custom.fontDescriptor.addingAttributes([
+                .traits: [UIFontDescriptor.TraitKey.weight: weight]
+            ])
+            return UIFont(descriptor: descriptor, size: scaled)
+        }
+        return .systemFont(ofSize: scaled, weight: weight)
+    }
+
+    private static func setText(_ label: UILabel, _ text: String, size: CGFloat, lineHeight: CGFloat, weight: UIFont.Weight) {
+        let font = font(size: size, weight: weight)
+        let scale = FarmerChat.isInitialized ? (FarmerChat.shared.config.theme?.typeScale ?? 1.0) : 1.0
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = lineHeight * scale
+        paragraph.maximumLineHeight = lineHeight * scale
+        paragraph.alignment = label.textAlignment
+        label.font = font
+        label.attributedText = NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: label.textColor ?? .label,
+            .paragraphStyle: paragraph,
+        ])
+    }
+}
+
+/// 40pt fully-rounded pill: 1pt default border, surface fill, 14pt semibold label, leading 28pt
+/// circle at ~12% brand holding a 20pt brand-green icon.
+final class FCUIEmptyStatePill: UIControl {
+    private let action: () -> Void
+
+    init(icon: String, title: String, action: @escaping () -> Void) {
+        self.action = action
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = FCUITheme.surfacePrimary
+        layer.cornerRadius = 20
+        layer.borderWidth = 1
+        layer.borderColor = FCUITheme.borderDefault.resolvedColor(with: traitCollection).cgColor
+        accessibilityLabel = title
+        accessibilityTraits = .button
+        isAccessibilityElement = true
+
+        let iconCircle = UIView()
+        iconCircle.backgroundColor = FCUITheme.brandSurfacePrimary.withAlphaComponent(0.12)
+        iconCircle.layer.cornerRadius = 14
+        iconCircle.isUserInteractionEnabled = false
+        iconCircle.translatesAutoresizingMaskIntoConstraints = false
+        let image = UIImageView(image: UIImage(
+            systemName: icon,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        ))
+        image.tintColor = FCUITheme.brandSurfacePrimary
+        image.contentMode = .center
+        image.translatesAutoresizingMaskIntoConstraints = false
+        iconCircle.addSubview(image)
+
+        let label = UILabel()
+        label.text = title
+        label.font = FCUIChatEmptyStateView.font(size: 14, weight: .semibold)
+        label.textColor = FCUITheme.foregroundPrimary
+        label.isUserInteractionEnabled = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(iconCircle)
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 40),
+            iconCircle.widthAnchor.constraint(equalToConstant: 28),
+            iconCircle.heightAnchor.constraint(equalToConstant: 28),
+            iconCircle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            iconCircle.centerYAnchor.constraint(equalTo: centerYAnchor),
+            image.widthAnchor.constraint(equalToConstant: 20),
+            image.heightAnchor.constraint(equalToConstant: 20),
+            image.centerXAnchor.constraint(equalTo: iconCircle.centerXAnchor),
+            image.centerYAnchor.constraint(equalTo: iconCircle.centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: iconCircle.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        addAction(UIAction { [weak self] _ in self?.action() }, for: .touchUpInside)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isHighlighted: Bool {
+        didSet { alpha = isHighlighted ? 0.6 : 1 }
+    }
+
+    /// `layer.borderColor` is a CGColor and does not follow light/dark on its own.
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        layer.borderColor = FCUITheme.borderDefault.resolvedColor(with: traitCollection).cgColor
     }
 }
 #endif

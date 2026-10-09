@@ -74,6 +74,7 @@ import { LocationChatBubble } from '../components/LocationChatBubble';
 import { useShareCard } from '../components/ShareCard';
 import { stopAllVoiceClips, VoiceClip } from '../components/VoiceClip';
 import { FcIcon } from '../components/Icon';
+import { ChatEmptyState } from '../components/ChatEmptyState';
 import { SweepBorder } from '../components/Gradients';
 import type { ChatRouteParams } from '../navigation/types';
 import { Green500, radius, spacing, typography } from '../theme';
@@ -934,6 +935,26 @@ export function ChatScreen(props: {
               onPress={scrollToContentEnd}
               style={styles.scrollIndicator}
             />
+            {/* SDK addition (no app counterpart — the app always enters chat with a question):
+                a centred placeholder while the thread is empty. It fills the list's box, which
+                ends above the composer / input row (flow siblings), so neither overlaps it, and
+                it does not scroll with the list. Gone with the first message; never on history. */}
+            {state.messages.length === 0 &&
+            !state.isLoading &&
+            !isHistoryEntry &&
+            !textInputVisible &&
+            !voiceInputVisible &&
+            !photoInputVisible ? (
+              <ChatEmptyState
+                onPhoto={sdk.config.enableImages ? () => setPhotoInputVisible(true) : undefined}
+                onSpeak={sdk.config.enableVoice ? () => setVoiceInputVisible(true) : undefined}
+                onType={
+                  isComposerUi
+                    ? () => composerRef.current?.focus()
+                    : () => setTextInputVisible(true)
+                }
+              />
+            ) : null}
           </View>
           {/* App parity (ChatThreadContent.kt:243 / ChatScreen.kt:1048): the composer UI drops
               this row entirely — the InputComposer below already carries camera and mic. */}

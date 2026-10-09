@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { FcIcon, type IconName } from './FcIcon';
-import { ActionButton, CircularProgress } from './common';
+import { ActionButton, CircularProgress, LogoGlyph } from './common';
 import { Assets } from '../assets';
 import { useLabel, useSdk } from '../context';
 import { answerGenerationTips, type TipData } from '../../core/tips';
@@ -385,6 +385,54 @@ export function LogoAppBar(props: {
         <FcIcon name="logo_mark" size={36} tint="#FFFFFF" />
       </div>
       {props.trailing ?? <span className="fcsdk-c-appbar-spacer" aria-hidden />}
+    </div>
+  );
+}
+
+/**
+ * Empty-chat placeholder (SDK addition, 2026-10-09): a fresh CHAT_ONLY chat would otherwise open on
+ * a blank screen. Centred above the composer: the FarmerChat mark, the app's tagline and Home
+ * greeting labels (no new keys), and the three ways to ask. Each way is a button that does what the
+ * composer's own control does, so the hint is never a dead end. It disappears with the first message.
+ */
+export function ChatEmptyState(props: {
+  bottomInset: string;
+  onPhoto?: () => void;
+  onSpeak?: () => void;
+  onType: () => void;
+}) {
+  const label = useLabel();
+  const ways: { key: string; icon: IconName; text: string; onClick?: () => void }[] = [
+    { key: 'photo', icon: 'icon_camera', text: label('fc_v2_app_label_photo', 'Photo'), onClick: props.onPhoto },
+    { key: 'speak', icon: 'icon_mic', text: label('fc_v2_app_label_speak', 'Speak'), onClick: props.onSpeak },
+    { key: 'type', icon: 'icon_keyboard', text: label('fc_v2_app_label_type', 'Type'), onClick: props.onType },
+  ];
+  return (
+    <div className="fcsdk-c-empty" style={{ bottom: props.bottomInset }}>
+      <div className="fcsdk-c-empty-mark" aria-hidden>
+        <LogoGlyph size={34} tint="#FFFFFF" />
+      </div>
+      <h2 className="fcsdk-c-empty-title">
+        {label('fc_v2_app_label_farmerchat_tagline', 'FarmerChat: Practical advice for your crops & livestock')}
+      </h2>
+      <p className="fcsdk-c-empty-sub">
+        {label(
+          'fc_v2_app_label_get_started_by_clicking_on_photo_speak_or_type_to_ask_your_question',
+          'Tap a button to ask a question',
+        )}
+      </p>
+      <div className="fcsdk-c-empty-ways">
+        {ways
+          .filter((w) => w.onClick)
+          .map((w) => (
+            <button key={w.key} type="button" className="fcsdk-c-empty-way" onClick={w.onClick}>
+              <span className="fcsdk-c-empty-way-ico" aria-hidden>
+                <FcIcon name={w.icon} size={20} tint="var(--fc-c-brand-surface-primary)" />
+              </span>
+              {w.text}
+            </button>
+          ))}
+      </div>
     </div>
   );
 }

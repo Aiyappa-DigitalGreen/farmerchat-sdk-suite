@@ -8209,3 +8209,40 @@ The Vercel project `farmerchat-widget` (farmerchat-widget.vercel.app) was delete
 request; the URL now returns 404. The demo lives only on Railway
 (https://farmerchat-sdk-suite-production.up.railway.app), deployed from GitHub `main`. READMEs point
 there. `web/widget/vercel/` is kept: `web/railway/server.mjs` imports its proxy handler.
+
+## Empty-chat placeholder — all v2 platforms (2026-10-09, SDK addition)
+
+User request: a fresh chat should not open on a blank screen. The app has no chat empty state (it
+always enters chat with a question), so this is an SDK addition. Shown when there are no messages,
+nothing is loading, it is not a history entry and no input overlay is open; it disappears with the
+first message. Centred above the composer, outside the scrolling list.
+
+Content (existing labels only, no new keys): the FarmerChat mark in a 64dp brand-green circle with
+an 8dp halo; `fc_v2_app_label_farmerchat_tagline`;
+`fc_v2_app_label_get_started_by_clicking_on_photo_speak_or_type_to_ask_your_question` (stage serves
+"Ask by Voice, Photo or Text"); Photo / Speak / Type pills (`fc_v2_app_label_photo|speak|type`) that do
+what the chat's own controls do, hidden when images / voice are disabled.
+
+| Platform | Where | Differences |
+|---|---|---|
+| web | `chatParts.tsx` `ChatEmptyState`, CSS `.fcsdk-c-empty*` in `theme.ts`, `ChatScreen.tsx` | reference |
+| android compose | `ChatScreen.kt` `ChatEmptyState` / `ChatEmptyStatePill` (sibling of the LazyColumn) | hidden while the composer is focused or voice is active; NOT hidden while the photo sheet is open (its scrim covers it; `PhotoInput` exposes no open state and changing its public signature was avoided) |
+| android views | `widgets/ChatEmptyStateView.kt`, `fc_fragment_chat.xml`, `ChatFragment.kt`; `InputOverlaysController.onVisibilityChanged` added | hidden while the composer is focused |
+| ios SwiftUI | `ChatView.swift` `FCChatEmptyState` (overlay between app bar and input bar) | never shows when the chat opens with a payload (question/answer/image/audio) to avoid a flash; a chat error with no messages shows the error screen instead; SF Symbols icons; no fixed-colour radial highlight |
+| ios UIKit | `ChatViewController.swift` `FCUIChatEmptyStateView` / `FCUIEmptyStatePill`; `FCUILogoMark` made internal | same as SwiftUI; inputs are modal so no overlay check |
+| react-native | `components/ChatEmptyState.tsx`, `ChatScreen.tsx`; `theme.withAlpha` exported | none |
+
+Verified: android compile (core/compose/views) + core unit tests (exit 0); ios FarmerChatCore
+`swift build` + `swift test` (129, 0 failures), `xcodebuild` FarmerChatSwiftUI + FarmerChatUIKit for the
+iOS Simulator (succeeded); react-native `tsc` + `npm test` (20 pass); web `tsc` + build + tests, widget
+build. Web checked in the browser (stage): the placeholder renders centred with the served labels
+and disappears on the first question. Android/iOS/RN: UNVERIFIED on device (not rendered).
+
+### Widget demo host page redesigned (same day)
+
+`web/widget/demo/index.html` is now "Malnad Monsoon Collective" (fictional coffee / pepper /
+arecanut growers in the Western Ghats): monsoon-ink and mist palette with a turmeric accent so the
+widget's green launcher is the only green on the page. Until the widget is first opened, the
+launcher pulses with a turmeric ring (host CSS on `.fcw-launcher`) and a callout with an arrow points
+at it (dismissible; mirrors for `?left=1`). Test controls, query params and `data-ask` buttons are
+unchanged. Rainfall and prices are illustrative and labelled as such.

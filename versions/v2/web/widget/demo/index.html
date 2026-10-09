@@ -3,119 +3,147 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Kaveri Valley Farmers</title>
+  <title>Malnad Monsoon Collective</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Noto+Sans+Kannada:wght@500&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..900&family=Noto+Sans+Kannada:wght@500&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!--
+    A fictional growers' collective in the Western Ghats (coffee, pepper, arecanut), made up to host
+    the FarmerChat widget. The palette is monsoon ink, mist and turmeric on purpose: the widget's
+    green launcher is the only green on the page, and it is ringed and pointed at until first opened.
+  -->
   <style>
-    /*
-     * Demo host page for the FarmerChat widget: the website of a FICTIONAL farmer producer
-     * company. Every name, price and event here is illustrative. The page deliberately uses no
-     * green, so the widget's brand green is the only green on screen.
-     */
     :root {
-      --water: #E9F0EC;      /* pale paddy-water background */
-      --slate: #1E3A4C;      /* river slate — text and rules */
-      --slate-soft: #4B6474;
-      --turmeric: #E3A008;   /* the one warm accent */
-      --ragi: #7A4A2E;       /* ragi-brown secondary marks */
-      --paper: #FFFFFF;
-      --line: #C9D6D0;
-      --display: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
-      --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-      --kn: "Noto Sans Kannada", var(--body);
+      --ink: #0E1B2A; --ink-2: #16283B; --mist: #EEF2F4; --paper: #FFFFFF; --slate: #2B3D4F; --slate-soft: #5B6E80;
+      --line: #D5DEE5; --water: #F5F8FA; --rain: #6FB2DA; --turmeric: #F2B132; --turmeric-ink: #3A2600; --chili: #C8462F;
+      --display: 'Archivo', 'Arial Narrow', system-ui, sans-serif; --body: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --kn: 'Noto Sans Kannada', var(--body);
     }
     * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
-    body { margin: 0; background: var(--water); color: var(--slate); font: 400 17px/1.6 var(--body); }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--mist); color: var(--slate); font: 400 16px/1.55 var(--body); }
     a { color: inherit; }
-    :focus-visible { outline: 3px solid var(--turmeric); outline-offset: 3px; border-radius: 4px; }
-    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding-inline: 24px; }
+    .kn { font-family: var(--kn); }
+    h1, h2, h3 { font-family: var(--display); color: var(--ink); margin: 0; text-wrap: balance; }
 
-    /* ---------- header */
-    header.site { padding: 22px 0; }
-    header.site .wrap { display: flex; align-items: center; gap: 28px; }
-    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-    .brand svg { flex: 0 0 auto; }
-    .brand-name { font: 700 19px/1.1 var(--display); letter-spacing: -0.01em; }
-    .brand-kn { display: block; font: 500 12px/1.4 var(--kn); color: var(--slate-soft); }
-    nav.main { display: flex; gap: 22px; margin-left: auto; font-weight: 500; font-size: 15px; }
-    nav.main a { text-decoration: none; padding: 6px 0; border-bottom: 2px solid transparent; }
-    nav.main a:hover { border-bottom-color: var(--turmeric); }
-    .ask-btn { white-space: nowrap; font: 600 15px/1 var(--body); color: var(--paper); background: var(--slate); border: 0; border-radius: 999px;
-      padding: 12px 18px; cursor: pointer; }
-    .ask-btn:hover { background: #163042; }
+    /* header */
+    header.site { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--ink) 92%, transparent); backdrop-filter: blur(10px); color: #fff; }
+    header.site .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .brand svg { width: 34px; height: 34px; }
+    .brand b { font: 800 19px/1 var(--display); font-stretch: 85%; letter-spacing: .01em; display: block; }
+    .brand small { display: block; font: 500 11.5px/1.3 var(--kn); color: rgba(255,255,255,.65); margin-top: 3px; }
+    nav.top { margin-left: auto; display: flex; gap: 22px; font-weight: 500; font-size: 14.5px; }
+    nav.top a { text-decoration: none; color: rgba(255,255,255,.8); }
+    nav.top a:hover { color: #fff; }
+    .ask-top { font: 700 14px/1 var(--body); height: 40px; padding: 0 16px; border-radius: 12px; border: 0; cursor: pointer;
+      background: var(--turmeric); color: var(--turmeric-ink); display: inline-flex; align-items: center; gap: 8px; }
+    .ask-top svg { width: 18px; height: 18px; }
 
-    /* ---------- hero: the season timeline is the page's one bold element */
-    .hero { padding: 36px 0 56px; }
-    .hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
-    .hero h1 { margin: 0 0 18px; font: 800 clamp(38px, 5.2vw, 64px)/1.02 var(--display); letter-spacing: -0.025em; }
-    .hero .when { margin: 0 0 14px; font-weight: 600; color: var(--ragi); }
-    .hero .lede { margin: 0 0 26px; max-width: 30em; color: var(--slate-soft); }
-    .hero .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-    .ghost-btn { font: 600 15px/1 var(--body); color: var(--slate); background: transparent; border: 1.5px solid var(--slate);
-      border-radius: 999px; padding: 11px 18px; cursor: pointer; text-decoration: none; }
+    /* hero: monsoon night, falling rain, the week's rainfall */
+    .hero { position: relative; overflow: hidden; background: radial-gradient(120% 90% at 85% 0%, #20405C 0%, var(--ink) 55%); color: #DCE6EE; }
+    .rain { position: absolute; inset: 0; pointer-events: none; opacity: .5;
+      background-image: repeating-linear-gradient(105deg, transparent 0 22px, rgba(111,178,218,.22) 22px 23px, transparent 23px 61px);
+      background-size: 200px 200px; }
+    @media (prefers-reduced-motion: no-preference) { .rain { animation: fall 1.4s linear infinite; } @keyframes fall { to { background-position: -54px 200px; } } }
+    .hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 56px; align-items: center; padding-block: 72px 88px; }
+    .eyebrow { font-weight: 600; font-size: 14px; color: var(--turmeric); margin: 0 0 14px; }
+    .hero h1 { color: #fff; font-weight: 900; font-stretch: 78%; font-size: clamp(44px, 6.4vw, 84px); line-height: .95; letter-spacing: -.01em; }
+    .hero h1 .kn { display: block; font-size: .3em; font-weight: 500; letter-spacing: 0; color: rgba(255,255,255,.62); margin-top: 18px; line-height: 1.3; }
+    .lede { font-size: 18px; max-width: 46ch; margin: 22px 0 0; color: #C4D3DF; }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .btn { text-decoration: none; font: 700 15px/1 var(--body); height: 48px; padding: 0 20px; border-radius: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-sun { border: 0; background: var(--turmeric); color: var(--turmeric-ink); }
+    .btn-line { border: 1.5px solid rgba(255,255,255,.35); background: transparent; color: #fff; }
+    .btn-line:hover { border-color: #fff; }
 
-    .season { background: var(--paper); border-radius: 28px; padding: 26px 26px 22px; box-shadow: 0 1px 0 var(--line); }
-    .season h2 { margin: 0 0 4px; font: 700 18px/1.3 var(--display); }
-    .season .sub { margin: 0 0 18px; font-size: 14px; color: var(--slate-soft); }
-    .timeline { position: relative; padding-top: 30px; display: grid; grid-template-columns: 92px 1fr; row-gap: 14px; column-gap: 14px; }
-    .months { grid-column: 2; display: grid; grid-template-columns: repeat(6, 1fr); font-size: 12.5px; font-weight: 600; color: var(--slate-soft); }
-    .crop { font: 600 14px/1.2 var(--body); align-self: center; }
-    .crop small { display: block; font: 500 11.5px/1.3 var(--kn); color: var(--slate-soft); }
-    .lane { position: relative; height: 34px; border-radius: 10px; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / 6 - 1px), var(--line) calc(100% / 6 - 1px), var(--line) calc(100% / 6)); }
-    .stage { position: absolute; top: 4px; bottom: 4px; border-radius: 7px; transform-origin: left center;
-      animation: grow 900ms cubic-bezier(.2, .7, .2, 1) both; }
-    .stage.grow { background: #A7C4D3; }
-    .stage.field { background: var(--slate); }
-    .stage.harvest { background: var(--turmeric); }
-    .lane:nth-of-type(2) .stage { animation-delay: 80ms; }
-    @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-    .today { position: absolute; top: 22px; bottom: -4px; width: 2px; background: var(--ragi); pointer-events: none; }
-    .today span { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); white-space: nowrap;
-      font: 600 12px/1 var(--body); color: var(--paper); background: var(--ragi); padding: 4px 8px; border-radius: 999px; }
-    .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 18px; font-size: 13px; color: var(--slate-soft); }
-    .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .gauge { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 22px; padding: 22px 22px 18px; }
+    .gauge h2 { color: #fff; font-size: 17px; font-weight: 700; }
+    .gauge p { margin: 4px 0 0; font-size: 13.5px; color: #9FB4C5; }
+    .bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 190px; margin-top: 22px; }
+    .bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+    .bar i { display: block; border-radius: 8px 8px 3px 3px; background: linear-gradient(180deg, var(--rain), #2E6E99); }
+    .bar.heavy i { background: linear-gradient(180deg, #A9D6F2, var(--rain)); }
+    .bar b { font: 600 12px/1 var(--body); color: #fff; text-align: center; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+    .bar span { font-size: 12px; color: #9FB4C5; text-align: center; margin-top: 8px; }
+    .gauge-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.12); font-size: 13.5px; }
+    .gauge-foot b { color: #fff; font-variant-numeric: tabular-nums; }
+    .alert { display: inline-flex; align-items: center; gap: 6px; color: var(--turmeric); font-weight: 600; }
 
-    /* ---------- sections */
-    section.band { padding: 56px 0; }
-    section.band.paper { background: var(--paper); }
-    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
-    .section-head h2 { margin: 0; font: 700 clamp(26px, 3vw, 34px)/1.15 var(--display); letter-spacing: -0.015em; }
-    .note { font-size: 13.5px; color: var(--slate-soft); }
+    /* crops */
+    section.band { padding-block: 72px; }
+    .sec-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 28px; }
+    .sec-head h2 { font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; font-stretch: 85%; }
+    .sec-head p { margin: 0; color: var(--slate-soft); max-width: 48ch; }
+    .crops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .crop { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+    .crop-top { display: flex; align-items: center; gap: 12px; }
+    .crop-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--water); }
+    .crop-ico svg { width: 26px; height: 26px; }
+    .crop h3 { font-size: 21px; font-weight: 800; font-stretch: 90%; }
+    .crop h3 small { display: block; font: 500 13px/1.3 var(--kn); color: var(--slate-soft); }
+    .stage { font-size: 13px; font-weight: 600; color: var(--slate); background: var(--water); border-radius: 999px; padding: 5px 10px; align-self: flex-start; }
+    .stage.warn { background: #FCEBE7; color: var(--chili); }
+    .crop p { margin: 0; color: var(--slate-soft); font-size: 15px; }
+    .ask-link { margin-top: auto; align-self: flex-start; font: 600 14.5px/1.3 var(--body); color: var(--ink); background: none; border: 0; padding: 6px 0; cursor: pointer;
+      text-decoration: underline; text-decoration-color: var(--turmeric); text-decoration-thickness: 2px; text-underline-offset: 5px; }
+    .ask-link:hover { color: #000; }
 
-    /* prices: a real table, not cards */
-    table.prices { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-    .prices th { text-align: left; font: 600 13.5px/1.4 var(--body); color: var(--slate-soft); padding: 0 12px 10px 0; border-bottom: 1.5px solid var(--slate); }
-    .prices td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); }
-    .prices td.num, .prices th.num { text-align: right; }
-    .prices .crop-name { font-weight: 600; }
-    .up { color: #2F6A3F; } .down { color: #A33A2A; }
-    .up::before { content: "▲ "; font-size: 10px; } .down::before { content: "▼ "; font-size: 10px; }
+    /* prices + questions */
+    .two { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 28px; align-items: start; }
+    .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 24px; }
+    .panel h2 { font-size: 24px; font-weight: 800; font-stretch: 85%; }
+    .panel > p { margin: 6px 0 16px; color: var(--slate-soft); font-size: 14px; }
+    .tbl { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 440px; }
+    th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--line); font-size: 15px; }
+    th { font-size: 12.5px; font-weight: 600; color: var(--slate-soft); }
+    td.num, th.num { text-align: right; }
+    .up { color: #1C7C4A; font-weight: 600; } .down { color: var(--chili); font-weight: 600; }
+    .qs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    .qs button { width: 100%; text-align: left; font: 500 15.5px/1.4 var(--body); color: var(--ink); background: var(--water); border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+    .qs button:hover { border-color: var(--slate-soft); }
+    .qs .kn { font-size: 13px; color: var(--slate-soft); }
 
-    /* ask + events */
-    .split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; }
-    .ask h2 { margin: 0 0 12px; font: 700 clamp(26px, 3vw, 34px)/1.15 var(--display); letter-spacing: -0.015em; }
-    .ask p { margin: 0 0 22px; max-width: 34em; color: var(--slate-soft); }
-    .questions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-    .questions button { width: 100%; text-align: left; font: 500 16px/1.4 var(--body); color: var(--slate); background: var(--water);
-      border: 0; border-left: 4px solid var(--turmeric); border-radius: 0 14px 14px 0; padding: 14px 16px; cursor: pointer; }
-    .questions button:hover { background: #DDE8E3; }
-    .questions .kn { display: block; font: 500 13px/1.5 var(--kn); color: var(--slate-soft); }
+    footer.site { background: var(--ink); color: #9FB4C5; font-size: 13.5px; }
+    footer.site .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-block: 26px 110px; }
 
-    .events h2 { margin: 0 0 18px; font: 700 22px/1.2 var(--display); }
-    .events ol { list-style: none; margin: 0; padding: 0; }
-    .events li { display: grid; grid-template-columns: 64px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
-    .date { text-align: center; line-height: 1.1; }
-    .date b { display: block; font: 800 26px/1 var(--display); }
-    .date span { font-size: 13px; color: var(--slate-soft); }
-    .events h3 { margin: 0 0 2px; font: 600 16px/1.35 var(--body); }
-    .events p { margin: 0; font-size: 14.5px; color: var(--slate-soft); }
+    /* FarmerChat attention: the widget launcher is ringed in turmeric and a callout points at it,
+       until the widget is opened for the first time on this page. */
+    body.fc-attn .fcw-launcher { animation: fc-ring 2.2s ease-out infinite; }
+    @keyframes fc-ring {
+      0% { box-shadow: 0 4px 12px rgba(0,0,0,.25), 0 0 0 0 rgba(242,177,50,.85); }
+      70% { box-shadow: 0 4px 12px rgba(0,0,0,.25), 0 0 0 18px rgba(242,177,50,0); }
+      100% { box-shadow: 0 4px 12px rgba(0,0,0,.25), 0 0 0 0 rgba(242,177,50,0); }
+    }
+    @media (prefers-reduced-motion: reduce) { body.fc-attn .fcw-launcher { animation: none; box-shadow: 0 0 0 4px var(--turmeric); } }
+    .callout { position: fixed; right: 20px; bottom: 116px; z-index: 2147482000; width: min(300px, calc(100vw - 40px));
+      background: var(--paper); color: var(--slate); border-radius: 18px; padding: 16px 40px 16px 16px;
+      box-shadow: 0 18px 40px -12px rgba(14,27,42,.45), 0 0 0 1px rgba(14,27,42,.06); }
+    body.fc-left .callout { right: auto; left: 20px; }
+    .callout b { display: block; font: 800 17px/1.25 var(--display); font-stretch: 90%; color: var(--ink); }
+    .callout p { margin: 6px 0 0; font-size: 14px; line-height: 1.45; color: var(--slate-soft); }
+    .callout .x { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--slate-soft); cursor: pointer; font-size: 18px; line-height: 1; }
+    .callout .x:hover { background: var(--water); }
+    .callout svg.arrow { position: absolute; right: 58px; bottom: -38px; width: 40px; height: 36px; overflow: visible; }
+    body.fc-left .callout svg.arrow { right: auto; left: 34px; transform: scaleX(-1); }
+    @media (prefers-reduced-motion: no-preference) { .callout { animation: rise .5s .8s ease-out both; } @keyframes rise { from { opacity: 0; transform: translateY(10px); } } }
 
-    footer.site { padding: 36px 0 120px; font-size: 14.5px; color: var(--slate-soft); }
-    footer.site .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px; }
-
-    /* ---------- test controls: kept out of the way, for SDK testing */
+    @media (max-width: 900px) {
+      nav.top { display: none; }
+      .hero .wrap { grid-template-columns: 1fr; gap: 36px; padding-block: 48px 64px; }
+      .crops { grid-template-columns: 1fr; }
+      .two { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .wrap { padding-inline: 16px; }
+      .ask-top span { display: none; }
+      .brand small { display: none; }
+      .bars { gap: 6px; height: 160px; }
+      .callout { bottom: 112px; }
+    }
     details.devtools { position: fixed; left: 16px; bottom: 16px; z-index: 10; font: 500 13px/1.4 var(--body);
       background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 20px rgba(30, 58, 76, 0.12); max-width: 300px; }
     details.devtools summary { cursor: pointer; padding: 10px 14px; list-style: none; color: var(--slate-soft); }
@@ -130,159 +158,114 @@
     .devtools button { font: 500 12.5px/1 var(--body); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--water); color: var(--slate); cursor: pointer; }
     .devtools .state { width: 100%; margin-top: 4px; color: var(--slate-soft); }
     .devtools .state b { color: var(--slate); }
-
-    @media (max-width: 880px) {
-      nav.main { display: none; }
-      .hero .wrap, .split { grid-template-columns: 1fr; gap: 32px; }
-      header.site .ask-btn { margin-left: auto; }
-    }
-    @media (max-width: 520px) {
-      .wrap { padding: 0 16px; }
-      .brand-kn { display: none; }
-      header.site .ask-btn { display: none; }
-      .timeline { grid-template-columns: 70px 1fr; column-gap: 10px; }
-      .prices .market { display: none; }
-      .section-head { flex-direction: column; gap: 4px; }
-    }
-    @media (prefers-reduced-motion: reduce) { .stage { animation: none; } }
   </style>
 </head>
-<body>
+<body class="fc-attn">
   <header class="site">
     <div class="wrap">
-      <a class="brand" href="#" aria-label="Kaveri Valley Farmers, home">
-        <!-- A paddy stalk over a river line. -->
-        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-          <circle cx="20" cy="20" r="20" fill="#1E3A4C" />
-          <path d="M20 31V12" stroke="#E3A008" stroke-width="2.4" stroke-linecap="round" />
-          <path d="M20 16c-4-1-6-4-6-7 4 0 6 3 6 7zM20 21c4-1 6-4 6-7-4 0-6 3-6 7zM20 26c-4-1-6-4-6-7 4 0 6 3 6 7z" fill="#E3A008" />
-          <path d="M9 31c4 2 7-2 11 0s7 2 11 0" stroke="#A7C4D3" stroke-width="2" fill="none" stroke-linecap="round" />
-        </svg>
-        <span>
-          <span class="brand-name">Kaveri Valley Farmers</span>
-          <span class="brand-kn">ಕಾವೇರಿ ಕಣಿವೆ ರೈತ ಉತ್ಪಾದಕ ಕಂಪನಿ</span>
-        </span>
+      <a class="brand" href="#top" aria-label="Malnad Monsoon Collective home">
+        <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#F2B132"/><path d="M17 6c4.8 5.6 7.2 9.8 7.2 13a7.2 7.2 0 1 1-14.4 0C9.8 15.8 12.2 11.6 17 6z" fill="#0E1B2A"/><path d="M14 20.5a3.4 3.4 0 0 0 3.4 3.3" stroke="#F2B132" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
+        <span><b>Malnad Monsoon Collective</b><small class="kn">ಮಲೆನಾಡು ಮುಂಗಾರು ಬೆಳೆಗಾರರ ಸಂಘ</small></span>
       </a>
-      <nav class="main" aria-label="Main">
-        <a href="#season">This season</a>
-        <a href="#prices">Market prices</a>
-        <a href="#events">At the centre</a>
-      </nav>
-      <button class="ask-btn" type="button" data-ask>Ask FarmerChat</button>
+      <nav class="top" aria-label="Sections"><a href="#crops">This week</a><a href="#prices">Prices</a><a href="#ask">Ask an expert</a></nav>
+      <button class="ask-top" type="button" data-ask><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Ask FarmerChat</span></button>
     </div>
   </header>
 
-  <main>
-    <section class="hero" id="season">
+  <main id="top">
+    <section class="hero">
+      <div class="rain" aria-hidden="true"></div>
       <div class="wrap">
         <div>
-          <p class="when" id="when">Mandya and Mysuru, week of 8 October</p>
-          <h1>Paddy harvest opens this week.</h1>
-          <p class="lede">
-            Fields transplanted in late June are ready once 80–85% of grains turn straw-coloured.
-            Drain the water ten days before cutting, and book the community harvester early —
-            the queue fills by Friday.
-          </p>
-          <div class="actions">
-            <button class="ask-btn" type="button" data-ask="When should I drain my paddy field before harvest?">Ask when to drain your field</button>
-            <a class="ghost-btn" href="#events">Book the harvester</a>
+          <p class="eyebrow" id="when">Chikkamagaluru and Kodagu, this week</p>
+          <h1>The rains are back on the estates.<span class="kn">ಎಸ್ಟೇಟ್‌ಗಳಿಗೆ ಮತ್ತೆ ಮಳೆ ಬಂದಿದೆ</span></h1>
+          <p class="lede">Three heavy days in a row. Clear the drains before the next spell, watch arecanut for fruit rot, and hold off on pepper fertiliser until the soil drains.</p>
+          <div class="hero-cta">
+            <button class="btn btn-sun" type="button" data-ask="It has rained heavily for three days. What should I do on my coffee estate this week?">Ask what to do this week</button>
+            <a class="btn btn-line" href="#prices">See today's prices</a>
           </div>
         </div>
-
-        <figure class="season" style="margin:0" aria-labelledby="season-title">
-          <h2 id="season-title">Where each crop stands</h2>
-          <p class="sub">Typical kharif calendar for the valley's main crops.</p>
-          <div class="timeline" id="timeline">
-            <div></div>
-            <div class="months" aria-hidden="true"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span></div>
-            <!-- Each lane is Jun 1 → Nov 30; stage positions are % of that span. -->
-            <div class="crop">Paddy<small>ಭತ್ತ</small></div>
-            <div class="lane" role="img" aria-label="Paddy: nursery June, in field July to September, harvest October to mid November">
-              <span class="stage grow" style="left:2%;width:14%"></span>
-              <span class="stage field" style="left:17%;width:51%"></span>
-              <span class="stage harvest" style="left:69%;width:22%"></span>
-            </div>
-            <div class="crop">Ragi<small>ರಾಗಿ</small></div>
-            <div class="lane" role="img" aria-label="Ragi: sowing July, in field August to October, harvest November">
-              <span class="stage grow" style="left:22%;width:10%"></span>
-              <span class="stage field" style="left:33%;width:48%"></span>
-              <span class="stage harvest" style="left:82%;width:17%"></span>
-            </div>
-            <div class="crop">Maize<small>ಮೆಕ್ಕೆಜೋಳ</small></div>
-            <div class="lane" role="img" aria-label="Maize: sowing June, in field July to September, harvest late September to October">
-              <span class="stage grow" style="left:4%;width:9%"></span>
-              <span class="stage field" style="left:14%;width:46%"></span>
-              <span class="stage harvest" style="left:61%;width:18%"></span>
-            </div>
-            <div class="crop">Groundnut<small>ಕಡಲೆಕಾಯಿ</small></div>
-            <div class="lane" role="img" aria-label="Groundnut: sowing June to July, in field July to September, harvest October">
-              <span class="stage grow" style="left:6%;width:12%"></span>
-              <span class="stage field" style="left:19%;width:44%"></span>
-              <span class="stage harvest" style="left:64%;width:16%"></span>
-            </div>
-            <div class="today" id="today" aria-hidden="true"><span>This week</span></div>
+        <div class="gauge" role="img" aria-label="Rainfall over the last seven days at the collective's Mudigere gauge, in millimetres: 12, 8, 31, 64, 88, 72 and 40.">
+          <h2>Rain at the Mudigere gauge</h2>
+          <p>Last seven days, millimetres per day</p>
+          <div class="bars" aria-hidden="true">
+            <div class="bar"><b>12</b><i style="height:12%"></i><span>Thu</span></div>
+            <div class="bar"><b>8</b><i style="height:8%"></i><span>Fri</span></div>
+            <div class="bar"><b>31</b><i style="height:31%"></i><span>Sat</span></div>
+            <div class="bar heavy"><b>64</b><i style="height:64%"></i><span>Sun</span></div>
+            <div class="bar heavy"><b>88</b><i style="height:88%"></i><span>Mon</span></div>
+            <div class="bar heavy"><b>72</b><i style="height:72%"></i><span>Tue</span></div>
+            <div class="bar"><b>40</b><i style="height:40%"></i><span>Wed</span></div>
           </div>
-          <div class="legend">
-            <span><i style="background:#A7C4D3"></i>Nursery and sowing</span>
-            <span><i style="background:#1E3A4C"></i>In the field</span>
-            <span><i style="background:#E3A008"></i>Harvest</span>
-          </div>
-        </figure>
+          <div class="gauge-foot"><span>Week total <b>315 mm</b></span><span class="alert">Fruit-rot weather for arecanut</span></div>
+        </div>
       </div>
     </section>
 
-    <section class="band paper" id="prices">
+    <section class="band" id="crops">
       <div class="wrap">
-        <div class="section-head">
-          <h2>Today's market prices</h2>
-          <span class="note">Illustrative prices for this demo page, ₹ per quintal.</span>
+        <div class="sec-head">
+          <h2>On the estate this week</h2>
+          <p>What the collective's field team is telling members, crop by crop. Tap a question to ask FarmerChat for your own field.</p>
         </div>
-        <table class="prices">
-          <thead>
-            <tr><th>Crop</th><th class="market">Market</th><th class="num">Modal price</th><th class="num">Since last week</th></tr>
-          </thead>
-          <tbody>
-            <tr><td class="crop-name">Paddy (common)</td><td class="market">Mandya</td><td class="num">₹2,310</td><td class="num up">₹45</td></tr>
-            <tr><td class="crop-name">Ragi</td><td class="market">Mysuru</td><td class="num">₹3,980</td><td class="num up">₹60</td></tr>
-            <tr><td class="crop-name">Maize</td><td class="market">Chamarajanagar</td><td class="num">₹2,140</td><td class="num down">₹30</td></tr>
-            <tr><td class="crop-name">Groundnut</td><td class="market">Hunsur</td><td class="num">₹6,450</td><td class="num up">₹110</td></tr>
-            <tr><td class="crop-name">Tomato</td><td class="market">Kolar</td><td class="num">₹1,200</td><td class="num down">₹180</td></tr>
-          </tbody>
-        </table>
+        <div class="crops">
+          <article class="crop">
+            <div class="crop-top">
+              <span class="crop-ico"><svg viewBox="0 0 26 26" aria-hidden="true"><ellipse cx="13" cy="13" rx="8" ry="10.5" fill="#6B3E26"/><path d="M13 3.5c-2.6 3.4-2.6 15.6 0 19" stroke="#C99A6B" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></span>
+              <h3>Coffee<small class="kn">ಕಾಫಿ</small></h3>
+            </div>
+            <span class="stage">Berry development</span>
+            <p>Keep shade-tree drains open so water doesn't stand around the roots, and gather fallen berries to break the berry borer's cycle.</p>
+            <button class="ask-link" type="button" data-ask="How do I control coffee berry borer during the monsoon?">Ask about berry borer</button>
+          </article>
+          <article class="crop">
+            <div class="crop-top">
+              <span class="crop-ico"><svg viewBox="0 0 26 26" aria-hidden="true"><path d="M13 3v20" stroke="#3E6B3A" stroke-width="1.8" stroke-linecap="round"/><g fill="#1E2B1F"><circle cx="10" cy="8" r="2.2"/><circle cx="16" cy="10" r="2.2"/><circle cx="10" cy="13" r="2.2"/><circle cx="16" cy="15.5" r="2.2"/><circle cx="10" cy="18.5" r="2.2"/></g></svg></span>
+              <h3>Black pepper<small class="kn">ಕಾಳುಮೆಣಸು</small></h3>
+            </div>
+            <span class="stage">Spike setting</span>
+            <p>Yellowing vines after this much rain often mean quick wilt. Check the base of the vine, and don't apply fertiliser until the soil drains.</p>
+            <button class="ask-link" type="button" data-ask="My pepper vines are yellowing after heavy rain. Is it quick wilt and what should I do?">Ask about yellowing vines</button>
+          </article>
+          <article class="crop">
+            <div class="crop-top">
+              <span class="crop-ico"><svg viewBox="0 0 26 26" aria-hidden="true"><path d="M13 2v6" stroke="#3E6B3A" stroke-width="1.8" stroke-linecap="round"/><g fill="#D9822B"><circle cx="9" cy="12" r="3.2"/><circle cx="17" cy="12" r="3.2"/><circle cx="13" cy="17.5" r="3.2"/><circle cx="8.5" cy="19.5" r="2.6"/><circle cx="17.5" cy="19.5" r="2.6"/></g></svg></span>
+              <h3>Arecanut<small class="kn">ಅಡಿಕೆ</small></h3>
+            </div>
+            <span class="stage warn">Fruit-rot risk</span>
+            <p>Koleroga spreads fast in continuous rain. Members with nuts dropping should spray in the next dry window. Cover the bunches if you can.</p>
+            <button class="ask-link" type="button" data-ask="Arecanut nuts are dropping after continuous rain. How do I manage koleroga?">Ask about nut drop</button>
+          </article>
+        </div>
       </div>
     </section>
 
-    <section class="band" id="ask">
-      <div class="wrap split">
-        <div class="ask">
-          <h2>Not sure what's wrong with a crop?</h2>
-          <p>
-            Ask FarmerChat in Kannada, Hindi or English — by typing, speaking, or sending a photo
-            of the leaf. It answers for your crop and your location, any time of day.
-          </p>
-          <ul class="questions">
-            <li><button type="button" data-ask="My paddy leaves have brown spots with grey centres. What is it?">My paddy leaves have brown spots with grey centres. What is it?<span class="kn">ಭತ್ತದ ಎಲೆಗಳ ಮೇಲೆ ಕಂದು ಚುಕ್ಕೆಗಳು</span></button></li>
-            <li><button type="button" data-ask="How much fertilizer does ragi need after the first weeding?">How much fertilizer does ragi need after the first weeding?<span class="kn">ರಾಗಿಗೆ ಗೊಬ್ಬರ ಎಷ್ಟು?</span></button></li>
-            <li><button type="button" data-ask="How do I store groundnut so it doesn't get aflatoxin?">How do I store groundnut so it doesn't get aflatoxin?<span class="kn">ಕಡಲೆಕಾಯಿ ಸಂಗ್ರಹಣೆ</span></button></li>
-          </ul>
+    <section class="band" id="prices" style="padding-top:0">
+      <div class="wrap two">
+        <div class="panel">
+          <h2>Today's prices</h2>
+          <p>Illustrative prices for this demo page, collective collection centres.</p>
+          <div class="tbl">
+            <table>
+              <thead><tr><th>Produce</th><th>Unit</th><th class="num">Price</th><th class="num">Since last week</th></tr></thead>
+              <tbody>
+                <tr><td>Arabica parchment</td><td>50 kg bag</td><td class="num">₹19,850</td><td class="num up">+₹450</td></tr>
+                <tr><td>Robusta cherry</td><td>50 kg bag</td><td class="num">₹11,200</td><td class="num up">+₹180</td></tr>
+                <tr><td>Black pepper (garbled)</td><td>kg</td><td class="num">₹642</td><td class="num down">−₹9</td></tr>
+                <tr><td>Arecanut (rashi)</td><td>quintal</td><td class="num">₹48,900</td><td class="num up">+₹600</td></tr>
+                <tr><td>Cardamom (8 mm)</td><td>kg</td><td class="num">₹2,310</td><td class="num down">−₹35</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        <div class="events" id="events">
-          <h2>At the centre</h2>
-          <ol>
-            <li>
-              <div class="date"><b>10</b><span>Oct</span></div>
-              <div><h3>Harvester booking opens</h3><p>Two machines for members, booked in four-hour slots. Bring your member card.</p></div>
-            </li>
-            <li>
-              <div class="date"><b>14</b><span>Oct</span></div>
-              <div><h3>Soil testing camp</h3><p>Free tests before rabi sowing. Collect samples from five spots per acre.</p></div>
-            </li>
-            <li>
-              <div class="date"><b>22</b><span>Oct</span></div>
-              <div><h3>Ragi value-addition training</h3><p>Malt and flour processing, with the women's self-help groups.</p></div>
-            </li>
-          </ol>
+        <div class="panel" id="ask">
+          <h2>Ask an expert, any time</h2>
+          <p>FarmerChat answers by voice, photo or text, in Kannada and other languages. Try one of these.</p>
+          <ul class="qs">
+            <li><button type="button" data-ask="Coffee leaves have orange powder underneath. What is it and how do I treat it?">Coffee leaves have orange powder underneath. What is it?<span class="kn">ಕಾಫಿ ಎಲೆಯ ಕೆಳಗೆ ಕಿತ್ತಳೆ ಪುಡಿ</span></button></li>
+            <li><button type="button" data-ask="When is the right time to harvest black pepper?">When is the right time to harvest pepper?<span class="kn">ಕಾಳುಮೆಣಸು ಕೊಯ್ಲು ಯಾವಾಗ?</span></button></li>
+            <li><button type="button" data-ask="How should I dry arecanut during rainy weather?">How should I dry arecanut when it keeps raining?<span class="kn">ಮಳೆಯಲ್ಲಿ ಅಡಿಕೆ ಒಣಗಿಸುವುದು</span></button></li>
+          </ul>
         </div>
       </div>
     </section>
@@ -290,10 +273,17 @@
 
   <footer class="site">
     <div class="wrap">
-      <span>Kaveri Valley Farmers is a fictional producer company, made up to demonstrate the FarmerChat widget.</span>
+      <span>Malnad Monsoon Collective is a fictional growers' group, made up to demonstrate the FarmerChat widget. Prices and rainfall are illustrative.</span>
       <span>Member helpline: 1800 000 0000 (sample number)</span>
     </div>
   </footer>
+
+  <aside class="callout" id="fc-callout" aria-label="FarmerChat">
+    <b>New: ask FarmerChat</b>
+    <p>Get farming advice by voice, photo or text, in your language. Tap the green button.</p>
+    <button class="x" type="button" aria-label="Dismiss" id="fc-callout-x">×</button>
+    <svg class="arrow" viewBox="0 0 40 36" aria-hidden="true"><path d="M4 2c2 16 10 25 24 29" fill="none" stroke="#F2B132" stroke-width="3" stroke-linecap="round"/><path d="M20 24.5l9 6.8-11 3" fill="none" stroke="#F2B132" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </aside>
 
   <details class="devtools">
     <summary>Test controls</summary>
@@ -325,12 +315,12 @@
     //   ?left=1   ?label=none
     var q = new URLSearchParams(location.search);
     var useEnv = q.get('env');
-    // Hosted (the Vercel demo): stage through the same-origin /stage/ function (vercel/api/stage.js),
-    // which adds the guest key server-side. Locally the stage proxy runs on :8898.
+    // Hosted (Railway): stage through the same-origin /stage/ proxy (web/railway/server.mjs →
+    // vercel/api/stage.js), which adds the guest key server-side. Locally the stage proxy runs on :8898.
     var hosted = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     var stage = q.get('stage') === '1' || (hosted && !q.get('base') && !useEnv);
     // ?replay=1: the agentic answer endpoint plays back a recorded streaming answer (hosted:
-    // /stage-replay/ in vercel/api/stage.js; locally the REPLAY_SSE proxy on :8896).
+    // /stage-replay/ on the same proxy; locally the REPLAY_SSE proxy on :8896).
     var replay = stage && q.get('replay') === '1';
     var stageBase = hosted ? location.origin + (replay ? '/stage-replay/' : '/stage/')
       : (replay ? 'http://localhost:8896/' : 'http://localhost:8898/');
@@ -362,7 +352,7 @@
           appearance: q.get('appearance') || 'day',
           onEvent: function (name, props) { console.log('[fc-event]', name, props); },
         },
-        onOpen: function () { document.getElementById('status').textContent = 'open'; },
+        onOpen: function () { document.getElementById('status').textContent = 'open'; settleAttention(); },
         onClose: function () { document.getElementById('status').textContent = 'closed'; },
       });
     }
@@ -385,25 +375,21 @@
       FarmerChatWidget.open(question || undefined);
     });
 
-    // Place "this week" on the season timeline (lanes span 1 Jun → 30 Nov).
-    (function placeToday() {
-      var now = new Date();
-      var start = new Date(now.getFullYear(), 5, 1);
-      var end = new Date(now.getFullYear(), 10, 30);
-      var frac = Math.min(1, Math.max(0, (now - start) / (end - start)));
-      var timeline = document.getElementById('timeline');
-      var lane = timeline.querySelector('.lane');
-      var marker = document.getElementById('today');
-      function place() {
-        var left = lane.offsetLeft + lane.offsetWidth * frac;
-        marker.style.left = left + 'px';
-        // The pill sits in the strip above the month labels; the line runs down through the lanes.
-        marker.style.top = '22px';
-      }
-      place();
-      window.addEventListener('resize', place);
-      var d = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
-      document.getElementById('when').textContent = 'Mandya and Mysuru, week of ' + d;
+
+    // FarmerChat attention: ring the launcher and show the callout until the widget is first opened
+    // (or the callout is dismissed). Matches the launcher side for ?left=1.
+    if (q.get('left')) document.body.classList.add('fc-left');
+    function settleAttention() {
+      document.body.classList.remove('fc-attn');
+      var c = document.getElementById('fc-callout');
+      if (c) c.hidden = true;
+    }
+    document.getElementById('fc-callout-x').addEventListener('click', settleAttention);
+
+    // "This week" in the eyebrow.
+    (function () {
+      var d = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+      document.getElementById('when').textContent = 'Chikkamagaluru and Kodagu, week of ' + d;
     })();
   </script>
   <script src="../dist/farmerchat-widget.iife.js"></script>

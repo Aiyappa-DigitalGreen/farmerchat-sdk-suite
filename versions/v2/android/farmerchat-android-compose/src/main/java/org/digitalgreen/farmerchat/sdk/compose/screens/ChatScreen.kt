@@ -16,6 +16,15 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -223,6 +232,12 @@ fun ChatScreen(
     // True while the text composer overlay is focused — hide the Photo/Speak/Type
     // row so the composer doesn't overlap it.
     var textComposerActive by remember { mutableStateOf(false) }
+    // True while the voice sheet is open — hides the empty-chat placeholder under it.
+    var voiceInputActive by remember { mutableStateOf(false) }
+    // Empty-chat placeholder entrance: skipped when the system has animations off (the
+    // platform's reduced-motion switch; API 26+ = minSdk).
+    val animationsEnabled = remember { android.animation.ValueAnimator.areAnimatorsEnabled() }
+    val emptyRisePx = with(LocalDensity.current) { 6.dp.roundToPx() }
     var cameraTempUri by remember { mutableStateOf<Uri?>(null) }
     var permissionDialogType by remember { mutableStateOf<String?>(null) }
 
@@ -1487,6 +1502,36 @@ fun ChatScreen(
                             }
                         }
 
+                        // Empty-chat placeholder (SDK addition, 2026-10-09 — web parity:
+                        // chatParts.tsx `ChatEmptyState`). The app always enters chat with a
+                        // question, so it has no empty state; a CHAT_ONLY host opens on a blank
+                        // thread. Centred in the list's viewport ABOVE the floating composer (same
+                        // bottom reserve the list uses) and outside the list, so it never scrolls.
+                        // Gone with the first message; never on a history entry; hidden while an
+                        // input surface is up (text composer focused, voice sheet open).
+                        val showEmptyState = state.messages.isEmpty() && !state.isLoading &&
+                            !isHistoryEntry && !textComposerActive && !voiceInputActive
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showEmptyState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = threadBottomReserve),
+                            enter = if (animationsEnabled) {
+                                fadeIn(tween(360)) + slideInVertically(tween(360)) { emptyRisePx }
+                            } else EnterTransition.None,
+                            exit = ExitTransition.None
+                        ) {
+                            ChatEmptyState(
+                                onPhoto = if (graph.config.enableImages) {
+                                    { trackChatIconClick("Image"); openPhotoInput?.invoke() }
+                                } else null,
+                                onSpeak = if (graph.config.enableVoice) {
+                                    { trackChatIconClick("Voice"); requestMicThenOpenVoice() }
+                                } else null,
+                                onType = { trackChatIconClick("Text"); focusTextInput?.invoke() }
+                            )
+                        }
+
                         // Scroll-to-bottom indicator when an answer arrives.
                         //
                         // App parity (ChatThreadContent.kt, commit 9023b57f): suppress it when
@@ -1669,6 +1714,7 @@ fun ChatScreen(
                 )
             },
             onOpenRequest = { open -> openVoiceInput = open },
+            onActiveChange = { active -> voiceInputActive = active },
             onRecordingFailed = { message -> toast.show(message, ToastState.Error) }
         )
 
@@ -2081,5 +2127,145 @@ private fun chatAppBarActions(
                 radius = Radius.MD
             )
         }
+    }
+}
+
+/**
+ * Empty-chat placeholder — SDK addition (web parity: `chatParts.tsx` `ChatEmptyState` and its
+ * `.fcsdk-c-empty*` CSS). A 64dp brand circle with the white logo mark and an 8dp halo, the
+ * tagline, the get-started line, then Photo / Speak / Type pills that do exactly what the chat's
+ * own input controls do. A null [onPhoto] / [onSpeak] hides that pill (host config disabled it).
+ * Existing label keys only.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChatEmptyState(
+    onPhoto: (() -> Unit)?,
+    onSpeak: (() -> Unit)?,
+    onType: () -> Unit
+) {
+    val colors = LocalContentColors.current
+    val brand = LocalBrandColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+    ) {
+        // Mark: radial highlight (web `radial-gradient(circle at 30% 25%, #2BD46B, brand 70%)`)
+        // and an 8dp halo at 12% brand drawn OUTSIDE the 64dp box, as web's box-shadow is, so
+        // it does not change the spacing.
+        Box(
+            modifier = Modifier
+                .padding(bottom = 6.dp)
+                .size(64.dp)
+                .drawBehind {
+                    drawCircle(
+                        color = brand.surfacePrimary.copy(alpha = 0.12f),
+                        radius = size.minDimension / 2f + 8.dp.toPx()
+                    )
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to Color(0xFF2BD46B),
+                            0.7f to brand.surfacePrimary,
+                            center = androidx.compose.ui.geometry.Offset(
+                                size.width * 0.30f, size.height * 0.25f
+                            ),
+                            radius = size.minDimension
+                        )
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.fc_logo_mark),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(Color.White),
+                modifier = Modifier.size(34.dp)
+            )
+        }
+        Text(
+            text = label(
+                Labels.FARMERCHAT_TAGLINE,
+                "FarmerChat: Practical advice for your crops & livestock"
+            ),
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = colors.foregroundPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 300.dp)
+        )
+        Text(
+            text = label(
+                Labels.GET_STARTED_BY_CLICKING_ON_PHOTO_SPEAK_OR_TYPE_TO_ASK_YOUR_QUESTION,
+                "Tap a button to ask a question"
+            ),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Normal
+            ),
+            color = colors.foregroundSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 280.dp)
+        )
+        FlowRow(
+            modifier = Modifier.padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (onPhoto != null) {
+                ChatEmptyStatePill(R.drawable.fc_icon_camera, label(Labels.PHOTO, "Photo"), onPhoto)
+            }
+            if (onSpeak != null) {
+                ChatEmptyStatePill(R.drawable.fc_icon_mic, label(Labels.SPEAK, "Speak"), onSpeak)
+            }
+            ChatEmptyStatePill(R.drawable.fc_icon_keyboard, label(Labels.TYPE, "Type"), onType)
+        }
+    }
+}
+
+/** One 40dp pill: a 28dp 12%-brand circle holding a 20dp brand icon, then a 14sp label. */
+@Composable
+private fun ChatEmptyStatePill(iconRes: Int, text: String, onClick: () -> Unit) {
+    val colors = LocalContentColors.current
+    val brand = LocalBrandColors.current
+    Row(
+        modifier = Modifier
+            .height(40.dp)
+            .clip(CircleShape)
+            .border(1.dp, colors.borderDefault, CircleShape)
+            .background(colors.surfacePrimary, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(brand.surfacePrimary.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(brand.surfacePrimary),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = colors.foregroundPrimary,
+            maxLines = 1
+        )
     }
 }

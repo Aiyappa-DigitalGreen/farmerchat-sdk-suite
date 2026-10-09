@@ -334,7 +334,7 @@ export let typography: TypographyTokens = { ...DEFAULT_TYPOGRAPHY };
 // ---------------------------------------------------------------------------
 
 /** #RRGGBB (or shorthand) → rgba() at the given alpha; passes through rgba()/named. */
-function withAlpha(color: string, alpha: number): string {
+export function withAlpha(color: string, alpha: number): string {
   const hex = color.trim();
   const m6 = /^#([0-9a-fA-F]{6})$/.exec(hex);
   const m3 = /^#([0-9a-fA-F]{3})$/.exec(hex);
