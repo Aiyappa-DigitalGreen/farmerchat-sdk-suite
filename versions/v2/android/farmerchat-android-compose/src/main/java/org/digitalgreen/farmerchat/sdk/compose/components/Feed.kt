@@ -258,8 +258,9 @@ fun ScrollIndicator(
                 )
                 .offset { IntOffset(0, bounceOffset.value.toInt()) }
                 .size(40.dp)
+                // App parity (ScrollIndicator.kt:95): an accent-green disc with a white arrow.
                 .background(
-                    color = contentColors.surfaceReadingSecondary,
+                    color = contentColors.buttonPrimaryAccent,
                     shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
@@ -268,7 +269,7 @@ fun ScrollIndicator(
                 painter = painterResource(id = R.drawable.fc_icon_arrow_down),
                 contentDescription = "Scroll for more",
                 modifier = Modifier.size(20.dp),
-                colorFilter = ColorFilter.tint(contentColors.foregroundPrimary)
+                colorFilter = ColorFilter.tint(contentColors.buttonPrimaryForeground)
             )
         }
     }

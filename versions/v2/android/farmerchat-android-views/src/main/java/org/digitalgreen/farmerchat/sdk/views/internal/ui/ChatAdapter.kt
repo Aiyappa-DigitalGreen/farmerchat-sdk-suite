@@ -537,7 +537,8 @@ internal class ChatAdapter(
 
         // ADDITIVE surface: a nudge below the real answer (gender-select / commodity-confirm).
         // Single-tap; the answer above keeps its own action row.
-        val additiveAlignment = alignmentKind != null && alignmentKind.isAdditive
+        // App parity (ChatThreadContent.kt:598): only once the message stops streaming, 16dp below.
+        val additiveAlignment = alignmentKind != null && alignmentKind.isAdditive && !message.isStreaming
         b.fcAiAlignmentAdditive.isVisible = additiveAlignment
         if (additiveAlignment) {
             b.fcAiAlignmentAdditive.bind(
@@ -605,7 +606,9 @@ internal class ChatAdapter(
             )
             // Save is absent from the agentic row in the app.
             b.fcActionDownload.isVisible = false
-            b.fcActionListen.isVisible = row.isTtsEnabled
+            // App parity (ChatResponseActions.kt:131): Listen is always drawn; with TTS off
+            // ListenPill dims it to 40% and drops its taps rather than hiding it.
+            b.fcActionListen.isVisible = true
             ListenPill.bind(
                 pill = b.fcActionListen,
                 spinner = b.fcActionListenLoading,
@@ -661,7 +664,10 @@ internal class ChatAdapter(
             // Header: titleMedium 18sp bold, foregroundPrimary; 10dp to the list.
             b.fcAiFollowUpLabel.textSize = 18f
             b.fcAiFollowUpLabel.setTextColor(FcTokens.color(b.root.context, R.color.fc_foreground_primary))
-            (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin = (16 * density).toInt()
+            // App ChatResponseActions.kt: after "Read full advice" comes Spacer 16, after the
+            // agentic row Spacer 1; then the follow-up block's own Spacer 16.
+            (b.fcAiFollowUpLabel.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin =
+                ((if (readFull) 16 + 16 else 1 + 16) * density).toInt()
             (b.fcAiFollowUps.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
                 topMargin = (10 * density).toInt()
                 bottomMargin = (40 * density).toInt() // app: 28dp + 12dp spacers after the list
@@ -689,13 +695,26 @@ internal class ChatAdapter(
         }
     }
 
+    /**
+     * App parity (InlineErrorContent.kt): the row always reads the fixed SOMETHING_WENT_WRONG
+     * label — never the raw error text — with a surfaceTertiary radius-12 "Try again" pill.
+     * Colours resolve through FcTokens so a host theme / fc_* override applies.
+     */
     private fun bindError(holder: ErrorHolder, row: ChatRow.InlineError) {
         val b = holder.binding
-        b.fcChatErrorText.text = row.message.ifBlank {
-            callbacks.labelFor(Labels.SOMETHING_WENT_WRONG, "Something went wrong")
+        val ctx = b.root.context
+        b.fcChatErrorText.text = callbacks.labelFor(Labels.SOMETHING_WENT_WRONG, "Something went wrong")
+        b.fcChatErrorText.setTextColor(FcTokens.color(ctx, R.color.fc_foreground_primary))
+        b.fcChatErrorRetry.background =
+            FcTokens.roundedRect(ctx, 12f, FcTokens.color(ctx, R.color.fc_surface_tertiary))
+        b.fcChatErrorRetryIcon.setColorFilter(FcTokens.color(ctx, R.color.fc_foreground_primary))
+        b.fcChatErrorRetryLabel.text = callbacks.labelFor(Labels.TRY_AGAIN, "Try again")
+        b.fcChatErrorRetryLabel.setTextColor(FcTokens.color(ctx, R.color.fc_foreground_primary))
+        b.fcChatErrorRetryLabel.typeface = if (android.os.Build.VERSION.SDK_INT >= 28) {
+            android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, 600, false)
+        } else {
+            android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
         }
-        b.fcChatErrorRetry.text = callbacks.labelFor(Labels.TRY_AGAIN, "Try again")
-        b.fcChatErrorRetry.state = PrimaryButtonView.State.DEFAULT
         b.fcChatErrorRetry.setOnClickListener { callbacks.onRetry() }
     }
 }

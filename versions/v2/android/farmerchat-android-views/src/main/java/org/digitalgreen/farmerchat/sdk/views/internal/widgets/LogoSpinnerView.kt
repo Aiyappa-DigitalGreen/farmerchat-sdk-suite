@@ -48,6 +48,8 @@ internal class LogoSpinnerView @JvmOverloads constructor(
         setIndicatorColor(spinnerColor)
         trackColor = android.graphics.Color.TRANSPARENT
         trackThickness = (2.5f * resources.displayMetrics.density).toInt()
+        // Material3 1.4.0's indeterminate CircularProgressIndicator draws ROUND caps.
+        trackCornerRadius = trackThickness / 2
     }
     private val logo = ImageView(context).apply {
         setImageResource(FcViewTheme.hostTheme()?.logo ?: R.drawable.fc_logo_mark)
@@ -76,8 +78,9 @@ internal class LogoSpinnerView @JvmOverloads constructor(
     /** App LogoWithSpinner: every 3s the mark turns 360° over 600ms, ease-out. */
     private val spin = object : Runnable {
         override fun run() {
+            // Compose EaseOut = cubic-bezier(0, 0, 0.58, 1).
             logo.animate().rotationBy(360f).setDuration(600)
-                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                .setInterpolator(android.view.animation.PathInterpolator(0f, 0f, 0.58f, 1f)).start()
             postDelayed(this, 3600)
         }
     }

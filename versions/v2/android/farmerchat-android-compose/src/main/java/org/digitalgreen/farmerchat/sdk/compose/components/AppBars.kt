@@ -7,6 +7,8 @@ import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,9 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -248,6 +253,12 @@ fun LogoAppBar(
      * Green800 circle with a white back arrow) that it draws instead of an ActionButton.
      */
     leftRadius: Dp = Radius.MD,
+    /**
+     * App parity (LogoAppBar.kt `leftPainter` + res/drawable/leftbutton.xml): a self-contained
+     * glyph drawn on a 42dp brand.surfaceSecondary circle instead of an ActionButton. The chat bar
+     * passes the stroked back arrow for the from-Home entry. Takes precedence over [leftIcon].
+     */
+    leftPainter: Painter? = null,
     onLeftClick: () -> Unit = {},
     rightIcon: ImageVector? = null,
     rightLabel: String? = null,
@@ -267,6 +278,8 @@ fun LogoAppBar(
         modifier = modifier
             .fillMaxWidth()
             .height(barHeight)
+            // App parity: the 80dp yellow glow never paints below the bar.
+            .clipToBounds()
             .background(brand.surfacePrimary)
     ) {
         Glow(
@@ -286,7 +299,23 @@ fun LogoAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            if (leftIcon != null) {
+            if (leftPainter != null) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(brand.surfaceSecondary)
+                        .clickable(onClick = onLeftClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = leftPainter,
+                        contentDescription = null,
+                        modifier = Modifier.size(42.dp),
+                        colorFilter = ColorFilter.tint(brand.foregroundPrimary)
+                    )
+                }
+            } else if (leftIcon != null) {
                 ActionButton(
                     onClick = onLeftClick,
                     icon = leftIcon,

@@ -1,10 +1,15 @@
 package org.digitalgreen.farmerchat.sdk.compose.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -22,6 +27,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +69,11 @@ internal fun ListenButton(
     isLoading: Boolean = false,
     isPlaying: Boolean = false,
     hasAudioUrl: Boolean = false,
+    /**
+     * App parity (ListenButton.kt:73): when TTS is off the pill is still DRAWN — its surface at
+     * 40% alpha — but takes no taps. The SDK used to hide it entirely.
+     */
+    enabled: Boolean = true,
     light: Boolean = false
 ) {
     val c = LocalContentColors.current
@@ -84,79 +95,102 @@ internal fun ListenButton(
         else -> ListenState.Default
     }
 
-    Row(
+    // App parity (ListenButton.kt:97): a Surface whose colour dims to 40% when disabled; not
+    // clickable while disabled or loading; no ripple; the four states cross-fade over 500ms.
+    // The icon / label keep their explicit full-strength colours, exactly as the app's do.
+    Surface(
         modifier = modifier
             .then(if (light) Modifier else Modifier.width(160.dp))
             .height(42.dp)
             .clip(shape)
-            .background(container)
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+            .clickable(
+                enabled = enabled && state != ListenState.Loading,
+                onClick = onClick,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ),
+        shape = shape,
+        color = if (enabled) container else container.copy(alpha = 0.4f),
+        contentColor = if (enabled) content else content.copy(alpha = 0.4f)
     ) {
-        when (state) {
-            ListenState.Default -> {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = null,
-                    modifier = Modifier.size(23.dp),
-                    tint = accent
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = label(Labels.LISTEN, "Listen"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = content
-                )
-            }
+        AnimatedContent(
+            targetState = state,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(500)) togetherWith
+                    fadeOut(animationSpec = tween(500))
+            },
+            contentAlignment = Alignment.Center,
+            label = "listenButtonContent"
+        ) { currentState ->
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                when (currentState) {
+                    ListenState.Default -> {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = null,
+                            modifier = Modifier.size(23.dp),
+                            tint = accent
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = label(Labels.LISTEN, "Listen"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = content
+                        )
+                    }
 
-            ListenState.Loading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = accent,
-                    trackColor = accent.copy(alpha = 0.3f),
-                    strokeCap = StrokeCap.Round
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = label(Labels.LOADING, "Loading..."),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = content,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                    ListenState.Loading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = accent,
+                            trackColor = accent.copy(alpha = 0.3f),
+                            strokeCap = StrokeCap.Round
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = label(Labels.LOADING, "Loading..."),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = content,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
-            ListenState.Playing -> {
-                Icon(
-                    imageVector = Icons.Filled.Pause,
-                    contentDescription = null,
-                    modifier = Modifier.size(23.dp),
-                    tint = accent
-                )
-                Spacer(Modifier.width(6.dp))
-                SoundWaveAnimation(
-                    modifier = Modifier.width(54.dp).height(26.dp),
-                    isAnimating = true,
-                    barColor = waveColor
-                )
-            }
+                    ListenState.Playing -> {
+                        Icon(
+                            imageVector = Icons.Filled.Pause,
+                            contentDescription = null,
+                            modifier = Modifier.size(23.dp),
+                            tint = accent
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        SoundWaveAnimation(
+                            modifier = Modifier.width(54.dp).height(26.dp),
+                            isAnimating = true,
+                            barColor = waveColor
+                        )
+                    }
 
-            ListenState.Paused -> {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(23.dp),
-                    tint = accent
-                )
-                Spacer(Modifier.width(6.dp))
-                SoundWaveAnimation(
-                    modifier = Modifier.width(54.dp).height(26.dp),
-                    isAnimating = false,
-                    barColor = waveColor
-                )
+                    ListenState.Paused -> {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(23.dp),
+                            tint = accent
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        SoundWaveAnimation(
+                            modifier = Modifier.width(54.dp).height(26.dp),
+                            isAnimating = false,
+                            barColor = waveColor
+                        )
+                    }
+                }
             }
         }
     }

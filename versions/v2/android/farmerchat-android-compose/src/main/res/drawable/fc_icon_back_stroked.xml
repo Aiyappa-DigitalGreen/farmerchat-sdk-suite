@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's leftbutton.xml arrow glyph (fc-compose-agentic res/drawable/leftbutton.xml): a 2dp
+     round-capped white stroke in a 42x42 viewBox. The circle behind it is drawn in code from
+     brand.surfaceSecondary (default Green800 #08361B, the app's fill) so host theming applies. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="42dp"
+    android:height="42dp"
+    android:viewportWidth="42"
+    android:viewportHeight="42"
+    android:autoMirrored="true">
+  <path
+      android:pathData="M27.708,21.261H14.292"
+      android:strokeLineJoin="round"
+      android:strokeWidth="2"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M21,27.97L14.292,21.261L21,14.553"
+      android:strokeLineJoin="round"
+      android:strokeWidth="2"
+      android:fillColor="#00000000"
+      android:strokeColor="#ffffff"
+      android:strokeLineCap="round"/>
+</vector>

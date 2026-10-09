@@ -98,7 +98,7 @@ fun LogoSpinner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            LogoWithSpinner(40.dp, 23.dp, 2.5.dp, logoColor)
+            LogoWithSpinner(40.dp, 23.dp, 2.5.dp, logoColor, rotateMark = true)
             if (displayLabel != null) {
                 // App parity: the HORIZONTAL spinner shimmers its label, the vertical one does
                 // not. The app splits these into two components (`LogoSpinner.kt` uses a plain
@@ -115,8 +115,26 @@ private fun LogoWithSpinner(
     spinnerSize: Dp,
     logoSize: Dp,
     strokeWidth: Dp,
-    spinnerColor: Color
+    spinnerColor: Color,
+    /**
+     * App parity (LogoSpinnerHorizontal.kt `LogoWithSpinner`): the horizontal (chat) spinner's
+     * mark turns 360° every 3s over 600ms EaseOut. The app's generic `LogoSpinner` does not
+     * rotate, so the vertical type keeps a still mark.
+     */
+    rotateMark: Boolean = false
 ) {
+    val rotation = remember { Animatable(0f) }
+    if (rotateMark) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(3000L)
+                rotation.animateTo(
+                    targetValue = rotation.value + 360f,
+                    animationSpec = tween(durationMillis = 600, easing = EaseOut)
+                )
+            }
+        }
+    }
     Box(contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             modifier = Modifier.size(spinnerSize),
@@ -126,7 +144,9 @@ private fun LogoWithSpinner(
         Image(
             painter = painterResource(id = R.drawable.fc_logo_mark),
             contentDescription = "FarmerChat",
-            modifier = Modifier.size(logoSize),
+            modifier = Modifier
+                .size(logoSize)
+                .graphicsLayer { rotationZ = rotation.value },
             colorFilter = ColorFilter.tint(spinnerColor)
         )
     }

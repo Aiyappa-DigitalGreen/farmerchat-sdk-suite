@@ -169,6 +169,11 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
         // 42dp Green800 CIRCLE — rather than the 12dp-cornered chip the other bars use.
         if (!isHistoryEntry && !isChatOnly) {
             binding.fcChatAppBar.fcAppBarLeft.setBackgroundResource(R.drawable.fc_bg_appbar_chip_round)
+            // App res/drawable/leftbutton.xml: the arrow is a 2dp round-capped STROKE drawn in a
+            // 42x42 viewBox — not the filled Material back glyph — so it fills the 42dp button
+            // with no inset.
+            binding.fcChatAppBar.fcAppBarLeft.setImageResource(R.drawable.fc_icon_back_stroked)
+            binding.fcChatAppBar.fcAppBarLeft.setPadding(0, 0, 0, 0)
         }
         binding.fcChatAppBar.fcAppBarLeft.setOnClickListener {
             if (isHistoryEntry && graph.config.showDrawer) {
@@ -710,7 +715,6 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     private fun runScrollIndicator() {
         if (!indicatorWanted()) return
         val indicator = binding.fcChatScrollIndicator
-        val density = resources.displayMetrics.density
         (indicator.layoutParams as android.view.ViewGroup.MarginLayoutParams).bottomMargin =
             binding.fcChatList.paddingBottom
         indicator.requestLayout()
@@ -723,7 +727,9 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             indicatorAnim?.cancel()
             indicator.isVisible = false
         }
-        val bounceDp = 14f * density
+        // App ScrollIndicator.kt: `IntOffset(0, bounceOffset.value.toInt())` with a target of 14f
+        // — 14 device PIXELS, not dp.
+        val bounceDp = 14f
         fun bounce(): List<android.animation.Animator> = listOf(
             android.animation.ObjectAnimator.ofFloat(indicator, View.TRANSLATION_Y, 0f, bounceDp)
                 .setDuration(280L),

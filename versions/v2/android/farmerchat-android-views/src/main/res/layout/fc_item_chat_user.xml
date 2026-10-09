@@ -4,10 +4,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="48dp"
+    android:paddingStart="84dp"
     android:paddingEnd="20dp"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
     android:gravity="end">
 
     <!-- App UserChatBubble.kt, image only (no caption / voice): no bubble, a bare 220x160dp

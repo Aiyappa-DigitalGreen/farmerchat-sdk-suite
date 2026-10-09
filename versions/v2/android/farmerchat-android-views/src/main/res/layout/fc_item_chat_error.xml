@@ -1,22 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inline error row — app ui/chat/component/InlineErrorContent.kt: a 48dp feedbackFail disc with a
+  white Close (24dp), 12dp, the fixed "Something went wrong" label (bodyMedium, foregroundPrimary,
+  weight 1), 8dp, then a radius-12 surfaceTertiary "Try again" pill (padding h10 / v12, a 16dp
+  Refresh + labelMedium 4dp apart).
+
+  Horizontal: the list's 20dp gutter + the app's 4dp start. Vertical: 4dp top so the row sits
+  12dp under the failed question's bubble row (8dp bottom padding), as the app's
+  Column(spacedBy 12) does; gravity TOP because the row also carries the viewport reserve.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:orientation="horizontal"
+    android:gravity="top"
+    android:baselineAligned="false"
+    android:paddingStart="24dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="8dp">
 
-    <TextView
-        android:id="@+id/fcChatErrorText"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/fc_error"
-        android:textSize="15sp"
-        tools:text="Something went wrong" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:baselineAligned="false">
 
-    <org.digitalgreen.farmerchat.sdk.views.internal.widgets.PrimaryButtonView
-        android:id="@+id/fcChatErrorRetry"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp" />
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/fc_bg_circle_error">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/fc_ic_close"
+                app:tint="@color/fc_white" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/fcChatErrorText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:textColor="@color/fc_foreground_primary"
+            android:textSize="17sp"
+            tools:text="Something went wrong" />
+
+        <LinearLayout
+            android:id="@+id/fcChatErrorRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/fcChatErrorRetryIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/fc_ic_refresh" />
+
+            <TextView
+                android:id="@+id/fcChatErrorRetryLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:textColor="@color/fc_foreground_primary"
+                android:textSize="15sp"
+                tools:text="Try again" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

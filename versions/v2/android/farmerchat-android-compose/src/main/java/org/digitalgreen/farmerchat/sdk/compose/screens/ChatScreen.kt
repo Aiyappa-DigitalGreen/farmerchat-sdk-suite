@@ -16,7 +16,7 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,6 +45,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.VolumeUp
@@ -74,6 +75,8 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.graphicsLayer
+import org.digitalgreen.farmerchat.sdk.compose.components.attentionWobble
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -854,6 +857,15 @@ fun ChatScreen(
         }
     }
 
+    // Listen (TTS) — shared by the answer's action row and an exclusive alignment surface.
+    val onListen: () -> Unit = {
+        if (state.audioPlaybackUrl != null) {
+            vm.onAction(ChatAction.SetAudioPlaying(!state.isAudioPlaying))
+        } else {
+            vm.onAction(ChatAction.SynthesiseAudio)
+        }
+    }
+
     // ------------------------------------------------------------------ UI
     val isThread = state.messages.isNotEmpty()
 
@@ -895,6 +907,11 @@ fun ChatScreen(
                 },
                 // App parity (ChatScreen.kt:1450): from Home the app draws its `leftbutton`
                 // drawable — a CIRCLE — not the rounded-square ActionButton the other bars use.
+                // App parity (ChatScreen.kt `leftPainter = painterResource(R.drawable.leftbutton)`):
+                // the from-Home back button is the app's stroked arrow on a 42dp circle.
+                leftPainter = if (!isHistoryEntry && graph.config.mode != FarmerChatMode.CHAT_ONLY) {
+                    painterResource(id = R.drawable.fc_icon_back_stroked)
+                } else null,
                 leftRadius = if (!isHistoryEntry && graph.config.mode != FarmerChatMode.CHAT_ONLY) {
                     org.digitalgreen.farmerchat.sdk.compose.theme.Radius.Rounded
                 } else {
@@ -928,15 +945,21 @@ fun ChatScreen(
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
+                        // App parity (ChatLoadingContent.kt:60): padding h20 / top20, 16 between
+                        // the bubble row (start 64, End) and the spinner.
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(horizontal = 20.dp)
+                                .padding(top = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             if (!args.question.isNullOrBlank()) {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = Alignment.CenterEnd
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 64.dp),
+                                    horizontalArrangement = Arrangement.End
                                 ) {
                                     UserChatBubble(
                                         text = args.question,
@@ -944,7 +967,6 @@ fun ChatScreen(
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(24.dp))
                             // App parity (ChatLoadingContent.kt:92): LogoSpinnerHorizontal with a
                             // shimmering foregroundPrimary label — no dots.
                             LogoSpinner(
@@ -959,17 +981,22 @@ fun ChatScreen(
 
                 !isThread && state.errorMessage != null -> {
                     // Full error content with retry + question bubble.
+                    // App parity (ChatErrorContent.kt:57): padding h20 / top20, spacedBy 16,
+                    // bubble row start 64 / End.
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         if (!args.question.isNullOrBlank()) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.CenterEnd
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 64.dp),
+                                horizontalArrangement = Arrangement.End
                             ) {
                                 UserChatBubble(
                                     text = args.question,
@@ -978,7 +1005,6 @@ fun ChatScreen(
                             }
                         }
                         InlineErrorContent(
-                            message = state.errorMessage.orEmpty(),
                             onRetry = {
                                 trackChatRetry()
                                 vm.onAction(ChatAction.RetryLastRequest)
@@ -989,16 +1015,22 @@ fun ChatScreen(
 
                 else -> {
                     // Thread
+                    val threadBottomReserve = (if (isComposerUi) {
+                        composerBarHeight(floating = true, hasAttachment = photoUris.isNotEmpty())
+                    } else 0.dp) + 16.dp
                     Box(modifier = Modifier.weight(1f)) {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            // App parity (ChatThreadContent.kt:100): the composer UI reserves
-                            // composerBarHeight(floating) at the bottom so the last bubble is not
-                            // hidden behind the floating pill; the legacy input keeps 24.dp.
+                            // App parity (ChatThreadContent.kt:300): horizontal 20, top 20, bottom =
+                            // the input's height + 16. The composer floats OVER the list, so it
+                            // reserves composerBarHeight(floating) + 16. The legacy
+                            // PrimaryInputButtons row is a Column sibling BELOW this Box in the SDK
+                            // (the app overlays it and reserves 72 + 8 + nav), so it already owns
+                            // its own height and only the trailing 16 remains.
                             contentPadding = PaddingValues(
-                                start = 16.dp, end = 16.dp, top = 16.dp,
-                                bottom = if (isComposerUi) composerBarHeight(floating = true, hasAttachment = photoUris.isNotEmpty()) else 24.dp
+                                start = 20.dp, end = 20.dp, top = 20.dp,
+                                bottom = threadBottomReserve
                             ),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -1024,9 +1056,11 @@ fun ChatScreen(
                                     // because it is their reply to a GPS_PROMPT chip.
                                     is ChatMessage.LocationMessage -> {
                                         item(key = "loc_${message.id}") {
-                                            Box(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                contentAlignment = Alignment.CenterEnd
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(start = 64.dp),
+                                                horizontalArrangement = Arrangement.End
                                             ) {
                                                 LocationChatBubble(
                                                     address = message.address,
@@ -1038,9 +1072,33 @@ fun ChatScreen(
 
                                     is ChatMessage.UserMessage -> {
                                         item(key = "msg_${message.id}") {
-                                            Box(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                contentAlignment = Alignment.CenterEnd
+                                            // App parity (ChatThreadContent.kt:325): the user item
+                                            // fades in over 500ms and is a Column(spacedBy 12) of
+                                            // [bubble row, + the inline error when THIS message
+                                            // failed]. A failed LAST message reserves a viewport so
+                                            // the question stays pinned at the top with the retry
+                                            // row beneath it, mirroring the answer's reserve.
+                                            val bubbleAlpha = remember { Animatable(0f) }
+                                            LaunchedEffect(Unit) {
+                                                bubbleAlpha.animateTo(1f, animationSpec = tween(500))
+                                            }
+                                            val isFailedHere = state.failedMessageId == message.id &&
+                                                state.errorMessage != null
+                                            val failReserve =
+                                                if (isFailedHere && state.messages.lastOrNull()?.id == message.id) {
+                                                    Modifier.heightIn(min = reserveHeightDp)
+                                                } else Modifier
+                                            Column(
+                                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                                modifier = Modifier
+                                                    .graphicsLayer { alpha = bubbleAlpha.value }
+                                                    .then(failReserve)
+                                            ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(start = 64.dp),
+                                                horizontalArrangement = Arrangement.End
                                             ) {
                                                 val hasAudio = message.audioUri != null
                                                 UserChatBubble(
@@ -1062,6 +1120,15 @@ fun ChatScreen(
                                                     onVoicePlayClick = { toggleVoicePlayback(message) },
                                                     onVoicePauseClick = { toggleVoicePlayback(message) }
                                                 )
+                                            }
+                                            if (isFailedHere) {
+                                                InlineErrorContent(
+                                                    onRetry = {
+                                                        trackChatRetry()
+                                                        vm.onAction(ChatAction.RetryLastRequest)
+                                                    }
+                                                )
+                                            }
                                             }
                                         }
                                     }
@@ -1119,16 +1186,24 @@ fun ChatScreen(
                                                         onChipClick = { chip ->
                                                             handleAlignmentChip(message.id, alignmentKind, chip)
                                                         },
-                                                        onTypeInstead = { focusTextInput?.invoke() }
+                                                        onTypeInstead = { focusTextInput?.invoke() },
+                                                        // App parity (ChatThreadContent.kt:498): the
+                                                        // exclusive surface carries its own Listen pill.
+                                                        onListenClick = onListen,
+                                                        listenLoading = state.isLoadingSynthesiseAudio,
+                                                        listenPlaying = state.isAudioPlaying &&
+                                                            state.audioPlaybackUrl != null,
+                                                        hasAudioUrl = state.audioPlaybackUrl != null,
+                                                        isTtsEnabled = state.isTtsEnabled
                                                     )
                                                 }
                                                 return@item
                                             }
 
-                                            Column(
-                                                modifier = streamReserve,
-                                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
+                                            // App parity (ChatThreadContent.kt:481): NO arrangement
+                                            // spacing — each block brings its own gap (StreamErrorCard
+                                            // top 16, the action block top 24).
+                                            Column(modifier = streamReserve) {
                                                 AiAnswerBlock(
                                                     // A streaming answer must never run the typewriter
                                                     // reveal — the text is already arriving a token at
@@ -1199,21 +1274,26 @@ fun ChatScreen(
                                                 if (isLastAi && !state.isLoading &&
                                                     !message.isInterrupted && answerRevealed
                                                 ) {
-                                                    // Fade/slide the actions in once the reveal completes.
+                                                    // App parity (ChatThreadContent.kt:567): the action
+                                                    // block fades in (fade ONLY, no slide).
                                                     val actionsVisible = remember {
                                                         MutableTransitionState(false)
                                                     }
                                                     actionsVisible.targetState = true
                                                     AnimatedVisibility(
                                                         visibleState = actionsVisible,
-                                                        enter = fadeIn(tween(350)) +
-                                                            slideInVertically(tween(350)) { it / 4 }
+                                                        enter = fadeIn()
                                                     ) {
+                                                        // App parity (ChatResponseActions.kt:85): 24 above
+                                                        // the block; the follow-ups live INSIDE it, so they
+                                                        // sit in this item's viewport reserve instead of in
+                                                        // a separate list item below a full screen of space.
                                                         Column(
-                                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(top = 24.dp)
                                                         ) {
-                                                            // App parity (ChatResponseActions.kt:89):
-                                                            // the branches are EXCLUSIVE. A pre-generated
+                                                            // The branches are EXCLUSIVE. A pre-generated
                                                             // answer whose full advice was not yet asked
                                                             // for shows ONLY "Read full advice"; every
                                                             // other answer gets the Share/Listen row.
@@ -1233,8 +1313,11 @@ fun ChatScreen(
                                                                             )
                                                                         )
                                                                     },
-                                                                    modifier = Modifier.fillMaxWidth()
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .attentionWobble(delayMs = 1800L)
                                                                 )
+                                                                Spacer(modifier = Modifier.height(16.dp))
                                                             } else {
                                                                 ChatResponseActions(
                                                                     isTtsEnabled = state.isTtsEnabled,
@@ -1244,21 +1327,62 @@ fun ChatScreen(
                                                                         state.audioPlaybackUrl != null,
                                                                     onShare = { shareImage() },
                                                                     onDownload = { downloadImage() },
-                                                                    onListen = {
-                                                                        if (state.audioPlaybackUrl != null) {
-                                                                            vm.onAction(
-                                                                                ChatAction.SetAudioPlaying(!state.isAudioPlaying)
-                                                                            )
-                                                                        } else {
-                                                                            vm.onAction(ChatAction.SynthesiseAudio)
-                                                                        }
-                                                                    },
+                                                                    onListen = onListen,
                                                                     // App parity (ChatThreadContent.kt:584):
                                                                     // the agentic action UI for EVERY
                                                                     // answer — agentic, legacy #27 and
                                                                     // pre-generated alike.
                                                                     useChips = true
                                                                 )
+                                                                // App: a 1dp trailing gap only.
+                                                                Spacer(modifier = Modifier.height(1.dp))
+                                                            }
+
+                                                            // An ADDITIVE alignment surface with chips owns
+                                                            // the space under the answer, so the follow-ups
+                                                            // are hidden (app `showFollowUps`, 43ba5de4).
+                                                            // NOT hidden by an error.
+                                                            val showFollowUps = !(alignmentKind?.isAdditive == true &&
+                                                                !message.alignmentChips.isNullOrEmpty())
+                                                            if (showFollowUps) {
+                                                                val followUps = state.suggestedQuestions.orEmpty()
+                                                                if (followUps.isNotEmpty()) {
+                                                                    // Fade the related-questions block in
+                                                                    // over 0.3s; fade only (ChatResponseActions.kt:217).
+                                                                    val followUpsVisible = remember {
+                                                                        MutableTransitionState(false).apply { targetState = true }
+                                                                    }
+                                                                    AnimatedVisibility(
+                                                                        visibleState = followUpsVisible,
+                                                                        enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+                                                                        exit = ExitTransition.None
+                                                                    ) {
+                                                                        // A pre-generated answer never asks a
+                                                                        // clarification (ChatThreadContent.kt:582).
+                                                                        val clarify = state.clarificationRequired &&
+                                                                            !message.isPreGenerated
+                                                                        FollowUpSection(
+                                                                            title = if (clarify)
+                                                                                label(
+                                                                                    Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW,
+                                                                                    "Choose an option from the below"
+                                                                                )
+                                                                            else
+                                                                                label(
+                                                                                    Labels.RELATED_QUESTIONS,
+                                                                                    "You can also ask"
+                                                                                ),
+                                                                            questions = followUps,
+                                                                            onQuestionClick = { qIndex, question ->
+                                                                                onFollowUpClicked(question, qIndex)
+                                                                            },
+                                                                            useChips = true,
+                                                                            clarificationRequired = clarify
+                                                                        )
+                                                                    }
+                                                                }
+                                                                Spacer(modifier = Modifier.height(28.dp))
+                                                                Spacer(modifier = Modifier.height(12.dp))
                                                             }
                                                         }
                                                     }
@@ -1283,7 +1407,10 @@ fun ChatScreen(
                                                 //          → "Help us tailor your advice" + chips.
                                                 // Confirmed side by side on a device 2026-09-08:
                                                 // the two blocks were simply transposed.
-                                                if (alignmentKind?.isAdditive == true) {
+                                                // App parity (ChatThreadContent.kt:598): 16 above the
+                                                // nudge, and only once the message stops streaming.
+                                                if (alignmentKind?.isAdditive == true && !message.isStreaming) {
+                                                    Spacer(modifier = Modifier.height(16.dp))
                                                     AlignmentSurface(
                                                         kind = alignmentKind,
                                                         message = message.alignmentMessage.orEmpty(),
@@ -1336,80 +1463,22 @@ fun ChatScreen(
                                 }
                             }
 
-                            // Inline error + retry
-                            if (state.errorMessage != null) {
+                            // An error NOT tied to a message in the thread keeps a standalone
+                            // inline row; one tied to a message renders under that bubble above.
+                            val errorTiedToMessage = state.failedMessageId != null &&
+                                state.messages.any { it.id == state.failedMessageId }
+                            if (state.errorMessage != null && !errorTiedToMessage) {
                                 item(key = "inline_error") {
+                                    // Same fail reserve as a tied error (and as the Views
+                                    // flavour's error row): the question above stays pinned at
+                                    // the top with the retry row beneath it.
+                                    Box(modifier = Modifier.heightIn(min = reserveHeightDp)) {
                                     InlineErrorContent(
-                                        message = state.errorMessage.orEmpty(),
                                         onRetry = {
                                             trackChatRetry()
                                             vm.onAction(ChatAction.RetryLastRequest)
                                         }
                                     )
-                                }
-                            }
-
-                            // Follow-up questions — appear only after the last answer's reveal.
-                            val followUps = state.suggestedQuestions.orEmpty()
-                            val lastAnswerRevealed =
-                                lastAiMessage != null && lastAiMessage.id in revealedIds
-                            // An ADDITIVE alignment surface owns the space under the answer: while
-                            // its chips are on screen the follow-up list and the "ask a follow-up"
-                            // prompt are hidden, so the farmer answers the nudge instead of being
-                            // offered two competing lists. App parity — `fc-compose-agentic`
-                            // 43ba5de4 "no follow up in case of chips"
-                            // (`ChatThreadContent.kt`, `showFollowUps = ...`). The backend agrees:
-                            // the live prose capture's metadata carries
-                            // `"followups_gated_by": "commodity-confirm"` with `followups: []`.
-                            val additiveSurfaceOpen = lastAiMessage?.alignmentKind?.isAdditive == true &&
-                                !lastAiMessage.alignmentChips.isNullOrEmpty()
-                            if (followUps.isNotEmpty() && !state.isLoading &&
-                                state.errorMessage == null && lastAnswerRevealed &&
-                                !additiveSurfaceOpen
-                            ) {
-                                item(key = "followups") {
-                                    Column {
-                                        // App parity (ChatResponseActions.kt 0456f364): fade the
-                                        // whole related-questions block in over 0.3s so it eases
-                                        // in instead of snapping. Fade ONLY — the SDK previously
-                                        // also slid the block up by a quarter of its height, which
-                                        // moves the content under it while it settles; the app is
-                                        // explicit that no size/position animation may run here.
-                                        // ExitTransition.None because the block is only ever
-                                        // removed by dropping the list item, never animated out.
-                                        val followUpsVisible = remember {
-                                            MutableTransitionState(false).apply { targetState = true }
-                                        }
-                                        AnimatedVisibility(
-                                            visibleState = followUpsVisible,
-                                            enter = fadeIn(animationSpec = tween(durationMillis = 300)),
-                                            exit = ExitTransition.None
-                                        ) {
-                                            // App parity (ChatThreadContent.kt:582): a
-                                            // pre-generated answer never asks a clarification.
-                                            val clarify = state.clarificationRequired &&
-                                                lastAiMessage?.isPreGenerated != true
-                                            FollowUpSection(
-                                                title = if (clarify)
-                                                    label(
-                                                        Labels.CHOOSE_A_FOLLOWUP_OPTION_BELOW,
-                                                        "Choose an option from the below"
-                                                    )
-                                                else
-                                                    label(
-                                                        Labels.RELATED_QUESTIONS,
-                                                        "You can also ask"
-                                                    ),
-                                                questions = followUps,
-                                                onQuestionClick = { qIndex, question ->
-                                                    onFollowUpClicked(question, qIndex)
-                                                },
-                                                // App parity (ChatThreadContent.kt:584):
-                                                // follow-ups are numbered chips for EVERY answer.
-                                                useChips = true,
-                                                clarificationRequired = clarify
-                                            )
-                                        }
                                     }
                                 }
                             }
@@ -1442,7 +1511,10 @@ fun ChatScreen(
                                 hiddenBelow >= twoLinesPx
                             }
                         }
-                        if (lastAiMessage != null && !state.isLoading && hasContentBelow) {
+                        // App parity (ChatThreadContent.kt:642): hidden while there is an error.
+                        if (lastAiMessage != null && !state.isLoading && hasContentBelow &&
+                            state.errorMessage.isNullOrBlank()
+                        ) {
                             ScrollIndicator(
                                 triggerKey = lastAiMessage.id,
                                 onClick = {
@@ -1452,9 +1524,10 @@ fun ChatScreen(
                                         )
                                     }
                                 },
+                                // App: inputButtonsHeight + 16 (composer: 92 + 16 = 108).
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .padding(bottom = 12.dp)
+                                    .padding(bottom = threadBottomReserve)
                             )
                         }
 
@@ -1621,29 +1694,69 @@ fun ChatScreen(
     }
 }
 
-/** Inline error row + Try again button (RetryLastRequest with retry flag). */
+/**
+ * Inline error row + Try again pill. App parity (InlineErrorContent.kt): a 48dp feedbackFail disc
+ * with a white Close, the fixed SOMETHING_WENT_WRONG label (NOT the raw error text), and a
+ * surfaceTertiary radius-12 "Try again" pill. `Content_Try_Again_Clicked` is tracked by the
+ * caller's [onRetry] (`trackChatRetry`).
+ */
 @Composable
 private fun InlineErrorContent(
-    message: String,
     onRetry: () -> Unit
 ) {
     val colors = LocalContentColors.current
     val brand = LocalBrandColors.current
+    val type = MaterialTheme.typography
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(color = brand.feedbackFail, shape = CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = null,
+                tint = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = brand.feedbackFail
+            text = label(Labels.SOMETHING_WENT_WRONG, "Something went wrong"),
+            style = type.bodyMedium,
+            color = colors.foregroundPrimary,
+            modifier = Modifier.weight(1f)
         )
-        SecondaryButton(
-            label = label(Labels.TRY_AGAIN, "Try again"),
-            onClick = onRetry,
-            backgroundColor = colors.surfaceReadingSecondary
-        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Row(
+            modifier = Modifier
+                .clip(SmoothShapes.rounded(Radius.MD))
+                .background(colors.surfaceTertiary)
+                .clickable { onRetry() }
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = colors.foregroundPrimary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = label(Labels.TRY_AGAIN, "Try again"),
+                style = type.labelMedium,
+                color = colors.foregroundPrimary
+            )
+        }
     }
 }
 
@@ -1662,25 +1775,18 @@ private fun FollowUpSection(
     clarificationRequired: Boolean = false
 ) {
     val colors = LocalContentColors.current
-    val brand = LocalBrandColors.current
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(brand.foregroundSecondary)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = colors.foregroundSecondary
-            )
-        }
+    // App parity (ChatResponseActions.kt:225): Spacer 16, a titleMedium foregroundPrimary title
+    // (no dot), Spacer 10, then the chips 8 apart.
+    Column {
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.foregroundPrimary
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         questions.forEachIndexed { qIndex, question ->
             // App parity (ChatResponseActions.kt:212).
             if (useChips) {
@@ -1696,6 +1802,7 @@ private fun FollowUpSection(
                     onClick = { onQuestionClick(qIndex, question) }
                 )
             }
+        }
         }
     }
 }
@@ -1748,17 +1855,16 @@ private fun ChatResponseActions(
                     onClick = onShare,
                     borderBrush = LocalBrandColors.current.accentSweepBorder
                 )
-                if (isTtsEnabled) {
-                    // App parity: Listen is its own component, and once audio exists the LABEL
-                    // is replaced by the animated sound wave (ListenButton.kt:161).
-                    ListenButton(
-                        onClick = onListen,
-                        isLoading = isLoadingAudio,
-                        isPlaying = isAudioPlaying,
-                        hasAudioUrl = hasAudioUrl,
-                        light = true
-                    )
-                }
+                // App parity (ChatResponseActions.kt:131): Listen is always DRAWN; with TTS off it
+                // is dimmed and takes no taps (`enabled = isTtsEnabled`) rather than hidden.
+                ListenButton(
+                    onClick = onListen,
+                    isLoading = isLoadingAudio,
+                    isPlaying = isAudioPlaying,
+                    hasAudioUrl = hasAudioUrl,
+                    enabled = isTtsEnabled,
+                    light = true
+                )
             }
         }
         return
@@ -1774,15 +1880,14 @@ private fun ChatResponseActions(
             text = label(Labels.SAVE, "Save"),
             onClick = onDownload
         )
-        if (isTtsEnabled) {
-            ListenButton(
-                onClick = onListen,
-                isLoading = isLoadingAudio,
-                isPlaying = isAudioPlaying,
-                hasAudioUrl = hasAudioUrl,
-                light = true
-            )
-        }
+        ListenButton(
+            onClick = onListen,
+            isLoading = isLoadingAudio,
+            isPlaying = isAudioPlaying,
+            hasAudioUrl = hasAudioUrl,
+            enabled = isTtsEnabled,
+            light = true
+        )
     }
 }
 

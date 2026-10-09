@@ -1801,11 +1801,15 @@ class ChatViewModel(
 
     private fun onAnswerError(placeholderId: String?, message: String) {
         _state.update { current ->
+            val remaining = current.messages.filterNot { it.id == placeholderId }
             current.copy(
-                messages = current.messages.filterNot { it.id == placeholderId },
+                messages = remaining,
                 isLoading = false,
                 errorMessage = message,
-                failedMessageId = placeholderId,
+                // App ChatViewModel.kt (#27 ApiResult.Error): the error belongs to the last user
+                // message left after the placeholder is dropped, so the inline error renders
+                // under that question (ChatThreadContent.kt), not as a detached row.
+                failedMessageId = remaining.lastOrNull { it is ChatMessage.UserMessage }?.id,
                 chatResponseState = UiState.Error(message)
             )
         }

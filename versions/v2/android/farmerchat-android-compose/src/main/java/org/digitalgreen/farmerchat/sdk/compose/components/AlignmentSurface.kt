@@ -2,7 +2,6 @@ package org.digitalgreen.farmerchat.sdk.compose.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -12,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,8 +18,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.digitalgreen.farmerchat.sdk.compose.R
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalBrandColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.LocalContentColors
 import org.digitalgreen.farmerchat.sdk.compose.theme.Radius
@@ -70,7 +74,13 @@ fun AlignmentSurface(
      * surface invites the farmer down a path the backend will just re-ask. Live `gps-prompt`
      * sends `blocking: true`; absent on the wire → false, the pre-2026-09-03 behaviour.
      */
-    blocking: Boolean = false
+    blocking: Boolean = false,
+    /** Listen pill (app AlignmentSurface.kt:76-80) — TTS for the live, exclusive surface. */
+    onListenClick: () -> Unit = {},
+    listenLoading: Boolean = false,
+    listenPlaying: Boolean = false,
+    hasAudioUrl: Boolean = false,
+    isTtsEnabled: Boolean = true
 ) {
     val colors = LocalContentColors.current
     val brand = LocalBrandColors.current
@@ -83,16 +93,9 @@ fun AlignmentSurface(
     // Clarify/confirm stay open so the farmer can pick a different option.
     val chipsLocked = (isCapabilityPrompt || additive) && hasPick
 
-    val content: @Composable ColumnScope.() -> Unit = {
-        if (message.isNotBlank()) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyLarge,
-                color = colors.foregroundPrimary
-            )
-            Spacer(Modifier.height(if (isEscalate || additive) 12.dp else 16.dp))
-        }
-
+    // Header + chips. Rendered plainly (clarify / confirm / escalate / additive) or inside the
+    // bordered capability card. App parity: AlignmentSurface.kt `optionsContent`.
+    val optionsContent: @Composable ColumnScope.() -> Unit = {
         if (!isEscalate && !additive) {
             Text(
                 text = when (kind) {
@@ -104,10 +107,11 @@ fun AlignmentSurface(
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.foregroundPrimary
             )
-            Spacer(Modifier.height(16.dp))
         }
 
         if (chips.isNotEmpty()) {
+            // The 16dp gap belongs to the header; escalate and additive have none.
+            if (!isEscalate && !additive) Spacer(Modifier.height(16.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 chips.forEachIndexed { index, chip ->
                     val isSelected =
@@ -132,48 +136,101 @@ fun AlignmentSurface(
                 }
             }
         }
+    }
 
+    // Capability in progress: spinner + label BELOW the (bordered) card, never inside it.
+    val progressRow: @Composable ColumnScope.() -> Unit = {
         if (fetchingProgressLabel != null) {
             Spacer(Modifier.height(16.dp))
             LogoSpinner(type = LogoSpinnerType.Horizontal, label = fetchingProgressLabel)
         }
+    }
 
-        // Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
-        // Without it a farmer whose answer is not among the chips has no way forward.
+    // Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
+    // App parity (AlignmentSurface.kt:195): ONE text run — hint (secondary) + " " + the CTA
+    // (accent, SemiBold), bodySmall, with only the CTA clickable.
+    val escapeHatch: @Composable ColumnScope.() -> Unit = {
         if (chips.isNotEmpty() && !isEscalate && !isCapabilityPrompt && !additive &&
             !hasPick && isLatest && !effectiveLoading && !blocking
         ) {
             Spacer(Modifier.height(12.dp))
+            val hint = label(Labels.DONT_SEE_YOUR_OPTION, "Don't see your option?")
+            val cta = label(Labels.TYPE_OR_SAY_IT, "Type or say it.")
+            val text = buildAnnotatedString {
+                withStyle(SpanStyle(color = colors.foregroundSecondary)) { append(hint) }
+                append(" ")
+                withLink(LinkAnnotation.Clickable(tag = "type_instead") { onTypeInstead() }) {
+                    withStyle(
+                        SpanStyle(color = colors.buttonPrimaryAccent, fontWeight = FontWeight.SemiBold)
+                    ) { append(cta) }
+                }
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Info,
+                    painter = painterResource(id = R.drawable.fc_icon_info),
                     contentDescription = null,
                     tint = colors.buttonPrimaryAccent,
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = label(Labels.DONT_SEE_YOUR_OPTION, "Don't see your option?"),
+                    text = text,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.foregroundSecondary
-                )
-                Text(
-                    text = label(Labels.TYPE_OR_SAY_IT, "Type or say it."),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.buttonPrimaryAccent,
-                    modifier = Modifier.clickable(onClick = onTypeInstead)
                 )
             }
         }
     }
 
+    val content: @Composable ColumnScope.() -> Unit = {
+        // App parity (AlignmentSurface.kt:226): the prompt goes through the markdown renderer
+        // (bodyMedium), not a plain bodyLarge Text.
+        if (message.isNotBlank()) {
+            MarkdownText(text = message, color = colors.foregroundPrimary)
+        }
+
+        // Listen pill — only while this is the live prompt (latest + idle): TTS targets the
+        // latest response. Never on the urgent escalate surface or an additive nudge.
+        if (!isEscalate && !additive && isLatest && !effectiveLoading) {
+            Spacer(Modifier.height(16.dp))
+            ListenButton(
+                onClick = onListenClick,
+                isLoading = listenLoading,
+                isPlaying = listenPlaying,
+                hasAudioUrl = hasAudioUrl,
+                enabled = isTtsEnabled,
+                light = true
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        if (isCapabilityPrompt) {
+            // App parity (AlignmentSurface.kt:256): header + chips in a thin-bordered radius-16
+            // card; no escape hatch; the fetch progress sits below the card.
+            val cardShape = SmoothShapes.rounded(Radius.LG)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(cardShape)
+                    .border(1.dp, colors.borderDefault, cardShape)
+                    .padding(16.dp),
+                content = optionsContent
+            )
+            progressRow()
+        } else {
+            optionsContent()
+            progressRow()
+            escapeHatch()
+        }
+    }
+
     if (isEscalate) {
-        // Urgent surfaces get a tinted, bordered card so they read differently at a glance.
+        // Urgent surfaces get a tinted, bordered card. App parity: Radius.LG (16), escalateSurface
+        // (Red500 8%) + escalateBorder (Red500 16%), derived from feedbackFail.
         val fail = brand.feedbackFail
-        val shape = SmoothShapes.rounded(Radius.MD)
+        val shape = SmoothShapes.rounded(Radius.LG)
         Column(
             modifier = modifier
                 .fillMaxWidth()

@@ -65,7 +65,8 @@ fun Chip(
 
     // Escalate palette, derived so hosts need no extra tokens.
     val escalateForeground = brand.feedbackFail
-    val escalateSurface = brand.feedbackFail.copy(alpha = 0.12f)
+    // App: escalateSurface = Red500_8 (0x14 = 8% of #E5533D), ColorBrandSemantic.kt:56.
+    val escalateSurface = brand.feedbackFail.copy(alpha = 0.08f)
 
     // A selected chip records a pick: no taps, no chevron.
     val clickable = enabled && !selected
@@ -87,12 +88,13 @@ fun Chip(
         // (both Neutral700 = #3F3F46), which made disabled chip text invisible. App
         // components/chips/Chip.kt @ 0c8c740f (e335413b).
         !enabled -> colors.foregroundSecondary
-        isEscalate -> colors.buttonPrimaryForeground
+        // App: brand.foregroundPrimary (white) on the solid red surface.
+        isEscalate -> brand.foregroundPrimary
         else -> colors.foregroundPrimary
     }
     val chevronColor = when {
         !enabled -> colors.foregroundTertiary
-        isEscalate -> colors.buttonPrimaryForeground
+        isEscalate -> brand.foregroundPrimary
         type == ChipType.Agentic -> colors.buttonPrimaryAccent
         else -> colors.foregroundSecondary
     }
@@ -124,10 +126,9 @@ fun Chip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                // REQUESTED: chip labels are bold in every state. The app bolds only the
-                // SELECTED chip (`if (selected) FontWeight.Bold else null`, Chip.kt:127) and
-                // leaves the rest at labelMedium's 600. Recorded in docs/05.
-                fontWeight = FontWeight.Bold,
+                // App parity (Chip.kt:127): labelMedium's own 600, Bold only for the SELECTED
+                // chip. (Supersedes the earlier "bold in every state" request in docs/05.)
+                fontWeight = if (selected) FontWeight.Bold else null,
                 color = labelColor,
                 modifier = Modifier.weight(1f)
             )
@@ -174,7 +175,9 @@ private fun ChipNumberBadge(number: Int, type: ChipType, enabled: Boolean) {
         // surface — so the circle vanished into the chip in BOTH themes. It now uses the
         // muted-but-distinct secondary foreground, as the app does (97832e9a).
         !enabled -> colors.foregroundSecondary
-        isEscalate -> colors.buttonPrimaryForeground.copy(alpha = 0.22f)
+        // App parity (Chip.kt:178): the escalate chip is solid red, so the badge inverts to a
+        // white circle with a red number.
+        isEscalate -> brand.foregroundPrimary
         else -> colors.buttonPrimaryAccent
     }
     val fg = when {
@@ -182,7 +185,7 @@ private fun ChipNumberBadge(number: Int, type: ChipType, enabled: Boolean) {
         // both themes (light numeral over the dark light-mode circle, dark numeral over the
         // light dark-mode one). foregroundTertiary here was the same Neutral700 as the circle.
         !enabled -> colors.surfaceTertiary
-        isEscalate -> colors.buttonPrimaryForeground
+        isEscalate -> brand.feedbackFail
         else -> colors.buttonPrimaryForeground
     }
     Box(
