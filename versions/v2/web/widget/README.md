@@ -183,7 +183,30 @@ open http://localhost:5182/demo/mobile.html          # 390×760 phone frame (ful
 `demo/index.html` reads `?env=`, `?base=`, `?geoKey=` (optional override; a key is built in),
 `?mode=FULL_JOURNEY` (default is the SDK's `CHAT_ONLY`), `?left=1` and `?label=` from the URL.
 
-## Hosted demo on Vercel
+## Hosted demo on Railway (GitHub CI/CD)
+
+The demo is served by `versions/v2/web/railway/server.mjs`, a zero-dependency Node server:
+- `/demo/` serves the demo pages;
+- `/dist/` serves the widget script and `illustrations/`;
+- `/stage/*` and `/stage-replay/*` go through the same proxy handler as the Vercel version
+  (`vercel/api/stage.js`);
+- `/healthz` is the health check.
+
+The Railway service (project `farmerchat-widget`, Digital Green Foundation) builds from GitHub
+`main` with **root directory `/versions/v2`**. That root is needed because the widget build copies
+its illustrations from the Android SDK assets. Railway runs `versions/v2/package.json`: `build`
+compiles the SDK then the widget, and `start` runs the server.
+
+Deployment happens only through GitHub: push to `main` and Railway builds it. Never deploy by hand
+(repo `CLAUDE.md` §8).
+
+To test it locally, the same way Railway runs it:
+
+```bash
+cd versions/v2 && npm run build && PORT=8920 npm start   # http://localhost:8920/demo/
+```
+
+## Hosted demo on Vercel (previous host)
 
 `vercel/` turns the demo into a static site plus one serverless function:
 

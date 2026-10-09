@@ -1,0 +1,13 @@
+{
+  "name": "farmerchat-web-site",
+  "private": true,
+  "description": "Builds the v2 web SDK + widget and serves the hosted widget demo (Railway service root = versions/v2, deployed from GitHub).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm --prefix web/packages/farmerchat-web ci && npm --prefix web/packages/farmerchat-web run build && npm --prefix web/widget ci && npm --prefix web/widget run build",
+    "start": "node web/railway/server.mjs"
+  }
+}
