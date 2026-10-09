@@ -185,6 +185,9 @@ open http://localhost:5182/demo/mobile.html          # 390×760 phone frame (ful
 
 ## Hosted demo on Railway (GitHub CI/CD)
 
+Live: **https://farmerchat-sdk-suite-production.up.railway.app** (`/` redirects to `/demo/`; add
+`?replay=1` for the recorded streaming answer).
+
 The demo is served by `versions/v2/web/railway/server.mjs`, a zero-dependency Node server:
 - `/demo/` serves the demo pages;
 - `/dist/` serves the widget script and `illustrations/`;
@@ -193,7 +196,7 @@ The demo is served by `versions/v2/web/railway/server.mjs`, a zero-dependency No
 - `/healthz` is the health check.
 
 The Railway service (project `farmerchat-widget`, Digital Green Foundation) builds from GitHub
-`main` with **root directory `/versions/v2`**. That root is needed because the widget build copies
+`main` with **root directory `/versions/v2`**, health check `/healthz` and a generated domain on port 8080. That root is needed because the widget build copies
 its illustrations from the Android SDK assets. Railway runs `versions/v2/package.json`: `build`
 compiles the SDK then the widget, and `start` runs the server.
 
