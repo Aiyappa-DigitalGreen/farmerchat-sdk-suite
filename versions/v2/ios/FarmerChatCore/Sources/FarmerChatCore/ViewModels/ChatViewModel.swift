@@ -577,7 +577,9 @@ public final class ChatViewModel: ObservableObject {
             triggeredInputType: triggeredInputType,
             ssfrCrop: ssfrCrop,
             transcriptionId: transcriptionId,
-            retry: isRetry
+            retry: isRetry,
+            // Per-LANGUAGE flag persisted on language selection (app ChatViewModel); default true.
+            streamingRequired: env.prefs.bool(.streamingRequired, default: true)
         )
         env.analytics.track(AnalyticsEvents.sendQuery, props: [
             "input_type": triggeredInputType,

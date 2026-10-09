@@ -108,6 +108,9 @@ public struct TextPromptRequest: Codable, Sendable {
     public var useEntityExtraction: Bool
     public var transcriptionId: String?
     public var retry: Bool
+    /// App `TextPromptRequest.streaming_required`: the selected language's flag, read from
+    /// ``PrefKey/streamingRequired`` (default true). Sent on #27 and #27a alike.
+    public var streamingRequired: Bool
 
     enum CodingKeys: String, CodingKey {
         case query
@@ -120,6 +123,7 @@ public struct TextPromptRequest: Codable, Sendable {
         case useEntityExtraction = "use_entity_extraction"
         case transcriptionId = "transcription_id"
         case retry
+        case streamingRequired = "streaming_required"
     }
 
     public init(
@@ -132,7 +136,8 @@ public struct TextPromptRequest: Codable, Sendable {
         ssfrCrop: String? = nil,
         useEntityExtraction: Bool = true,
         transcriptionId: String? = nil,
-        retry: Bool = false
+        retry: Bool = false,
+        streamingRequired: Bool = true
     ) {
         self.query = query
         self.conversationId = conversationId
@@ -144,6 +149,22 @@ public struct TextPromptRequest: Codable, Sendable {
         self.useEntityExtraction = useEntityExtraction
         self.transcriptionId = transcriptionId
         self.retry = retry
+        self.streamingRequired = streamingRequired
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        query = try c.decode(String.self, forKey: .query)
+        conversationId = try c.decode(String.self, forKey: .conversationId)
+        messageId = try c.decode(String.self, forKey: .messageId)
+        statementId = try c.decodeIfPresent(FlexibleID.self, forKey: .statementId)
+        weatherCtaTriggered = try c.decodeIfPresent(Bool.self, forKey: .weatherCtaTriggered) ?? false
+        triggeredInputType = try c.decode(String.self, forKey: .triggeredInputType)
+        ssfrCrop = try c.decodeIfPresent(String.self, forKey: .ssfrCrop)
+        useEntityExtraction = try c.decodeIfPresent(Bool.self, forKey: .useEntityExtraction) ?? true
+        transcriptionId = try c.decodeIfPresent(String.self, forKey: .transcriptionId)
+        retry = try c.decodeIfPresent(Bool.self, forKey: .retry) ?? false
+        streamingRequired = try c.decodeIfPresent(Bool.self, forKey: .streamingRequired) ?? true
     }
 }
 

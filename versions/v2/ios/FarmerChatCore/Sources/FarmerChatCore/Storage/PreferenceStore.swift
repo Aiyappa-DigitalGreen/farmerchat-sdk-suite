@@ -26,6 +26,10 @@ public enum PrefKey: String, CaseIterable, Sendable {
     case selectedLanguageDisplayName = "SELECTED_LANGUAGE_DISPLAY_NAME"
     case languageLabelsJson = "LANGUAGE_LABELS_JSON"
     case languageLabelsLoaded = "LANGUAGE_LABELS_LOADED"
+    /// The selected language's `streaming_required` — the app's `PreferenceKeys.STREAMING_REQUIRED`
+    /// key name verbatim (`is_streaming_required`). Read with ``PreferenceStore/bool(_:default:)``
+    /// so an unset value means true, as in the app.
+    case streamingRequired = "is_streaming_required"
 
     // Profile
     case userName = "USER_NAME"
@@ -112,6 +116,11 @@ public final class PreferenceStore: @unchecked Sendable {
 
     public func bool(_ key: PrefKey) -> Bool {
         defaults.bool(forKey: key.namespaced)
+    }
+
+    /// Like ``bool(_:)`` but returns `defaultValue` when the key was never written.
+    public func bool(_ key: PrefKey, default defaultValue: Bool) -> Bool {
+        defaults.object(forKey: key.namespaced) == nil ? defaultValue : defaults.bool(forKey: key.namespaced)
     }
 
     public func setBool(_ value: Bool, _ key: PrefKey) {

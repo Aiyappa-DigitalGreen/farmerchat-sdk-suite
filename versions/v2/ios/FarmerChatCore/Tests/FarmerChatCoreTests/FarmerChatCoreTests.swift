@@ -35,6 +35,34 @@ final class FarmerChatCoreTests: XCTestCase {
 
     // MARK: - Retry policy invariants (CLAUDE.md §3)
 
+    func testSupportedLanguageStreamingRequiredDecodes() throws {
+        let off = try JSONDecoder().decode(SupportedLanguage.self, from: Data(#"{"id": 1, "code": "hi", "streaming_required": false}"#.utf8))
+        XCTAssertEqual(off.streamingRequired, false)
+        let absent = try JSONDecoder().decode(SupportedLanguage.self, from: Data(#"{"id": 2, "code": "en"}"#.utf8))
+        XCTAssertNil(absent.streamingRequired)
+        XCTAssertTrue(absent.streamingRequired ?? true)
+    }
+
+    func testTextPromptRequestEncodesStreamingRequired() throws {
+        let defaulted = TextPromptRequest(query: "q", conversationId: "c", messageId: "", triggeredInputType: "text")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(defaulted)) as? [String: Any]
+        XCTAssertEqual(json?["streaming_required"] as? Bool, true)
+        let off = TextPromptRequest(query: "q", conversationId: "c", messageId: "", triggeredInputType: "text", streamingRequired: false)
+        let offJson = try JSONSerialization.jsonObject(with: JSONEncoder().encode(off)) as? [String: Any]
+        XCTAssertEqual(offJson?["streaming_required"] as? Bool, false)
+    }
+
+    func testStreamingRequiredPrefDefaultsTrue() {
+        let suite = "fc_sdk_test_streaming_\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = PreferenceStore(defaults: defaults)
+        XCTAssertTrue(prefs.bool(.streamingRequired, default: true))
+        prefs.setBool(false, .streamingRequired)
+        XCTAssertFalse(prefs.bool(.streamingRequired, default: true))
+        XCTAssertNotNil(defaults.object(forKey: "fc_sdk_is_streaming_required"))
+    }
+
     func testRetryableStatusTable() {
         for code in [408, 500, 502, 503, 504, 404] {
             XCTAssertTrue(RetryPolicy.isRetryable(status: code), "\(code) must be retryable")

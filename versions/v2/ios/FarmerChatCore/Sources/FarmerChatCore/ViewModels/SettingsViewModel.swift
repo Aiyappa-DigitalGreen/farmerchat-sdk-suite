@@ -7,6 +7,10 @@ public struct LanguageSettingsState: Sendable {
     public var expandedLanguages: Bool = false
     public var selectedLanguageId: Int?
     public var selectedLanguageCode: String?
+    /// The picked language's `streaming_required`, saved with it on submit (app
+    /// SettingsViewModel). Seeded from the stored value so re-saving the current language
+    /// keeps it.
+    public var selectedStreamingRequired: Bool = true
     public var isFetchingLabels: Bool = false
     public var fetchingLabelsForId: Int?
     public var isSubmittingLanguage: Bool = false
@@ -43,6 +47,7 @@ public final class SettingsViewModel: ObservableObject {
     public init(env: FarmerChat = .shared) {
         self.env = env
         self.appearanceMode = env.appearance
+        self.state.selectedStreamingRequired = env.prefs.bool(.streamingRequired, default: true)
     }
 
     public var isAuthenticated: Bool { env.session.isAuthenticated }
@@ -118,6 +123,11 @@ public final class SettingsViewModel: ObservableObject {
     public func selectLanguage(id: Int, code: String?) {
         state.selectedLanguageId = id
         state.selectedLanguageCode = code
+        if case .success(let groups) = state.languageState,
+           let language = groups.flatMap({ ($0.priorityView ?? []) + ($0.expandedView ?? []) })
+            .first(where: { $0.id == id }) {
+            state.selectedStreamingRequired = language.streamingRequired ?? true
+        }
         env.analytics.track(AnalyticsEvents.languageSelected, props: ["language_id": String(id), "screen": ScreenNames.languageChooser])
         Task { await fetchLabels(languageId: id, code: code) }
     }
@@ -152,6 +162,8 @@ public final class SettingsViewModel: ObservableObject {
                 if let code = state.selectedLanguageCode {
                     env.prefs.setString(code, .selectedLanguageCode)
                 }
+                // Per-language; sent as TextPromptRequest.streaming_required (app parity).
+                env.prefs.setBool(state.selectedStreamingRequired, .streamingRequired)
                 if case .success(let groups) = state.languageState {
                     let all = groups.flatMap { ($0.priorityView ?? []) + ($0.expandedView ?? []) }
                     if let display = all.first(where: { $0.id == languageId })?.displayName {

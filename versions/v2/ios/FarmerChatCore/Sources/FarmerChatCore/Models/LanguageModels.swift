@@ -28,6 +28,11 @@ public struct SupportedLanguage: Codable, Sendable, Identifiable, Hashable {
     public var asrEnabled: Bool?
     public var ttsEnabled: Bool?
     public var countryPhoneCode: String?
+    /// App `SupportedLanguage.streaming_required` (default true when absent). Persisted under
+    /// ``PrefKey/streamingRequired`` when the language is selected and sent on every text query
+    /// as ``TextPromptRequest/streamingRequired``. Without it stage answers the agentic endpoint
+    /// in one `done` event; with it stage streams `status` + `text_delta` events.
+    public var streamingRequired: Bool?
 
     enum CodingKeys: String, CodingKey {
         case rawId = "id"
@@ -37,6 +42,7 @@ public struct SupportedLanguage: Codable, Sendable, Identifiable, Hashable {
         case asrEnabled = "asr_enabled"
         case ttsEnabled = "tts_enabled"
         case countryPhoneCode = "country_phone_code"
+        case streamingRequired = "streaming_required"
     }
 
     public var id: Int { rawId?.intValue ?? -1 }

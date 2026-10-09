@@ -297,6 +297,13 @@ public final class OnboardingViewModel: ObservableObject {
             if let code = state.languageCode {
                 prefs.setString(code, .selectedLanguageCode)
             }
+            // App OnboardingSharedViewModel: the selected language's streaming_required is
+            // persisted on selection (default true); sent as TextPromptRequest.streaming_required.
+            if case .success(let groups) = state.languageState,
+               let language = groups.flatMap({ ($0.priorityView ?? []) + ($0.expandedView ?? []) })
+                .first(where: { $0.id == languageId }) {
+                prefs.setBool(language.streamingRequired ?? true, .streamingRequired)
+            }
             labels.update(labels: map)
             state.labelsRefreshToken += 1
         }
