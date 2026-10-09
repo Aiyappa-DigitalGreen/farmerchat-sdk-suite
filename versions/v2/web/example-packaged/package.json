@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@digitalgreenorg/farmerchat-web": "file:./digitalgreenorg-farmerchat-web-1.0.0.tgz",
+    "@digitalgreenorg/farmerchat-web": "file:./digitalgreenorg-farmerchat-web-2.2.0.tgz",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
