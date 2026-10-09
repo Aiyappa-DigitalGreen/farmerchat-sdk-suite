@@ -783,6 +783,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         use_entity_extraction: true,
         transcription_id: opts.transcriptionId ?? null,
         retry: opts.retry ?? false,
+        // App ChatViewModel: the selected language's flag, default true when unset. Stage only
+        // streams (status + text_delta) when it is true.
+        streaming_required: store.getBool(PrefKeys.STREAMING_REQUIRED, true),
       };
 
       lastRequestRef.current = () =>

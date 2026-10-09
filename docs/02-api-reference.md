@@ -434,7 +434,14 @@ copy lacks. All are in app source, so none is an invention:
 | `streaming_required` | **per-language**, from the language API's `streaming_required`, persisted by the app under `is_streaming_required` |
 | `image_name`, `image` | inline image payload on the text-prompt path |
 
-`streaming_required` was suspected of gating the stream. It does **not**: the endpoint returned a
-full stream both with and without it (3,351 vs 4,620 bytes). It is still a fidelity gap, because the
-language API returns it per language and the SDK never parses, persists or sends it.
+`streaming_required` **does gate the stream on stage** (re-measured 2026-10-09 on
+`farmerchat.farmstack.co/mobile-app-stage/`, same guest, same questions). Without it, every answer
+arrived as `done` + `metadata` only, after 11–19 s: no `status`, no `text_delta`, so no client could
+type the answer out. With `"streaming_required": true`, the same endpoint sent `status` at ~2 s and
+then six `text_delta` chunks over ~1.3 s before `done` + `metadata`. (An earlier dev-host capture
+streamed either way: 3,351 vs 4,620 bytes. The backends evidently differ, so always send it.)
+
+Wiring, as in the app: the language API returns `streaming_required` per language (default true).
+It is persisted under `is_streaming_required` at language selection (onboarding and settings, next
+to the ASR/TTS flags) and sent on every `TextPromptRequest`, read with default `true`.
 

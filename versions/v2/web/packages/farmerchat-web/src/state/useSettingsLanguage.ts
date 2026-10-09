@@ -18,6 +18,8 @@ export interface LanguageSettingsState {
   selectedLanguageId: number | null;
   selectedLanguageCode: string | null;
   selectedLanguageDisplayName: string | null;
+  /** The picked language's streaming_required, saved with it (app SettingsViewModel). */
+  selectedStreamingRequired: boolean;
   fetchingLabelsForId: number | null;
   isSubmitting: boolean;
   submitSuccess: boolean;
@@ -31,6 +33,7 @@ const initialState: LanguageSettingsState = {
   selectedLanguageId: null,
   selectedLanguageCode: null,
   selectedLanguageDisplayName: null,
+  selectedStreamingRequired: true,
   fetchingLabelsForId: null,
   isSubmitting: false,
   submitSuccess: false,
@@ -51,6 +54,8 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
     ...initialState,
     selectedLanguageId: services.store.getInt(PrefKeys.SELECTED_LANGUAGE_ID),
     selectedLanguageCode: services.store.getString(PrefKeys.SELECTED_LANGUAGE_CODE),
+    // Re-saving the current language must not flip the stored flag back to the default.
+    selectedStreamingRequired: services.store.getBool(PrefKeys.STREAMING_REQUIRED, true),
   }));
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -85,6 +90,7 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
           selectedLanguageId: language.id,
           selectedLanguageCode: language.code ?? null,
           selectedLanguageDisplayName: language.display_name ?? null,
+          selectedStreamingRequired: language.streaming_required ?? true,
           fetchingLabelsForId: null,
         });
       } else {
@@ -108,6 +114,7 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
     });
     if (res.ok) {
       store.setInt(PrefKeys.SELECTED_LANGUAGE_ID, s.selectedLanguageId);
+      store.setBool(PrefKeys.STREAMING_REQUIRED, s.selectedStreamingRequired);
       if (s.selectedLanguageCode) labels.setLanguageCode(s.selectedLanguageCode);
       // App parity: persist the display name so the drawer's "Language: X" line
       // updates (previously only id/code were saved → stale drawer).

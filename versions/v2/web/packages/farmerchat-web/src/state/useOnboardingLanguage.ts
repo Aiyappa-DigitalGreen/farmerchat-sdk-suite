@@ -211,6 +211,8 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
         labels.setLabels(res.data);
         if (language.code) labels.setLanguageCode(language.code);
         store.setInt(PrefKeys.SELECTED_LANGUAGE_ID, language.id);
+        // App OnboardingSharedViewModel: persisted on language selection, default true.
+        store.setBool(PrefKeys.STREAMING_REQUIRED, language.streaming_required ?? true);
         if (language.display_name ?? language.name) {
           store.setString(PrefKeys.SELECTED_LANGUAGE_DISPLAY_NAME, language.display_name ?? language.name ?? '');
         }

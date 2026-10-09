@@ -63,6 +63,8 @@ export interface SupportedLanguage {
   asr_enabled?: boolean | null;
   tts_enabled?: boolean | null;
   country_phone_code?: string | null;
+  /** App SupportedLanguage.streaming_required (default true): sent as TextPromptRequest.streaming_required. */
+  streaming_required?: boolean | null;
 }
 
 export interface SupportedLanguageGroup {
@@ -599,6 +601,12 @@ export interface TextPromptRequest {
   use_entity_extraction: boolean;
   transcription_id?: string | null;
   retry: boolean;
+  /**
+   * App TextPromptRequest.streaming_required: the selected language's flag (default true). Stage
+   * streams the agentic answer (status + text_delta) only when this is true; without it the whole
+   * answer arrives at once as done + metadata.
+   */
+  streaming_required?: boolean;
 }
 
 export interface IntentClassificationOutput {
