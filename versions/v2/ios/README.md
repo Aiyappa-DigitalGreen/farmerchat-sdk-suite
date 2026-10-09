@@ -2,7 +2,8 @@
 
 Full app-as-SDK. **By default (`mode: .chatOnly`) one entry point lands directly in a fresh AI
 chat** — guest init, the conversation and the server labels are bootstrapped headlessly, there is
-no drawer, and the chat bar carries the history and language icons. The one exception is a first
+no drawer, and the chat bar carries the language icon (history is off unless the host sets
+`showHistory: true`). The one exception is a first
 launch with no `languageCode`/`locale` configured: the language onboarding screen shows once, then
 the chat (later launches, or a host-set language, go straight to chat). Hosts that opt in with
 `mode: .fullJourney` get the complete FarmerChat journey — splash → language → name → home feed →
@@ -167,10 +168,12 @@ FarmerChatConfig(
 
     // C3 scope + toggles
     mode: .chatOnly,                      // .chatOnly (default) | .fullJourney
-    showSettings: true, showHistory: true,
+    showSettings: true,
+    showHistory: nil,                     // unset (default) = mode == .fullJourney (no history
+                                          // button in chat-only); set to force
     showDrawer: nil,                      // unset (default) = mode == .fullJourney; set to force
                                           // With the drawer off the chat bar carries the
-                                          // history (showHistory) and language icons.
+                                          // language icon, plus history when showHistory resolves true.
     enableWeather: true, enableSsfr: true,
 
     // 2.0.0 agentic streaming chat (#27a) — default false keeps 1.0.0 chat
@@ -243,7 +246,7 @@ cfg.languageCode      = @"en";
 cfg.defaultCountryCode = @"IN";
 // farmerChatApiKey / geoApiKey are built in — set them only to override.
 cfg.mode              = FCModeChatOnly;   // the default; FCModeFullJourney opts in to Home
-// cfg.showDrawer unset = resolves from mode (NO in chat-only); assigning pins it.
+// cfg.showDrawer / cfg.showHistory unset = resolve from mode (NO in chat-only); assigning pins them.
 cfg.enableAnalytics   = YES;              // default NO, matching Android
 
 // Host-supplied auth (optional). The async Swift tokenProvider becomes a completion block.

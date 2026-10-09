@@ -432,7 +432,8 @@ Grouped by what you are actually deciding.
 |---|---|
 | `mode(FarmerChatMode)` | `CHAT_ONLY` (default) or `FULL_JOURNEY` (onboarding, Home, drawer, settings) |
 | `showDrawer(Boolean?)` | Unset by default → resolves to `mode == FULL_JOURNEY`. An explicit value wins |
-| `showHistory` / `showSettings` | Chrome toggles (default true) |
+| `showHistory(Boolean?)` | History ("past advice") button / recent chats. Unset by default → resolves to `mode == FULL_JOURNEY`. An explicit value wins |
+| `showSettings(Boolean)` | Settings entry (default true) |
 | `showNameScreen(Boolean)` | Skip the name step |
 | `enableSsfr(Boolean)` | The fertilizer-advisory card |
 | `enableVoice` / `enableImages` / `enableWeather` | Feature switches |
@@ -442,8 +443,8 @@ Grouped by what you are actually deciding.
 | `minSplashDurationMs(Long)` | Splash floor |
 
 **`CHAT_ONLY`** (the default) has no drawer unless you set `showDrawer(true)`: with the drawer off
-the chat app bar carries the history and language buttons instead (`showHistory(false)` hides the
-history one). The mode also bootstraps headlessly, because it skips the screens that normally do this work:
+the chat app bar carries the language button instead. It shows no history button unless you set
+`showHistory(true)` — only the chat screen loads and a guest has no past conversations. The mode also bootstraps headlessly, because it skips the screens that normally do this work:
 it resolves coordinates, opens a guest session, identifies the user and raises device attributes,
 loads labels (endpoint #3 — otherwise the chat renders hardcoded English), and creates the
 conversation (`FarmerChatGraph.kt:440-470`). So the farmer lands straight in chat with none of it

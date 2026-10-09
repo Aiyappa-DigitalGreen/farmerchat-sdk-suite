@@ -161,11 +161,19 @@ public final class FCFarmerChatConfiguration: NSObject {
     /// onboarding + Home + drawer.
     @objc public var mode: FCMode = .chatOnly
     @objc public var showSettings: Bool = true
-    @objc public var showHistory: Bool = true
+    /// The host's explicit value, or nil when never set.
+    private var showHistoryOverride: Bool?
+    /// Unset by default, resolving to `mode == FCModeFullJourney` (no history button in
+    /// chat-only). Setting it pins the value.
+    @objc public var showHistory: Bool {
+        get { showHistoryOverride ?? (mode == .fullJourney) }
+        set { showHistoryOverride = newValue }
+    }
     /// The host's explicit value, or nil when never set.
     private var showDrawerOverride: Bool?
     /// Unset by default, resolving to `mode == FCModeFullJourney` (no drawer in chat-only, where
-    /// the chat bar carries the history and language icons). Setting it pins the value.
+    /// the chat bar carries the language icon, plus history when `showHistory` resolves YES).
+    /// Setting it pins the value.
     @objc public var showDrawer: Bool {
         get { showDrawerOverride ?? (mode == .fullJourney) }
         set { showDrawerOverride = newValue }
@@ -259,7 +267,7 @@ public final class FCFarmerChatConfiguration: NSObject {
             tokenProvider: swiftProvider,
             mode: mode.swiftValue,
             showSettings: showSettings,
-            showHistory: showHistory,
+            showHistory: showHistoryOverride,
             showDrawer: showDrawerOverride,
             showNameScreen: showNameScreen,
             enableAnalytics: enableAnalytics,

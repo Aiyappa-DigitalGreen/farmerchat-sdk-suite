@@ -1243,8 +1243,9 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
      * is otherwise no way to reach either screen. When the drawer is on, these stay hidden and
      * the drawer remains the single navigation surface, exactly as before.
      *
-     * Each icon is independently gated on its own config flag, so a host can expose history
-     * without language or vice versa.
+     * History is additionally gated on the resolved `config.showHistory`, which, unset,
+     * resolves to `mode == FULL_JOURNEY` — so the default CHAT_ONLY setup shows the language
+     * button alone (a guest there has no past advice to open).
      */
     private fun setUpAppBarActions() {
         val bar = binding.fcChatAppBar

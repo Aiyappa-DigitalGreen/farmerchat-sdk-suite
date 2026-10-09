@@ -228,13 +228,21 @@ public struct FarmerChatConfig: Sendable {
     /// chat. Pass `.fullJourney` for onboarding + Home + drawer.
     public var mode: FarmerChatMode
     public var showSettings: Bool
-    /// History entry point. Default true: in the drawer (full journey) or, when the drawer is
-    /// off, as an icon in the chat app bar.
-    public var showHistory: Bool
+    /// The host's explicit `showHistory`, or nil when it did not set one.
+    private var showHistoryOverride: Bool?
+    /// History entry point: in the drawer (full journey) or, when the drawer is off, as an icon
+    /// in the chat app bar. Unset by default, in which case it resolves to `mode == .fullJourney`
+    /// (chat-only opens straight into a chat, typically for a guest with no history, so the chat
+    /// app bar carries only the language icon). An explicit host value always wins.
+    public var showHistory: Bool {
+        get { showHistoryOverride ?? (mode == .fullJourney) }
+        set { showHistoryOverride = newValue }
+    }
     /// The host's explicit `showDrawer`, or nil when it did not set one.
     private var showDrawerOverride: Bool?
     /// Navigation drawer. Unset by default, in which case it resolves to `mode == .fullJourney`
-    /// (no drawer in chat-only; the chat app bar then carries the history and language icons).
+    /// (no drawer in chat-only; the chat app bar then carries the language icon, plus history
+    /// when `showHistory` resolves true).
     /// An explicit host value always wins.
     public var showDrawer: Bool {
         get { showDrawerOverride ?? (mode == .fullJourney) }
@@ -301,7 +309,7 @@ public struct FarmerChatConfig: Sendable {
         tokenProvider: FarmerChatTokenProvider? = nil,
         mode: FarmerChatMode = .chatOnly,
         showSettings: Bool = true,
-        showHistory: Bool = true,
+        showHistory: Bool? = nil,
         showDrawer: Bool? = nil,
         showNameScreen: Bool = true,
         enableAnalytics: Bool = false,
@@ -348,7 +356,7 @@ public struct FarmerChatConfig: Sendable {
         self.tokenProvider = tokenProvider
         self.mode = mode
         self.showSettings = showSettings
-        self.showHistory = showHistory
+        self.showHistoryOverride = showHistory
         self.showDrawerOverride = showDrawer
         self.showNameScreen = showNameScreen
         self.enableAnalytics = enableAnalytics

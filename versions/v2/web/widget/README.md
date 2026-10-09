@@ -2,7 +2,7 @@
 
 An Intercom-style widget for the **complete** FarmerChat web SDK. It adds a launcher bubble pinned
 to a corner of the page. Clicking it opens FarmerChat in a floating panel: by default straight into
-the chat (the SDK's `CHAT_ONLY` default — voice, photos, history and language from the chat bar;
+the chat (the SDK's `CHAT_ONLY` default — voice and photos, and the language button in the chat bar;
 a first-time visitor picks a language once before the chat);
 pass `mode: 'FULL_JOURNEY'` for the whole journey (onboarding, Home, drawer, settings). On phones
 the panel becomes a full-screen sheet. In chat-only mode each page load starts a new conversation; closing and

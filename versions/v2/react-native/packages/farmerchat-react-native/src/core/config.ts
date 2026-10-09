@@ -188,7 +188,11 @@ export interface FarmerChatConfig {
   enableSsfr?: boolean;
   /** Show the Settings entry in the drawer. Default true. */
   showSettings?: boolean;
-  /** Show the chat-history entry + "See all" in the drawer. Default true. */
+  /**
+   * Show chat history ("past advice"): the drawer entry + "See all", and the chat-bar history
+   * button when the drawer is off. **Unset by default**, resolving to `mode === 'FULL_JOURNEY'`:
+   * CHAT_ONLY users are fresh guests with no history. An explicit host value always wins.
+   */
   showHistory?: boolean;
   /**
    * Show the hamburger/drawer chrome at all. **Unset by default**, and an unset value resolves to
@@ -372,7 +376,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     enableWeather: config.enableWeather ?? true,
     enableSsfr: config.enableSsfr ?? true,
     showSettings: config.showSettings ?? true,
-    showHistory: config.showHistory ?? true,
+    showHistory: config.showHistory ?? (mode === 'FULL_JOURNEY'),
     showDrawer: config.showDrawer ?? (mode === 'FULL_JOURNEY'),
     showNameScreen: config.showNameScreen ?? true,
     enableAnalytics: config.enableAnalytics ?? false,

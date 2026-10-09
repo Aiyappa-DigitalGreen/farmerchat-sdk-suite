@@ -165,7 +165,7 @@ final class FarmerChatCoreTests: XCTestCase {
         // Chat-only by default (2026-10-09); the drawer resolves from the mode when unset.
         XCTAssertEqual(c.mode, .chatOnly)
         XCTAssertTrue(c.showSettings)
-        XCTAssertTrue(c.showHistory)
+        XCTAssertFalse(c.showHistory)
         XCTAssertFalse(c.showDrawer)
         XCTAssertTrue(c.enableSsfr)
         XCTAssertTrue(c.stringOverrides.isEmpty)
@@ -185,6 +185,23 @@ final class FarmerChatCoreTests: XCTestCase {
         XCTAssertTrue(c.showDrawer)
         c.showDrawer = false
         XCTAssertFalse(c.showDrawer)
+    }
+
+    func testShowHistoryResolvesFromModeUnlessExplicit() {
+        XCTAssertFalse(FarmerChatConfig(mode: .chatOnly).showHistory)
+        XCTAssertTrue(FarmerChatConfig(mode: .fullJourney).showHistory)
+        XCTAssertTrue(FarmerChatConfig(mode: .chatOnly, showHistory: true).showHistory)
+        XCTAssertFalse(FarmerChatConfig(mode: .fullJourney, showHistory: false).showHistory)
+
+        // Unset follows a later mode change; an explicit assignment then pins it.
+        var c = FarmerChatConfig()
+        c.mode = .fullJourney
+        XCTAssertTrue(c.showHistory)
+        c.showHistory = false
+        XCTAssertFalse(c.showHistory)
+        c.mode = .chatOnly
+        c.showHistory = true
+        XCTAssertTrue(c.showHistory)
     }
 
     func testBuiltInKeysUsedWhenHostPassesNothingOrBlank() {

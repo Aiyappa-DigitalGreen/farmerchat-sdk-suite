@@ -2090,7 +2090,9 @@ private fun ShareCard(
  * either screen at all. When the drawer is on these stay hidden and the drawer remains the single
  * navigation surface.
  *
- * History is gated on `showHistory` as well, so a host can expose language without history.
+ * History is gated on the resolved `config.showHistory` as well, so a host can expose language
+ * without history. Unset, it resolves to `mode == FULL_JOURNEY`, so the default CHAT_ONLY setup
+ * shows the language button alone (a guest there has no past advice to open).
  * Language is shown whenever the drawer is off, because once onboarding is skipped it is the only
  * way for a farmer to change language.
  *

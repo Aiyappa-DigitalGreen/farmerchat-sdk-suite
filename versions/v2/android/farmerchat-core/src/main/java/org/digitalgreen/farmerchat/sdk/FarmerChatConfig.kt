@@ -259,8 +259,12 @@ class FarmerChatConfig private constructor(
     /** Journey scope. Default [FarmerChatMode.CHAT_ONLY]; pass FULL_JOURNEY for the whole app. */
     val mode: FarmerChatMode,
     val showSettings: Boolean,
-    /** History entry point (the chat app bar's history button when the drawer is off). Default true. */
-    val showHistory: Boolean,
+    /**
+     * The host's explicit history choice, or null = "not set" (the default). Read [showHistory],
+     * never this: it exists only so [newBuilder] round-trips "unset" instead of freezing the
+     * mode-derived value.
+     */
+    private val showHistorySetting: Boolean?,
     /**
      * The host's explicit drawer choice, or null = "not set" (the default). Read [showDrawer],
      * never this: it exists only so [newBuilder] round-trips "unset" instead of freezing the
@@ -332,10 +336,21 @@ class FarmerChatConfig private constructor(
     /**
      * Whether the navigation drawer is shown: the host's explicit `showDrawer(...)` when set,
      * else `mode == FULL_JOURNEY`. So CHAT_ONLY (the default) has no drawer — the chat app bar
-     * then carries the history and language buttons instead — and FULL_JOURNEY keeps it.
+     * then carries the language button (plus history only when [showHistory] resolves true) —
+     * and FULL_JOURNEY keeps it.
      */
     val showDrawer: Boolean
         get() = showDrawerSetting ?: (mode == FarmerChatMode.FULL_JOURNEY)
+
+    /**
+     * Whether the history entry points are shown (the chat app bar's history button when the
+     * drawer is off, the drawer's recent-chats section): the host's explicit `showHistory(...)`
+     * when set, else `mode == FULL_JOURNEY`. So CHAT_ONLY (the default) shows no history — only
+     * the chat screen loads and a guest has no past conversations — and FULL_JOURNEY keeps it.
+     * Every UI call site reads this resolved value.
+     */
+    val showHistory: Boolean
+        get() = showHistorySetting ?: (mode == FarmerChatMode.FULL_JOURNEY)
 
     fun newBuilder(): Builder = Builder(environment)
         .customBaseUrl(customBaseUrl)
@@ -365,7 +380,7 @@ class FarmerChatConfig private constructor(
         .tokenProvider(tokenProvider)
         .mode(mode)
         .showSettings(showSettings)
-        .showHistory(showHistory)
+        .showHistory(showHistorySetting)
         .showDrawer(showDrawerSetting)
         .enableSsfr(enableSsfr)
         .fabLabel(fabLabel)
@@ -421,7 +436,7 @@ class FarmerChatConfig private constructor(
 
         private var mode: FarmerChatMode = FarmerChatMode.CHAT_ONLY
         private var showSettings: Boolean = true
-        private var showHistory: Boolean = true
+        private var showHistory: Boolean? = null
         private var showDrawer: Boolean? = null
         private var showNameScreen: Boolean = true
         private var enableSsfr: Boolean = true
@@ -518,8 +533,12 @@ class FarmerChatConfig private constructor(
         /** Journey scope. Default [FarmerChatMode.CHAT_ONLY]; FULL_JOURNEY opts in to the whole app. */
         fun mode(mode: FarmerChatMode) = apply { this.mode = mode }
         fun showSettings(show: Boolean) = apply { showSettings = show }
-        /** History button / entry point. Default true. */
-        fun showHistory(show: Boolean) = apply { showHistory = show }
+        /**
+         * History button / entry point. Unset by default, which resolves to
+         * `mode == FULL_JOURNEY` (no history in CHAT_ONLY). An explicit value always wins;
+         * `null` returns to "unset".
+         */
+        fun showHistory(show: Boolean?) = apply { showHistory = show }
         /**
          * Navigation drawer. Unset by default, which resolves to `mode == FULL_JOURNEY` (no
          * drawer in CHAT_ONLY). An explicit value always wins; `null` returns to "unset".
@@ -595,7 +614,7 @@ class FarmerChatConfig private constructor(
             tokenProvider = tokenProvider,
             mode = mode,
             showSettings = showSettings,
-            showHistory = showHistory,
+            showHistorySetting = showHistory,
             showDrawerSetting = showDrawer,
             showNameScreen = showNameScreen,
             enableSsfr = enableSsfr,

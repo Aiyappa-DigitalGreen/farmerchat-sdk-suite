@@ -98,7 +98,8 @@ consumed by the splash router, exactly like the app's deep-link handling.
 | `tokenProvider` | `() => HostToken \| null \| Promise<…>` | — | HOST_TOKEN: (re)supply a token; called on 401. |
 | `mode` | `'FULL_JOURNEY' \| 'CHAT_ONLY'` | `'CHAT_ONLY'` | `CHAT_ONLY` (default) skips Home and lands in chat, after a one-time language screen on a first launch (skipped when `languageCode`/`locale` is set); the splash bootstraps the guest session and labels headlessly, and each journey (SDK boot) starts a new conversation unless it opens a specific history conversation. `FULL_JOURNEY` runs onboarding, Home, drawer and settings. |
 | `showDrawer` | `boolean` | follows `mode` | Unset → `true` in `FULL_JOURNEY`, `false` in `CHAT_ONLY` (the chat app bar then shows the history and language buttons instead of the menu). An explicit value wins. |
-| `showSettings` / `showHistory` | `boolean` | `true` | Hide the Settings / History entries (drawer items, and the chat-bar history button when the drawer is off). |
+| `showSettings` | `boolean` | `true` | Hide the Settings entry (drawer item). |
+| `showHistory` | `boolean` | follows `mode` | History ("past advice") entries: drawer item, and the chat-bar history button when the drawer is off. Unset → `true` in `FULL_JOURNEY`, `false` in `CHAT_ONLY` (guests have no history). An explicit value wins. |
 | `enableSsfr` | `boolean` | `true` | Home SSFR (fertilizer) card. |
 | `stringOverrides` | `Record<labelKey, string>` | — | Highest-precedence label overrides (host wins over server + English). |
 | `locale` | `string` | — | Force a language code regardless of device/onboarding. |

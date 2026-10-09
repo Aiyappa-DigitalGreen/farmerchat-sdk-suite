@@ -48,8 +48,9 @@ FarmerChatConfig {
                                   //   once (skipped if languageCode/locale is set), then chat; later launches
                                   //   open straight into chat with a headless guest bootstrap.
                                   //   FULL_JOURNEY (onboarding → Home → chat …) still ships.
-  showDrawer?                     // unset → (mode == FULL_JOURNEY); chat-only puts history + language in the chat bar
-  showHistory = true, showSettings = true, showNameScreen = true
+  showDrawer?                     // unset → (mode == FULL_JOURNEY); chat-only puts language (+ history if on) in the chat bar
+  showHistory?                    // unset → (mode == FULL_JOURNEY): no history in chat-only (guests have none); explicit wins
+  showSettings = true, showNameScreen = true
   appearance: day|night|auto
   languageCode?                   // preselect, skips language screen if valid
   enableVoice = true, enableImages = true, enableWeather = true

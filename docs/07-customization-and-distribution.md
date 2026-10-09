@@ -110,7 +110,7 @@ Expose the journey/chat as a host-placeable component, in addition to `launch()`
 
 ### C3. Screen/feature toggles
 - `mode = CHAT_ONLY` (v2 default since 2026-10-09; skip Home and the rest of onboarding and land in chat, after a one-time language screen on a first launch unless the host sets `languageCode`/`locale`) | `FULL_JOURNEY`.
-- `showSettings`, `showHistory`, `showDrawer`, `enableWeather`, `enableSsfr` (bool; default true). Existing `enableVoice/Images` stay.
+- `showSettings`, `enableWeather`, `enableSsfr` (bool; default true). `showDrawer` and `showHistory` (bool; unset → `mode == FULL_JOURNEY`, explicit wins). Existing `enableVoice/Images` stay.
 
 ### C4. Event hooks + programmatic API
 Config callbacks (all optional): `onChatOpened()`, `onMessageSent(text)`, `onAnswerReceived(messageId)`, `onScreenView(name)`, `onError(code, message)`, `onSessionStart()`, `onExit()`. These are semantic, in addition to the raw `onEvent(name, props)` analytics fan-out. `onExit()` fires when the user closes the SDK from a surface with nowhere to go back to (e.g. CHAT_ONLY chat close) so a component-embedding host (React Native `<FarmerChatView>`, web) can unmount/hide the SDK; on Android/iOS the SDK finishes/dismisses its own Activity/VC, so wiring `onExit` there is optional.

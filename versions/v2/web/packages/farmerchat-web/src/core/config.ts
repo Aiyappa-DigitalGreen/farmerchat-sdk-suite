@@ -301,11 +301,16 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
    */
   mode?: FarmerChatMode;
   showSettings?: boolean;
-  /** History button in the chat app bar / drawer entry. Default true. */
+  /**
+   * History ("past advice") button in the chat app bar / drawer entry. Unset by default, which
+   * resolves to `mode === 'FULL_JOURNEY'`: CHAT_ONLY users are fresh guests with no history, so the
+   * chat bar shows only the language button. An explicit host value wins.
+   */
   showHistory?: boolean;
   /**
    * Navigation drawer. Unset by default, which resolves to `mode === 'FULL_JOURNEY'`: so
-   * CHAT_ONLY has no drawer and the chat app bar shows the history and language buttons instead.
+   * CHAT_ONLY has no drawer and the chat app bar shows the language button (and history, when
+   * `showHistory` is on) instead.
    * An explicit host value wins.
    */
   showDrawer?: boolean;
@@ -421,7 +426,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     tokenProvider: config.tokenProvider,
     mode,
     showSettings: config.showSettings ?? true,
-    showHistory: config.showHistory ?? true,
+    showHistory: config.showHistory ?? mode === 'FULL_JOURNEY',
     // Unset ⇒ follows the mode: drawer in FULL_JOURNEY only. An explicit host value wins.
     showDrawer: config.showDrawer ?? mode === 'FULL_JOURNEY',
     showNameScreen: config.showNameScreen ?? true,

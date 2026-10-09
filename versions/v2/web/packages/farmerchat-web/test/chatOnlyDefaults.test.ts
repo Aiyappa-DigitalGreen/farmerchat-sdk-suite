@@ -23,7 +23,13 @@ test('mode defaults to CHAT_ONLY and showDrawer then resolves to false', () => {
   const c = resolveConfig({ environment: 'prod' });
   assert.equal(c.mode, 'CHAT_ONLY');
   assert.equal(c.showDrawer, false);
-  assert.equal(c.showHistory, true);
+  assert.equal(c.showHistory, false);
+});
+
+test('showHistory follows the mode unless the host sets it', () => {
+  assert.equal(resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY' }).showHistory, true);
+  assert.equal(resolveConfig({ environment: 'prod', showHistory: true }).showHistory, true);
+  assert.equal(resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY', showHistory: false }).showHistory, false);
 });
 
 test('FULL_JOURNEY resolves showDrawer to true', () => {

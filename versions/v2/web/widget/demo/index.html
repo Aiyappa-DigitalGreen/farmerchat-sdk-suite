@@ -110,6 +110,53 @@
     footer.site { background: var(--ink); color: #9FB4C5; font-size: 13.5px; }
     footer.site .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-block: 26px 110px; }
 
+
+    /* forecast strip */
+    .forecast { background: var(--ink-2); color: #C4D3DF; border-top: 1px solid rgba(255,255,255,.08); }
+    .forecast .wrap { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); gap: 12px; align-items: stretch; padding-block: 18px; }
+    .forecast h2 { color: #fff; font-size: 15px; font-weight: 700; align-self: center; padding-right: 8px; }
+    .day { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.05); font-size: 13.5px; }
+    .day svg { width: 28px; height: 28px; flex: none; }
+    .day b { display: block; color: #fff; font-size: 14px; }
+    .day span { font-variant-numeric: tabular-nums; }
+    .day.dry { outline: 1.5px solid var(--turmeric); outline-offset: -1.5px; }
+    .day.dry b::after { content: ' · spray window'; color: var(--turmeric); font-weight: 600; font-size: 12px; }
+
+    /* member numbers */
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+    .stat { border-left: 3px solid var(--turmeric); padding: 4px 0 4px 16px; }
+    .stat b { display: block; font: 900 40px/1 var(--display); font-stretch: 80%; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .stat span { color: var(--slate-soft); font-size: 14.5px; }
+
+    /* services */
+    .services { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .svc { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .svc svg { width: 30px; height: 30px; }
+    .svc h3 { font-size: 18px; font-weight: 800; font-stretch: 90%; }
+    .svc p { margin: 0; font-size: 14.5px; color: var(--slate-soft); }
+    .svc .meta { margin-top: auto; font-size: 13px; font-weight: 600; color: var(--slate); }
+
+    /* events + field note */
+    .events { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .events li { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .events li:last-child { border-bottom: 0; }
+    .date { text-align: center; background: var(--ink); color: #fff; border-radius: 12px; padding: 8px 0; }
+    .date b { display: block; font: 900 24px/1 var(--display); font-stretch: 80%; }
+    .date span { font-size: 12px; color: var(--turmeric); font-weight: 600; }
+    .events h3 { font-size: 17px; font-weight: 700; font-stretch: 95%; }
+    .events p { margin: 3px 0 0; font-size: 14.5px; color: var(--slate-soft); }
+    .note { background: var(--ink); color: #DCE6EE; border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+    .note blockquote { margin: 0; font: 600 21px/1.4 var(--display); font-stretch: 95%; color: #fff; }
+    .note .who { font-size: 14px; color: #9FB4C5; }
+    .note .who b { color: var(--turmeric); display: block; font-size: 15px; }
+    .note button { align-self: flex-start; }
+
+    @media (max-width: 900px) {
+      .forecast .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .forecast h2 { grid-column: 1 / -1; }
+      .stats, .services { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) { .stat b { font-size: 32px; } .services { grid-template-columns: 1fr; } }
     /* FarmerChat attention: the widget launcher is ringed in turmeric and a callout points at it,
        until the widget is opened for the first time on this page. */
     body.fc-attn .fcw-launcher { animation: fc-ring 2.2s ease-out infinite; }
@@ -167,7 +214,7 @@
         <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="17" fill="#F2B132"/><path d="M17 6c4.8 5.6 7.2 9.8 7.2 13a7.2 7.2 0 1 1-14.4 0C9.8 15.8 12.2 11.6 17 6z" fill="#0E1B2A"/><path d="M14 20.5a3.4 3.4 0 0 0 3.4 3.3" stroke="#F2B132" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
         <span><b>Malnad Monsoon Collective</b><small class="kn">ಮಲೆನಾಡು ಮುಂಗಾರು ಬೆಳೆಗಾರರ ಸಂಘ</small></span>
       </a>
-      <nav class="top" aria-label="Sections"><a href="#crops">This week</a><a href="#prices">Prices</a><a href="#ask">Ask an expert</a></nav>
+      <nav class="top" aria-label="Sections"><a href="#crops">This week</a><a href="#prices">Prices</a><a href="#services">Services</a><a href="#centre">Events</a><a href="#ask">Ask an expert</a></nav>
       <button class="ask-top" type="button" data-ask><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Ask FarmerChat</span></button>
     </div>
   </header>
@@ -199,6 +246,18 @@
           </div>
           <div class="gauge-foot"><span>Week total <b>315 mm</b></span><span class="alert">Fruit-rot weather for arecanut</span></div>
         </div>
+      </div>
+    </section>
+
+
+    <section class="forecast" aria-label="Five-day forecast">
+      <div class="wrap">
+        <h2>Next five days</h2>
+        <div class="day"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M8 16a5 5 0 0 1 .6-10 6.5 6.5 0 0 1 12.2 2.4A4 4 0 0 1 20 16z" fill="#9FB4C5"/><g stroke="#6FB2DA" stroke-width="2" stroke-linecap="round"><path d="M10 19l-1.5 4M15 19l-1.5 4M20 19l-1.5 4"/></g></svg><div><b>Thu</b><span>48 mm · 21–25°</span></div></div>
+        <div class="day"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M8 16a5 5 0 0 1 .6-10 6.5 6.5 0 0 1 12.2 2.4A4 4 0 0 1 20 16z" fill="#9FB4C5"/><g stroke="#6FB2DA" stroke-width="2" stroke-linecap="round"><path d="M10 19l-1.5 4M15 19l-1.5 4M20 19l-1.5 4"/></g></svg><div><b>Fri</b><span>36 mm · 21–26°</span></div></div>
+        <div class="day dry"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="10" cy="10" r="4.5" fill="#F2B132"/><path d="M9 21a5 5 0 0 1 .6-10 6.5 6.5 0 0 1 12.2 2.4A4 4 0 0 1 21 21z" fill="#9FB4C5"/></svg><div><b>Sat</b><span>4 mm · 22–28°</span></div></div>
+        <div class="day"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="10" cy="10" r="4.5" fill="#F2B132"/><path d="M9 21a5 5 0 0 1 .6-10 6.5 6.5 0 0 1 12.2 2.4A4 4 0 0 1 21 21z" fill="#9FB4C5"/></svg><div><b>Sun</b><span>9 mm · 22–27°</span></div></div>
+        <div class="day"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M8 16a5 5 0 0 1 .6-10 6.5 6.5 0 0 1 12.2 2.4A4 4 0 0 1 20 16z" fill="#9FB4C5"/><g stroke="#6FB2DA" stroke-width="2" stroke-linecap="round"><path d="M10 19l-1.5 4M15 19l-1.5 4M20 19l-1.5 4"/></g></svg><div><b>Mon</b><span>30 mm · 21–25°</span></div></div>
       </div>
     </section>
 
@@ -267,6 +326,49 @@
             <li><button type="button" data-ask="How should I dry arecanut during rainy weather?">How should I dry arecanut when it keeps raining?<span class="kn">ಮಳೆಯಲ್ಲಿ ಅಡಿಕೆ ಒಣಗಿಸುವುದು</span></button></li>
           </ul>
         </div>
+      </div>
+    </section>
+
+    <section class="band" style="padding-top:0" aria-label="The collective in numbers">
+      <div class="wrap stats">
+        <div class="stat"><b>2,840</b><span>member growers</span></div>
+        <div class="stat"><b>17</b><span>villages across two districts</span></div>
+        <div class="stat"><b>6</b><span>collection centres</span></div>
+        <div class="stat"><b>41%</b><span>members are women growers</span></div>
+      </div>
+    </section>
+
+    <section class="band" id="services" style="padding-top:0">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Member services</h2>
+          <p>Book at any collection centre, or ask FarmerChat which one suits your estate.</p>
+        </div>
+        <div class="services">
+          <article class="svc"><svg viewBox="0 0 30 30" aria-hidden="true"><path d="M6 24h18M9 24V13h12v11" fill="none" stroke="#0E1B2A" stroke-width="2" stroke-linejoin="round"/><path d="M12 13V7h6v6" fill="none" stroke="#F2B132" stroke-width="2"/></svg><h3>Soil testing</h3><p>Lime and nutrient advice for your block, results in ten days.</p><span class="meta">₹150 a sample</span></article>
+          <article class="svc"><svg viewBox="0 0 30 30" aria-hidden="true"><rect x="4" y="15" width="22" height="9" rx="2" fill="none" stroke="#0E1B2A" stroke-width="2"/><path d="M7 15l4-7h8l4 7" fill="none" stroke="#F2B132" stroke-width="2" stroke-linejoin="round"/></svg><h3>Covered drying yards</h3><p>Dry arecanut and coffee under cover when the rain won't stop.</p><span class="meta">Book by the day</span></article>
+          <article class="svc"><svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="9" fill="none" stroke="#0E1B2A" stroke-width="2"/><path d="M15 9v6l4 3" fill="none" stroke="#F2B132" stroke-width="2" stroke-linecap="round"/></svg><h3>Pulping unit</h3><p>Wet processing for Arabica cherry on collection days.</p><span class="meta">Tue · Fri, 7 am–1 pm</span></article>
+          <article class="svc"><svg viewBox="0 0 30 30" aria-hidden="true"><path d="M7 11h16l-2 13H9z" fill="none" stroke="#0E1B2A" stroke-width="2" stroke-linejoin="round"/><path d="M11 11a4 4 0 0 1 8 0" fill="none" stroke="#F2B132" stroke-width="2"/></svg><h3>Input store</h3><p>Bordeaux mixture, lime and bio-inputs at member rates.</p><span class="meta">Open daily, 9 am–6 pm</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="centre" style="padding-top:0">
+      <div class="wrap two">
+        <div class="panel">
+          <h2>At the collection centre</h2>
+          <p>Mudigere centre unless noted. Free for members.</p>
+          <ol class="events">
+            <li><div class="date"><b>14</b><span>Oct</span></div><div><h3>Koleroga spray demonstration</h3><p>Preparing 1% Bordeaux mixture and spraying in the dry window.</p></div></li>
+            <li><div class="date"><b>18</b><span>Oct</span></div><div><h3>Pepper nursery day</h3><p>Rooted cuttings for gap filling, and how to train new vines.</p></div></li>
+            <li><div class="date"><b>25</b><span>Oct</span></div><div><h3>Coffee quality cupping, Somwarpet</h3><p>Bring 2 kg of parchment; the buyers' panel scores every lot.</p></div></li>
+          </ol>
+        </div>
+        <aside class="note" aria-label="From a member">
+          <blockquote>“I sent a photo of the spots on my pepper leaves and got an answer in Kannada before I'd finished my tea. It told me what to check at the base of the vine.”</blockquote>
+          <div class="who"><b>A member grower, Balur village</b>Illustrative quote for this demo page</div>
+          <button class="btn btn-sun" type="button" data-ask="There are dark spots on my pepper leaves. What could it be?">Try it with your crop</button>
+        </aside>
       </div>
     </section>
   </main>

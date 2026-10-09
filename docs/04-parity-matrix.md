@@ -8246,3 +8246,27 @@ widget's green launcher is the only green on the page. Until the widget is first
 launcher pulses with a turmeric ring (host CSS on `.fcw-launcher`) and a callout with an arrow points
 at it (dismissible; mirrors for `?left=1`). Test controls, query params and `data-ask` buttons are
 unchanged. Rainfall and prices are illustrative and labelled as such.
+
+## History ("past advice") hidden in CHAT_ONLY by default — all v2 platforms (2026-10-09)
+
+User request: chat-only users are fresh guests with no history, so the chat app bar should not offer
+it. `showHistory` is now unset by default, like `showDrawer`, and resolves to `mode == FULL_JOURNEY`;
+an explicit host value always wins. CHAT_ONLY's chat bar shows only the language button;
+FULL_JOURNEY is unchanged.
+
+| Platform | Where |
+|---|---|
+| android | `FarmerChatConfig.showHistory` is now a resolved getter over a nullable setting; `Builder.showHistory(Boolean?)` (null = unset; existing Boolean callers compile); `newBuilder()` keeps unset; tests in `ChatOnlyDefaultConfigTest`. Samples set it explicitly and are unchanged |
+| ios | `FarmerChatConfig.showHistory` computed over `showHistoryOverride`; init param `Bool? = nil`; ObjC `FCFarmerChatConfiguration.showHistory` the same; test `testShowHistoryResolvesFromModeUnlessExplicit` |
+| react-native / web | `resolveConfig`: `showHistory ?? mode === 'FULL_JOURNEY'`; tests updated/added; README rows |
+
+Known difference (unchanged): web gates `openScreen('chatHistory')` on `showHistory`; Android and iOS
+have no such gate. Verified: android compile (core/compose/views/samples) + core tests (238, 0
+failures); ios Core build + test (130, 0 failures), SwiftUI + UIKit simulator builds; RN tsc + tests;
+web tsc + build + tests; browser: the widget's chat bar shows only the language button.
+
+### Widget demo page filled out (same day)
+
+The Malnad Monsoon Collective page gained a five-day forecast strip (with the dry spray window
+highlighted), member numbers, member services, collection-centre events and a field quote, so it reads
+as a full site like the earlier demo. All figures and the quote are labelled illustrative.

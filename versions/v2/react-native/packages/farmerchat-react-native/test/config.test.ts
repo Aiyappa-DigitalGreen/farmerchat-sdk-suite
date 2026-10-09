@@ -19,7 +19,13 @@ test('mode defaults to CHAT_ONLY with no drawer', () => {
   const c = resolveConfig(base);
   assert.equal(c.mode, 'CHAT_ONLY');
   assert.equal(c.showDrawer, false);
-  assert.equal(c.showHistory, true);
+  assert.equal(c.showHistory, false);
+});
+
+test('showHistory follows the mode unless the host sets it', () => {
+  assert.equal(resolveConfig({ ...base, mode: 'FULL_JOURNEY' }).showHistory, true);
+  assert.equal(resolveConfig({ ...base, showHistory: true }).showHistory, true);
+  assert.equal(resolveConfig({ ...base, mode: 'FULL_JOURNEY', showHistory: false }).showHistory, false);
 });
 
 test('FULL_JOURNEY resolves showDrawer to true when unset', () => {
