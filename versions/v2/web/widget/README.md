@@ -11,7 +11,7 @@ reopening the panel keeps the current one (the panel stays mounted).
 It wraps the v2 web SDK (`../packages/farmerchat-web`, a `file:` dependency, so no source is copied).
 Every SDK config field works unchanged, including `enableAgenticChat`.
 
-**Live demo:** https://farmerchat-widget.vercel.app, a sample host page with the widget against the
+**Live demo:** https://farmerchat-sdk-suite-production.up.railway.app, a sample host page with the widget against the
 stage backend (agentic chat on, answers stream). Version 2.2.0, the same as every v2 platform.
 
 ## Drop-in: one script tag (any website, no React needed)
@@ -210,7 +210,11 @@ To test it locally, the same way Railway runs it:
 cd versions/v2 && npm run build && PORT=8920 npm start   # http://localhost:8920/demo/
 ```
 
-## Hosted demo on Vercel (previous host)
+## Hosted demo on Vercel (retired)
+
+The Vercel project `farmerchat-widget` was deleted on 2026-10-09; Railway (above) is the only
+host. The `vercel/` folder stays because the Railway server reuses its proxy handler
+(`vercel/api/stage.js`, `vercel/api/_replay.js`). What it used to do on Vercel:
 
 `vercel/` turns the demo into a static site plus one serverless function:
 

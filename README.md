@@ -12,7 +12,7 @@ Source of truth: the production Android app at `fc-compose` (org.digitalgreen.fa
 | v1 | `android/ ios/ react-native/ web/` (repo root) | 1.0.0 | The original `fc-compose` port. Synchronous chat only. Kept for hosts already on it. |
 
 - **Integration guide (all seven flavours):** https://claude.ai/artifact/BqBKuAzn2wvALENkme1pLe (Digital Green org).
-- **Live web widget demo:** https://farmerchat-widget.vercel.app — the Intercom-style widget on a sample
+- **Live web widget demo:** https://farmerchat-sdk-suite-production.up.railway.app — the Intercom-style widget on a sample
   host page, talking to the stage backend. Test controls (bottom left) include a streaming replay.
 - **Defaults (v2):** the SDK opens straight into chat (`mode` defaults to `CHAT_ONLY`; a first-time user picks a
   language once first, unless the host sets `languageCode`; pass

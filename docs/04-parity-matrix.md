@@ -8202,3 +8202,10 @@ FarmerChatUIKit for the iOS Simulator (BUILD SUCCEEDED); react-native `tsc --noE
 widget build + tsc. Browser (web widget, live stage): clean storage → language screen → "Start using
 FarmerChat" → chat; reload → straight to chat; clean storage + `open('question')` → language screen →
 chat with the question answered. Android/iOS/RN not run on a device: UNVERIFIED on device.
+
+## Vercel widget demo retired (2026-10-09)
+
+The Vercel project `farmerchat-widget` (farmerchat-widget.vercel.app) was deleted at the user's
+request; the URL now returns 404. The demo lives only on Railway
+(https://farmerchat-sdk-suite-production.up.railway.app), deployed from GitHub `main`. READMEs point
+there. `web/widget/vercel/` is kept: `web/railway/server.mjs` imports its proxy handler.
