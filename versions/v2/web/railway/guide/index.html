@@ -108,9 +108,11 @@ h1{font-family:var(--display);font-weight:800;font-size:clamp(44px,6.6vw,88px);l
   background:var(--card);color:var(--ink-2);font:600 14.5px var(--sans)}
 .st-chip i{font-style:normal;font-weight:500;color:var(--faint);font-size:13px}
 .st-chip:hover{border-color:var(--line-2)}
-.st-chip[aria-pressed="true"]{background:var(--soil);border-color:var(--soil);color:#fff}
-.st-chip[aria-pressed="true"] i{color:rgba(255,255,255,.65)}
-.st-chip[aria-pressed="true"] .ico{color:var(--sprout)}
+/* Selected platform: a solid sprout pill, visible on the light and the dark page alike. */
+.st-chip[aria-pressed="true"]{background:var(--sprout);border-color:var(--sprout);color:var(--soil);box-shadow:0 0 0 3px rgba(198,236,138,.25)}
+.st-chip[aria-pressed="true"] i{color:rgba(15,31,23,.7)}
+.st-chip[aria-pressed="true"] .ico{color:var(--soil)}
+.st-chip:focus-visible{outline:2px solid var(--dawn);outline-offset:2px}
 .st-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px;counter-reset:none}
 .st-step{position:relative;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:0;border-radius:20px;overflow:hidden;
   background:var(--card);border:1px solid var(--line)}
@@ -139,9 +141,9 @@ h1{font-family:var(--display);font-weight:800;font-size:clamp(44px,6.6vw,88px);l
 .ptab-n{font-weight:600;font-size:15px}
 .ptab-f{font-size:13px;color:var(--faint)}
 .ptab-s{display:none}
-.ptab.on > .ptab-a{background:var(--soil);color:#fff}
-.ptab.on > .ptab-a .ico{color:var(--sprout)}
-.ptab.on > .ptab-a .ptab-f{color:rgba(255,255,255,.65)}
+.ptab.on > .ptab-a{background:var(--sprout);color:var(--soil)}
+.ptab.on > .ptab-a .ico{color:var(--soil)}
+.ptab.on > .ptab-a .ptab-f{color:rgba(15,31,23,.7)}
 .ptab-secs{margin:6px 0 10px 19px;padding-left:12px;border-left:2px solid var(--line)}
 .js .ptab-secs{display:none}
 .js .ptab.on > .ptab-secs{display:block}
@@ -1324,12 +1326,26 @@ handle.unmount();</code></pre></div></div><h4 class="sub">Or use the floating la
     window.addEventListener('resize', function(){ size(); if (reduce) requestAnimationFrame(draw); });
   }
 
+  /* Scroll to a page offset; if the smooth animation stalls (throttled frames), finish it instantly. */
+  function glide(top){
+    top = Math.max(0, Math.min(top, document.documentElement.scrollHeight - innerHeight));
+    scrollTo({ top: top, behavior: reduce ? 'instant' : 'smooth' });
+    setTimeout(function(){ if (Math.abs(scrollY - top) > 4) scrollTo({ top: top, behavior: 'instant' }); }, 900);
+  }
+
   /* Three-step switcher: one platform's install / initialize / open steps at a time. */
   document.querySelectorAll('.st-chip').forEach(function(b){
     b.addEventListener('click', function(){
       var id = b.dataset.st;
       document.querySelectorAll('.st-chip').forEach(function(x){ x.setAttribute('aria-pressed', x === b); });
       document.querySelectorAll('.st-list').forEach(function(l){ l.hidden = l.dataset.st !== id; });
+      // Phones: the chips fill the screen, so bring step 1 of the chosen platform into view.
+      if (matchMedia('(max-width:620px)').matches) {
+        var list = document.querySelector('.st-list[data-st="' + id + '"]');
+        var bar = document.querySelector('.topbar, header');
+        var top = list.getBoundingClientRect().top + scrollY - ((bar ? bar.offsetHeight : 0) + 12);
+        glide(top);
+      }
     });
   });
 
@@ -1363,8 +1379,15 @@ handle.unmount();</code></pre></div></div><h4 class="sub">Or use the floating la
     if (!pid) return;
     e.preventDefault();
     show(pid);
-    var target = id === pid ? document.getElementById('guide') : document.getElementById(id);
-    target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' });
+    var narrow = matchMedia('(max-width:860px)').matches;
+    // Phones: a platform tab lands on that platform's first topic, just below the sticky header + rail.
+    var target = id === pid ? (narrow ? document.getElementById(pid) : document.getElementById('guide')) : document.getElementById(id);
+    if (narrow) {
+      var rail = document.querySelector('.rail');
+      var bar = document.querySelector('.topbar, header');
+      var cover = (bar ? bar.offsetHeight : 0) + (rail ? rail.offsetHeight : 0) + 16;
+      glide(target.getBoundingClientRect().top + scrollY - cover);
+    } else target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' });
     try { history.replaceState(null, '', '#' + id); } catch(err){}
   });
   window.addEventListener('hashchange', function(){ var p = platFor(location.hash.slice(1)); if (p) show(p); });

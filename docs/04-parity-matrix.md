@@ -8318,3 +8318,5 @@ Follow-up (2026-10-12): `/` now serves the integration guide (also at `/guide/`)
 landing page moved to `/showcase/`. Guide on phones: every platform chip and rail entry is visible
 (full chip labels, wrapping short-name rail), and the "How it works" arrow labels sit beside their
 arrows. Artifact v19.
+Guide (2026-10-12): the selected platform (step chips and guide rail) is a solid light-green pill in
+both themes; on phones, picking a platform scrolls to its step 1 / first topic. Artifact v20.
