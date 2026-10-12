@@ -8320,3 +8320,20 @@ landing page moved to `/showcase/`. Guide on phones: every platform chip and rai
 arrows. Artifact v19.
 Guide (2026-10-12): the selected platform (step chips and guide rail) is a solid light-green pill in
 both themes; on phones, picking a platform scrolls to its step 1 / first topic. Artifact v20.
+
+## App sync check: fc-compose dev/v2.5 @c0c4f571 (2026-10-12)
+
+origin `dev/v2.5` moved 393c5bb0 → c0c4f571 (one commit, "firebase userAttribute key added"),
+compared from a scratch clone (the local checkout was not touched). The commit is analytics-only:
+- `UserAttributeKeys.PREFERRED_LANGUAGE` renamed "Preferred language" → "preferred_language". **No
+  SDK change:** no platform declares or raises that key (android v2 raises only the 7 device/carrier
+  keys; ios/react-native/web have no `onUserAttribute`).
+- New `FIREBASE_ALLOWED` allowlist (Firebase's 25-property cap) gating `setUserProperty`. Vendor
+  routing is the host's job (root CLAUDE.md §6), so it is documented, not coded:
+  `versions/v2/android/INTEGRATION.md` Step 7 shows the filter (only `Carrier_Name` and `Device_Type`
+  of the SDK's 7 keys are on the allowlist).
+
+No UI, endpoint, event-name or label change, so ios / react-native / web need nothing. Unmerged
+feature branches updated the same day (`features/dev_v2.5_referral_dashbaord` +15,
+`feature/dev-v2.5-mux-video` +7, `feature/dev-v2.5-mux-video-tts` +9) are not on the release line and
+were not ported.

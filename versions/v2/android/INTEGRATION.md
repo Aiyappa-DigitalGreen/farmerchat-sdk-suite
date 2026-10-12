@@ -582,6 +582,17 @@ Narrower hooks also exist: `onChatOpened`, `onMessageSent`, `onAnswerReceived`, 
 
 Event names are byte-identical to the reference app's constants, so dashboards line up.
 
+**Forwarding attributes to Firebase:** Firebase caps a project at 25 user properties, so the app
+(since `c0c4f571`) sends Firebase only an allowlist. Of the 7 keys the SDK raises, only
+`Carrier_Name` and `Device_Type` are on it. To match the app's Firebase data, filter before
+`setUserProperty`; send the rest to sinks without the cap (MoEngage, Plotline, Adjust):
+
+```kotlin
+// import org.digitalgreen.farmerchat.sdk.core.analytics.UserAttributeKeys
+val firebaseAllowed = setOf(UserAttributeKeys.CARRIER_NAME, UserAttributeKeys.DEVICE_TYPE)
+.onUserAttribute { key, value -> if (key in firebaseAllowed) Firebase.analytics.setUserProperty(key, value) }
+```
+
 ---
 
 ## Step 8 — Permissions
