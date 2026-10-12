@@ -2,7 +2,8 @@
  * Production server for the hosted widget demo on Railway (deployed by GitHub → Railway, never
  * by hand; see the repo CLAUDE.md §8). Zero dependencies: Node's http module only.
  *
- *   /                      → the showcase landing page (railway/home/index.html)
+ *   /, /guide/             → the SDK integration guide (railway/guide/index.html)
+ *   /showcase/             → web app + widget side by side with their code (railway/home/index.html)
  *   /app/*                 → demo-app/dist: the web SDK as a full-page app (npm + React host)
  *   /demo/*                → widget/demo (index.html, mobile.html): the one-script-tag widget
  *   /dist/*                → widget/dist (farmerchat-widget.iife.js + illustrations/)
@@ -10,7 +11,6 @@
  *                            (widget/vercel/api/stage.js), so there is one copy of the logic.
  *                            The OTP endpoints are refused here: this proxy is public, and it must
  *                            not become a way to send login codes to arbitrary phone numbers.
- *   /guide/                → the SDK integration guide (railway/guide/index.html)
  *   /healthz               → 200 "ok"
  */
 import http from 'node:http';
@@ -64,8 +64,9 @@ const server = http.createServer((req, res) => {
   }
   if (p === '/guide' || p === '/guide/index.html') { res.writeHead(301, { location: '/guide/' }); return res.end(); }
   if (p === '/guide/') return sendFile(res, path.join(here, 'guide', 'index.html'), req.method === 'HEAD');
-  if (p === '/' || p === '/index.html') return sendFile(res, path.join(here, 'home', 'index.html'), req.method === 'HEAD');
-  if (p === '/demo' || p === '/app') { res.writeHead(301, { location: p + '/' + url.search }); return res.end(); }
+  if (p === '/' || p === '/index.html') return sendFile(res, path.join(here, 'guide', 'index.html'), req.method === 'HEAD');
+  if (p === '/showcase/') return sendFile(res, path.join(here, 'home', 'index.html'), req.method === 'HEAD');
+  if (p === '/demo' || p === '/app' || p === '/showcase') { res.writeHead(301, { location: p + '/' + url.search }); return res.end(); }
   for (const [prefix, root] of Object.entries(ROOTS)) {
     if (!p.startsWith(prefix)) continue;
     let rel = p.slice(prefix.length) || 'index.html';

@@ -8313,3 +8313,8 @@ Follow-up (same day): the widget demo's bottom-left "Test controls" panel (open/
 boot, reset session, streaming-replay toggle, status readout) was removed so the page reads as a real
 host site; the URL switches (`?replay=1`, `?mode=`, `?base=`, …) still work. The guide (artifact v16
 and `/guide/`) gained "Live demo" links in its top bar and hero, pointing straight at the widget demo (`/demo/`).
+
+Follow-up (2026-10-12): `/` now serves the integration guide (also at `/guide/`); the two-integration
+landing page moved to `/showcase/`. Guide on phones: every platform chip and rail entry is visible
+(full chip labels, wrapping short-name rail), and the "How it works" arrow labels sit beside their
+arrows. Artifact v19.

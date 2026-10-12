@@ -237,6 +237,9 @@ tr:last-child td{border-bottom:0}
 .cmt:focus-visible{outline:2px solid var(--dawn);outline-offset:2px}
 .cmt svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
 @media (max-width:860px){.cmt{margin-left:auto}}
+:root{--flow-ink:#9A5C06}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--flow-ink:#F6B04A}}
+:root[data-theme="dark"]{--flow-ink:#F6B04A}
 
 /* ---- for-everyone sections: what farmers get, how it works, website, FAQ ---- */
 .what,.how,.web,.faq{padding-block:clamp(64px,8vw,104px) 0}
@@ -256,7 +259,7 @@ tr:last-child td{border-bottom:0}
 .flow-arrow{position:relative;display:flex;align-items:center;justify-content:center}
 .flow-arrow::before{content:'';position:absolute;left:10px;right:10px;top:50%;height:2px;background:repeating-linear-gradient(90deg,var(--dawn) 0 8px,transparent 8px 14px)}
 .flow-arrow::after{content:'';position:absolute;right:8px;top:calc(50% - 5px);border:5px solid transparent;border-left:8px solid var(--dawn)}
-.flow-arrow span{position:relative;top:-16px;font-size:12.5px;font-weight:700;color:#B46D0A;background:var(--paper);padding:0 6px;white-space:nowrap}
+.flow-arrow span{position:relative;top:-16px;font-size:12.5px;font-weight:700;color:var(--flow-ink);background:var(--paper);padding:0 6px;white-space:nowrap}
 .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:16px}
 .fact{display:flex;flex-direction:column;gap:4px;padding:16px 18px;border-radius:14px;background:var(--wash)}
 .fact b{font-weight:700}
@@ -275,9 +278,9 @@ tr:last-child td{border-bottom:0}
   .feat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .flow{grid-template-columns:1fr;gap:0}
   .flow-arrow{height:56px}
-  .flow-arrow::before{left:50%;right:auto;top:6px;bottom:6px;width:2px;height:auto;background:repeating-linear-gradient(180deg,var(--dawn) 0 8px,transparent 8px 14px)}
-  .flow-arrow::after{right:auto;left:calc(50% - 5px);top:auto;bottom:4px;border:5px solid transparent;border-top:8px solid var(--dawn)}
-  .flow-arrow span{top:0;left:52px;position:absolute}
+  .flow-arrow::before{left:calc(50% - 1px);right:auto;top:6px;bottom:16px;width:2px;height:auto;background:repeating-linear-gradient(180deg,var(--dawn) 0 8px,transparent 8px 14px)}
+  .flow-arrow::after{right:auto;left:calc(50% - 5px);top:auto;bottom:6px;border:5px solid transparent;border-top:8px solid var(--dawn);border-bottom:0}
+  .flow-arrow span{position:absolute;top:50%;left:calc(50% + 12px);transform:translateY(-50%);padding:0}
   .web-grid{grid-template-columns:1fr}
 }
 @media (max-width:620px){.feat-grid,.facts{grid-template-columns:1fr}}
