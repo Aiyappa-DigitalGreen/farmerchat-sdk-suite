@@ -18,7 +18,7 @@ FarmerChat.initialize({
   // uncommenting the line below and running `adb reverse tcp:8899 tcp:8899`.
   // The committed default stays on the live dev backend per the guardrail.
   customBaseUrl: 'http://localhost:8899/',
-  appearance: 'light',
+  appearance: 'day',
   enableVoice: true,
   enableImages: true,
   enableWeather: true,

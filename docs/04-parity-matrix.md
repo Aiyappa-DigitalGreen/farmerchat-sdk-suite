@@ -8386,5 +8386,5 @@ Follow-up 2 (2026-10-13), dependencies and remaining surfaces:
   per-file grants), no `postMessage` handlers, no cleartext base URLs, no token/PII in logs or
   analytics, logout clears local credentials on all four v2 platforms even when the API call fails,
   no signing keys / `.env` / service files committed, Android libs current (OkHttp 5.3.2, Retrofit 3.0.0).
-- Pre-existing, not security, not changed: RN example apps fail `tsc` on `appearance: "light"`
-  (`App.tsx:21`; `AppearanceMode` has no `"light"`).
+- RN example apps (v1+v2) failed `tsc` on `appearance: 'light'` (`App.tsx:21`; `AppearanceMode` is
+  `'day' | 'night' | 'auto'`). Fixed to `'day'`; all four RN examples now pass `tsc --noEmit`.
