@@ -3,15 +3,28 @@ import FarmerChatCore
 
 // MARK: - Markdown text (port of components/MarkdownText.kt)
 
+/// Clears `.link` on every run whose scheme is not http(s). `Text` opens markdown links through the
+/// system `openURL`, and answers are model output, so `tel:`/`sms:`/app deep links must stay inert
+/// (web `markdownParse` and RN `Markdown` parity: the label renders as plain text).
+func fcStripUnsafeLinks(_ attributed: AttributedString) -> AttributedString {
+    var out = attributed
+    for run in out.runs {
+        guard let url = run.link else { continue }
+        let scheme = url.scheme?.lowercased()
+        if scheme != "http" && scheme != "https" { out[run.range].link = nil }
+    }
+    return out
+}
+
 public struct FCMarkdownText: View {
     @Environment(\.fcTheme) private var theme
     let text: String
 
     public var body: some View {
-        if let attributed = try? AttributedString(
+        if let attributed = (try? AttributedString(
             markdown: text,
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
+        )).map(fcStripUnsafeLinks) {
             Text(attributed)
                 .font(.system(size: 16))
                 .foregroundColor(theme.content.foregroundPrimary)
@@ -122,10 +135,10 @@ private struct FCMarkdownTextColored: View {
     let color: Color
 
     var body: some View {
-        if let attributed = try? AttributedString(
+        if let attributed = (try? AttributedString(
             markdown: text,
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
+        )).map(fcStripUnsafeLinks) {
             Text(attributed)
                 .font(.system(size: FarmerChat.shared.config.messageFontSize ?? 16))
                 .foregroundColor(color)

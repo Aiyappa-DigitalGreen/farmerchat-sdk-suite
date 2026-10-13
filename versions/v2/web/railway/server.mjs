@@ -52,11 +52,20 @@ function sendFile(res, file, head) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://x');
-  const p = decodeURIComponent(url.pathname);
+  // Both throw on hostile input (`GET /%`, `GET //`); uncaught here that kills the process.
+  let url, p;
+  try {
+    url = new URL(req.url, 'http://x');
+    p = decodeURIComponent(url.pathname);
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain' });
+    return res.end('Bad request');
+  }
   if (p === '/healthz') { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('ok'); }
   if (p.startsWith('/stage/') || p.startsWith('/stage-replay/')) {
-    if (OTP_PATHS.test(p)) { res.writeHead(403, { 'content-type': 'text/plain' }); return res.end('Phone login is disabled on this demo'); }
+    // Collapse `//` and fold case first: `/api//user/generate_otp/` slipped past the raw test, and
+    // many upstreams normalize it straight back onto the real endpoint.
+    if (OTP_PATHS.test(p.replace(/\/{2,}/g, '/').toLowerCase())) { res.writeHead(403, { 'content-type': 'text/plain' }); return res.end('Phone login is disabled on this demo'); }
     return Promise.resolve(stageHandler(req, res)).catch(() => {
       if (!res.headersSent) { res.writeHead(502, { 'content-type': 'text/plain' }); }
       res.end('Proxy error');

@@ -123,6 +123,9 @@ class FarmerChatGraph internal constructor(
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = if (config.debugLogging) HttpLoggingInterceptor.Level.BODY
         else HttpLoggingInterceptor.Level.NONE
+        // BODY prints headers too: keep bearer tokens and the API key out of logcat.
+        redactHeader("Authorization")
+        redactHeader("API-Key")
     }
 
     private val authHeaderInterceptor = AuthHeaderInterceptor(tokenStore, appContext, prefs)

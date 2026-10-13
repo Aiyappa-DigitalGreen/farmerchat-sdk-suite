@@ -147,7 +147,9 @@ function num(v: number | "", d: number): number {
   return v === "" || v == null || isNaN(v as number) ? d : Number(v)
 }
 function mdLite(t: string): string {
-  return String(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")
+  // Escape first: the result goes to dangerouslySetInnerHTML and `t` can be typed chat input.
+  const esc = String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+  return esc.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")
 }
 
 /** Bridge the studio ThemeState onto shadcn's design tokens (scoped to .phone).

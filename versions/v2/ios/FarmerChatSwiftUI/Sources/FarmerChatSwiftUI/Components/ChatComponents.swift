@@ -67,7 +67,20 @@ func fcInlineMarkdown(_ text: String) -> AttributedString {
         options: AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
-    )) ?? AttributedString(text)
+    )).map(fcStripUnsafeLinks) ?? AttributedString(text)
+}
+
+/// Clears `.link` on every run whose scheme is not http(s). `Text` opens markdown links through the
+/// system `openURL`, and answers are model output, so `tel:`/`sms:`/app deep links must stay inert
+/// (web `markdownParse` and RN `Markdown` parity: the label renders as plain text).
+func fcStripUnsafeLinks(_ attributed: AttributedString) -> AttributedString {
+    var out = attributed
+    for run in out.runs {
+        guard let url = run.link else { continue }
+        let scheme = url.scheme?.lowercased()
+        if scheme != "http" && scheme != "https" { out[run.range].link = nil }
+    }
+    return out
 }
 
 /// Port of `parseMarkdownBlocks`.

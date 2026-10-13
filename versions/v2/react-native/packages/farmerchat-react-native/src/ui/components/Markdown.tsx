@@ -42,7 +42,10 @@ function parseInline(text: string): InlineSegment[] {
   };
   while ((match = linkRegex.exec(text)) !== null) {
     if (match.index > lastIndex) pushStyled(text.slice(lastIndex, match.index), null);
-    pushStyled(match[1] ?? '', match[2] ?? null);
+    // Only http(s) is tappable (web markdownParse parity). Answers are model output, and
+    // Linking.openURL hands any other scheme (tel:, intent:, upi:, app deep links) to the OS.
+    const href = match[2] ?? '';
+    pushStyled(match[1] ?? '', /^https?:\/\//i.test(href) ? href : null);
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) pushStyled(text.slice(lastIndex), null);

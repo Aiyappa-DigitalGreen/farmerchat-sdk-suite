@@ -8337,3 +8337,23 @@ No UI, endpoint, event-name or label change, so ios / react-native / web need no
 feature branches updated the same day (`features/dev_v2.5_referral_dashbaord` +15,
 `feature/dev-v2.5-mux-video` +7, `feature/dev-v2.5-mux-video-tts` +9) are not on the release line and
 were not ported.
+
+## Security hardening pass (2026-10-13)
+
+Audit of all six packages + the hosted site. `npm audit --omit=dev` is clean for web, widget,
+demo-app, react-native v2 and theme-studio. Fixed, both trees where both exist:
+
+| Fix | Where | Status |
+|---|---|---|
+| Markdown links: only `http(s)` is tappable; any other scheme renders as plain label text (answers are model output; `Linking.openURL` / SwiftUI `Text` hand `tel:`, `intent:`, `upi:`, app deep links to the OS). Web already did this (`markdownParse.ts`). | react-native v1+v2 `Markdown.tsx`; ios v1+v2 SwiftUI `fcStripUnsafeLinks` (`ChatComponents.swift`) | DONE. android compose/views and iOS UIKit render answer links as non-clickable text, so no change needed |
+| `debugLogging` BODY logging redacts `Authorization` and `API-Key` | android v1+v2 `FarmerChatGraph.kt` | DONE |
+| Hosted site: a malformed URL (`GET /%`, `GET //`) threw inside the request listener and crashed the process; now 400 | `versions/v2/web/railway/server.mjs` | DONE, verified locally |
+| Hosted site: the OTP block on the public stage proxy was bypassable with `//` or case (`/api//user/generate_otp/`); path is now slash-collapsed and lower-cased before the test | `versions/v2/web/railway/server.mjs` | DONE, verified locally (403, nothing forwarded) |
+| theme-studio chat preview `mdLite` escapes HTML before `dangerouslySetInnerHTML` (self-XSS from typed input) | `theme-studio/src/components/PhonePreview.tsx` | DONE |
+
+**Not changed, by decision (see docs/05):** the bundled Geolocation key (`DEFAULT_GEO_API_KEY`, all v2
+platforms + the public widget bundle) and the guest API key (`DEFAULT_GUEST_USER_API_KEY`, android v1)
+are client-side keys and extractable by design. Mitigation is on the Google Cloud / backend side:
+restrict the geo key to the Geolocation API with a billing alert, rotate it, and long term proxy
+geolocate through the backend. Token storage (plain app-private prefs / localStorage) mirrors the app
+and is unchanged.
