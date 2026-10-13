@@ -17,7 +17,7 @@ FarmerChat.initialize({
   // (chat answer, OTP, voice, image, TTS), point the SDK at the local mock by
   // uncommenting the line below and running `adb reverse tcp:8899 tcp:8899`.
   // The committed default stays on the live dev backend per the guardrail.
-  customBaseUrl: 'http://localhost:8899/',
+  // customBaseUrl: 'http://localhost:8899/',
   appearance: 'day',
   // The SDK defaults to CHAT_ONLY; this example demos the full journey, so it opts in.
   // The FarmerChat API key and the Google Geolocation key are built in — nothing to supply.

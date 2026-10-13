@@ -20,14 +20,14 @@ Requirements: minSdk 26, compileSdk 36, Kotlin 2.x, AGP 8.x.
 dependencies {
     implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0")
     // OR
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:1.0.0")
+    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:1.1.0")
 }
 ```
 
 ### Local distribution proof (this repo)
 
 ```bash
-./gradlew publishToMavenLocal                 # publishes core + compose + views @ 1.0.0
+./gradlew publishToMavenLocal                 # publishes core + compose + views @ 1.1.0
 ./gradlew :sample-consumer:assembleDebug      # a host that consumes the SDK BY COORDINATE from mavenLocal()
 ```
 
@@ -219,7 +219,7 @@ cd android
 ./gradlew :farmerchat-android-views:compileDebugKotlin
 ./gradlew :sample-compose:assembleDebug :sample-views:assembleDebug
 ./gradlew :sample-jetpack:assembleDebug
-./gradlew publishToMavenLocal      # com.digitalgreen:* 1.0.0
+./gradlew publishToMavenLocal      # org.digitalgreen.farmerchat:* 1.1.0
 ```
 
 `sample-compose` / `sample-views` are minimal hosts: initialize + analytics-listener logging + launch/openChat/logout buttons.

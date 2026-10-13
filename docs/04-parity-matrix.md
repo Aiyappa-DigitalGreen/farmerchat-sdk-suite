@@ -8388,3 +8388,31 @@ Follow-up 2 (2026-10-13), dependencies and remaining surfaces:
   no signing keys / `.env` / service files committed, Android libs current (OkHttp 5.3.2, Retrofit 3.0.0).
 - RN example apps (v1+v2) failed `tsc` on `appearance: 'light'` (`App.tsx:21`; `AppearanceMode` is
   `'day' | 'night' | 'auto'`). Fixed to `'day'`; all four RN examples now pass `tsc --noEmit`.
+
+## Full test pass across the suite (2026-10-13)
+
+Ran every automated check in the repo. Result after fixes: **all green**.
+
+| Area | Checks run | Result |
+|---|---|---|
+| android v1 | `testDebugUnitTest` + `assembleDebug` (after `publishToMavenLocal`) | OK after fix |
+| android v2 | `testDebugUnitTest` + `assembleDebug` | OK |
+| ios v1 + v2 | `swift test` (Core) + `xcodebuild` iOS Simulator (SwiftUI, UIKit) | OK |
+| web v1 + v2 | `typecheck`, `typecheck:test`, `test`, `build` | OK after fix |
+| react-native v1 + v2 | `typecheck`, `build`, v2 `test`; examples `tsc --noEmit` | OK |
+| widget, demo-app, web examples, theme-studio | `typecheck` / `build` | OK |
+
+Issues found and fixed:
+- **android v1 `sample-consumer` could not build**: it pinned `farmerchat-android-compose:1.0.0`
+  but v1 publishes **1.1.0** since 15928e5. Pin, `android/README.md` (3 refs, incl. a wrong
+  `com.digitalgreen` group) and the `gradle.properties` reference mirror moved to 1.1.0.
+  `DeviceInfo.SDK_VERSION_NAME` ("1.0.0", sent to the backend in `Device-Info`) left unchanged on
+  purpose: it is a wire value, not the artifact version.
+- **web v1 + v2 `typecheck:test` failed**: later tests import `node:test` / `node:fs` with no Node
+  types. Added `@types/node` (devDependency) and `"types": ["node"]` in `tsconfig.test.json` only;
+  main `tsconfig.json` keeps `"types": []`, so the published `.d.ts` is unaffected. v2
+  `chatOnlyDefaults.test.ts` passed launch-intent object literals with fields beyond the declared
+  `{ type }` (excess-property error); bound to consts, assertions unchanged.
+- **RN example apps (v1 + v2) were committed pointing at the local mock** (`customBaseUrl:
+  'http://localhost:8899/'` active, contradicting the comment above it). Commented out, so the
+  committed default is the live dev backend again.

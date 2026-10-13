@@ -91,11 +91,14 @@ test('a CHAT_ONLY journey start clears the stored conversation unless opening a 
   assert.equal(store.getString(PrefKeys.NEW_CONVERSATION_ID), null);
 
   store.setString(PrefKeys.NEW_CONVERSATION_ID, 'conv-old');
-  beginChatOnlyJourney(store, { type: 'chatQuery', question: 'q', source: 'deeplink' });
+  // Real launch intents carry more than `type`; bound to a const so the extra fields type-check.
+  const deeplink = { type: 'chatQuery', question: 'q', source: 'deeplink' };
+  beginChatOnlyJourney(store, deeplink);
   assert.equal(store.getString(PrefKeys.NEW_CONVERSATION_ID), null);
 
   store.setString(PrefKeys.NEW_CONVERSATION_ID, 'conv-old');
-  beginChatOnlyJourney(store, { type: 'chat', chatId: 'conv-history' });
+  const historyChat = { type: 'chat', chatId: 'conv-history' };
+  beginChatOnlyJourney(store, historyChat);
   assert.equal(store.getString(PrefKeys.NEW_CONVERSATION_ID), 'conv-old');
 });
 
