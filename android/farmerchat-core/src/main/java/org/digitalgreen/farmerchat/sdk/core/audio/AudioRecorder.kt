@@ -4,7 +4,7 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Base64
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -50,11 +50,11 @@ class AudioRecorder(private val context: Context) {
             isRecording = true
             true
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to start recording", e)
+            FcLog.e(TAG, "Failed to start recording", e)
             resetAfterFailure()
             false
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting recording", e)
+            FcLog.e(TAG, "Error starting recording", e)
             resetAfterFailure()
             false
         }
@@ -72,7 +72,7 @@ class AudioRecorder(private val context: Context) {
         try {
             fileOutputStream?.close()
         } catch (e: Exception) {
-            Log.e(TAG, "Error closing output stream", e)
+            FcLog.e(TAG, "Error closing output stream", e)
         }
         fileOutputStream = null
     }
@@ -99,7 +99,7 @@ class AudioRecorder(private val context: Context) {
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping recording", e)
+            FcLog.e(TAG, "Error stopping recording", e)
             closeOutputStream()
             mediaRecorder?.release()
             mediaRecorder = null
@@ -124,7 +124,7 @@ class AudioRecorder(private val context: Context) {
             audioFile?.delete()
             audioFile = null
         } catch (e: Exception) {
-            Log.e(TAG, "Error cancelling recording", e)
+            FcLog.e(TAG, "Error cancelling recording", e)
             closeOutputStream()
             mediaRecorder?.release()
             mediaRecorder = null
@@ -139,7 +139,7 @@ class AudioRecorder(private val context: Context) {
             mediaRecorder = null
             isRecording = false
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing recorder", e)
+            FcLog.e(TAG, "Error releasing recorder", e)
         }
     }
 
@@ -151,7 +151,7 @@ class AudioRecorder(private val context: Context) {
             return try {
                 Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
             } catch (e: Exception) {
-                Log.e(TAG, "Error converting to base64", e)
+                FcLog.e(TAG, "Error converting to base64", e)
                 null
             }
         }

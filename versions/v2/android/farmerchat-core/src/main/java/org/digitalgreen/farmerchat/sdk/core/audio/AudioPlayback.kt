@@ -4,7 +4,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.net.Uri
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -63,7 +63,7 @@ class AudioPlayback {
             }
             player.prepareAsync()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to play audio", e)
+            FcLog.e(TAG, "Failed to play audio", e)
             onError?.invoke(e)
             stop()
         }
@@ -113,7 +113,7 @@ class AudioPlayback {
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                         ?.toLongOrNull() ?: 0L
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to read duration", e)
+                    FcLog.e(TAG, "Failed to read duration", e)
                     0L
                 } finally {
                     runCatching { retriever.release() }

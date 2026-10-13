@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
@@ -80,7 +79,7 @@ object ImageUtils {
                 sizeKb = bytes.size / 1024
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to prepare image", e)
+            FcLog.e(TAG, "Failed to prepare image", e)
             null
         }
     }

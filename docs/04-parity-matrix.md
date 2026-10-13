@@ -8437,3 +8437,14 @@ bundles Core, so it ships Core's superset manifest). Derived from source greps, 
 Verified: `swift build` + `swift test` (Core) and `xcodebuild` iOS Simulator (SwiftUI, UIKit) in
 both trees; each manifest is present in its built `.bundle`. Hosts still own the Info.plist usage
 strings (mic, camera, photos, location).
+
+### Phase 2: release builds stay silent (android v1 + v2), DONE
+- New core-internal `core/util/FcLog`, enabled from `FarmerChatConfig.debugLogging` at
+  `initialize` (set alongside the graph build, so it always matches the running config). All core
+  `Log.*` calls route through it: 18 in v2, 16 in v1 (TokenAuthenticator, AudioRecorder,
+  AudioPlayback, ImageUtils, ChatViewModel, AgenticChatDataSource). Before, they logged in every
+  host's release build.
+- Kept always-on on purpose: `FarmerChatActivity` "not initialized" (integration misuse a developer
+  must see) and PostHog's "ON"/"OFF" notice lines (the module's own diagnostics).
+- PostHog no longer logs the first 8 characters of the API key or of the user id.
+- Verified: `testDebugUnitTest` + `assembleDebug`, both trees.

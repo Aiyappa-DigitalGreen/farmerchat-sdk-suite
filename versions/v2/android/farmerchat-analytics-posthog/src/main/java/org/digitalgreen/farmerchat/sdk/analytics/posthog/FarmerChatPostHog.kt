@@ -98,8 +98,8 @@ public object FarmerChatPostHog {
 
         started = true
         // NOTICE-level, not debug: this is the line that answers "is PostHog actually on?".
-        // The key is truncated — never log a full credential.
-        Log.i(TAG, "PostHog ON host=$host key=${apiKey.take(8)}… flavor=$appFlavor debug=$isDebug")
+        // No part of the key is logged: even a prefix is a credential fragment in a release log.
+        Log.i(TAG, "PostHog ON host=$host flavor=$appFlavor debug=$isDebug")
     }
 
     /**
@@ -197,7 +197,8 @@ public object FarmerChatPostHog {
         PersonPropertyBuffer.markIdentified()
         val pending = PersonPropertyBuffer.drain()
         PostHog.identify(distinctId = userId, userProperties = pending)
-        Log.i(TAG, "identify ${userId.take(8)}… with ${pending?.size ?: 0} person properties")
+        // The user id is not logged (personal data in a release log).
+        Log.i(TAG, "identify with ${pending?.size ?: 0} person properties")
     }
 
     /** PostHog's US ingest endpoint — the default the iOS build also uses. */

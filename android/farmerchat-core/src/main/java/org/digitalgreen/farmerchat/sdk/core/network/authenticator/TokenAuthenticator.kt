@@ -1,7 +1,7 @@
 package org.digitalgreen.farmerchat.sdk.core.network.authenticator
 
 import android.os.Looper
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import okhttp3.Authenticator
 import okhttp3.Request
 import okhttp3.Response
@@ -121,7 +121,7 @@ class TokenAuthenticator(
                     null
                 }
             } catch (e: Exception) {
-                Log.e("TokenAuthenticator", "Host token refresh failed: ${e.localizedMessage}")
+                FcLog.e("TokenAuthenticator", "Host token refresh failed: ${e.localizedMessage}")
                 onSessionExpired?.invoke()
                 null
             }
@@ -181,7 +181,7 @@ class TokenAuthenticator(
             onSessionExpired?.invoke()
             null
         } catch (e: Exception) {
-            Log.e("TokenAuthenticator", "Auth failed: ${e.localizedMessage}")
+            FcLog.e("TokenAuthenticator", "Auth failed: ${e.localizedMessage}")
             null
         }
     }
@@ -216,13 +216,13 @@ class TokenAuthenticator(
             try {
                 onGuestReinitialized(body)
             } catch (e: Exception) {
-                Log.e("TokenAuthenticator", "Guest re-init hook failed: ${e.localizedMessage}")
+                FcLog.e("TokenAuthenticator", "Guest re-init hook failed: ${e.localizedMessage}")
             }
             response.request.newBuilder()
                 .header("Authorization", "Bearer $newAccess")
                 .build()
         } catch (e: Exception) {
-            Log.e("TokenAuthenticator", "Guest re-init failed: ${e.localizedMessage}")
+            FcLog.e("TokenAuthenticator", "Guest re-init failed: ${e.localizedMessage}")
             onSessionExpired?.invoke()
             null
         }

@@ -2,7 +2,7 @@ package org.digitalgreen.farmerchat.sdk.core.ui.chat
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -217,7 +217,7 @@ class ChatViewModel(
                         addPreGeneratedMessagesToState(action)
                     }
                     is ApiResult.Error -> {
-                        Log.w(TAG, "Campaign: new conversation failed, showing content anyway")
+                        FcLog.w(TAG, "Campaign: new conversation failed, showing content anyway")
                         addPreGeneratedMessagesToState(action)
                     }
                 }
@@ -331,7 +331,7 @@ class ChatViewModel(
                             _state.update { it.copy(messages = emptyList()) }
                         }
                         is ApiResult.Error ->
-                            Log.w(TAG, "New conversation failed for push query, using existing")
+                            FcLog.w(TAG, "New conversation failed for push query, using existing")
                     }
                 }
                 initializeWithQuestion(

@@ -1,6 +1,6 @@
 package org.digitalgreen.farmerchat.sdk.core.remote
 
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
@@ -265,7 +265,7 @@ class AgenticChatDataSource internal constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse agentic event type=$type", e)
+            FcLog.w(TAG, "Failed to parse agentic event type=$type", e)
             null
         }
     }

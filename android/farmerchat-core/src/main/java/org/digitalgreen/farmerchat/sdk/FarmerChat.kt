@@ -57,6 +57,7 @@ object FarmerChat {
             if (existing != null && existing.config.environment == config.environment) {
                 return
             }
+            org.digitalgreen.farmerchat.sdk.core.util.FcLog.enabled = config.debugLogging
             val graph = FarmerChatGraph(context.applicationContext, config)
             graphInternal = graph
             authObserverJob?.cancel()

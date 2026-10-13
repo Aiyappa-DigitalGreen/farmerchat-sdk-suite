@@ -2,7 +2,7 @@ package org.digitalgreen.farmerchat.sdk.core.ui.chat
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import org.digitalgreen.farmerchat.sdk.core.util.FcLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -315,7 +315,7 @@ class ChatViewModel(
                         addPreGeneratedMessagesToState(action)
                     }
                     is ApiResult.Error -> {
-                        Log.w(TAG, "Campaign: new conversation failed, showing content anyway")
+                        FcLog.w(TAG, "Campaign: new conversation failed, showing content anyway")
                         addPreGeneratedMessagesToState(action)
                     }
                 }
@@ -441,7 +441,7 @@ class ChatViewModel(
                             _state.update { it.copy(messages = emptyList()) }
                         }
                         is ApiResult.Error ->
-                            Log.w(TAG, "New conversation failed for push query, using existing")
+                            FcLog.w(TAG, "New conversation failed for push query, using existing")
                     }
                 }
                 initializeWithQuestion(
@@ -949,7 +949,7 @@ class ChatViewModel(
                         error.isTimeout || error.throwable is java.io.IOException -> StreamErrorKind.NETWORK
                         else -> StreamErrorKind.UNKNOWN
                     }
-                    Log.w(
+                    FcLog.w(
                         TAG,
                         "chat answer failed: kind=$kind code=${error?.code} timeout=${error?.isTimeout} " +
                             "message=${error?.message ?: data?.message}",
@@ -1064,7 +1064,7 @@ class ChatViewModel(
                 agenticChatDataSource.stream(request).collect { event: AgenticEvent ->
                     // Debug builds: what the stream actually sent (progress text included), so a
                     // missing status line can be told apart from one the server never sent.
-                    if (config.debugLogging) Log.d(TAG, "stream event: " + when (event) {
+                    FcLog.d(TAG, "stream event: " + when (event) {
                         is AgenticEvent.Status -> "status stage=${event.stage}"
                         is AgenticEvent.ToolCall -> "tool_call ${event.name} status_text=${event.statusText}"
                         is AgenticEvent.ToolResult -> "tool_result ${event.name} status_text=${event.statusText}"
