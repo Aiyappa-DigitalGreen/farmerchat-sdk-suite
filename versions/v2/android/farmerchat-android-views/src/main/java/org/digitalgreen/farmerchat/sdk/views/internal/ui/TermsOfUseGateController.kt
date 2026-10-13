@@ -272,6 +272,9 @@ internal class TermsOfUseGateController(
         }
 
         binding.fcTouContentWebView.settings.javaScriptEnabled = true
+        // Legal pages are https only: no file:// or content:// reach from page JS.
+        binding.fcTouContentWebView.settings.allowFileAccess = false
+        binding.fcTouContentWebView.settings.allowContentAccess = false
         binding.fcTouContentWebView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 contentBinding?.fcTouContentProgress?.isVisible = true

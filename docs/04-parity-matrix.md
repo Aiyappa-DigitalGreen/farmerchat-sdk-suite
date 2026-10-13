@@ -8359,3 +8359,15 @@ contradicts `widget/vercel/api/stage.js`'s "the guest key must never ship in a p
 restrict the geo key to the Geolocation API with a billing alert, rotate it, and long term proxy
 geolocate through the backend. Token storage (plain app-private prefs / localStorage) mirrors the app
 and is unchanged.
+
+Follow-up, same day (non-breaking hardening only):
+- android v1+v2, all 7 legal / Terms-of-Use WebViews (compose + views): `allowFileAccess = false`,
+  `allowContentAccess = false`. They load https legal URLs only; `android_asset` image URIs are
+  unaffected (Coil, not WebView). `compileDebugKotlin` clean for both UI modules in both trees.
+- Hosted site: `nosniff`, `strict-origin-when-cross-origin` referrer policy and HSTS on every
+  response (deliberately no X-Frame-Options: the guide is embedded elsewhere); the stage proxy
+  rejects request bodies over 25 MB with 413 instead of buffering them unbounded. Verified locally.
+- Considered and **not** done because it would break hosts or the demo: removing the bundled
+  geo/guest keys, moving web tokens out of localStorage, a CSP on the demo pages, an endpoint
+  allowlist on the stage proxy (low value: the proxy only bypasses browser CORS, the stage API is
+  directly reachable anyway).

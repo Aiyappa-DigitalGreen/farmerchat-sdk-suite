@@ -59,6 +59,9 @@ internal class LegalContentDialogFragment : DialogFragment() {
         binding.fcLegalAppBar.fcAppBarLeft.setOnClickListener { dismissAllowingStateLoss() }
 
         binding.fcLegalWebView.settings.javaScriptEnabled = true
+        // Legal pages are https only: no file:// or content:// reach from page JS.
+        binding.fcLegalWebView.settings.allowFileAccess = false
+        binding.fcLegalWebView.settings.allowContentAccess = false
         binding.fcLegalWebView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 binding.fcLegalProgress.isVisible = true

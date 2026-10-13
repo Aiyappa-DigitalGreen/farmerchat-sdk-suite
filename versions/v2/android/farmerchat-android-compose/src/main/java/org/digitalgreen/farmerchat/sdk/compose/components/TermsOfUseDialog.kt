@@ -90,6 +90,9 @@ fun TermsOfUseDialog(
                         factory = { ctx ->
                             WebView(ctx).apply {
                                 settings.javaScriptEnabled = true
+                                // Legal pages are https only: no file:// or content:// reach from page JS.
+                                settings.allowFileAccess = false
+                                settings.allowContentAccess = false
                                 setBackgroundColor(android.graphics.Color.WHITE)
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {

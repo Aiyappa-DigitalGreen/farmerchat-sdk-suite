@@ -63,6 +63,9 @@ fun LegalContentScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                         settings.javaScriptEnabled = true
+                        // Legal pages are https only: no file:// or content:// reach from page JS.
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
                         settings.domStorageEnabled = true
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {

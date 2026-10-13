@@ -65,10 +65,20 @@ async function replay(req, res) {
   res.end();
 }
 
+// The body is buffered in memory, so an unbounded one could exhaust the public server. 25 MB is far
+// above any real request (a camera photo as base64 JSON is a few MB).
+const MAX_BODY = 25 * 1024 * 1024;
+class BodyTooLarge extends Error {}
+
 async function readBody(req) {
   if (req.method === 'GET' || req.method === 'HEAD') return undefined;
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > MAX_BODY) throw new BodyTooLarge();
+    chunks.push(c);
+  }
   return chunks.length ? Buffer.concat(chunks) : undefined;
 }
 
@@ -88,9 +98,16 @@ export default async function handler(req, res) {
   const key = process.env.FC_GUEST_API_KEY;
   if (key && !headers['api-key'] && GUEST_PATHS.test(target.pathname)) headers['api-key'] = key;
 
+  let body;
+  try {
+    body = await readBody(req);
+  } catch (e) {
+    res.writeHead(e instanceof BodyTooLarge ? 413 : 400, { ...cors(req), 'content-type': 'text/plain' });
+    return res.end(e instanceof BodyTooLarge ? 'Request too large' : 'Bad request');
+  }
   let up;
   try {
-    up = await fetch(target, { method: req.method, headers, body: await readBody(req), redirect: 'manual' });
+    up = await fetch(target, { method: req.method, headers, body, redirect: 'manual' });
   } catch (e) {
     res.writeHead(502, { ...cors(req), 'content-type': 'text/plain' });
     return res.end('Upstream unreachable');

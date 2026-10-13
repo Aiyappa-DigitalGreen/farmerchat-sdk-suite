@@ -52,6 +52,10 @@ function sendFile(res, file, head) {
 }
 
 const server = http.createServer((req, res) => {
+  // Safe on every response. No X-Frame-Options / frame-ancestors: the guide is embedded elsewhere.
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('referrer-policy', 'strict-origin-when-cross-origin');
+  res.setHeader('strict-transport-security', 'max-age=31536000');
   // Both throw on hostile input (`GET /%`, `GET //`); uncaught here that kills the process.
   let url, p;
   try {
