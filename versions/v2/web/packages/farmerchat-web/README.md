@@ -309,3 +309,14 @@ still constructed with their real names, properties and ordering — they are dr
 `showNameScreen` was added in the same change (default `true`, so no behaviour change). Set it
 `false` to skip the Enter-Name step, as on Android.
 
+## Lifecycle, diagnostics and privacy (2.2.x)
+
+```ts
+FarmerChat.isInitialized();                  // boolean
+FarmerChat.shutdown();                       // tear down; data + auth listeners kept
+FarmerChat.clearAllData();                   // local wipe of fc_sdk_ localStorage keys; auth → false
+// config: debugLogging: true → console.debug request lines (path only, never query/headers/bodies)
+// config: onLinkClick: (url) => boolean — return true to handle a chat-answer link yourself
+```
+
+Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).

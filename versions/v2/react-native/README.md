@@ -73,3 +73,13 @@ still constructed with their real names, properties and ordering — they are dr
 `showNameScreen` was added in the same change (default `true`, so no behaviour change). Set it
 `false` to skip the Enter-Name step, as on Android.
 
+## Lifecycle, diagnostics and privacy (2.2.x)
+
+```ts
+FarmerChat.shutdown();                       // tear down; isInitialized → false; data + listeners kept
+await FarmerChat.clearAllData();             // local wipe of fc_sdk_ AsyncStorage keys; auth → false
+const stop = FarmerChat.onAuthStateChanged((signedIn) => {});   // survives re-initialize
+// config: debugLogging: true → console.debug request lines; onLinkClick: (url) => boolean
+```
+
+Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).

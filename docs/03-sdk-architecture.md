@@ -16,14 +16,27 @@ Applies to all six packages. Read `01-app-specification.md` (screens/nav/lifecyc
 
 ```
 FarmerChat.initialize(config: FarmerChatConfig)
-                                  // Android v2 (2.2.0): a repeat call rebuilds the graph only when environment,
-                                  // mode or showDrawer/showHistory/showSettings differ — lets one host offer a
-                                  // full-journey AND a CHAT_ONLY entry. Other platforms: first config wins (docs/04 gap).
+                                  // v2, ALL platforms (Android since 2.2.0; iOS/RN/web 2026-10-13): a repeat call
+                                  // rebuilds only when environment, mode or showDrawer/showHistory/showSettings
+                                  // differ (resolved values), tearing the old instance down; otherwise it is a
+                                  // no-op and the first config wins, except that a changed host accessToken is
+                                  // pushed as if updateTokens() had been called. Host auth listeners survive a
+                                  // rebuild. Lets one host offer a full-journey AND a CHAT_ONLY entry.
+FarmerChat.shutdown()             // v2 (2026-10-13): tear down; isInitialized → false; persisted data and host
+                                  //   auth listeners kept (they re-bind on the next initialize). Idempotent.
+FarmerChat.clearAllData()         // v2 (2026-10-13): local-only wipe of every fc_sdk_ item incl. tokens and
+                                  //   appearance; auth → false. NO server call (docs/02 has no delete-user
+                                  //   endpoint). SDK stays initialized. RN returns a Promise; others are sync.
+                                  //   iOS keeps the per-install Keychain device id.
+FarmerChat.isInitialized          // property on Android/iOS/RN; method isInitialized() on web (like isAuthenticated()).
 FarmerChat.launch(...)            // Android: Activity/Compose entry; iOS: UIViewController/View; RN: <FarmerChatView/>; Web: <FarmerChat/> or mount(el)
 FarmerChat.openChat(question?, conversationId?)   // deep-link style entry
 FarmerChat.updateTokens(accessToken, refreshToken?)  // HOST_TOKEN: push a freshly-refreshed token at runtime (refresh omitted preserves stored)
 FarmerChat.logout()
-FarmerChat.isAuthenticated / onAuthStateChanged
+FarmerChat.isAuthenticated / onAuthStateChanged(listener) → unsubscribe
+                                  // static, survives re-initialize on all four (iOS also keeps its instance
+                                  // publisher; RN keeps addAuthStateListener as an alias). Android and iOS emit
+                                  // the current value on subscribe; RN and web emit on change only.
 FarmerChat.setAnalyticsListener(listener)
 config.onExit                     // CHAT_ONLY close / back with nothing beneath: SDK presenters close themselves and
                                   //   fire it; embedded hosts remove the SDK in it (docs/07 C4). All four platforms.
@@ -53,6 +66,10 @@ FarmerChatConfig {
   showDrawer?                     // unset → (mode == FULL_JOURNEY); chat-only puts language (+ history if on) in the chat bar
   showHistory?                    // unset → (mode == FULL_JOURNEY): no history in chat-only (guests have none); explicit wins
   showSettings = true, showNameScreen = true
+  debugLogging = false            // all four: one line per HTTP request (method, path, status, ms, request id;
+                                  //   never host, query, headers or bodies). false → the SDK logs nothing.
+  onLinkClick?(url) → handled     // web, RN, iOS SwiftUI: http(s) links tapped in chat answers; true = host
+                                  //   handled it. N/A on Android and iOS UIKit (answer links not tappable).
   appearance: day|night|auto
   languageCode?                   // preselect, skips language screen if valid
   enableVoice = true, enableImages = true, enableWeather = true

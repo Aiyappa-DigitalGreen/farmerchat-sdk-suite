@@ -2,7 +2,12 @@
   "name": "@digitalgreenorg/farmerchat-widget",
   "version": "2.2.0",
   "description": "Intercom-style FarmerChat web widget: a launcher bubble that opens the full FarmerChat SDK in a floating panel. ESM for React hosts, one <script> tag for any page.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
+    "directory": "versions/v2/web/widget"
+  },
   "type": "module",
   "main": "./dist/farmerchat-widget.js",
   "module": "./dist/farmerchat-widget.js",

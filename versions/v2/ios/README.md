@@ -568,3 +568,16 @@ Unverified (documented, not claimed):
 
 Known intentional gaps and conservative choices are recorded in
 `docs/04-parity-matrix.md` and `docs/05-open-questions.md`.
+
+## Lifecycle, diagnostics and privacy (2.2.x)
+
+```swift
+FarmerChat.shutdown()                       // tear down; isInitialized → false; data + listeners kept
+FarmerChat.clearAllData()                   // local wipe: fc_sdk_ UserDefaults + Keychain tokens; auth → false
+let stop = FarmerChat.onAuthStateChanged { signedIn in … }   // static; survives re-initialize
+// FarmerChatConfig(debugLogging: true)  → os.Logger lines, subsystem "org.digitalgreen.farmerchat"
+// FarmerChatConfig(onLinkClick: { url in openInApp(url); return true })   // SwiftUI answers only
+// Privacy: PrivacyInfo.xcprivacy ships in all three packages; you still own the Info.plist usage strings.
+```
+
+Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).

@@ -8448,3 +8448,64 @@ strings (mic, camera, photos, location).
   must see) and PostHog's "ON"/"OFF" notice lines (the module's own diagnostics).
 - PostHog no longer logs the first 8 characters of the API key or of the user id.
 - Verified: `testDebugUnitTest` + `assembleDebug`, both trees.
+
+### Phase 3–5: lifecycle and host API (v2, all four platforms), DONE
+docs/03 updated. Its old line "other platforms: first config wins" was wrong: iOS, RN and web
+replaced the instance on every `initialize` with no teardown, which leaked observers.
+
+| Item | android | ios | react-native | web |
+|---|---|---|---|---|
+| Re-init: no-op unless env/mode/drawer/history/settings differ (resolved values) | existing | DONE | DONE | DONE (initialize, mount, mountFab, `<FarmerChat config>`) |
+| ...a changed host `accessToken` on the no-op path is pushed like `updateTokens` | DONE | DONE (HOST_TOKEN mode only: the old rebuild only seeded there) | DONE | DONE |
+| Host auth listeners survive a rebuild | existing | DONE (static registry) | DONE (static set; were per-instance before) | DONE (static set) |
+| `shutdown()` | DONE | DONE (also cancels in-flight requests on the SDK's own URLSessions) | DONE | DONE |
+| `clearAllData()` (local only, includes tokens and appearance) | DONE (sync) | DONE (sync; keeps the per-install Keychain device id) | DONE (`Promise<void>`) | DONE (sync) |
+| `debugLogging` | existing (OkHttp) | DONE (`os.Logger`) | DONE (`console.debug`) | DONE (`console.debug`) |
+| `isInitialized` | property | property | getter | DONE `isInitialized()` |
+| Static `onAuthStateChanged(listener) → unsubscribe` | existing | DONE (plus the instance publisher) | DONE (alias of `addAuthStateListener`) | existing |
+| `onLinkClick(url) → handled` | N/A (answer links not tappable) | DONE (SwiftUI answers; UIKit N/A) | DONE | DONE |
+
+Known, deliberate differences:
+- Android and iOS listeners get the current value on subscribe; RN and web listeners only on change.
+- A listener set at runtime with `setAnalyticsListener` does not survive a rebuild on any platform
+  (unchanged; it is stored on the instance).
+- Before `initialize`, `clearAllData` is a no-op on Android (no Context). On iOS, RN and web it
+  wipes storage only.
+- Web teardown does not abort in-flight requests, so a still-mounted root doesn't show errors.
+- RN/web log one line per retry attempt. The stream request logs when headers arrive. iOS stream
+  lines show `rid=-` (no X-Request-ID on that request).
+- Widget: `ensureSdk` now calls the latest host `onExit`. Without that, `update()` kept the first
+  config's closure under the no-op rule.
+
+Tests added: Android `FarmerChatLifecycleTest` (6), iOS `LifecycleTests` (8), RN `lifecycle.test.ts`
+(10, with native stubs), web `lifecycle.test.ts` (7). Web `authRecovery.test.ts` existed but was not
+in `npm test` because it needs bundling. It is now `npm run test:auth` (esbuild + node, 6 tests),
+and CI runs it.
+
+### Phase 6: repo standards, DONE
+Apache-2.0 `LICENSE` + `NOTICE`. Web and widget `license` changed from MIT to Apache-2.0, a user
+decision on 2026-10-13. Also `SECURITY.md` (GitHub private reporting), root `CHANGELOG.md`, and
+`versions/v2/MIGRATION.md` (built from the v1→v2 config diff). The RN `repository.directory` was
+stale and now points at `versions/v2/...`; `repository` was added to web and widget. Each v2
+platform README has a "Lifecycle, diagnostics and privacy" section.
+
+### Phase 7: CI, DONE
+`.github/workflows/sdk-{android,ios,react-native,web}.yml`: v2 only, path-filtered, test-only
+(nothing publishes or deploys; CLAUDE.md §8). Android publishes to mavenLocal first because
+`sample-consumer` needs it.
+
+### Considered and NOT done (reasons)
+- Changing iOS `FarmerChat.shared` from `fatalError`: a breaking signature change. It stays a
+  documented fail-fast, as MoEngage hard-crashes on misuse in debug.
+- `explicitApi()` / binary-compatibility validator: compose and views use core across modules, so a
+  visibility sweep is its own project.
+- Unified cross-platform API names (`isAuthenticated` property vs method, etc.): renames break
+  hosts. Additive aliases only.
+- Kill switch / remote disable: the host already decides whether to launch a UI SDK; a remote
+  switch needs a backend flag that docs/02 does not have.
+- `onReady` / init-failure callback: initialize is local and synchronous (no network). Runtime
+  failures already reach the host through `onError`.
+- PostHog module Maven publication: root CLAUDE.md §6 bars third-party analytics inside SDK
+  packages; publishing it is a product decision.
+- EncryptedSharedPreferences: deprecated by Google, and it needs a data migration.
+- `sideEffects: false` on the widget: the IIFE registers a global, so a bundler would drop it.

@@ -1,0 +1,67 @@
+# Changelog
+
+All notable changes to the FarmerChat SDK suite. Built from the git history and `docs/04-parity-matrix.md`.
+The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 1.x is the top-level
+`android/`, `ios/`, `react-native/`, `web/`. Upgrading from 1.x: see `versions/v2/MIGRATION.md`.
+
+## [Unreleased]
+
+### Added (v2, all four platforms unless noted)
+- `FarmerChat.shutdown()`: tears the SDK down; persisted data and host auth listeners are kept.
+- `FarmerChat.clearAllData()`: local-only wipe of every `fc_sdk_` item including tokens and appearance.
+  There is no server-side delete. React Native returns a Promise.
+- `debugLogging` config on iOS, React Native and Web (Android already had it): one line per HTTP
+  request (method, path, status, duration, request id). Off by default.
+- `onLinkClick(url) -> handled` config hook for links in chat answers (Web, React Native, iOS SwiftUI).
+- `FarmerChat.isInitialized()` on Web; static `onAuthStateChanged` on iOS and React Native.
+- Apple privacy manifests (`PrivacyInfo.xcprivacy`) in FarmerChatCore, FarmerChatSwiftUI and
+  FarmerChatUIKit (v1 and v2), wired into SPM and the CocoaPods spec.
+- Repo: Apache-2.0 `LICENSE` and `NOTICE`, `SECURITY.md`, `versions/v2/MIGRATION.md`, and GitHub
+  Actions CI that builds and tests each v2 SDK.
+
+### Changed
+- A repeat `initialize` on iOS, React Native and Web now matches Android. It is a no-op unless
+  `environment`, `mode` or `showDrawer`/`showHistory`/`showSettings` change. Before, every call
+  replaced the instance without tearing the old one down, which leaked listeners. A changed host
+  `accessToken` is still applied on all four platforms. Host auth listeners survive a rebuild.
+- Android: SDK logs are silent unless `debugLogging` is set. Previously 18 log lines could appear in
+  host release builds.
+- Web license changed from MIT to Apache-2.0 to match the rest of the suite.
+
+### Security
+- Chat-answer links open only for `http(s)` on React Native and iOS SwiftUI (v1 and v2). Previously
+  `tel:`, `intent:`, `upi:` and app deep links were handed to the OS.
+- Android: `Authorization` and `API-Key` are redacted from debug HTTP logs. The PostHog module no
+  longer logs key or user-id prefixes. Legal WebViews disallow `file://` and `content://` access.
+- Hosted demo: a malformed URL no longer crashes the server; the OTP block on the public stage proxy
+  can no longer be bypassed with `//` or case changes; security headers added; proxied request
+  bodies are capped at 25 MB.
+- Semver-compatible dependency updates in every npm project, which cleared the critical
+  `shell-quote` advisory.
+
+### Fixed
+- Android v1 `sample-consumer` pinned 1.0.0 while the SDK publishes 1.1.0.
+- Web `typecheck:test` failed (missing Node types). RN example apps were committed pointing at
+  the local mock server and used an invalid `appearance` value.
+
+## [2.2.0] - 2026-10-09
+
+### Breaking
+- `mode` defaults to `CHAT_ONLY` (was `FULL_JOURNEY`) on every platform.
+- `guestApiKey` renamed to `farmerChatApiKey`, with no alias. The FarmerChat and Geolocation keys
+  are built in.
+
+### Added
+- A first-time chat-only user picks a language once before the chat.
+- Empty-chat placeholder. History is hidden by default in chat-only mode.
+- The chat's close (X) closes the SDK on every platform; `onExit` added on Android and iOS.
+- Streaming answers: `streaming_required` is sent like the app, so stage streams typed answers.
+- Web widget (`@digitalgreenorg/farmerchat-widget`) and a hosted demo with an integration guide.
+
+### Fixed
+- The newest question stays pinned after an unanswered alignment surface.
+
+## [1.1.0] - 2026-09-28 (Android)
+
+- Neutral theme colours in the Views flavour, host language in `setHostSession`, and a local-only
+  logout in `HOST_TOKEN` mode.

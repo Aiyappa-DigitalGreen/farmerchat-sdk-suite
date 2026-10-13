@@ -365,3 +365,16 @@ all seven gate label keys present on #3 in en/hi/sw.
 screen. `TermsOfUseGateTest` pins the show/hide predicate given a state; that the ViewModel
 actually writes that state, and that both flavours actually construct the sheet, is
 build-and-inspection evidence only.
+
+## Lifecycle, diagnostics and privacy (2.2.x)
+
+```kotlin
+FarmerChat.shutdown()          // tear down; isInitialized → false; data + auth listeners kept
+FarmerChat.clearAllData()      // local wipe of every fc_sdk_ item (tokens, appearance); auth → false; no server call
+// config: .debugLogging(true) → OkHttp request lines (Authorization / API-Key redacted) + SDK diagnostics.
+// Off by default: a release host app gets no SDK log output.
+// Re-initialize is a no-op unless environment, mode or showDrawer/showHistory/showSettings change;
+// a new host accessToken is still applied. onLinkClick does not apply: answer links are not tappable.
+```
+
+Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).
