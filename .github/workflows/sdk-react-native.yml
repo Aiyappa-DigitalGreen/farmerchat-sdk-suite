@@ -1,0 +1,26 @@
+name: SDK React Native (v2)
+on:
+  push:
+    paths: ['versions/v2/react-native/packages/**', '.github/workflows/sdk-react-native.yml']
+  pull_request:
+    paths: ['versions/v2/react-native/packages/**', '.github/workflows/sdk-react-native.yml']
+concurrency:
+  group: sdk-rn-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: versions/v2/react-native/packages/farmerchat-react-native
+    steps:
+      - uses: actions/checkout@v4
+      # Tests run .ts files directly on Node's built-in type stripping.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

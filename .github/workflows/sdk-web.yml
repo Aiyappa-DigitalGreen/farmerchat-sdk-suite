@@ -1,0 +1,36 @@
+# Web SDK plus the two things built from it (widget, demo app). Test-only: the demo site is deployed
+# by Railway's GitHub integration, not by this workflow.
+name: SDK Web (v2)
+on:
+  push:
+    paths: ['versions/v2/web/**', '.github/workflows/sdk-web.yml']
+  pull_request:
+    paths: ['versions/v2/web/**', '.github/workflows/sdk-web.yml']
+concurrency:
+  group: sdk-web-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: SDK
+        working-directory: versions/v2/web/packages/farmerchat-web
+        run: |
+          npm ci
+          npm run typecheck
+          npm run typecheck:test
+          npm test
+          npm run test:auth
+          npm run build
+      # Both consume the SDK through a file: dependency, so they build after it.
+      - name: Widget
+        working-directory: versions/v2/web/widget
+        run: npm ci && npm run typecheck && npm run build
+      - name: Demo app
+        working-directory: versions/v2/web/demo-app
+        run: npm ci && npm run build

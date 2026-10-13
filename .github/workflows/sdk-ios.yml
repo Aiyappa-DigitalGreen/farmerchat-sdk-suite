@@ -1,0 +1,26 @@
+# Builds and tests the v2 iOS SDK. swift build targets macOS and cannot compile the iOS-only
+# SwiftUI/UIKit packages, so those are built with xcodebuild for the simulator (CLAUDE.md §5).
+name: SDK iOS (v2)
+on:
+  push:
+    paths: ['versions/v2/ios/**', '.github/workflows/sdk-ios.yml']
+  pull_request:
+    paths: ['versions/v2/ios/**', '.github/workflows/sdk-ios.yml']
+concurrency:
+  group: sdk-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core (swift test)
+        working-directory: versions/v2/ios/FarmerChatCore
+        run: swift build && swift test
+      - name: SwiftUI (iOS Simulator)
+        working-directory: versions/v2/ios/FarmerChatSwiftUI
+        run: xcodebuild -scheme FarmerChatSwiftUI -destination 'generic/platform=iOS Simulator' build -quiet
+      - name: UIKit (iOS Simulator)
+        working-directory: versions/v2/ios/FarmerChatUIKit
+        run: xcodebuild -scheme FarmerChatUIKit -destination 'generic/platform=iOS Simulator' build -quiet
