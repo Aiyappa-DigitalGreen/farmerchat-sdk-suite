@@ -8352,8 +8352,10 @@ demo-app, react-native v2 and theme-studio. Fixed, both trees where both exist:
 | theme-studio chat preview `mdLite` escapes HTML before `dangerouslySetInnerHTML` (self-XSS from typed input) | `theme-studio/src/components/PhonePreview.tsx` | DONE |
 
 **Not changed, by decision (see docs/05):** the bundled Geolocation key (`DEFAULT_GEO_API_KEY`, all v2
-platforms + the public widget bundle) and the guest API key (`DEFAULT_GUEST_USER_API_KEY`, android v1)
-are client-side keys and extractable by design. Mitigation is on the Google Cloud / backend side:
+platforms + the public widget bundle) and the guest API key (`DEFAULT_GUEST_USER_API_KEY` /
+`DEFAULT_FARMERCHAT_API_KEY`: android, ios, react-native v1+v2, web v2, **and the public widget IIFE**)
+are client-side keys and extractable by design. Note the guest key being in the widget bundle
+contradicts `widget/vercel/api/stage.js`'s "the guest key must never ship in a page". Mitigation is on the Google Cloud / backend side:
 restrict the geo key to the Geolocation API with a billing alert, rotate it, and long term proxy
 geolocate through the backend. Token storage (plain app-private prefs / localStorage) mirrors the app
 and is unchanged.
