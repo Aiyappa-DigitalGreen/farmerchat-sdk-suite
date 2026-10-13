@@ -17,7 +17,8 @@ let package = Package(
     targets: [
         .target(
             name: "FarmerChatCore",
-            path: "Sources/FarmerChatCore"
+            path: "Sources/FarmerChatCore",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
         .testTarget(
             name: "FarmerChatCoreTests",

@@ -24,5 +24,9 @@ Pod::Spec.new do |s|
     '../FarmerChatCore/Sources/FarmerChatCore/**/*.swift'
   ]
 
+  # Apple privacy manifest. The pod bundles Core, and Core's manifest is the superset (UIKit's
+  # declares nothing of its own), so Core's is the one shipped.
+  s.resource_bundles = { 'FarmerChatUIKit_Privacy' => ['../FarmerChatCore/Sources/FarmerChatCore/PrivacyInfo.xcprivacy'] }
+
   s.frameworks = 'UIKit', 'AVFoundation', 'CoreLocation', 'Security', 'SafariServices', 'WebKit', 'Photos', 'PhotosUI'
 end

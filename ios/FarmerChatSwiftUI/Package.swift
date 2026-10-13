@@ -17,7 +17,8 @@ let package = Package(
         .target(
             name: "FarmerChatSwiftUI",
             dependencies: ["FarmerChatCore"],
-            path: "Sources/FarmerChatSwiftUI"
+            path: "Sources/FarmerChatSwiftUI",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         )
     ]
 )

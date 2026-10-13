@@ -17,7 +17,8 @@ let package = Package(
         .target(
             name: "FarmerChatUIKit",
             dependencies: ["FarmerChatCore"],
-            path: "Sources/FarmerChatUIKit"
+            path: "Sources/FarmerChatUIKit",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
         // Compile-only Objective-C conformance check — see Sources/FarmerChatObjCSmoke/FCObjCSmoke.m.
         // This is the only build step that can fail when the Obj-C facade regresses.

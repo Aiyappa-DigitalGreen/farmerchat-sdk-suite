@@ -8416,3 +8416,24 @@ Issues found and fixed:
 - **RN example apps (v1 + v2) were committed pointing at the local mock** (`customBaseUrl:
   'http://localhost:8899/'` active, contradicting the comment above it). Commented out, so the
   committed default is the live dev backend again.
+
+## SDK standards pass, benchmarked against MoEngage / Plotline (2026-10-13)
+
+Gap analysis: MoEngage public developer docs plus Plotline's published artifacts (iOS repo, AAR/POM,
+npm). Each phase below is a separate commit.
+
+### Phase 1: Apple privacy manifests (ios v1 + v2), DONE
+`PrivacyInfo.xcprivacy` in FarmerChatCore, FarmerChatSwiftUI and FarmerChatUIKit, wired as an SPM
+`.copy` resource in each `Package.swift` and a `resource_bundles` entry in the UIKit podspec (which
+bundles Core, so it ships Core's superset manifest). Derived from source greps, not assumptions:
+- Required-reason APIs: only `UserDefaults.standard` (Core), so reason `CA92.1`. No file
+  timestamp, boot time, disk space or keyboard APIs anywhere.
+- Collected data (Core, sent to the FarmerChat backend, linked, not tracking, App Functionality):
+  Name (`update_user` first/last), PhoneNumber (OTP), UserID, DeviceID, PreciseLocation (GPS at
+  100 m accuracy sent as full-precision lat/lng), AudioData (voice), PhotosorVideos (image
+  analysis), OtherUserContent (chat). `NSPrivacyTracking` false; no IDFA/IDFV.
+- SwiftUI/UIKit manifests declare nothing: they call no required-reason API and send nothing
+  themselves.
+Verified: `swift build` + `swift test` (Core) and `xcodebuild` iOS Simulator (SwiftUI, UIKit) in
+both trees; each manifest is present in its built `.bundle`. Hosts still own the Info.plist usage
+strings (mic, camera, photos, location).
