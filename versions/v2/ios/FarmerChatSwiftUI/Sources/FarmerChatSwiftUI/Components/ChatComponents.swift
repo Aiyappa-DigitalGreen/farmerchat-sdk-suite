@@ -517,6 +517,7 @@ public struct FCAiAnswerText: View {
         }()
 
         FCMarkdownTextColored(text: display, color: color ?? theme.content.foregroundPrimary)
+            .modifier(FCAnswerLinkHandler())
             .contentShape(Rectangle())
             .onTapGesture {
                 // Tap anywhere on the answer to skip the reveal.
@@ -555,6 +556,26 @@ public struct FCAiAnswerText: View {
                     caretOn.toggle()
                 }
             }
+    }
+}
+
+/// `FarmerChatConfig.onLinkClick` for links in a chat ANSWER (they already passed
+/// `fcStripUnsafeLinks`, so only http(s) reaches here). Installed only when the host set the hook;
+/// when the hook returns false the link goes to the inherited `openURL` (the system handler
+/// unless an ancestor overrides it), so the default behaviour is unchanged.
+private struct FCAnswerLinkHandler: ViewModifier {
+    @Environment(\.openURL) private var inheritedOpenURL
+
+    func body(content: Content) -> some View {
+        if FarmerChat.isInitialized, let hook = FarmerChat.shared.config.onLinkClick {
+            content.environment(\.openURL, OpenURLAction { url in
+                if hook(url) { return .handled }
+                inheritedOpenURL(url)
+                return .handled
+            })
+        } else {
+            content
+        }
     }
 }
 

@@ -60,6 +60,8 @@ export class FarmerChatSdk {
   readonly agentic: AgenticChatDataSource;
 
   private pendingTarget: PendingTarget | null = null;
+  /** Set by {@link dispose}: a torn-down instance's late hydration must not touch shared storage. */
+  private disposed = false;
   private hydratePromise: Promise<void> | null = null;
 
   constructor(config: FarmerChatConfig) {
@@ -98,6 +100,7 @@ export class FarmerChatSdk {
   ready(): Promise<void> {
     if (!this.hydratePromise) {
       this.hydratePromise = this.store.hydrate().then(async () => {
+        if (this.disposed) return;
         // Env-scoped cache invalidation: a conversation id is only valid on the
         // backend that created it — drop it if the base URL changed since last init.
         const currentBase = this.config.baseUrl;
@@ -113,10 +116,30 @@ export class FarmerChatSdk {
         this.labels.restoreFromStore();
         this.applyConfigDefaults();
         // HOST_TOKEN mode (C2): seed host-supplied tokens before splash routing.
+        if (this.disposed) return;
         await this.session.initHostToken();
       });
     }
     return this.hydratePromise;
+  }
+
+  /**
+   * Teardown for `FarmerChat.shutdown()` and a re-initialize that rebuilds the instance: drop the
+   * pending target and every listener/subscriber this instance holds, and detach the analytics
+   * listener. Persisted data is kept. In-flight requests end on their own per-request deadline.
+   * Best effort: never throws.
+   */
+  dispose(): void {
+    try {
+      this.disposed = true;
+      this.pendingTarget = null;
+      this.session.dispose();
+      this.labels.dispose();
+      this.store.dispose();
+      this.analytics.setListener(null);
+    } catch {
+      // teardown is best effort
+    }
   }
 
   // --- CHAT_ONLY headless bootstrap (FarmerChatGraph.ensureChatOnlySession parity) -----------

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// HTTP method for endpoint descriptors.
 enum HTTPMethod: String, Sendable {
@@ -37,6 +38,8 @@ final class APIClient: @unchecked Sendable {
     let deviceInfo: DeviceInfoProvider
     let decoder: JSONDecoder
     let encoder: JSONEncoder
+    /// False when the caller injected the session (tests): teardown leaves it alone.
+    private let ownsSession: Bool
 
     init(
         baseURL: URL,
@@ -49,6 +52,7 @@ final class APIClient: @unchecked Sendable {
         self.tokenStore = tokenStore
         self.refresher = refresher
         self.deviceInfo = deviceInfo
+        self.ownsSession = session == nil
         if let session {
             self.session = session
         } else {
@@ -59,6 +63,18 @@ final class APIClient: @unchecked Sendable {
         }
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
+    }
+
+    /// Re-initialize / shutdown teardown: cancels this client's in-flight requests. The session
+    /// is NOT invalidated — a view still holding the old instance would crash creating a task
+    /// on an invalidated session; a cancelled one just fails the call.
+    func cancelInFlight() {
+        guard ownsSession else { return }
+        APIClient.cancelTasks(of: session)
+    }
+
+    static func cancelTasks(of session: URLSession) {
+        session.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
     }
 
     // MARK: - Request execution
@@ -108,11 +124,14 @@ final class APIClient: @unchecked Sendable {
 
             let data: Data
             let response: URLResponse
+            let started = DispatchTime.now()
             do {
                 (data, response) = try await session.data(for: request)
+                NetworkLog.completed(request, status: (response as? HTTPURLResponse)?.statusCode, started: started)
             } catch {
                 let nsError = error as NSError
                 let isTimeout = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+                NetworkLog.failed(request, error: nsError, started: started)
                 return .error(ApiError(
                     message: nsError.localizedDescription,
                     apiName: endpoint.name,
@@ -247,5 +266,60 @@ final class APIClient: @unchecked Sendable {
         request.setValue(deviceInfo.deviceInfoHeaderValue(), forHTTPHeaderField: "Device-Info")
         request.httpBody = body
         return request
+    }
+}
+
+/// `FarmerChatConfig.debugLogging` sink (Android `FcLog` parity): one line per completed request,
+/// `[FarmerChat] <METHOD> <path> -> <status> (<ms>ms) rid=<X-Request-ID>`. Path only — no host,
+/// query, headers or bodies (they carry tokens and personal data). Off unless the host opts in.
+enum NetworkLog {
+    private static let lock = NSLock()
+    private static var _enabled = false
+    static var enabled: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _enabled }
+        set { lock.lock(); _enabled = newValue; lock.unlock() }
+    }
+
+    private static let logger = Logger(subsystem: "org.digitalgreen.farmerchat", category: "network")
+
+    static func completed(_ request: URLRequest, status: Int?, started: DispatchTime) {
+        guard enabled else { return }
+        emit(request, outcome: status.map(String.init) ?? "ERR non-HTTP", started: started)
+    }
+
+    static func failed(_ request: URLRequest, error: NSError, started: DispatchTime) {
+        guard enabled else { return }
+        emit(request, outcome: "ERR " + shortReason(error), started: started)
+    }
+
+    /// A fixed token, never `localizedDescription` (which can echo the URL).
+    static func shortReason(_ error: NSError) -> String {
+        guard error.domain == NSURLErrorDomain else { return "error" }
+        switch error.code {
+        case NSURLErrorTimedOut: return "timeout"
+        case NSURLErrorCancelled: return "cancelled"
+        case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost: return "offline"
+        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed: return "dns"
+        case NSURLErrorCannotConnectToHost: return "connect"
+        case NSURLErrorSecureConnectionFailed, NSURLErrorServerCertificateUntrusted: return "tls"
+        default: return "urlerror \(error.code)"
+        }
+    }
+
+    static func line(_ request: URLRequest, outcome: String, ms: Int) -> String {
+        let method = request.httpMethod ?? "GET"
+        // percentEncodedPath keeps the trailing slash every endpoint path ends with (`url.path`
+        // drops it); no host, no query.
+        let path = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: true)?.percentEncodedPath } ?? ""
+        let rid = request.value(forHTTPHeaderField: "X-Request-ID") ?? "-"
+        return "[FarmerChat] \(method) \(path) -> \(outcome) (\(ms)ms) rid=\(rid)"
+    }
+
+    private static func emit(_ request: URLRequest, outcome: String, started: DispatchTime) {
+        let ms = Int((DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000)
+        let text = line(request, outcome: outcome, ms: ms)
+        // The line is already scrubbed to method/path/status/rid, so it is safe to mark public;
+        // otherwise os.Logger redacts it to <private> outside a debugger.
+        logger.debug("\(text, privacy: .public)")
     }
 }

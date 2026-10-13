@@ -257,4 +257,26 @@ export class SessionStore {
       // storage failures are non-fatal; in-memory state is authoritative
     }
   }
+
+  /**
+   * `FarmerChat.clearAllData()` — local privacy wipe. Removes EVERY persisted `fc_sdk_` key,
+   * appearance, tokens and device id included, and never a key outside the namespace. Reads the
+   * key list from AsyncStorage itself, not the cache, so a prefixed key that was never hydrated
+   * goes too.
+   */
+  async clearAll(): Promise<void> {
+    this.cache.clear();
+    this.emit();
+    try {
+      const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(STORAGE_PREFIX));
+      if (keys.length > 0) await AsyncStorage.multiRemove(keys);
+    } catch {
+      // storage failures are non-fatal; in-memory state is authoritative
+    }
+  }
+
+  /** Teardown (`FarmerChat.shutdown` / re-initialize): drop every subscriber. Persisted data stays. */
+  dispose(): void {
+    this.listeners.clear();
+  }
 }

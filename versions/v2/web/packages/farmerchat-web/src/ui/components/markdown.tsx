@@ -20,6 +20,8 @@
  */
 
 import { Fragment, ReactNode } from 'react';
+import type { MouseEvent } from 'react';
+import { useOptionalSdk } from '../context';
 import {
   InlineNode,
   MarkdownBlock,
@@ -208,7 +210,32 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
   }
 }
 
+/**
+ * `FarmerChatConfig.onLinkClick`: one delegated handler for every answer link (paragraphs, lists,
+ * tables). Only `renderInline` emits anchors, and only for http(s) hrefs, so the existing filter
+ * still decides what is a link. The hook returning true suppresses the default new-tab open; false,
+ * unset or a throwing hook leaves it untouched.
+ */
+function linkClickHandler(hook: ((url: string) => boolean) | undefined) {
+  if (!hook) return undefined;
+  return (e: MouseEvent<HTMLDivElement>) => {
+    const target = e.target as Element | null;
+    const anchor = target?.closest?.('a[href]');
+    if (!anchor || !e.currentTarget.contains(anchor)) return;
+    const href = anchor.getAttribute('href');
+    if (!href) return;
+    let handled = false;
+    try {
+      handled = hook(href) === true;
+    } catch {
+      handled = false;
+    }
+    if (handled) e.preventDefault();
+  };
+}
+
 export function MarkdownText(props: { text: string }) {
+  const onLinkClick = useOptionalSdk()?.services.config.onLinkClick;
   const blocks = parseMarkdownBlocks(props.text);
   const out: ReactNode[] = [];
 
@@ -273,5 +300,9 @@ export function MarkdownText(props: { text: string }) {
     i++;
   }
 
-  return <div className="fcsdk-md">{out}</div>;
+  return (
+    <div className="fcsdk-md" onClick={linkClickHandler(onLinkClick)}>
+      {out}
+    </div>
+  );
 }

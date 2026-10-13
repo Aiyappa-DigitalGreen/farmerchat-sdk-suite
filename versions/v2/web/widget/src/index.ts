@@ -34,8 +34,9 @@ export interface FarmerChatWidgetStatics {
   boot(options: WidgetBootOptions): void;
   /**
    * Merge new options into the booted widget. Omit `config` (or pass the same
-   * object) to keep the live session; a new `config` object rebuilds the SDK and
-   * remounts the panel. Ignored before boot.
+   * object) to leave the SDK alone; a new `config` object re-initialises it — a
+   * no-op unless environment, mode, showDrawer, showHistory or showSettings change,
+   * though a new `accessToken` is pushed — and remounts the panel. Ignored before boot.
    */
   update(options: Partial<WidgetBootOptions>): void;
   shutdown(): void;

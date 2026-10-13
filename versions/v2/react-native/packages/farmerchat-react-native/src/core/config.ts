@@ -291,6 +291,22 @@ export interface FarmerChatConfig {
   onEvent?: FarmerChatEventListener;
   /** Called when both token refresh and the guest-token fallback fail. */
   onSessionExpired?: () => void;
+
+  /**
+   * Diagnostic logging, default **false** = zero SDK diagnostic output (android
+   * `FarmerChatConfig.debugLogging` parity). When true, `HttpClient` logs one `console.debug`
+   * line per completed request: `[FarmerChat] <METHOD> <path> -> <status> (<ms>ms) rid=<id>`,
+   * or `-> ERR <reason>` on a network error/timeout. Path only: no host, query, headers or
+   * bodies (they carry tokens and personal data). Optional-peer degrade warnings are not gated.
+   */
+  debugLogging?: boolean;
+
+  /**
+   * Optional host hook for http(s) links tapped in CHAT ANSWERS (only links that already pass
+   * the answer renderer's http(s) filter). Return `true` when the host handled the link and the
+   * SDK does nothing; `false` (or no hook) keeps the default `Linking.openURL`.
+   */
+  onLinkClick?: (url: string) => boolean;
 }
 
 export interface ResolvedFarmerChatConfig {
@@ -341,6 +357,8 @@ export interface ResolvedFarmerChatConfig {
   callbacks: FarmerChatCallbacks;
   onEvent: FarmerChatEventListener | null;
   onSessionExpired: (() => void) | null;
+  debugLogging: boolean;
+  onLinkClick: ((url: string) => boolean) | null;
 }
 
 export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfig {
@@ -403,6 +421,8 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedFarmerChatConfi
     callbacks: config.callbacks ?? {},
     onEvent: config.onEvent ?? null,
     onSessionExpired: config.onSessionExpired ?? null,
+    debugLogging: config.debugLogging ?? false,
+    onLinkClick: config.onLinkClick ?? null,
   };
 }
 

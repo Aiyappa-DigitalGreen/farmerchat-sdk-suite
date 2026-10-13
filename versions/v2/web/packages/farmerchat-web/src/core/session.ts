@@ -157,6 +157,16 @@ export class SessionManager {
   }
 
   /**
+   * `FarmerChat.clearAllData()`: local-only wipe of EVERY fc_sdk_ key, appearance and tokens
+   * included. No network call — docs/02 has no delete-user endpoint.
+   */
+  clearLocalData(): void {
+    this.store.clearAll([]);
+    this.sessionStartFired = false;
+    this.emit(false);
+  }
+
+  /**
    * docs/02 Step 3: the 401 authenticator replaced a rejected guest with a new one. Screens that
    * loaded data for the old `user_id` (Home: conversation, feed, weather, profile) reload on this.
    */

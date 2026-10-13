@@ -253,12 +253,16 @@ actor TokenRefresher {
             request.setValue(farmerChatApiKey, forHTTPHeaderField: "API-Key")
         }
         request.httpBody = try? JSONEncoder().encode(body)
+        let started = DispatchTime.now()
         do {
             let (data, response) = try await session.data(for: request)
+            NetworkLog.completed(request, status: (response as? HTTPURLResponse)?.statusCode, started: started)
             guard let http = response as? HTTPURLResponse else { return .failed }
             guard (200..<300).contains(http.statusCode) else { return .http(status: http.statusCode) }
             return .ok(try JSONDecoder().decode(Response.self, from: data))
         } catch {
+            // URLSession throws URLError; a JSONDecoder failure was already logged as completed.
+            if error is URLError { NetworkLog.failed(request, error: error as NSError, started: started) }
             return .failed
         }
     }

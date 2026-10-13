@@ -161,4 +161,12 @@ public final class PreferenceStore: @unchecked Sendable {
             setString(appearance, .appearanceMode)
         }
     }
+
+    /// `FarmerChat.clearAllData()` wipe: every `fc_sdk_`-prefixed key in this store, appearance
+    /// included — not just the `PrefKey` cases — and nothing outside the namespace.
+    public func clearNamespace() {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("fc_sdk_") {
+            defaults.removeObject(forKey: key)
+        }
+    }
 }

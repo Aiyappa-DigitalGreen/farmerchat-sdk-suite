@@ -339,6 +339,17 @@ export interface FarmerChatConfig extends FarmerChatCallbacks {
   onEvent?: FarmerChatEventListener;
   /** Called when the session cannot be recovered (refresh + guest/host token all failed). */
   onSessionExpired?: () => void;
+  /**
+   * Default false: the SDK prints nothing. True logs one `console.debug` line per completed HTTP
+   * request — `[FarmerChat] <METHOD> <path> -> <status> (<ms>ms) rid=<X-Request-ID>` — with no
+   * host, query string, headers or bodies. Android's `FarmerChatConfig.debugLogging`.
+   */
+  debugLogging?: boolean;
+  /**
+   * Links tapped in chat answers (http/https only). Return true when the host handled the URL —
+   * the SDK then does nothing; false or unset keeps the default (open in a new tab).
+   */
+  onLinkClick?: (url: string) => boolean;
 }
 
 export interface ResolvedConfig {
@@ -384,6 +395,8 @@ export interface ResolvedConfig {
   callbacks: FarmerChatCallbacks;
   onEvent?: FarmerChatEventListener;
   onSessionExpired?: () => void;
+  debugLogging: boolean;
+  onLinkClick?: (url: string) => boolean;
 }
 
 export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
@@ -451,5 +464,7 @@ export function resolveConfig(config: FarmerChatConfig): ResolvedConfig {
     },
     onEvent: config.onEvent,
     onSessionExpired: config.onSessionExpired,
+    debugLogging: config.debugLogging ?? false,
+    onLinkClick: config.onLinkClick,
   };
 }

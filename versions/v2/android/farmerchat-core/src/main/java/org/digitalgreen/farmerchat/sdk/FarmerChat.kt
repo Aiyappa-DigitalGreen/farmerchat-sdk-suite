@@ -64,6 +64,14 @@ object FarmerChat {
                 existing.showHistory == config.showHistory &&
                 existing.showSettings == config.showSettings
             ) {
+                // Equivalent config keeps the graph, but a fresh host token still reaches the
+                // session. Compared against the stored token (graph.config stays the first
+                // config), so a repeat call with the same token is a no-op.
+                val graph = graphInternal
+                val token = config.accessToken
+                if (graph != null && token != null && token != graph.tokenStore.getAccessToken()) {
+                    graph.sessionManager.updateTokens(token, config.refreshToken)
+                }
                 return
             }
             org.digitalgreen.farmerchat.sdk.core.util.FcLog.enabled = config.debugLogging
@@ -260,6 +268,41 @@ object FarmerChat {
     fun clearLocalSession() {
         val graph = graphInternal ?: return
         graph.sessionManager.clearLocalSession()
+        graph.locationPromptManager.clearState()
+    }
+
+    /**
+     * Tears the SDK down: [isInitialized] becomes false and every other API behaves as it does
+     * before [initialize]. Persisted data is KEPT, and so are listeners registered through
+     * [onAuthStateChanged] (they bind to the graph of the next [initialize]). Idempotent and safe
+     * before [initialize]. Call it only while no SDK screen is showing; host-owned views are the
+     * host's to remove.
+     */
+    @JvmStatic
+    fun shutdown() {
+        synchronized(this) {
+            val graph = graphInternal ?: return
+            authObserverJob?.cancel()
+            authObserverJob = null
+            graphInternal = null
+            runCatching { graph.locationPromptManager.clearState() }
+            // Static hooks the graph wired: drop them so the old graph is not kept alive.
+            org.digitalgreen.farmerchat.sdk.core.base.ErrorHandler.labelResolver = null
+            org.digitalgreen.farmerchat.sdk.core.util.FcLog.enabled = false
+        }
+    }
+
+    /**
+     * Local-only "delete my data" wipe: removes EVERY item the SDK persisted under `fc_sdk_`,
+     * appearance, device id and tokens included, and flips auth to false (listeners are notified
+     * when the state changes). No network call: there is no delete-user endpoint, so the
+     * server-side account is untouched. The SDK stays initialized. No-op before [initialize]
+     * (there is no Context to reach the SDK's preferences).
+     */
+    @JvmStatic
+    fun clearAllData() {
+        val graph = graphInternal ?: return
+        graph.sessionManager.clearAllData()
         graph.locationPromptManager.clearState()
     }
 }

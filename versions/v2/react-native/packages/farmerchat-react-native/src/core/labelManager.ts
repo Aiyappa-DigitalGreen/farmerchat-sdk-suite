@@ -62,6 +62,11 @@ export class LabelManager {
     return normalized === '' ? 'en' : normalized;
   }
 
+  /** Teardown (`FarmerChat.shutdown` / re-initialize): drop every subscriber. */
+  dispose(): void {
+    this.listeners.clear();
+  }
+
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => {

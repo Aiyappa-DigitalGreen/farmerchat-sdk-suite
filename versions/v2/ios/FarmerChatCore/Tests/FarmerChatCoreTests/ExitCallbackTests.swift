@@ -35,6 +35,9 @@ final class ExitCallbackTests: XCTestCase {
     /// the web bug was exactly this hop silently dropping `onExit`.
     func testConfigOnExitIsWiredThroughInitialize() {
         let counter = Counter()
+        // An equivalent re-initialize is a no-op (first config wins), so start from scratch.
+        FarmerChat.shutdown()
+        defer { FarmerChat.shutdown() }
         let fc = FarmerChat.initialize(config: FarmerChatConfig(environment: .dev, onExit: { counter.bump() }))
         fc.analytics.exit()
         XCTAssertEqual(counter.count, 1)

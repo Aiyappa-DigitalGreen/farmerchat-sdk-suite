@@ -146,6 +146,16 @@ class SessionManager(
     }
 
     /**
+     * Local-only full wipe (FarmerChat.clearAllData): every fc_sdk_ pref, appearance and device
+     * id included, then tokens. Auth flips last so a listener sees storage already wiped.
+     */
+    fun clearAllData() {
+        prefs.removeAllNamespaced()
+        tokenStore.clear()
+        _isAuthenticated.value = false
+    }
+
+    /**
      * Logout (app semantics): POST api/user/logout/ best-effort, clear all SDK prefs
      * (preserving appearance), clear tokens, flip auth state.
      */

@@ -2,7 +2,12 @@
   "name": "@digitalgreenorg/farmerchat-web",
   "version": "2.2.0",
   "description": "FarmerChat embeddable web SDK (React 18). Full app-as-SDK: onboarding, home feed, AI chat, voice, images, OTP auth.",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
+    "directory": "versions/v2/web/packages/farmerchat-web"
+  },
   "type": "module",
   "main": "./dist/farmerchat-web.cjs",
   "module": "./dist/farmerchat-web.js",
@@ -23,7 +28,8 @@
     "build": "vite build && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json",
-    "test": "node --import ./test/ts-extension-hook.mjs test/agentic.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticStream.test.ts && node --import ./test/ts-extension-hook.mjs test/alignmentPick.test.ts && node --import ./test/ts-extension-hook.mjs test/capabilityChip.test.ts && node --import ./test/ts-extension-hook.mjs test/markdown.test.ts && node --import ./test/ts-extension-hook.mjs test/countryLatLng.test.ts && node --import ./test/ts-extension-hook.mjs test/labelKeys.test.ts && node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/chatOnlyDefaults.test.ts",
+    "test": "node --import ./test/ts-extension-hook.mjs test/agentic.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticStream.test.ts && node --import ./test/ts-extension-hook.mjs test/alignmentPick.test.ts && node --import ./test/ts-extension-hook.mjs test/capabilityChip.test.ts && node --import ./test/ts-extension-hook.mjs test/markdown.test.ts && node --import ./test/ts-extension-hook.mjs test/countryLatLng.test.ts && node --import ./test/ts-extension-hook.mjs test/labelKeys.test.ts && node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/chatOnlyDefaults.test.ts && node --import ./test/ts-extension-hook.mjs test/lifecycle.test.ts",
+    "test:auth": "esbuild test/authRecovery.test.ts --bundle --platform=node --format=esm --log-level=warning --outfile=node_modules/.cache/fc-tests/authRecovery.mjs && node node_modules/.cache/fc-tests/authRecovery.mjs",
     "dev": "vite build --watch"
   },
   "peerDependencies": {

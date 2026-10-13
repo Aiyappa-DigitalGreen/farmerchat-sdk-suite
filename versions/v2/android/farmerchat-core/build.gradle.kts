@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.gson)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 publishing {

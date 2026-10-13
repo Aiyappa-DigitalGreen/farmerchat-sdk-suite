@@ -239,4 +239,19 @@ export class SessionManager {
     await this.store.clearAllPreservingAppearance();
     this.notifyAuthState();
   }
+
+  /**
+   * `FarmerChat.clearAllData()`: wipe every persisted `fc_sdk_` key (no network call: docs/02
+   * has no delete-user endpoint), then tell auth listeners the user is signed out.
+   */
+  async clearAllData(): Promise<void> {
+    await this.store.clearAll();
+    this.notifyAuthState();
+  }
+
+  /** Teardown (`FarmerChat.shutdown` / re-initialize): drop every listener this instance holds. */
+  dispose(): void {
+    this.authListeners.clear();
+    this.guestReplacedListeners.clear();
+  }
 }

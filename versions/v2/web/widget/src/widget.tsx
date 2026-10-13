@@ -63,18 +63,24 @@ export function currentWidget(): WidgetHandle | null {
 }
 
 let initializedFor: FarmerChatConfig | null = null;
+/** The newest host config seen, so the SDK's onExit wrapper never calls a stale `onExit`. */
+let latestConfig: FarmerChatConfig | null = null;
 let generation = 0;
 
 /**
- * Initialises the SDK singleton for this host config (no-op when it is the same
- * object). Runs before the panel ever opens — `createServices` is synchronous and
+ * Re-initialises the SDK singleton for this host config (skipped when it is the
+ * same object). The SDK treats that as a no-op unless environment, mode,
+ * showDrawer, showHistory or showSettings changed; a changed `accessToken` is
+ * pushed into the live session either way. Runs before the panel ever opens — `createServices` is synchronous and
  * makes no requests — so `FarmerChatWidget.sdk.logout()`, `isAuthenticated()`,
  * `onAuthStateChanged()` and `updateTokens()` act on the stored session even on a
  * page load where the user never opens the widget.
  *
- * Returns a generation number that changes only when the services were rebuilt.
+ * Returns a generation number that changes on every new config object (the panel
+ * remounts on it).
  */
 export function ensureSdk(config: FarmerChatConfig): number {
+  latestConfig = config;
   if (config === initializedFor) return generation;
   initializedFor = config;
   generation += 1;
@@ -84,7 +90,7 @@ export function ensureSdk(config: FarmerChatConfig): number {
     // the panel; the host's own onExit still fires.
     onExit: () => {
       activeHandle?.close();
-      config.onExit?.();
+      latestConfig?.onExit?.();
     },
   });
   return generation;
@@ -181,8 +187,9 @@ export function FarmerChatWidget(props: FarmerChatWidgetProps): ReactElement {
   const openRef = useRef(open);
   openRef.current = open;
 
-  // Only a NEW config object rebuilds the SDK services; the same object across
-  // re-renders (or `update()` calls that leave it out) keeps the live session.
+  // Only a NEW config object re-initialises the SDK (a no-op unless environment /
+  // mode / drawer / history / settings change; new tokens are pushed). The same
+  // object across re-renders (or `update()` calls that leave it out) is skipped.
   const sdkGeneration = useMemo(() => ensureSdk(config), [config]);
   // A question asked while the SDK root is not mounted yet is handed over in an
   // effect, after the root (a child, so its effects run first) has registered its

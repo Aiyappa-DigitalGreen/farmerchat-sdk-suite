@@ -34,13 +34,136 @@ public final class FarmerChat: @unchecked Sendable {
     }
 
     /// Initializes (or re-initializes) the SDK environment.
+    ///
+    /// Android `FarmerChat.initialize` parity: re-initializing with a different environment,
+    /// `mode` or showDrawer/showHistory/showSettings tears the old instance down and builds a new
+    /// one, so one host can offer both a full-journey and a CHAT_ONLY entry point by
+    /// re-initializing before each launch. Call it only while no SDK screen is showing. Any other
+    /// difference is ignored (first config wins) and the existing instance is returned.
+    /// Listeners added with ``onAuthStateChanged(_:)`` survive the rebuild.
     @discardableResult
     public static func initialize(config: FarmerChatConfig) -> FarmerChat {
         lock.lock()
-        defer { lock.unlock() }
+        if let existing = _shared, existing.config.isSameShape(as: config) {
+            // HOST_TOKEN hosts re-initialize with a fresh token; a rebuild used to seed it, so the
+            // no-op path must still apply it (same path as `updateTokens`). Recorded on the kept
+            // config so an identical repeat does not re-push.
+            if config.authMode == .hostToken, let access = config.accessToken, !access.isEmpty,
+               access != existing.config.accessToken {
+                existing.updateTokens(access: access, refresh: config.refreshToken)
+                existing.config.accessToken = access
+                existing.config.refreshToken = config.refreshToken
+            }
+            lock.unlock()
+            return existing
+        }
+        let previous = _shared
+        NetworkLog.enabled = config.debugLogging
         let instance = FarmerChat(config: config)
         _shared = instance
+        lock.unlock()
+
+        previous?.tearDown()
+        // Outside `lock`: the bridge replays the current value synchronously, and a host
+        // listener may read `isInitialized` / `shared`.
+        bindAuthListeners(to: instance)
         return instance
+    }
+
+    /// Tears the SDK down: `isInitialized` becomes false and in-flight requests are cancelled.
+    /// Persisted data and listeners added with ``onAuthStateChanged(_:)`` are kept (they bind to
+    /// the next `initialize`). Host-owned views are not removed. Idempotent; safe before
+    /// `initialize`.
+    public static func shutdown() {
+        lock.lock()
+        let previous = _shared
+        _shared = nil
+        NetworkLog.enabled = false
+        lock.unlock()
+
+        authLock.lock()
+        let bridge = authBridge
+        authBridge = nil
+        authLock.unlock()
+        bridge?.cancel()
+
+        previous?.tearDown()
+    }
+
+    /// Local-only "delete my data" wipe: removes every `fc_sdk_` UserDefaults key (appearance
+    /// included) and the Keychain token items. No network call — docs/02 has no delete-user
+    /// endpoint. The SDK stays initialized; auth state becomes false and auth listeners are
+    /// notified. The per-install device id is kept (`KeychainTokenStore.clear()` semantics).
+    public static func clearAllData() {
+        lock.lock()
+        let instance = _shared
+        lock.unlock()
+
+        if let instance {
+            instance.prefs.clearNamespace()
+            instance.tokenStore.clear()
+            instance.session.markDataCleared()
+        } else {
+            PreferenceStore().clearNamespace()
+            KeychainTokenStore().clear()
+            notifyAuthListeners(false)
+        }
+    }
+
+    /// Best effort, never throws: cancels what this instance owns.
+    private func tearDown() {
+        api.cancelInFlight()
+    }
+
+    // MARK: - Static auth listeners (survive re-initialize and shutdown)
+
+    private static let authLock = NSLock()
+    private static var authListeners: [(id: UUID, listener: (Bool) -> Void)] = []
+    private static var authBridge: AnyCancellable?
+
+    /// Callback form of auth-state observation (Android `FarmerChat.onAuthStateChanged`).
+    /// Fires immediately with the current value (false before `initialize`), then on every
+    /// change. Kept across re-initialize and shutdown. Returns the unsubscribe function.
+    @discardableResult
+    public static func onAuthStateChanged(_ listener: @escaping (Bool) -> Void) -> () -> Void {
+        let id = UUID()
+        authLock.lock()
+        authListeners.append((id, listener))
+        authLock.unlock()
+
+        lock.lock()
+        let current = _shared?.isAuthenticated ?? false
+        lock.unlock()
+        listener(current)
+
+        return {
+            authLock.lock()
+            authListeners.removeAll { $0.id == id }
+            authLock.unlock()
+        }
+    }
+
+    private static func notifyAuthListeners(_ value: Bool) {
+        authLock.lock()
+        let listeners = authListeners.map(\.listener)
+        authLock.unlock()
+        listeners.forEach { $0(value) }
+    }
+
+    private static func bindAuthListeners(to instance: FarmerChat) {
+        let bridge = instance.session.$isAuthenticated.sink { notifyAuthListeners($0) }
+        lock.lock()
+        let isCurrent = _shared === instance
+        lock.unlock()
+        guard isCurrent else {
+            bridge.cancel() // a concurrent initialize/shutdown already replaced this instance
+            return
+        }
+        authLock.lock()
+        let previous = authBridge
+        authBridge = bridge
+        authLock.unlock()
+        previous?.cancel()
     }
 
     // MARK: - Environment
@@ -321,5 +444,16 @@ public final class FarmerChat: @unchecked Sendable {
 
     public var appearance: FarmerChatAppearance {
         FarmerChatAppearance(rawValue: prefs.string(.appearanceMode) ?? "") ?? config.appearance
+    }
+}
+
+extension FarmerChatConfig {
+    /// The fields whose change rebuilds the SDK on re-initialize (Android parity).
+    func isSameShape(as other: FarmerChatConfig) -> Bool {
+        environment == other.environment &&
+            mode == other.mode &&
+            showDrawer == other.showDrawer &&
+            showHistory == other.showHistory &&
+            showSettings == other.showSettings
     }
 }

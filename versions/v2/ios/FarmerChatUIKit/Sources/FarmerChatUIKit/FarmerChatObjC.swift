@@ -208,6 +208,9 @@ public final class FCFarmerChatConfiguration: NSObject {
     /// dismisses itself; an embedded one cannot, so hide/remove it here.
     @objc public var onExit: (() -> Void)?
 
+    /// One `os.Logger` line per HTTP request (method, path, status, ms, request id). Default NO.
+    @objc public var debugLogging: Bool = false
+
     @objc public override init() { super.init() }
 
     /// Convenience for the common case.
@@ -287,7 +290,8 @@ public final class FCFarmerChatConfiguration: NSObject {
                 { @Sendable code, message in block(code.map(NSNumber.init(value:)), message) }
             },
             onSessionStart: onSessionStart.map { block in { @Sendable in block() } },
-            onExit: onExit.map { block in { @Sendable in block() } }
+            onExit: onExit.map { block in { @Sendable in block() } },
+            debugLogging: debugLogging
         )
     }
 }
@@ -346,8 +350,18 @@ public final class FCFarmerChat: NSObject {
         _ = FarmerChat.initialize(config: configuration.swiftValue())
     }
 
-    /// Whether `initializeWithConfiguration:` has run.
+    /// Whether `initializeWithConfiguration:` has run (and `shutdown` has not).
     @objc public static var isInitialized: Bool { FarmerChat.isInitialized }
+
+    /// Tears the SDK down (`isInitialized` becomes NO). Persisted data is kept.
+    @objc public static func shutdown() {
+        FarmerChat.shutdown()
+    }
+
+    /// Local-only wipe of everything the SDK persisted (`fc_sdk_` defaults + Keychain tokens).
+    @objc public static func clearAllData() {
+        FarmerChat.clearAllData()
+    }
 
     // --- Presentation
 

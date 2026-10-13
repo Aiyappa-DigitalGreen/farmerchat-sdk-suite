@@ -52,6 +52,7 @@ export function createServices(config: FarmerChatConfig): SdkServices {
     },
     // `session` is created below; this only runs on a 401, long after construction.
     onGuestReplaced: () => session.notifyGuestReplaced(),
+    debugLogging: resolved.debugLogging,
   });
   const api = new FarmerChatApi(http, resolved.farmerChatApiKey, resolved.geoApiKey);
   const analytics = new Analytics(resolved.onEvent, resolved.callbacks, resolved.enableAnalytics);

@@ -89,6 +89,8 @@ export interface HttpClientDeps {
    * entry loads (new conversation, feed, weather, profile).
    */
   onGuestReplaced?: () => void;
+  /** `FarmerChatConfig.debugLogging`: one console.debug line per completed request. Default off. */
+  debugLogging?: boolean;
 }
 
 const backoffDelay = (attempt: number): number => Math.min(500 * 2 ** attempt, 3000);
@@ -238,7 +240,7 @@ export class HttpClient {
         init.body = JSON.stringify(opts.body);
       }
 
-      const response = await fetch(url, init);
+      const response = await this.loggedFetch(url, init, 'aborted');
       if (response.status === 401 && !this.isAuthSkipped(url) && authAttempts < 2) {
         authAttempts++;
         // Drain the 401 body so the connection can be reused, then replay with a fresh Bearer.
@@ -423,12 +425,11 @@ export class HttpClient {
         'X-Request-ID': generateUuid(),
       };
       if (apiKey) headers['API-Key'] = apiKey;
-      const res = await fetch(this.deps.baseUrl + path, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      const res = await this.loggedFetch(
+        this.deps.baseUrl + path,
+        { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal },
+        'timeout',
+      );
       if (!res.ok) return { status: res.status, data: null };
       let data: RefreshTokenResponse | null = null;
       try {
@@ -484,9 +485,36 @@ export class HttpClient {
         headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(opts.body);
       }
-      return await fetch(url, init);
+      return await this.loggedFetch(url, init, 'timeout');
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /**
+   * `fetch` plus the opt-in diagnostic line (Android FcLog parity). Path only: the host, the query
+   * string (geolocate carries its key there), headers and bodies carry keys, tokens and personal
+   * data and are never printed. `abortReason` names what an AbortError means at this call site.
+   */
+  private async loggedFetch(url: string, init: RequestInit, abortReason: 'timeout' | 'aborted'): Promise<Response> {
+    if (!this.deps.debugLogging) return fetch(url, init);
+    const started = Date.now();
+    const method = init.method ?? 'GET';
+    const rid = (init.headers as Record<string, string> | undefined)?.['X-Request-ID'] ?? '-';
+    let path: string;
+    try {
+      path = new URL(url).pathname;
+    } catch {
+      path = url.split('?')[0]!.replace(/^[a-z]+:\/\/[^/]+/i, '');
+    }
+    try {
+      const response = await fetch(url, init);
+      console.debug(`[FarmerChat] ${method} ${path} -> ${response.status} (${Date.now() - started}ms) rid=${rid}`);
+      return response;
+    } catch (err) {
+      const reason = (err as { name?: unknown } | null)?.name === 'AbortError' ? abortReason : 'network';
+      console.debug(`[FarmerChat] ${method} ${path} -> ERR ${reason} (${Date.now() - started}ms) rid=${rid}`);
+      throw err;
     }
   }
 

@@ -191,6 +191,18 @@ class SdkPreferences(context: Context) {
         }
     }
 
+    /**
+     * Removes EVERY `fc_sdk_` key, appearance and device id included (FarmerChat.clearAllData,
+     * the "delete my data" wipe). Unlike [clearAll] it removes key by key, so a key outside the
+     * namespace is never touched.
+     */
+    fun removeAllNamespaced() {
+        val keys = prefs.all.keys.filter { it.startsWith(NAMESPACE) }
+        val editor = prefs.edit()
+        keys.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     // ---------------- language labels ----------------
 
     fun saveLanguageLabels(labels: Map<String, String>) {

@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '../context';
+import { useSdk, useTheme } from '../context';
 import { spacing, typography } from '../theme';
 
 interface InlineSegment {
@@ -52,19 +52,35 @@ function parseInline(text: string): InlineSegment[] {
   return segments;
 }
 
+/**
+ * Open an answer link: the host's `config.onLinkClick` first (true = handled, SDK does nothing),
+ * else — no hook, false, or a throwing hook — the default `Linking.openURL`. Only reached for
+ * links that passed the http(s) filter in {@link parseInline}.
+ */
+function openAnswerLink(url: string, onLinkClick: ((url: string) => boolean) | null): void {
+  let handled = false;
+  try {
+    handled = onLinkClick?.(url) === true;
+  } catch {
+    handled = false;
+  }
+  if (!handled) void Linking.openURL(url);
+}
+
 function InlineText(props: {
   text: string;
   color: string;
   linkColor: string;
   baseStyle?: object;
 }): React.ReactElement {
+  const onLinkClick = useSdk().config.onLinkClick;
   const segments = parseInline(props.text);
   return (
     <Text style={[typography.body, { color: props.color }, props.baseStyle]}>
       {segments.map((seg, i) => (
         <Text
           key={i}
-          onPress={seg.link ? () => void Linking.openURL(seg.link as string) : undefined}
+          onPress={seg.link ? () => openAnswerLink(seg.link as string, onLinkClick) : undefined}
           style={{
             fontWeight: seg.bold ? '700' : undefined,
             fontStyle: seg.italic ? 'italic' : undefined,

@@ -20,6 +20,13 @@ public final class FarmerChatAPI: @unchecked Sendable {
         self.agentic = AgenticChatDataSource(client: client)
     }
 
+    /// Re-initialize / shutdown teardown: cancels every request this facade's sessions own.
+    func cancelInFlight() {
+        client.cancelInFlight()
+        agentic.cancelInFlight()
+        APIClient.cancelTasks(of: session)
+    }
+
     // MARK: 1. Guest init
 
     public func initializeUser(_ body: InitializeGuestUserRequest) async -> ApiResult<InitializeGuestUserResponse> {

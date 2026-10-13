@@ -285,6 +285,17 @@ public struct FarmerChatConfig: Sendable {
     /// it cannot remove itself, so the host must hide/unmount it here.
     public var onExit: (@Sendable () -> Void)?
 
+    // MARK: - Diagnostics + link handling
+    /// When true the SDK logs one line per completed HTTP request through `os.Logger`
+    /// (subsystem `org.digitalgreen.farmerchat`, category `network`): method, path, status,
+    /// duration and `X-Request-ID` only — never the host, query, headers or bodies. Default
+    /// false = no SDK diagnostic output. Android `FarmerChatConfig.debugLogging` parity.
+    public var debugLogging: Bool
+    /// Host hook for http(s) links tapped in a chat ANSWER (SwiftUI only; UIKit renders answer
+    /// links as plain text). Return true when the host handled the link; false (or nil hook)
+    /// keeps the default behaviour of opening it externally.
+    public var onLinkClick: (@Sendable (URL) -> Bool)?
+
     public init(
         environment: FarmerChatEnvironment = .prod,
         customBaseURL: String? = nil,
@@ -330,7 +341,9 @@ public struct FarmerChatConfig: Sendable {
         onScreenView: (@Sendable (_ name: String) -> Void)? = nil,
         onError: (@Sendable (_ code: Int?, _ message: String) -> Void)? = nil,
         onSessionStart: (@Sendable () -> Void)? = nil,
-        onExit: (@Sendable () -> Void)? = nil
+        onExit: (@Sendable () -> Void)? = nil,
+        debugLogging: Bool = false,
+        onLinkClick: (@Sendable (URL) -> Bool)? = nil
     ) {
         self.environment = environment
         self.customBaseURL = customBaseURL
@@ -379,5 +392,7 @@ public struct FarmerChatConfig: Sendable {
         self.onError = onError
         self.onSessionStart = onSessionStart
         self.onExit = onExit
+        self.debugLogging = debugLogging
+        self.onLinkClick = onLinkClick
     }
 }

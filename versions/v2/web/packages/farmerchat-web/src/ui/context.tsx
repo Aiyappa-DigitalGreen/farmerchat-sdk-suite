@@ -37,6 +37,11 @@ const SdkContext = createContext<SdkContextValue | null>(null);
 
 export const SdkProvider = SdkContext.Provider;
 
+/** Non-throwing `useSdk` for leaf components that also render outside `<FarmerChat/>`. */
+export function useOptionalSdk(): SdkContextValue | null {
+  return useContext(SdkContext);
+}
+
 export function useSdk(): SdkContextValue {
   const ctx = useContext(SdkContext);
   if (!ctx) throw new Error('[FarmerChat] Components must be rendered inside <FarmerChat/>');

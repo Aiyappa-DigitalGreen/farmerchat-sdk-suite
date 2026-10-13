@@ -189,9 +189,11 @@ final class AgenticChatDataSource: @unchecked Sendable {
 
     private let client: APIClient
     private let session: URLSession
+    private let ownsSession: Bool
 
     init(client: APIClient, session: URLSession? = nil) {
         self.client = client
+        self.ownsSession = session == nil
         if let session {
             self.session = session
         } else {
@@ -201,6 +203,12 @@ final class AgenticChatDataSource: @unchecked Sendable {
             configuration.waitsForConnectivity = false
             self.session = URLSession(configuration: configuration)
         }
+    }
+
+    /// Teardown: cancels any open stream (see ``APIClient/cancelInFlight()``).
+    func cancelInFlight() {
+        guard ownsSession else { return }
+        APIClient.cancelTasks(of: session)
     }
 
     func stream(_ body: TextPromptRequest) -> AsyncThrowingStream<AgenticEvent, Error> {
@@ -243,9 +251,13 @@ final class AgenticChatDataSource: @unchecked Sendable {
 
             let bytes: URLSession.AsyncBytes
             let response: URLResponse
+            let started = DispatchTime.now()
             do {
                 (bytes, response) = try await session.bytes(for: request)
+                // Logged when the response head arrives (the body is an open-ended stream).
+                NetworkLog.completed(request, status: (response as? HTTPURLResponse)?.statusCode, started: started)
             } catch {
+                NetworkLog.failed(request, error: error as NSError, started: started)
                 if isCancellation(error) {
                     continuation.finish(throwing: CancellationError())
                 } else {

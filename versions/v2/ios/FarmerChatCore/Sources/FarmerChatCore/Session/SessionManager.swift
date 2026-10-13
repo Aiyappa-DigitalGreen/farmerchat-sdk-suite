@@ -140,6 +140,14 @@ public final class SessionManager: ObservableObject, @unchecked Sendable {
         tokenStore.saveTokens(access: access, refresh: refresh)
     }
 
+    /// `FarmerChat.clearAllData()`: storage is already wiped; publish `false` so every observer
+    /// (including the static auth listeners) is notified.
+    func markDataCleared() {
+        DispatchQueue.main.async { [weak self] in
+            self?.isAuthenticated = false
+        }
+    }
+
     /// Local-only session reset (used when the guest fallback also fails).
     public func expireSession() {
         tokenStore.clear()

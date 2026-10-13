@@ -10,6 +10,7 @@
  *   FarmerChat.isAuthenticated()
  *   FarmerChat.onAuthStateChanged(listener)
  *   FarmerChat.setAnalyticsListener(listener)
+ *   FarmerChat.isInitialized() / shutdown() / clearAllData()
  */
 
 import { createElement, useEffect, useMemo, useState } from 'react';
@@ -17,6 +18,7 @@ import { suspendMedia } from './core/mediaSuspend';
 import { createRoot, Root } from 'react-dom/client';
 import type { FarmerChatConfig, FarmerChatEventListener } from './core/config';
 import { createServices, SdkServices } from './core/services';
+import { createSdkLifecycle } from './core/lifecycle';
 import { FarmerChatRoot, FarmerChatController } from './ui/FarmerChatRoot';
 import { ICONS } from './ui/icons';
 
@@ -59,6 +61,11 @@ export { FARMERCHAT_VERSION } from './core/version';
 // Module-level singleton state (initialize/openChat/logout act on it)
 // ---------------------------------------------------------------------------
 
+/**
+ * Owns the services instance and the host auth listeners (core/lifecycle.ts). `sharedServices` /
+ * `sharedConfig` mirror it so the rest of this file reads them as before.
+ */
+const lifecycle = createSdkLifecycle<SdkServices>(createServices);
 let sharedServices: SdkServices | null = null;
 let sharedConfig: FarmerChatConfig | null = null;
 let activeController: FarmerChatController | null = null;
@@ -68,8 +75,10 @@ const mountedRoots = new Map<Element, Root>();
 
 function getOrCreateServices(config?: FarmerChatConfig): SdkServices {
   if (config) {
-    sharedConfig = config;
-    sharedServices = createServices(config);
+    // Android re-initialize rule: an equivalent config (environment, mode, showDrawer, showHistory,
+    // showSettings) keeps the live instance — first config wins; anything else rebuilds it.
+    sharedServices = lifecycle.initialize(config);
+    sharedConfig = lifecycle.currentConfig();
     return sharedServices;
   }
   if (!sharedServices) {
@@ -276,6 +285,22 @@ interface FarmerChatStatics {
   isAuthenticated(): boolean;
   onAuthStateChanged(listener: (isAuthenticated: boolean) => void): () => void;
   setAnalyticsListener(listener: FarmerChatEventListener | undefined): void;
+  /** True between `initialize` (or a config-carrying mount / prop) and `shutdown`. */
+  isInitialized(): boolean;
+  /**
+   * Tear the SDK instance down: `isInitialized()` becomes false and every other call behaves as it
+   * does before `initialize`. Persisted data and `onAuthStateChanged` listeners are kept (the
+   * listeners bind to the next instance). Idempotent. Host-mounted views are not removed — unmount
+   * them yourself.
+   */
+  shutdown(): void;
+  /**
+   * Local-only "delete my data": removes every `fc_sdk_` localStorage item, appearance and tokens
+   * included; nothing outside that namespace. No network call (there is no delete-user endpoint).
+   * Afterwards `isAuthenticated()` is false and auth listeners hear `false`; the SDK stays
+   * initialized.
+   */
+  clearAllData(): void;
 }
 
 export const FarmerChat: typeof FarmerChatComponent & FarmerChatStatics = Object.assign(FarmerChatComponent, {
@@ -351,11 +376,30 @@ export const FarmerChat: typeof FarmerChatComponent & FarmerChatStatics = Object
 
   onAuthStateChanged(listener: (isAuthenticated: boolean) => void): () => void {
     if (!sharedServices) throw new Error('[FarmerChat] initialize() first.');
-    return sharedServices.session.onAuthStateChanged(listener);
+    // Held by the lifecycle, not this instance's SessionManager, so it survives a re-initialize.
+    return lifecycle.addAuthListener(listener);
   },
 
   setAnalyticsListener(listener: FarmerChatEventListener | undefined): void {
     sharedServices?.analytics.setListener(listener);
+  },
+
+  isInitialized(): boolean {
+    return lifecycle.current() !== null;
+  },
+
+  shutdown(): void {
+    lifecycle.shutdown();
+    sharedServices = null;
+    sharedConfig = null;
+    // Before initialize nothing is queued or targeted; a still-mounted root must not keep
+    // receiving logout / openChat against the torn-down instance.
+    activeController = null;
+    pendingCommand = null;
+  },
+
+  clearAllData(): void {
+    lifecycle.clearAllData();
   },
 });
 

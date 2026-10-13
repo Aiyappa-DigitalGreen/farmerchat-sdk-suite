@@ -52,6 +52,15 @@ function makeRequestId(): string {
   );
 }
 
+/**
+ * Path-only form of a request URL for `debugLogging`: host, query and fragment stripped (the
+ * geolocate URL carries its API key in the query). A regex, not `new URL().pathname`, which RN's
+ * URL polyfill does not reliably implement.
+ */
+export function logPath(url: string): string {
+  return url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '').replace(/[?#].*$/, '') || '/';
+}
+
 interface AttemptOutcome<T> {
   kind: 'success' | 'http-error' | 'network-error';
   result?: ApiResult<T>;
@@ -172,6 +181,8 @@ export class HttpClient {
     priority: ApiPriority,
   ): Promise<AttemptOutcome<T>> {
     const controller = new AbortController();
+    const startedAt = Date.now();
+    const requestId = makeRequestId();
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -180,7 +191,7 @@ export class HttpClient {
 
     try {
       const headers: Record<string, string> = {
-        'X-Request-ID': makeRequestId(),
+        'X-Request-ID': requestId,
         'X-Timeout': String(Math.round(priority.timeoutMs / 1000)),
         'Build-Version': BUILD_VERSION_HEADER_VALUE,
         'Device-Info': getDeviceInfoHeader(),
@@ -198,6 +209,9 @@ export class HttpClient {
         body: spec.body !== undefined ? JSON.stringify(spec.body) : undefined,
         signal: controller.signal,
       });
+      this.debugLog(
+        `${spec.method} ${logPath(url)} -> ${response.status} (${Date.now() - startedAt}ms) rid=${requestId}`,
+      );
 
       if (response.ok) {
         // 204 (e.g. daily feed empty) → null payload
@@ -227,12 +241,27 @@ export class HttpClient {
         typeof e === 'object' &&
         e !== null &&
         (e as { name?: string }).name === 'AbortError';
+      // Never log the error message: it can carry the full URL.
+      this.debugLog(
+        `${spec.method} ${logPath(url)} -> ERR ${timedOut || isAbort ? 'timeout' : 'network'} ` +
+          `(${Date.now() - startedAt}ms) rid=${requestId}`,
+      );
       return {
         kind: 'network-error',
         isTimeout: timedOut || isAbort,
       };
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /** One diagnostic line, only when `config.debugLogging` is on (default off = no output). */
+  private debugLog(line: string): void {
+    if (!this.config.debugLogging) return;
+    try {
+      console.debug(`[FarmerChat] ${line}`);
+    } catch {
+      // logging never breaks a request
     }
   }
 }
