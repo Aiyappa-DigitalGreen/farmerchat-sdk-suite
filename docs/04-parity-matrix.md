@@ -8371,3 +8371,20 @@ Follow-up, same day (non-breaking hardening only):
   geo/guest keys, moving web tokens out of localStorage, a CSP on the demo pages, an endpoint
   allowlist on the stage proxy (low value: the proxy only bypasses browser CORS, the stage API is
   directly reachable anyway).
+
+Follow-up 2 (2026-10-13), dependencies and remaining surfaces:
+- `npm audit fix` (semver-compatible only, **lockfile-only**, no `package.json` range changed) in all
+  16 npm projects. Cleared the critical `shell-quote` (RN tree) and every compatible high/moderate.
+  Verified after: web v1+v2 `npm run build` + v2 `npm test`; widget, demo-app, theme-studio builds;
+  RN v1+v2 `tsc --noEmit` + v2 `npm test`; web examples `tsc --noEmit`.
+- **Left, needs a major upgrade (would break):** `vite` <=6.4.2 advisories (web packages/examples/
+  widget/demo-app) are dev-server-only (`server.fs.deny` / `launch-editor` on Windows, optimized-deps
+  `.map` traversal) and do not reach built bundles; `react-native` / `expo-constants` majors (pinned
+  to Expo 52 by react-native/CLAUDE.md); `tar` inside the Expo CLI in the RN example apps
+  (fix = Expo major). All are build-time tooling, none ship in an SDK.
+- Checked clean, no change: SDK Android manifests (nothing exported, FileProviders private with
+  per-file grants), no `postMessage` handlers, no cleartext base URLs, no token/PII in logs or
+  analytics, logout clears local credentials on all four v2 platforms even when the API call fails,
+  no signing keys / `.env` / service files committed, Android libs current (OkHttp 5.3.2, Retrofit 3.0.0).
+- Pre-existing, not security, not changed: RN example apps fail `tsc` on `appearance: "light"`
+  (`App.tsx:21`; `AppearanceMode` has no `"light"`).
