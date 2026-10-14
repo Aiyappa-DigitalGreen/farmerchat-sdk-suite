@@ -8509,3 +8509,46 @@ platform README has a "Lifecycle, diagnostics and privacy" section.
   packages; publishing it is a product decision.
 - EncryptedSharedPreferences: deprecated by Google, and it needs a data migration.
 - `sideEffects: false` on the widget: the IIFE registers a global, so a bundler would drop it.
+
+## SDK standards round 2: release readiness (2026-10-14)
+
+Everything that does not need registry accounts or a product decision. Every check was baselined
+against today's state and passes locally.
+
+| Item | Where | Status |
+|---|---|---|
+| Public API baseline, fails CI on drift | android: binary-compatibility-validator 0.18.1, `*/api/*.api` (`@InternalFarmerChatApi` and `sample-*` excluded). web + RN: API Extractor, `etc/*.api.md`, `npm run api:check` / `api:update`. ios: `swift package diagnose-api-breaking-changes` on FarmerChatCore vs the merge base or previous commit (`api-ios.yml` copies Core into a temp repo because the package is not at the git root) | DONE. iOS SwiftUI/UIKit NOT covered: iOS-only, the tool needs a host build |
+| Size budget (~15% headroom) | android AARs via `bundleReleaseAar` (core 2.70 MB, compose 2.01 MB, views 1.34 MB, posthog 14 KB); web ESM 208 KB / CJS 190 KB gz, widget IIFE 238 KB gz, RN dist 215 KB gz | DONE (`size-budget.*` per package) |
+| Generated API reference | android Dokka 2.1.0 (`:dokkaGenerate`), iOS DocC (`xcodebuild docbuild`, no manifest change), web + RN TypeDoc (`npm run docs`) | DONE, uploaded as CI artifacts; hosting not decided |
+| `npm audit --omit=dev --audit-level=high` in CI | web, widget, RN | DONE (0 findings; dev-only advisories excluded on purpose) |
+| Dependabot | `.github/dependabot.yml`: the 4 shipped npm packages, gradle, actions; weekly, grouped, no automatic majors | DONE |
+| Tag-driven release workflow | `.github/workflows/release.yml`: verifies all 9 version strings match the tag and a CHANGELOG section exists, builds and packs every platform, then a DRAFT GitHub release. Each publish job skips without its secret and in dry-run | DONE, actionlint clean. Publishing waits on accounts and the blockers below |
+| Troubleshooting + test mode | `versions/v2/TROUBLESHOOTING.md`: `onError` codes, verified setup failures, mock-server test mode via the existing `customBaseUrl` (iOS `customBaseURL`), now also in docs/03 | DONE |
+| Versioning + deprecation process | `VERSIONING.md` (support window left to the maintainers) | DONE |
+| iOS main-thread file read | `ChatViewModel` voice-file read + base64 moved off the main actor | DONE. Three other reads left: a public sync API and UI branch decisions |
+
+Distribution blockers found (beyond accounts):
+- **iOS SwiftPM by URL is impossible today.** Proven in a scratch clone: SwiftPM needs a root
+  `Package.swift` and ignores `ios-v2.2.0`-style tags. A prototype root manifest (not landed)
+  builds, but only at **iOS 16**, because FarmerChatSwiftUI uses iOS 16 APIs throughout. It would
+  raise FarmerChatUIKit's iOS 15 floor for SwiftPM users. NEEDS DECISION: iOS 16 for SwiftPM, a
+  separate distribution repo, or `@available` work in SwiftUI.
+- **CocoaPods trunk: UNVERIFIED** (CocoaPods not installed). The podspec's `../FarmerChatCore`
+  globs resolve from the repo root on trunk, so they will most likely find no sources.
+- **Maven Central:** the Android build has no signing, javadoc jar, full Central POM or Portal
+  uploader. `release.yml` keeps that job off until the repo variable `MAVEN_CENTRAL_READY` is set.
+
+Known tooling quirk (not a shipped bug): `:farmerchat-android-views:verifyReleaseResources` (part
+of `assembleRelease`) reports `navigation/fc_nav_graph not found`, even from clean. The published
+release AAR does contain `res/navigation/fc_nav_graph.xml` (checked in the mavenLocal AAR). Size
+checks therefore use `bundleReleaseAar`.
+
+Recorded, not built:
+- Offline question queue: the app does not do this, and root CLAUDE.md §1 makes the app the
+  source of truth.
+- Typed cross-platform error model: changing `onError`'s code type breaks callers, so it waits for 3.0.
+- Screenshot tests: baselines must be recorded on CI's renderer and the screen list chosen. NEEDS
+  DECISION; next in line.
+- Accessibility pass: labels must come from app strings through LabelManager (§2) and need a
+  device check.
+- Startup measurement: needs real devices.

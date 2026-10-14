@@ -378,3 +378,4 @@ FarmerChat.clearAllData()      // local wipe of every fc_sdk_ item (tokens, appe
 ```
 
 Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).
+Something not working, or testing without a backend account: [`TROUBLESHOOTING.md`](/versions/v2/TROUBLESHOOTING.md).

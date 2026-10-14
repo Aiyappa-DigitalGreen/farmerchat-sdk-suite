@@ -320,3 +320,4 @@ FarmerChat.clearAllData();                   // local wipe of fc_sdk_ localStora
 ```
 
 Upgrading from 1.x: see [`MIGRATION.md`](/versions/v2/MIGRATION.md). Full list: [`CHANGELOG.md`](/CHANGELOG.md).
+Something not working, or testing without a backend account: [`TROUBLESHOOTING.md`](/versions/v2/TROUBLESHOOTING.md).

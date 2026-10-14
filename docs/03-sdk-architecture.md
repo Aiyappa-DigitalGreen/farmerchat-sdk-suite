@@ -59,6 +59,8 @@ FarmerChatConfig {
   farmerChatApiKey?               // optional override of the built-in FarmerChat guest-init API-Key
                                   //   (renamed from guestApiKey — the old name was removed, no alias)
   geoApiKey?                      // optional override of the built-in Google geolocation key
+  customBaseUrl?                  // all four (iOS spells it customBaseURL): overrides the environment's base URL.
+                                  //   For local testing against tools/mock-server only; never in a release build.
   mode = CHAT_ONLY                // v2 default (was FULL_JOURNEY): first launch shows the language screen
                                   //   once (skipped if languageCode/locale is set), then chat; later launches
                                   //   open straight into chat with a headless guest bootstrap.

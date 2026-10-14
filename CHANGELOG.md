@@ -18,6 +18,10 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   FarmerChatUIKit (v1 and v2), wired into SPM and the CocoaPods spec.
 - Repo: Apache-2.0 `LICENSE` and `NOTICE`, `SECURITY.md`, `versions/v2/MIGRATION.md`, and GitHub
   Actions CI that builds and tests each v2 SDK.
+- Release readiness: public API baselines checked in CI on every platform (Android, web, React
+  Native, iOS Core), size budgets, generated API reference (Dokka, DocC, TypeDoc), production
+  `npm audit`, Dependabot, and a tag-driven release workflow that creates a draft release.
+- `versions/v2/TROUBLESHOOTING.md` (including a mock-backend test mode) and `VERSIONING.md`.
 
 ### Changed
 - A repeat `initialize` on iOS, React Native and Web now matches Android. It is a no-op unless
