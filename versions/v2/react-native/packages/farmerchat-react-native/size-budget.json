@@ -1,0 +1,6 @@
+{
+  "$comment": "Gzipped (level 9) budget for the RN SDK's compiled output, checked by `npm run size:check`: the sum of every dist/**/*.js file gzipped individually (.map and .d.ts excluded). Set 2026-10-14 at measured size + ~15%, rounded up to 5 KB (214.5 KB from a clean build). tsc never cleans dist, so measure after `rm -rf dist && npm run build`. Raise the budget only deliberately, in the change that grows the output.",
+  "entries": [
+    { "name": "dist JS (dist/**/*.js, total)", "dir": "dist", "ext": [".js"], "budgetKB": 250 }
+  ]
+}

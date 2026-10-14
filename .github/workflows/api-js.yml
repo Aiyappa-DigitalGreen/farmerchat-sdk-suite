@@ -1,0 +1,87 @@
+# SDK-standard checks for the JS packages: public API report drift (API Extractor), gzipped size
+# budgets, TypeDoc build, and a production-dependency audit. Test-only: never publishes or deploys.
+#
+# `npm audit` uses --omit=dev on purpose: the packages ship no runtime dependencies, and known
+# dev-only advisories (build and test tooling) must not turn this red.
+name: API + size (JS, v2)
+on:
+  push:
+    paths: ['versions/v2/web/**', 'versions/v2/react-native/packages/**', '.github/workflows/api-js.yml']
+  pull_request:
+    paths: ['versions/v2/web/**', 'versions/v2/react-native/packages/**', '.github/workflows/api-js.yml']
+permissions:
+  contents: read
+concurrency:
+  group: api-js-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  web:
+    # SDK and widget share one job: the widget consumes the SDK through a file: dependency, so it
+    # needs the SDK's dist built on the same runner first.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: SDK (build, API report, size, docs, audit)
+        working-directory: versions/v2/web/packages/farmerchat-web
+        run: |
+          npm ci
+          npm run build
+          npm run api:check
+          npm run size:check
+          npm run docs
+          npm audit --omit=dev --audit-level=high
+      - name: Widget (build, size, audit)
+        working-directory: versions/v2/web/widget
+        run: |
+          npm ci
+          npm run build
+          npm run size:check
+          npm audit --omit=dev --audit-level=high
+      - name: Upload web SDK API docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmerchat-web-api-docs
+          path: versions/v2/web/packages/farmerchat-web/api-docs
+          if-no-files-found: error
+      - name: Upload API report diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmerchat-web-api-report-temp
+          path: versions/v2/web/packages/farmerchat-web/temp
+          if-no-files-found: ignore
+
+  react-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: versions/v2/react-native/packages/farmerchat-react-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run api:check
+      - run: npm run size:check
+      - run: npm run docs
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Upload RN SDK API docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmerchat-react-native-api-docs
+          path: versions/v2/react-native/packages/farmerchat-react-native/api-docs
+          if-no-files-found: error
+      - name: Upload API report diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmerchat-react-native-api-report-temp
+          path: versions/v2/react-native/packages/farmerchat-react-native/temp
+          if-no-files-found: ignore

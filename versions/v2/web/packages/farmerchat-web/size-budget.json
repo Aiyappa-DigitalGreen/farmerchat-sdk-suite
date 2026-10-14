@@ -1,0 +1,7 @@
+{
+  "$comment": "Gzipped (level 9) budgets for the SDK's dist entry files, checked by `npm run size:check`. Set 2026-10-14 at measured size + ~15%, rounded up to 5 KB (ESM 208.1 KB, CJS 190.4 KB). Raise a budget only deliberately, in the change that grows the bundle.",
+  "entries": [
+    { "name": "ESM entry (dist/farmerchat-web.js)", "files": ["dist/farmerchat-web.js"], "budgetKB": 240 },
+    { "name": "CJS entry (dist/farmerchat-web.cjs)", "files": ["dist/farmerchat-web.cjs"], "budgetKB": 220 }
+  ]
+}

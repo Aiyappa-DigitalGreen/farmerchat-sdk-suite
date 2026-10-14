@@ -26,7 +26,8 @@
   "scripts": {
     "build": "vite build && vite build -c vite.embed.config.ts && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "demo": "vite demo --port 5181"
+    "demo": "vite demo --port 5181",
+    "size:check": "node ../packages/farmerchat-web/scripts/size-check.mjs"
   },
   "peerDependencies": {
     "@digitalgreenorg/farmerchat-web": "^2.2.0",

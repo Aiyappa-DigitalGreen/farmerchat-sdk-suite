@@ -27,7 +27,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts"
+    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
+    "size:check": "node scripts/size-check.mjs",
+    "docs": "typedoc"
   },
   "keywords": [
     "farmerchat",
@@ -77,6 +81,7 @@
     }
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.4",
     "@react-native-async-storage/async-storage": "2.1.0",
     "@react-navigation/drawer": "^7.1.1",
     "@react-navigation/native": "^7.0.14",
@@ -95,6 +100,7 @@
     "react-native-screens": "~4.4.0",
     "react-native-view-shot": "4.0.3",
     "react-native-webview": "13.12.5",
+    "typedoc": "^0.28.20",
     "typescript": "~5.3.3"
   }
 }

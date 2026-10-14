@@ -1,0 +1,7 @@
+{
+  "$comment": "Gzipped (level 9) budgets for the widget, checked by `npm run size:check`. Set 2026-10-14 at measured size + ~15%, rounded up (IIFE 238.3 KB, ESM 5.0 KB). The IIFE bundles the SDK, React and ReactDOM; the ESM build keeps them external. Raise a budget only deliberately, in the change that grows the bundle.",
+  "entries": [
+    { "name": "IIFE embed (dist/farmerchat-widget.iife.js)", "files": ["dist/farmerchat-widget.iife.js"], "budgetKB": 275 },
+    { "name": "ESM (dist/farmerchat-widget.js)", "files": ["dist/farmerchat-widget.js"], "budgetKB": 6 }
+  ]
+}
