@@ -8552,3 +8552,9 @@ Recorded, not built:
 - Accessibility pass: labels must come from app strings through LabelManager (§2) and need a
   device check.
 - Startup measurement: needs real devices.
+
+Verified on GitHub (2026-10-14): all 8 workflows green on `main`. `api-ios.yml` needed DocC archives
+zipped (upload-artifact rejects the colons in DocC file names). The release workflow passed a
+`workflow_dispatch` dry run for 2.2.0 (run 38519516317): verify, all four platform builds, and
+every publish job skipped. No tag, release or package was created. Release packaging uses
+`bundleReleaseAar` because of the views `verifyReleaseResources` quirk above.
