@@ -167,10 +167,13 @@ jobs:
       # sample-consumer resolves the SDK by coordinate from mavenLocal, so publish it first.
       - run: ./gradlew publishToMavenLocal
       - run: ./gradlew testDebugUnitTest assembleDebug
+      # bundleReleaseAar, not assembleRelease: assembleRelease also runs the views module's
+      # verifyReleaseResources, which wrongly reports navigation/fc_nav_graph missing (the AAR does
+      # contain it; see docs/04). bundleReleaseAar builds the same AAR that is published.
       - name: Release AARs (library modules only)
         run: >
-          ./gradlew :farmerchat-core:assembleRelease :farmerchat-android-compose:assembleRelease
-          :farmerchat-android-views:assembleRelease :farmerchat-analytics-posthog:assembleRelease
+          ./gradlew :farmerchat-core:bundleReleaseAar :farmerchat-android-compose:bundleReleaseAar
+          :farmerchat-android-views:bundleReleaseAar :farmerchat-analytics-posthog:bundleReleaseAar
       - name: Collect
         run: |
           mkdir -p "$GITHUB_WORKSPACE/out/aar"
