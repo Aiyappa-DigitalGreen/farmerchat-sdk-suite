@@ -6,6 +6,40 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.kotlin.parcelize) apply false
+    alias(libs.plugins.kotlinx.binary.compatibility.validator)
+    alias(libs.plugins.dokka)
+}
+
+// -----------------------------------------------------------------------------
+// PUBLIC API BASELINE (binary-compatibility-validator).
+// `./gradlew apiDump` writes <module>/api/<module>.api; `./gradlew apiCheck` fails when the
+// compiled public surface no longer matches it. Commit the .api files: a diff in them is a
+// public-API change and must be deliberate (docs/03). Declarations marked
+// @InternalFarmerChatApi are not public API. Samples are hosts, not SDK artifacts.
+// -----------------------------------------------------------------------------
+apiValidation {
+    nonPublicMarkers += "org.digitalgreen.farmerchat.sdk.InternalFarmerChatApi"
+    ignoredProjects += listOf("sample-compose", "sample-views", "sample-jetpack", "sample-consumer")
+}
+
+// -----------------------------------------------------------------------------
+// API REFERENCE (Dokka). `./gradlew :dokkaGenerate` writes one aggregated HTML site for the
+// four library modules to build/dokka/html. Build-time only; nothing is added to any AAR/POM.
+// -----------------------------------------------------------------------------
+val sdkLibraryModules = listOf(
+    ":farmerchat-core",
+    ":farmerchat-android-compose",
+    ":farmerchat-android-views",
+    ":farmerchat-analytics-posthog",
+)
+sdkLibraryModules.forEach { path ->
+    project(path) { apply(plugin = "org.jetbrains.dokka") }
+}
+dependencies {
+    sdkLibraryModules.forEach { dokka(project(it)) }
+}
+dokka {
+    moduleName.set("FarmerChat Android SDK")
 }
 
 // -----------------------------------------------------------------------------

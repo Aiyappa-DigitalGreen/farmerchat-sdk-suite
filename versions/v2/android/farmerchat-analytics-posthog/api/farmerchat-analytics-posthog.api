@@ -1,0 +1,37 @@
+public final class org/digitalgreen/farmerchat/sdk/analytics/posthog/FarmerChatPostHog {
+	public static final field DEFAULT_HOST Ljava/lang/String;
+	public static final field INSTANCE Lorg/digitalgreen/farmerchat/sdk/analytics/posthog/FarmerChatPostHog;
+	public static final fun attachExclusive (Lorg/digitalgreen/farmerchat/sdk/FarmerChatConfig$Builder;)Lorg/digitalgreen/farmerchat/sdk/FarmerChatConfig$Builder;
+	public static final fun identify (Ljava/lang/String;)V
+	public static final fun setUserProperty (Ljava/lang/String;Ljava/lang/String;)V
+	public static final fun setup (Landroid/content/Context;Ljava/lang/String;)V
+	public static final fun setup (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V
+	public static final fun setup (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public static final fun setup (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public static synthetic fun setup$default (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)V
+	public static final fun track (Ljava/lang/String;Ljava/util/Map;)V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming {
+	public static final field INSTANCE Lorg/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming;
+	public final fun event (Ljava/lang/String;)Ljava/lang/String;
+	public final fun getMerged ()Ljava/util/Map;
+	public final fun getSuppressed ()Ljava/util/Set;
+	public final fun properties (Ljava/util/Map;)Ljava/util/Map;
+	public final fun property (Ljava/lang/String;)Ljava/lang/String;
+	public final fun snake (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming$Merge {
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/util/Map;)Lorg/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming$Merge;
+	public static synthetic fun copy$default (Lorg/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming$Merge;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lorg/digitalgreen/farmerchat/sdk/analytics/posthog/PostHogNaming$Merge;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEvent ()Ljava/lang/String;
+	public final fun getExtra ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

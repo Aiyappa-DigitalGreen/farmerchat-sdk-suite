@@ -1,0 +1,740 @@
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatActivity : androidx/appcompat/app/AppCompatActivity, org/digitalgreen/farmerchat/sdk/views/internal/JourneyHost {
+	public static final field $stable I
+	public fun <init> ()V
+	public fun applyAppearance (Ljava/lang/String;)V
+	public fun closeDrawer ()V
+	public fun exitJourney ()V
+	public fun getExitRemovesSdk ()Z
+	public fun openDrawer ()V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatComposerFragment : androidx/fragment/app/Fragment {
+	public static final field $stable I
+	public fun <init> ()V
+	public fun onDestroyView ()V
+	public fun onGetLayoutInflater (Landroid/os/Bundle;)Landroid/view/LayoutInflater;
+	public fun onViewCreated (Landroid/view/View;Landroid/os/Bundle;)V
+}
+
+public abstract interface class org/digitalgreen/farmerchat/sdk/views/FarmerChatComposerFragment$Listener {
+	public fun onFarmerChatComposerHeightChanged (I)V
+	public abstract fun onFarmerChatComposerSubmit (Lorg/digitalgreen/farmerchat/sdk/FarmerChatLaunch;)V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatComposerFragment$Listener$DefaultImpls {
+	public static fun onFarmerChatComposerHeightChanged (Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatComposerFragment$Listener;I)V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatFab : com/google/android/material/floatingactionbutton/FloatingActionButton {
+	public static final field $stable I
+	public fun <init> (Landroid/content/Context;)V
+	public fun <init> (Landroid/content/Context;Landroid/util/AttributeSet;)V
+	public fun <init> (Landroid/content/Context;Landroid/util/AttributeSet;I)V
+	public synthetic fun <init> (Landroid/content/Context;Landroid/util/AttributeSet;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getQuestion ()Ljava/lang/String;
+	public final fun setQuestion (Ljava/lang/String;)V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatFileProvider : androidx/core/content/FileProvider {
+	public static final field $stable I
+	public fun <init> ()V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatFragment : androidx/fragment/app/Fragment, org/digitalgreen/farmerchat/sdk/views/internal/JourneyHost {
+	public static final field $stable I
+	public static final field Companion Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment$Companion;
+	public fun <init> ()V
+	public fun applyAppearance (Ljava/lang/String;)V
+	public fun closeDrawer ()V
+	public fun exitJourney ()V
+	public fun getExitRemovesSdk ()Z
+	public static final fun newInstance ()Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public static final fun newInstance (Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public static final fun newInstance (Ljava/lang/String;Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public static final fun newInstance (Lorg/digitalgreen/farmerchat/sdk/FarmerChatLaunch;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public fun onCreate (Landroid/os/Bundle;)V
+	public fun onDestroyView ()V
+	public fun onGetLayoutInflater (Landroid/os/Bundle;)Landroid/view/LayoutInflater;
+	public fun onViewCreated (Landroid/view/View;Landroid/os/Bundle;)V
+	public fun openDrawer ()V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/FarmerChatFragment$Companion {
+	public final fun newInstance ()Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public final fun newInstance (Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public final fun newInstance (Ljava/lang/String;Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public final fun newInstance (Lorg/digitalgreen/farmerchat/sdk/FarmerChatLaunch;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+	public static synthetic fun newInstance$default (Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment$Companion;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lorg/digitalgreen/farmerchat/sdk/views/FarmerChatFragment;
+}
+
+public abstract interface class org/digitalgreen/farmerchat/sdk/views/FarmerChatFragment$ExitListener {
+	public abstract fun onFarmerChatExit ()V
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcDialogCountryPickerBinding : androidx/viewbinding/ViewBinding {
+	public final field fcCountryList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcCountryPickerAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcCountryPickerRoot Landroid/widget/LinearLayout;
+	public final field fcCountrySaveButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDialogCountryPickerBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDialogCountryPickerBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDialogCountryPickerBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcDrawerBinding : androidx/viewbinding/ViewBinding {
+	public final field fcDrawerHelpRow Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerHistoryError Landroid/widget/LinearLayout;
+	public final field fcDrawerHistoryErrorSubtitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerHistoryErrorTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerHistoryLoading Landroid/widget/ProgressBar;
+	public final field fcDrawerHistoryRetry Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerHomeRow Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerLanguageRow Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerNoChats Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerRecentList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcDrawerRecentTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerSeeAll Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerSettingsRow Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerSignUpButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcDrawerSignUpSection Landroid/widget/LinearLayout;
+	public final field fcDrawerSignUpSubtitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerSignUpTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcDrawerWordmark Landroid/widget/ImageView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDrawerBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDrawerBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDrawerBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentAuthBinding : androidx/viewbinding/ViewBinding {
+	public final field fcAgreementCard Landroid/widget/LinearLayout;
+	public final field fcAgreementInfo Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAgreementPoint1 Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAgreementPoint2 Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAgreementTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAuthAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcAuthConsent Landroid/widget/TextView;
+	public final field fcAuthFlipper Landroid/widget/ViewFlipper;
+	public final field fcAuthLegal Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAuthToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public final field fcCountryCode Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcCountryFlag Landroid/widget/ImageView;
+	public final field fcCountryLoading Landroid/widget/ProgressBar;
+	public final field fcCountrySelector Landroid/widget/LinearLayout;
+	public final field fcOtpError Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcOtpResendRow Landroid/widget/LinearLayout;
+	public final field fcOtpSubtitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcOtpTimer Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcOtpTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcOtpView Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/OtpView;
+	public final field fcPhoneError Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcPhoneInput Landroid/widget/EditText;
+	public final field fcPhoneSubtitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcPhoneTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcResendButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcSmsButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcStartOverButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcVerifyButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcWhatsappButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentAuthBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentAuthBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentAuthBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatBinding : androidx/viewbinding/ViewBinding {
+	public final field fcChatAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcChatComposer Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/InputComposerView;
+	public final field fcChatEmptyState Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ChatEmptyStateView;
+	public final field fcChatInputButtons Landroid/widget/LinearLayout;
+	public final field fcChatInputPhoto Landroid/widget/LinearLayout;
+	public final field fcChatInputPhotoLabel Landroid/widget/TextView;
+	public final field fcChatInputSpeak Landroid/widget/LinearLayout;
+	public final field fcChatInputSpeakLabel Landroid/widget/TextView;
+	public final field fcChatInputType Landroid/widget/LinearLayout;
+	public final field fcChatInputTypeLabel Landroid/widget/TextView;
+	public final field fcChatList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcChatLoading Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcChatOverlays Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+	public final field fcChatScrollIndicator Landroid/widget/ImageView;
+	public final field fcChatTips Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/TipsCarouselView;
+	public final field fcChatToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public final field fcChatTopGlow Landroid/widget/ImageView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatHistoryBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHistoryAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcHistoryErrorBox Landroid/widget/LinearLayout;
+	public final field fcHistoryErrorText Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcHistoryList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcHistoryLoading Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcHistoryRetry Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatHistoryBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatHistoryBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentChatHistoryBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentEnterNameBinding : androidx/viewbinding/ViewBinding {
+	public final field fcNameInput Landroid/widget/EditText;
+	public final field fcNameSaveButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcNameSkipButton Landroid/widget/TextView;
+	public final field fcNameSubtitle Landroid/widget/TextView;
+	public final field fcNameTitle Landroid/widget/TextView;
+	public final field fcNameToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentEnterNameBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/ScrollView;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentEnterNameBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentEnterNameBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHelpBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHelpAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcHelpCopyright Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcHelpFaqCard Landroid/widget/LinearLayout;
+	public final field fcHelpFaqTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcHelpMoreCard Landroid/widget/LinearLayout;
+	public final field fcHelpMoreTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcHelpVersion Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHelpBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHelpBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHelpBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHomeBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHomeAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcHomeBackdrop Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/AgenticHomeBackdropView;
+	public final field fcHomeComposer Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/InputComposerView;
+	public final field fcHomeError Landroid/widget/LinearLayout;
+	public final field fcHomeErrorRetry Landroid/widget/TextView;
+	public final field fcHomeErrorTitle Landroid/widget/TextView;
+	public final field fcHomeFeed Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FadeTopRecyclerView;
+	public final field fcHomeGreeting Landroid/widget/TextView;
+	public final field fcHomeHeader Landroid/widget/LinearLayout;
+	public final field fcHomeHeaderLogo Landroid/widget/ImageView;
+	public final field fcHomeInputButtons Landroid/widget/LinearLayout;
+	public final field fcHomeLoading Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcHomeLocationPill Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LocationPillView;
+	public final field fcHomeOverlays Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+	public final field fcHomeSectionHeader Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/SectionHeaderView;
+	public final field fcHomeToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public final field fcInputPhoto Landroid/widget/LinearLayout;
+	public final field fcInputPhotoLabel Landroid/widget/TextView;
+	public final field fcInputSpeak Landroid/widget/LinearLayout;
+	public final field fcInputSpeakLabel Landroid/widget/TextView;
+	public final field fcInputType Landroid/widget/LinearLayout;
+	public final field fcInputTypeLabel Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHomeBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHomeBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHomeBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHostComposerBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHostComposer Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/InputComposerView;
+	public final field fcHostComposerOverlays Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+	public final field fcHostComposerRoot Landroid/widget/FrameLayout;
+	public final field fcHostComposerToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHostComposerBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHostComposerBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentHostComposerBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLanguageContent Landroid/widget/LinearLayout;
+	public final field fcLanguageLegal Landroid/widget/TextView;
+	public final field fcLanguageList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcLanguageLoading Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcLanguageStartButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcLanguageTagline Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageChooserBinding : androidx/viewbinding/ViewBinding {
+	public final field fcChooserAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcChooserList Landroidx/recyclerview/widget/RecyclerView;
+	public final field fcChooserLoading Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcChooserSave Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcChooserToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageChooserBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageChooserBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLanguageChooserBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLegalDialogBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLegalAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcLegalProgress Landroid/widget/ProgressBar;
+	public final field fcLegalWebView Landroid/webkit/WebView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLegalDialogBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLegalDialogBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentLegalDialogBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsBinding : androidx/viewbinding/ViewBinding {
+	public final field fcAccountTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAppearanceHint Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAppearanceTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcLocationHelper Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcLocationRow Landroid/widget/LinearLayout;
+	public final field fcLocationRowLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcLocationRowSpinner Landroid/widget/ProgressBar;
+	public final field fcLocationRowValue Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcLogoutButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcModeAuto Landroid/widget/LinearLayout;
+	public final field fcModeAutoIcon Landroid/widget/ImageView;
+	public final field fcModeAutoLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcModeDay Landroid/widget/LinearLayout;
+	public final field fcModeDayIcon Landroid/widget/ImageView;
+	public final field fcModeDayLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcModeNight Landroid/widget/LinearLayout;
+	public final field fcModeNightIcon Landroid/widget/ImageView;
+	public final field fcModeNightLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcMyFarmTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcNameRow Landroid/widget/LinearLayout;
+	public final field fcNameRowLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcNameRowValue Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcPhoneRow Landroid/widget/LinearLayout;
+	public final field fcPhoneRowLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcPhoneRowValue Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcSettingsAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcSettingsToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsNameBinding : androidx/viewbinding/ViewBinding {
+	public final field fcSettingsNameAppBar Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public final field fcSettingsNameInput Landroid/widget/EditText;
+	public final field fcSettingsNameLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcSettingsNameSave Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcSettingsNameToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsNameBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsNameBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSettingsNameBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSplashBinding : androidx/viewbinding/ViewBinding {
+	public final field fcSplashBg Landroid/widget/ImageView;
+	public final field fcSplashLogo Landroid/widget/ImageView;
+	public final field fcSplashToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSplashBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSplashBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentSplashBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentTermsContentBinding : androidx/viewbinding/ViewBinding {
+	public final field fcTouContentAccept Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcTouContentClose Landroid/widget/ImageButton;
+	public final field fcTouContentProgress Landroid/widget/ProgressBar;
+	public final field fcTouContentTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcTouContentWebView Landroid/webkit/WebView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentTermsContentBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentTermsContentBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFragmentTermsContentBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcFullScreenMessageBinding : androidx/viewbinding/ViewBinding {
+	public final field fcFsmAppBar Landroid/widget/FrameLayout;
+	public final field fcFsmGlow Landroid/widget/ImageView;
+	public final field fcFsmIllustration Landroid/widget/ImageView;
+	public final field fcFsmIllustrationClip Landroid/widget/FrameLayout;
+	public final field fcFsmLeftButton Landroid/widget/ImageButton;
+	public final field fcFsmMainMessage Landroid/widget/TextView;
+	public final field fcFsmPrimaryButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcFsmRightLabel Landroid/widget/TextView;
+	public final field fcFsmRoot Landroid/widget/LinearLayout;
+	public final field fcFsmSecondaryCta Landroid/widget/TextView;
+	public final field fcFsmSubtitle Landroid/widget/TextView;
+	public final field fcFsmTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFullScreenMessageBinding;
+	public fun getRoot ()Landroid/view/View;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcFullScreenMessageBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatAiBinding : androidx/viewbinding/ViewBinding {
+	public final field fcActionDownload Landroid/widget/TextView;
+	public final field fcActionListen Landroid/widget/TextView;
+	public final field fcActionListenLoading Landroid/widget/ProgressBar;
+	public final field fcActionShare Landroid/widget/TextView;
+	public final field fcAiActions Landroid/widget/LinearLayout;
+	public final field fcAiAlignmentAdditive Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/AlignmentSurfaceView;
+	public final field fcAiAlignmentExclusive Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/AlignmentSurfaceView;
+	public final field fcAiFollowUpLabel Landroid/widget/TextView;
+	public final field fcAiFollowUps Landroid/widget/LinearLayout;
+	public final field fcAiReadFull Landroid/widget/TextView;
+	public final field fcAiStreamError Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/StreamErrorCardView;
+	public final field fcAiStreamStatus Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public final field fcAiText Landroid/widget/TextView;
+	public final field fcAiWarning Landroid/widget/LinearLayout;
+	public final field fcAiWarningIcon Landroid/widget/ImageView;
+	public final field fcAiWarningText Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatAiBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatAiBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatAiBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatErrorBinding : androidx/viewbinding/ViewBinding {
+	public final field fcChatErrorRetry Landroid/widget/LinearLayout;
+	public final field fcChatErrorRetryIcon Landroid/widget/ImageView;
+	public final field fcChatErrorRetryLabel Landroid/widget/TextView;
+	public final field fcChatErrorText Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatErrorBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatErrorBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatErrorBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLoadingBinding : androidx/viewbinding/ViewBinding {
+	public final field fcChatLoadingSpinner Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/LogoSpinnerView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLoadingBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLoadingBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLoadingBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLocationBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLocationAddress Landroid/widget/TextView;
+	public final field fcLocationBubble Landroid/widget/LinearLayout;
+	public final field fcLocationLabel Landroid/widget/TextView;
+	public final field fcLocationPin Landroid/widget/ImageView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLocationBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLocationBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatLocationBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatUserBinding : androidx/viewbinding/ViewBinding {
+	public final field fcUserBanner Landroid/widget/ImageView;
+	public final field fcUserBubble Landroid/widget/LinearLayout;
+	public final field fcUserImageOnly Landroid/widget/ImageView;
+	public final field fcUserText Landroid/widget/TextView;
+	public final field fcUserThumb Landroid/widget/ImageView;
+	public final field fcUserVoice Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/VoiceClipView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatUserBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatUserBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemChatUserBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountryRowBinding : androidx/viewbinding/ViewBinding {
+	public final field fcCountryFlag Landroid/widget/ImageView;
+	public final field fcCountryFlagEmoji Landroid/widget/TextView;
+	public final field fcCountryName Landroid/widget/TextView;
+	public final field fcCountryRadio Landroid/widget/ImageView;
+	public final field fcCountryRowRoot Landroid/widget/LinearLayout;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountryRowBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountryRowBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountryRowBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountrySearchBinding : androidx/viewbinding/ViewBinding {
+	public final field fcCountrySearch Landroid/widget/EditText;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountrySearchBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountrySearchBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemCountrySearchBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemDrawerQuestionBinding : androidx/viewbinding/ViewBinding {
+	public final field fcDrawerQuestionIcon Landroid/widget/ImageView;
+	public final field fcDrawerQuestionTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemDrawerQuestionBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemDrawerQuestionBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemDrawerQuestionBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHelpRowBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHelpRowTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHelpRowBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHelpRowBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHelpRowBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryFooterBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHistoryFooterProgress Landroid/widget/ProgressBar;
+	public final field fcHistoryFooterRetry Landroid/widget/TextView;
+	public final field fcHistoryFooterText Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryFooterBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryFooterBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryFooterBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryHeaderBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHistoryHeaderText Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryHeaderBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/TextView;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryHeaderBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryHeaderBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryRowBinding : androidx/viewbinding/ViewBinding {
+	public final field fcHistoryRowIcon Landroid/widget/ImageView;
+	public final field fcHistoryRowTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryRowBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryRowBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHistoryRowBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeContentCardBinding : androidx/viewbinding/ViewBinding {
+	public final field fcCardCta Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcCardImage Lcom/google/android/material/imageview/ShapeableImageView;
+	public final field fcCardImageFrame Landroid/widget/FrameLayout;
+	public final field fcCardImageOverlay Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/AiImageOverlayView;
+	public final field fcCardPersonalization Landroid/widget/LinearLayout;
+	public final field fcCardPersonalizationLabel Landroid/widget/TextView;
+	public final field fcCardTitle Landroid/widget/TextView;
+	public final field fcCardViewBadge Landroid/widget/LinearLayout;
+	public final field fcCardViewCount Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeContentCardBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeContentCardBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeContentCardBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFeedHeaderBinding : androidx/viewbinding/ViewBinding {
+	public final field fcFeedHeaderTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFeedHeaderBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/TextView;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFeedHeaderBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFeedHeaderBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFooterBinding : androidx/viewbinding/ViewBinding {
+	public final field fcFeedFooterText Landroid/widget/TextView;
+	public final field fcFeedFooterWave Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFooterBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFooterBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeFooterBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSelectCardBinding : androidx/viewbinding/ViewBinding {
+	public final field fcSelectConfirm Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcSelectDismiss Landroid/widget/ImageButton;
+	public final field fcSelectOptions Landroid/widget/LinearLayout;
+	public final field fcSelectStatement Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSelectCardBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSelectCardBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSelectCardBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSsfrBinding : androidx/viewbinding/ViewBinding {
+	public final field fcSsfrMaize Landroid/widget/LinearLayout;
+	public final field fcSsfrMaizeLabel Landroid/widget/TextView;
+	public final field fcSsfrSubtitle Landroid/widget/TextView;
+	public final field fcSsfrTitle Landroid/widget/TextView;
+	public final field fcSsfrWheat Landroid/widget/LinearLayout;
+	public final field fcSsfrWheatLabel Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSsfrBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSsfrBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemHomeSsfrBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageExpanderBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLangExpander Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageExpanderBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageExpanderBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageExpanderBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageHeaderBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLanguageSubtitle Landroid/widget/TextView;
+	public final field fcLanguageTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageHeaderBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageHeaderBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageHeaderBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageRowBinding : androidx/viewbinding/ViewBinding {
+	public final field fcLangName Landroid/widget/TextView;
+	public final field fcLangProgress Landroid/widget/ProgressBar;
+	public final field fcLangRadio Landroid/widget/ImageView;
+	public final field fcLangRowRoot Landroid/widget/LinearLayout;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageRowBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageRowBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemLanguageRowBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcItemSuggestedQuestionBinding : androidx/viewbinding/ViewBinding {
+	public final field fcSuggestedAsk Landroid/widget/TextView;
+	public final field fcSuggestedText Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemSuggestedQuestionBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemSuggestedQuestionBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcItemSuggestedQuestionBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcJourneyHostBinding : androidx/viewbinding/ViewBinding {
+	public final field fcDrawer Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcDrawerBinding;
+	public final field fcDrawerLayout Landroidx/drawerlayout/widget/DrawerLayout;
+	public final field fcGlobalToast Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ToastView;
+	public final field fcLocationPromptHost Landroid/widget/FrameLayout;
+	public final field fcNavHost Landroidx/fragment/app/FragmentContainerView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcJourneyHostBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroidx/drawerlayout/widget/DrawerLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcJourneyHostBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcJourneyHostBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcShareCardBinding : androidx/viewbinding/ViewBinding {
+	public final field fcShareAnswer Landroid/widget/TextView;
+	public final field fcShareAppName Landroid/widget/TextView;
+	public final field fcShareFooter Landroid/widget/TextView;
+	public final field fcShareQuestion Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcShareCardBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcShareCardBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcShareCardBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcSheetLocationRecoveryBinding : androidx/viewbinding/ViewBinding {
+	public final field fcRecoveryButton Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcRecoveryClose Landroid/widget/ImageButton;
+	public final field fcRecoveryImage Landroid/widget/ImageView;
+	public final field fcRecoverySubtitle Landroid/widget/TextView;
+	public final field fcRecoveryTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetLocationRecoveryBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetLocationRecoveryBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetLocationRecoveryBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcSheetTermsOfUseUpdatedBinding : androidx/viewbinding/ViewBinding {
+	public final field fcTouAccept Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/PrimaryButtonView;
+	public final field fcTouMessage Landroid/widget/TextView;
+	public final field fcTouReadTerms Landroid/widget/TextView;
+	public final field fcTouTitle Landroid/widget/TextView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetTermsOfUseUpdatedBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/LinearLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetTermsOfUseUpdatedBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcSheetTermsOfUseUpdatedBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding : androidx/viewbinding/ViewBinding {
+	public final field fcAppBar Landroid/widget/FrameLayout;
+	public final field fcAppBarActions Landroid/widget/LinearLayout;
+	public final field fcAppBarGlow Landroid/widget/ImageView;
+	public final field fcAppBarHistory Landroid/widget/ImageButton;
+	public final field fcAppBarLanguage Landroid/widget/ImageButton;
+	public final field fcAppBarLeft Landroid/widget/ImageButton;
+	public final field fcAppBarLogo Landroid/widget/ImageView;
+	public final field fcAppBarRightLabel Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAppBarTitle Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public final field fcAppBarWeather Landroid/widget/LinearLayout;
+	public final field fcAppBarWeatherIcon Landroid/widget/ImageView;
+	public final field fcAppBarWeatherTemp Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/FcText;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewAppbarBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputComposerBinding : androidx/viewbinding/ViewBinding {
+	public final field fcComposerAction Landroid/widget/ImageButton;
+	public final field fcComposerCamera Landroid/widget/ImageButton;
+	public final field fcComposerFade Landroid/widget/LinearLayout;
+	public final field fcComposerField Landroid/widget/LinearLayout;
+	public final field fcComposerHintA Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ShimmerTextView;
+	public final field fcComposerHintB Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/ShimmerTextView;
+	public final field fcComposerInput Landroid/widget/EditText;
+	public final field fcComposerRow Landroid/widget/LinearLayout;
+	public final field fcComposerScrollDown Landroid/widget/ImageView;
+	public final field fcComposerSheet Landroid/widget/LinearLayout;
+	public final field fcComposerThumb Landroid/widget/ImageView;
+	public final field fcComposerThumbBox Landroid/widget/FrameLayout;
+	public final field fcComposerThumbRemove Landroid/widget/ImageButton;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputComposerBinding;
+	public fun getRoot ()Landroid/view/View;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputComposerBinding;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding : androidx/viewbinding/ViewBinding {
+	public final field fcOverlayRoot Landroid/widget/FrameLayout;
+	public final field fcOverlayScrim Landroid/view/View;
+	public final field fcPhotoCamera Landroid/widget/LinearLayout;
+	public final field fcPhotoCameraLabel Landroid/widget/TextView;
+	public final field fcPhotoGallery Landroid/widget/LinearLayout;
+	public final field fcPhotoGalleryLabel Landroid/widget/TextView;
+	public final field fcPhotoPanel Landroid/widget/LinearLayout;
+	public final field fcTextInputField Landroid/widget/EditText;
+	public final field fcTextInputPanel Landroid/widget/LinearLayout;
+	public final field fcTextInputSend Landroid/widget/ImageButton;
+	public final field fcVoicePanel Landroid/widget/FrameLayout;
+	public final field fcVoiceRecorder Lorg/digitalgreen/farmerchat/sdk/views/internal/widgets/VoiceRecorderView;
+	public static fun bind (Landroid/view/View;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+	public synthetic fun getRoot ()Landroid/view/View;
+	public fun getRoot ()Landroid/widget/FrameLayout;
+	public static fun inflate (Landroid/view/LayoutInflater;)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+	public static fun inflate (Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Z)Lorg/digitalgreen/farmerchat/sdk/views/databinding/FcViewInputOverlaysBinding;
+}
+
