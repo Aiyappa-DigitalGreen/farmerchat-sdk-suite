@@ -462,7 +462,11 @@ public final class ChatViewModel: ObservableObject {
     private func initializeVoicePrototype(audioURL: URL) {
         guard state.messages.isEmpty else { return }
         Task {
-            guard let base64 = try? Data(contentsOf: audioURL).base64EncodedString() else {
+            // File read + base64 off the main actor; the result is handled back on it.
+            let base64 = await Task.detached(priority: .userInitiated) {
+                try? Data(contentsOf: audioURL).base64EncodedString()
+            }.value
+            guard let base64 else {
                 state.errorMessage = env.labels.label("transcription_failed", fallback: "We couldn't hear that. Please try again.")
                 return
             }
