@@ -74,7 +74,11 @@ jobs:
             (cd "versions/v2/ios/$p" && xcodebuild docbuild -scheme "$p" \
               -destination 'generic/platform=iOS Simulator' \
               -derivedDataPath "$RUNNER_TEMP/docc-dd/$p" -quiet)
-            cp -R "$RUNNER_TEMP/docc-dd/$p/Build/Products/Debug-iphonesimulator/$p.doccarchive" "$out/"
+            # Zipped: a .doccarchive is ~30k files, some named like `init(from:).json`, and
+            # upload-artifact rejects colons in paths.
+            ditto -c -k --keepParent \
+              "$RUNNER_TEMP/docc-dd/$p/Build/Products/Debug-iphonesimulator/$p.doccarchive" \
+              "$out/$p.doccarchive.zip"
           done
           ls "$out"
 
