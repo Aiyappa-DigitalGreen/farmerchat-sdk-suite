@@ -1,0 +1,465 @@
+# Tag-driven release for the v2 SDKs (versions/v2/). CLAUDE.md §8: releases go through CI only.
+#
+# WHAT IT DOES
+#   verify          -> every version string == the release version, and CHANGELOG.md has `## [X.Y.Z]`
+#   build           -> tests + builds every platform, packs the artifacts (AARs, mavenLocal, npm tarballs)
+#   publish-*       -> pushes to a registry ONLY when that registry's secret exists AND it is not a dry run
+#   github-release  -> creates a DRAFT GitHub release (never published automatically)
+#
+# TRIGGERS
+#   - push a tag `vX.Y.Z` (e.g. v2.3.0)                     -> real run (publishes where secrets exist)
+#   - Actions > Release > Run workflow, version=X.Y.Z       -> dry_run defaults to true: verify + build +
+#                                                             pack only; publish/release steps just print
+#                                                             what they would do
+#
+# REQUIRED SECRETS (all optional: a missing secret skips that publish step cleanly)
+#   NPM_TOKEN                 npm automation token with publish rights on @digitalgreenorg
+#                             (web, widget, react-native). Published with --provenance.
+#   COCOAPODS_TRUNK_TOKEN     CocoaPods trunk session token (`pod trunk me` owner of FarmerChatUIKit).
+#   MAVEN_CENTRAL_USERNAME    Central Portal (central.sonatype.com) user token name.
+#   MAVEN_CENTRAL_PASSWORD    Central Portal user token password.
+#   SIGNING_KEY               ASCII-armoured GPG private key (in-memory signing).
+#   SIGNING_PASSWORD          Its passphrase.
+#   FARMERCHAT_REPO_URL/USER/TOKEN  (optional) a plain Maven repo, e.g. GitHub Packages; read by
+#                             versions/v2/android/build.gradle.kts. Published when the URL is set.
+#   GITHUB_TOKEN is provided automatically (draft release).
+#
+#   Maven Central is additionally gated on the repo VARIABLE `MAVEN_CENTRAL_READY == 'true'`, because
+#   the Gradle build cannot produce a Central-valid upload yet (see the publish-maven job). Adding the
+#   four secrets alone does NOT turn on a failing publish.
+#
+# KNOWN BLOCKERS BEFORE A REAL REGISTRY RELEASE (none of them block merging this file)
+#   - Maven Central: no `signing` plugin, no javadoc jar, no full POM metadata (name/description/url/
+#     licenses/developers/scm), no Central Portal upload (bundle API / plugin). See publish-maven.
+#   - CocoaPods: FarmerChatUIKit.podspec's source tag is "ios-v#{s.version}", not "v#{version}", and its
+#     source_files reference '../FarmerChatCore/...' relative to the podspec dir, while trunk resolves
+#     paths from the repo root. The step checks for the ios-v tag and skips if it is missing.
+#   - SPM: there is no root Package.swift (only versions/v2/ios/Package.binary.swift), so
+#     `.package(url:)` against this repo does not resolve yet.
+name: Release (v2)
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the v (e.g. 2.3.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: verify + build + pack only; publish nothing, create no release'
+        required: false
+        type: boolean
+        default: true
+
+# Two releases must never race (one pushing to npm while another drafts a release).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          # On a tag push `inputs` is empty, so a tag push is never a dry run.
+          INPUT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then raw="$INPUT_VERSION"; else raw="$REF_NAME"; fi
+          version="${raw#v}"
+          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$raw' is not a vX.Y.Z tag / X.Y.Z version"; exit 1
+          fi
+          dry_run=false
+          [ "$INPUT_DRY_RUN" = "true" ] && dry_run=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
+          echo "Release version: $version (dry_run=$dry_run)"
+
+      - name: Check every version string
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -u
+          V2=versions/v2
+          fail=0
+          # check <label> <file> <ERE matching everything up to and including the opening quote of the value>
+          check() {
+            label=$1 file=$2 pattern=$3
+            if [ ! -f "$file" ]; then echo "::error::$label: $file missing"; fail=1; return; fi
+            found=$(sed -nE "s/${pattern}([^\"']+)[\"'].*/\1/p" "$file" | head -n1)
+            if [ "$found" = "$VERSION" ]; then
+              echo "ok    $label = $found ($file)"
+            else
+              echo "::error file=$file::$label is '${found:-<not found>}', expected '$VERSION'"; fail=1
+            fi
+          }
+          check "android farmerChatVersion" "$V2/android/build.gradle.kts"                                 '^val farmerChatVersion = "'
+          check "web package.json"          "$V2/web/packages/farmerchat-web/package.json"                 '^  "version": "'
+          check "web FARMERCHAT_VERSION"    "$V2/web/packages/farmerchat-web/src/core/version.ts"          "^export const FARMERCHAT_VERSION = '"
+          check "widget package.json"       "$V2/web/widget/package.json"                                  '^  "version": "'
+          check "widget version.ts"         "$V2/web/widget/src/version.ts"                                "^export const FARMERCHAT_WIDGET_VERSION = '"
+          check "rn package.json"           "$V2/react-native/packages/farmerchat-react-native/package.json" '^  "version": "'
+          check "rn SDK_VERSION"            "$V2/react-native/packages/farmerchat-react-native/src/core/config.ts" "^export const SDK_VERSION = '"
+          check "ios FarmerChatSDK.version" "$V2/ios/FarmerChatCore/Sources/FarmerChatCore/Networking/DeviceInfoProvider.swift" '^    public static let version = "'
+          check "ios podspec s.version"     "$V2/ios/FarmerChatUIKit/FarmerChatUIKit.podspec"              "^  s\.version += '"
+          [ "$fail" = 0 ] || { echo "::error::Version mismatch: bump every file above to $VERSION"; exit 1; }
+
+      - name: Extract CHANGELOG notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Exact-string heading match (no regex, so the dots in the version are literal).
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+            END { if (!found) exit 3 }
+          ' CHANGELOG.md > release-notes.md || {
+            echo "::error file=CHANGELOG.md::No '## [$VERSION]' section in CHANGELOG.md"; exit 1; }
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error file=CHANGELOG.md::'## [$VERSION]' section is empty"; exit 1
+          fi
+          delim="EOF_$(date +%s%N)"
+          { echo "notes<<$delim"; cat release-notes.md; echo "$delim"; } >> "$GITHUB_OUTPUT"
+          echo "----- release notes for $VERSION -----"; cat release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # ---------------------------------------------------------------- build (mirrors sdk-*.yml) ----
+  build-android:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: versions/v2/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      # sample-consumer resolves the SDK by coordinate from mavenLocal, so publish it first.
+      - run: ./gradlew publishToMavenLocal
+      - run: ./gradlew testDebugUnitTest assembleDebug
+      - name: Release AARs (library modules only)
+        run: >
+          ./gradlew :farmerchat-core:assembleRelease :farmerchat-android-compose:assembleRelease
+          :farmerchat-android-views:assembleRelease :farmerchat-analytics-posthog:assembleRelease
+      - name: Collect
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out/aar"
+          cp farmerchat-*/build/outputs/aar/*-release.aar "$GITHUB_WORKSPACE/out/aar/"
+          tar -C "$HOME/.m2/repository" -czf "$GITHUB_WORKSPACE/out/farmerchat-android-maven-local.tgz" org/digitalgreen/farmerchat
+          ls -l "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/out/aar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+          if-no-files-found: error
+
+  build-ios:
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core (swift test)
+        working-directory: versions/v2/ios/FarmerChatCore
+        run: swift build && swift test
+      - name: SwiftUI (iOS Simulator)
+        working-directory: versions/v2/ios/FarmerChatSwiftUI
+        run: xcodebuild -scheme FarmerChatSwiftUI -destination 'generic/platform=iOS Simulator' build -quiet
+      - name: UIKit (iOS Simulator)
+        working-directory: versions/v2/ios/FarmerChatUIKit
+        run: xcodebuild -scheme FarmerChatUIKit -destination 'generic/platform=iOS Simulator' build -quiet
+
+  build-web:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: SDK
+        working-directory: versions/v2/web/packages/farmerchat-web
+        run: |
+          npm ci
+          npm run typecheck
+          npm run typecheck:test
+          npm test
+          npm run test:auth
+          npm run build
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out"
+      # The widget consumes the SDK through a file: dependency, so it builds after it.
+      - name: Widget
+        working-directory: versions/v2/web/widget
+        run: |
+          npm ci && npm run typecheck && npm run build
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-web
+          path: out/*.tgz
+          if-no-files-found: error
+
+  build-react-native:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: versions/v2/react-native/packages/farmerchat-react-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-react-native
+          path: out/*.tgz
+          if-no-files-found: error
+
+  # Single gate the publish jobs depend on: every platform built and tested.
+  build:
+    needs: [verify, build-android, build-ios, build-web, build-react-native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - run: echo "All v2 platforms built and tested for ${{ needs.verify.outputs.version }}"
+
+  # ---------------------------------------------------------------------------------- publish ----
+  publish-npm:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write   # npm provenance
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+      DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Plan
+        run: |
+          if [ "$HAS_NPM_TOKEN" != "true" ]; then echo "::notice::NPM_TOKEN not set: skipping npm publish"; fi
+          if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish @digitalgreenorg/farmerchat-web, -widget, -react-native @ $VERSION"; fi
+      - uses: actions/checkout@v4   # provenance links the tarball to this repo's package.json repository
+        if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@v4
+        if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
+        with:
+          pattern: npm-*
+          path: npm
+          merge-multiple: true
+      # Publish the exact tarballs that were tested. Order: web first (widget peer-depends on it).
+      - name: npm publish
+        if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          for name in farmerchat-web farmerchat-widget farmerchat-react-native; do
+            tgz="npm/digitalgreenorg-$name-$VERSION.tgz"
+            [ -f "$tgz" ] || { echo "::error::$tgz missing"; ls npm; exit 1; }
+            npm publish "$tgz" --access public --provenance
+          done
+
+  publish-maven:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HAS_CENTRAL: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' && secrets.MAVEN_CENTRAL_PASSWORD != '' && secrets.SIGNING_KEY != '' && secrets.SIGNING_PASSWORD != '' }}
+      CENTRAL_READY: ${{ vars.MAVEN_CENTRAL_READY == 'true' }}
+      HAS_CUSTOM_REPO: ${{ secrets.FARMERCHAT_REPO_URL != '' }}
+      DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Plan
+        run: |
+          echo "Maven Central: secrets=$HAS_CENTRAL ready-var=$CENTRAL_READY | custom repo: $HAS_CUSTOM_REPO | dry_run=$DRY_RUN"
+          if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish org.digitalgreen.farmerchat:*:$VERSION"; fi
+          if [ "$HAS_CENTRAL" = "true" ] && [ "$CENTRAL_READY" != "true" ]; then
+            echo "::warning::Central secrets are set but the Gradle build cannot publish to Central yet (see the workflow comment). Skipping."
+          fi
+      - uses: actions/checkout@v4
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+      - uses: actions/setup-java@v4
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+
+      # Plain Maven repo (e.g. GitHub Packages) via the mechanism already in build.gradle.kts.
+      - name: Publish to FARMERCHAT_REPO_URL
+        if: env.HAS_CUSTOM_REPO == 'true' && env.DRY_RUN != 'true'
+        working-directory: versions/v2/android
+        env:
+          FARMERCHAT_REPO_URL: ${{ secrets.FARMERCHAT_REPO_URL }}
+          FARMERCHAT_REPO_USER: ${{ secrets.FARMERCHAT_REPO_USER }}
+          FARMERCHAT_REPO_TOKEN: ${{ secrets.FARMERCHAT_REPO_TOKEN }}
+        run: ./gradlew publishAllPublicationsToFarmerChatRepository
+
+      # MAVEN CENTRAL (central.sonatype.com Portal, NOT legacy OSSRH) — NOT WIRED YET.
+      # The FARMERCHAT_REPO_URL mechanism does not fit: the Portal does not accept plain maven PUTs,
+      # it takes a signed bundle via its Publisher API. What versions/v2/android is missing:
+      #   1. `signing` plugin with useInMemoryPgpKeys(SIGNING_KEY, SIGNING_PASSWORD) on every publication
+      #   2. a javadoc jar (withJavadocJar() or an empty/dokka jar) next to the existing sources jar
+      #   3. full POM: name, description, url, licenses (Apache-2.0), developers, scm
+      #   4. an uploader, e.g. com.vanniktech.maven.publish (publishToMavenCentral) or
+      #      com.gradleup.nmcp, configured with the Portal user token
+      #   5. the org.digitalgreen namespace verified on central.sonatype.com
+      # Once those land in the Gradle files, replace the body below with the plugin's task and set the
+      # repository variable MAVEN_CENTRAL_READY=true. Until then this step never runs.
+      - name: Publish to Maven Central (Portal)
+        if: env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true' && env.DRY_RUN != 'true'
+        working-directory: versions/v2/android
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          echo "::error::MAVEN_CENTRAL_READY is true but no Central publish task is wired in this workflow yet."
+          exit 1
+
+  publish-cocoapods:
+    needs: [verify, build]
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      HAS_COCOAPODS_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN != '' }}
+      DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Plan
+        run: |
+          if [ "$HAS_COCOAPODS_TOKEN" != "true" ]; then echo "::notice::COCOAPODS_TRUNK_TOKEN not set: skipping pod trunk push"; fi
+          if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would pod trunk push FarmerChatUIKit $VERSION"; fi
+      - uses: actions/checkout@v4
+        if: env.HAS_COCOAPODS_TOKEN == 'true' && env.DRY_RUN != 'true'
+      # The podspec's source is tag "ios-v<version>", which trunk clones; this workflow is triggered by
+      # "v<version>". Skip (not fail) until that tag exists, or until the podspec is aligned.
+      - name: Check podspec source tag
+        id: podtag
+        if: env.HAS_COCOAPODS_TOKEN == 'true' && env.DRY_RUN != 'true'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/ios-v$VERSION" >/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Tag ios-v$VERSION (the podspec's s.source tag) does not exist: skipping pod trunk push."
+          fi
+      # NOTE: source_files uses '../FarmerChatCore/...' relative to the podspec; trunk validates from the
+      # repo root, so lint is expected to fail until the podspec paths are made repo-root relative.
+      - name: pod trunk push
+        if: env.HAS_COCOAPODS_TOKEN == 'true' && env.DRY_RUN != 'true' && steps.podtag.outputs.present == 'true'
+        working-directory: versions/v2/ios/FarmerChatUIKit
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: pod trunk push FarmerChatUIKit.podspec --allow-warnings
+
+  publish-spm:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Swift Package Manager
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          echo "SPM publishes nothing beyond the git tag v$VERSION."
+          echo "::notice::SPM resolution needs a root Package.swift; the repo has none yet (only versions/v2/ios/Package.binary.swift). Being investigated separately."
+
+  # ---------------------------------------------------------------------------- draft release ----
+  github-release:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      DRY_RUN: ${{ needs.verify.outputs.dry_run }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Collect assets
+        run: |
+          mkdir -p assets
+          find dist -type f \( -name '*.tgz' -o -name '*.aar' \) -exec cp {} assets/ \;
+          ls -l assets
+      - name: Create DRAFT release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: would run"
+            echo "  gh release create v$VERSION --draft --verify-tag --title 'FarmerChat SDK v$VERSION' --notes-file release-notes.md assets/*"
+            echo "----- notes -----"; cat dist/release-notes/release-notes.md
+            exit 0
+          fi
+          # --verify-tag: never let gh create the tag; it must be the pushed v$VERSION tag.
+          gh release create "v$VERSION" --draft --verify-tag \
+            --title "FarmerChat SDK v$VERSION" \
+            --notes-file dist/release-notes/release-notes.md \
+            assets/*
