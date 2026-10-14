@@ -1,0 +1,63 @@
+# Automated dependency updates for the shipped v2 packages (the v1 tree and example apps are excluded).
+# Weekly, grouped into one PR per ecosystem directory. Major versions are never proposed automatically:
+# react-native / expo are pinned by versions/v2/react-native/CLAUDE.md, React 18 is a peer-dependency
+# contract with host apps, and vite majors need a migration. CI must pass before anything merges.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/versions/v2/web/packages/farmerchat-web"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: npm
+    directory: "/versions/v2/web/widget"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: npm
+    directory: "/versions/v2/web/demo-app"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: npm
+    directory: "/versions/v2/react-native/packages/farmerchat-react-native"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: gradle
+    directory: "/versions/v2/android"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
