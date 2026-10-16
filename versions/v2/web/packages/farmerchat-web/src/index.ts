@@ -190,6 +190,32 @@ function fabLabel(props: FarmerChatFabProps): string | undefined {
 }
 
 /**
+ * The FAB overlay's SDK root. Rendered only while the overlay is open, so services resolve on
+ * open (as before), and an unmount of any kind (close, host unmount, shutdown) drops the
+ * controller so later commands queue for the next root instead of a dead one.
+ */
+function FabOverlayRoot(props: {
+  config?: FarmerChatConfig;
+  onExit: () => void;
+  onOwnExitChange: (hasOwnExit: boolean) => void;
+}): React.ReactElement {
+  const services = useMemo(() => getOrCreateServices(props.config), [props.config]);
+  useEffect(
+    () => () => {
+      activeController = null;
+    },
+    [],
+  );
+  return createElement(FarmerChatRoot, {
+    services,
+    onController: handleController,
+    inline: true,
+    onExit: props.onExit,
+    onOwnExitChange: props.onOwnExitChange,
+  });
+}
+
+/**
  * Drop-in floating launcher that opens the full FarmerChat overlay on click.
  * Unlike a bare `openChat()` call, this reveals (mounts) the SDK root — the
  * "floating launcher mode" of docs/04 row 52. Needs only a prior
@@ -197,33 +223,44 @@ function fabLabel(props: FarmerChatFabProps): string | undefined {
  */
 export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const [open, setOpen] = useState(false);
+  // True while the screen on top draws its own exit (the CHAT_ONLY chat's Close): the fallback
+  // close below steps aside so two X's never overlap the app bar (iOS FarmerChatFabButton parity).
+  const [screenHasOwnExit, setScreenHasOwnExit] = useState(false);
   const { bg, fg } = fabBrandColors(props);
   const label = fabLabel(props);
   const side = props.position === 'bottom-left' ? { left: '20px' } : { right: '20px' };
 
   if (open) {
+    const close = () => {
+      setOpen(false);
+      setScreenHasOwnExit(false);
+      // The revealed root is unmounting; drop its controller so a later
+      // reopen's deep-link queues for the fresh root instead of a dead one.
+      activeController = null;
+    };
     return createElement(
       'div',
       { style: { position: 'fixed', inset: 0, zIndex: 2147483000, background: 'var(--fc-bg, #ffffff)' } },
-      createElement(FarmerChatComponent, { config: props.config }),
-      createElement(
-        'button',
-        {
-          'aria-label': 'Close FarmerChat',
-          onClick: () => {
-            setOpen(false);
-            // The revealed root is unmounting; drop its controller so a later
-            // reopen's deep-link queues for the fresh root instead of a dead one.
-            activeController = null;
-          },
-          style: {
-            position: 'fixed', top: '14px', right: '14px', zIndex: 2147483001,
-            width: '40px', height: '40px', borderRadius: '999px', border: 'none', cursor: 'pointer',
-            background: 'rgba(0,0,0,0.5)', color: '#ffffff', fontSize: '18px', lineHeight: '40px',
-          },
-        },
-        '✕',
-      ),
+      // Full-screen overlay: the root fills it flush (inline), as the compose FAB's full-screen host.
+      // The SDK's own exit (CHAT_ONLY chat Close) collapses the overlay after the host's onExit.
+      createElement(FabOverlayRoot, { config: props.config, onExit: close, onOwnExitChange: setScreenHasOwnExit }),
+      // Fallback close for screens without their own exit (language, onboarding, Home): the web
+      // has no system Back to fall back on.
+      screenHasOwnExit
+        ? null
+        : createElement(
+            'button',
+            {
+              'aria-label': 'Close FarmerChat',
+              onClick: close,
+              style: {
+                position: 'fixed', top: '14px', right: '14px', zIndex: 2147483001,
+                width: '40px', height: '40px', borderRadius: '999px', border: 'none', cursor: 'pointer',
+                background: 'rgba(0,0,0,0.5)', color: '#ffffff', fontSize: '18px', lineHeight: '40px',
+              },
+            },
+            '\u2715',
+          ),
     );
   }
 

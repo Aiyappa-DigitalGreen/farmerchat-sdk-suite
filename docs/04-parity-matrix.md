@@ -8710,3 +8710,26 @@ the chat's X fires `onExit` and returns to the host. 0 crashes.
   fired even though the answer succeeded (docs/05).
 - Size: packed tarball 1.5 MB (3.5 MB unpacked, 426 files); Android Hermes bundle 3.7 MB
   (`expo export`). The on-device APK delta was not measured.
+
+## Cross-platform fidelity pass: web SDK + widget (2026-10-16)
+Compared state by state with the app checklist (`fc-compose-agentic` dev/v2.5 @c0c4f571) and the
+compose SDK screenshots, on DEMO through a local same-origin proxy (never prod). Before/after
+screenshots of 9 states for the full page and for the widget. Fixed:
+1. The FAB overlay's fallback ✕ sat over the globe tile. It is now hidden while the chat-only chat (own ✕)
+   is on top (`index.ts`, same rule as iOS b26efcb). It stays on the language screen (no system Back).
+2. The chat ✕ fired `onExit` but the FAB overlay stayed open. The overlay now closes (`FabOverlayRoot`).
+3. The Share icon rendered as a solid tray. Transparent fills are no longer tinted (`FcIcon.tsx`),
+   which also fixes `icon_arrow_down` and `ic_sun`.
+4. The empty-chat state stayed visible while typing. It hides while the composer is focused (compose `ChatScreen.kt:1512`).
+5. The tips pager now peeks a card on both sides from the start (`Tips.kt`).
+6. Empty-state title wrapping now matches compose (balanced wrap removed).
+7. `openChat(question)` after the widget was closed reopened the panel but never asked the question.
+   Each chat route entry now gets its own screen instance (compose navigates a new back-stack entry).
+End to end on DEMO: language, typed question (streamed `status` + `text_delta` + `done`), follow-up
+chip answered, Share called `navigator.share` with a PNG card, Listen (`synthesise_audio` 200, pause
+state), ✕ → `onExit`, deep link answered (page and widget). UNVERIFIED: voice, camera, the real OS share
+sheet, audible playback. Checks: web typecheck, typecheck:test, test, test:auth, build, api:check,
+size:check; widget typecheck/build/size; demo-app build: all pass.
+Open: #30 `follow_up_question_click` is sent with the question text on EVERY send (`useChat.ts:915`).
+The app sends it only on a chip tap, with the follow-up id (`ChatViewModel.kt:957-963`). DEMO answers
+500. RN has the same; this is being settled with the RN pass.

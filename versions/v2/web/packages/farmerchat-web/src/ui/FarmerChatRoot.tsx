@@ -44,6 +44,18 @@ export interface FarmerChatController {
   openScreen: (destination: string) => void;
 }
 
+/** Stable per-route-object id: a pushed route is a new object, a re-render keeps the same one. */
+const routeIds = new WeakMap<object, number>();
+let nextRouteId = 0;
+function routeKey(route: object): number {
+  let id = routeIds.get(route);
+  if (id === undefined) {
+    id = ++nextRouteId;
+    routeIds.set(route, id);
+  }
+  return id;
+}
+
 const DRAWER_ROUTES = new Set(['home', 'chat', 'settings', 'help', 'settingsLanguage', 'chatHistory']);
 
 export function FarmerChatRoot(props: {
@@ -51,6 +63,16 @@ export function FarmerChatRoot(props: {
   onController?: (controller: FarmerChatController) => void;
   /** C1 — inline embedding: fill the host container (no full-viewport assumptions). */
   inline?: boolean;
+  /**
+   * Internal (FarmerChatFab): called after the host's `config.onExit` when the SDK exits from a
+   * surface with nowhere to go back to (CHAT_ONLY chat close), so the presenter can collapse.
+   */
+  onExit?: () => void;
+  /**
+   * Internal (FarmerChatFab): true while the screen on top draws its own exit (the CHAT_ONLY
+   * chat's Close), so a presenter's fallback close steps aside instead of drawing a second X.
+   */
+  onOwnExitChange?: (hasOwnExit: boolean) => void;
 }) {
   const { services } = props;
   const navigator = useNavigator(
@@ -296,6 +318,11 @@ export function FarmerChatRoot(props: {
   );
 
   const current = navigator.current;
+  const hasOwnExit = current.name === 'chat' && services.config.mode === 'CHAT_ONLY';
+  const onOwnExitChange = props.onOwnExitChange;
+  useEffect(() => {
+    onOwnExitChange?.(hasOwnExit);
+  }, [hasOwnExit, onOwnExitChange]);
   const drawerVisible = services.config.showDrawer && DRAWER_ROUTES.has(current.name);
   const currentLanguage = services.store.getString(PrefKeys.SELECTED_LANGUAGE_DISPLAY_NAME) ?? services.labels.languageCode;
   const userName = services.store.getString(PrefKeys.USER_NAME);
@@ -397,6 +424,11 @@ export function FarmerChatRoot(props: {
       case 'chat':
         return (
           <ChatScreen
+            // One instance per back-stack entry (Compose gives each NavBackStackEntry its own
+            // state): a deep link pushed over an open chat (openChat(question) while the chat is
+            // on top, e.g. a widget reopened from the host page) must start that question, not be
+            // swallowed by the mounted screen's run-once initialisation.
+            key={routeKey(current)}
             params={current.params}
             onOpenDrawer={() => setDrawerOpen(true)}
             // 2.0.0: the GPS_PROMPT capability chip runs the ONE shared location flow (Compose
@@ -408,6 +440,7 @@ export function FarmerChatRoot(props: {
               // (host wires config.onExit); otherwise popUpTo(Home){!inclusive}.
               if (services.config.mode === 'CHAT_ONLY') {
                 services.analytics.exit();
+                props.onExit?.();
               } else {
                 navigator.popUpToAndPush('home', true, { name: 'home' });
               }

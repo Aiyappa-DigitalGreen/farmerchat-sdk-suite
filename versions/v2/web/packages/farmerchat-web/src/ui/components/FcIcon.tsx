@@ -14,6 +14,9 @@ export type { IconName };
  * `size` is the rendered box in px (= dp); when only one of width/height is given the
  * drawable's aspect ratio is kept, as `Modifier.size`/`height` would.
  */
+/** A drawable fill that paints nothing (`#00000000` in the XML, e.g. a stroke-only icon). */
+const TRANSPARENT_FILL = /^(none|transparent|rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(\.0*)?\s*\)|#[0-9a-f]{6}00|#[0-9a-f]{3}0)$/i;
+
 export function FcIcon(props: {
   name: IconName;
   size?: number;
@@ -50,7 +53,9 @@ export function FcIcon(props: {
         <path
           key={i}
           d={p.d}
-          fill={p.fill === 'none' ? 'none' : props.tint ?? p.fill}
+          // Compose's tint is a SrcIn colour filter: transparent pixels stay transparent, so a
+          // transparent fill must stay unpainted rather than take the tint (icon_share was solid).
+          fill={!p.fill || TRANSPARENT_FILL.test(p.fill) ? 'none' : props.tint ?? p.fill}
           fillOpacity={p.fillOpacity}
           fillRule={p.fillRule as 'evenodd' | undefined}
           stroke={p.stroke ? props.tint ?? p.stroke : undefined}

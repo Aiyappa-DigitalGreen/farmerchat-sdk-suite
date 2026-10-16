@@ -43,6 +43,8 @@ export function ChatScreen(props: {
   const label = useLabel();
   const [chat, actions] = useChat(services);
   const [overlay, setOverlay] = useState<InputKind | null>(null);
+  // compose `textComposerActive`: the composer field has focus (hides the empty-chat state).
+  const [composerFocused, setComposerFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initRef = useRef(false);
   const prevHeightRef = useRef(0);
@@ -645,7 +647,9 @@ export function ChatScreen(props: {
         />
 
         {showTips ? <Tips /> : null}
-        {chat.messages.length === 0 && !chat.isLoading && !isHistoryEntry && overlay === null ? (
+        {/* compose ChatScreen.kt:1512 — hidden while an input surface is up (composer focused,
+            voice sheet open). */}
+        {chat.messages.length === 0 && !chat.isLoading && !isHistoryEntry && overlay === null && !composerFocused ? (
           <ChatEmptyState
             bottomInset={
               isComposerUi
@@ -675,6 +679,7 @@ export function ChatScreen(props: {
           onReady={(handle) => {
             composerRef.current = handle;
           }}
+          onFocusChange={setComposerFocused}
           onPhotoClick={() => setOverlay('photo')}
           onVoiceClick={() => setOverlay('speak')}
           onSend={sendFromComposer}

@@ -269,9 +269,12 @@ export function Tips() {
       <div className="fcsdk-c-tips-fade" />
       <div className="fcsdk-c-tips-body">
         <div className="fcsdk-c-tips-viewport">
-          <div ref={trackRef} className="fcsdk-c-tips-track" style={{ transform: `translateX(calc(${-index} * (100% + 8px)))` }}>
-            {Array.from({ length: index + 2 }, (_, i) => {
-              const tip = tips[i % tips.length];
+          {/* Tips.kt starts its virtual pager mid-range, so a card peeks on BOTH sides from the
+              first frame: page -1 is rendered ahead of page 0. */}
+          <div ref={trackRef} className="fcsdk-c-tips-track" style={{ transform: `translateX(calc(${-(index + 1)} * (100% + 8px)))` }}>
+            {Array.from({ length: index + 3 }, (_, k) => {
+              const i = k - 1;
+              const tip = tips[((i % tips.length) + tips.length) % tips.length];
               return (
                 <div key={i} className="fcsdk-c-tip">
                   <span key={i === index ? `w${index}` : undefined} className={`fcsdk-c-tip-icon${i === index ? ' fcsdk-c-tip-icon--wobble' : ''}`}>
