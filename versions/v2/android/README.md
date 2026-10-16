@@ -25,8 +25,12 @@ Pick **one** UI artifact — each pulls in `farmerchat-core` transitively. `Farm
 
 Requirements: see [Requirements](#requirements) (Compose needs AGP 8.13+).
 
+Install from **Maven Central**. Most projects already declare it, so only the dependency is new.
+Until the first Central release is published (`RELEASING.md`), Gradle reports
+`Could not find org.digitalgreen.farmerchat`; in the meantime use the local build below.
+
 ```kotlin
-// settings.gradle.kts — repositories: mavenCentral() (or your internal repo / mavenLocal())
+// settings.gradle.kts — repositories { google(); mavenCentral() }
 
 dependencies {
     implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0")
@@ -35,14 +39,17 @@ dependencies {
 }
 ```
 
-### Local distribution proof (this repo)
+### Before the first release, or to test unreleased changes: build locally
 
 ```bash
-./gradlew publishToMavenLocal                 # publishes core + compose + views @ 2.2.0
-./gradlew :sample-consumer:assembleDebug      # a host that consumes the SDK BY COORDINATE from mavenLocal()
+./gradlew publishToMavenLocal                 # publishes core + compose + views @ 2.2.0 to ~/.m2
 ```
 
-`:sample-consumer` depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0` (not `project(...)`), proving import-by-coordinate. Version comes from ONE source: `farmerChatVersion` in the root `build.gradle.kts` (group `org.digitalgreen.farmerchat` on all subprojects), mirrored at runtime by `FarmerChatVersion.VERSION`.
+Then add `mavenLocal()` to your app's repositories.
+
+`:sample-consumer` depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0` (not
+`project(...)`) and resolves it from **Maven Central only**, exactly as a host app does. It builds
+once 2.2.0 is published there; until then CI and the release workflow exclude it. Version comes from ONE source: `farmerChatVersion` in the root `build.gradle.kts` (group `org.digitalgreen.farmerchat` on all subprojects), mirrored at runtime by `FarmerChatVersion.VERSION`.
 
 ### Public API surface & transitive footprint
 

@@ -22,6 +22,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      # sample-consumer resolves the SDK by coordinate from mavenLocal, so publish it first.
+      # sample-consumer resolves the SDK from Maven Central and is excluded below until the
+      # first release is published there; publishToMavenLocal still proves the artifacts publish.
       - run: ./gradlew publishToMavenLocal
-      - run: ./gradlew testDebugUnitTest assembleDebug
+      - run: ./gradlew testDebugUnitTest assembleDebug -x :sample-consumer:assembleDebug -x :sample-consumer:testDebugUnitTest

@@ -15,9 +15,9 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // mavenLocal() first so :sample-consumer resolves the FarmerChat SDK
-        // published by `./gradlew publishToMavenLocal` (import-by-coordinate proof).
-        mavenLocal()
+        // The SDK is resolved ONLINE, like any host app: :sample-consumer pulls
+        // org.digitalgreen.farmerchat:* from Maven Central (no mavenLocal). It cannot build until
+        // the first release is published there (RELEASING.md); CI and release.yml exclude it until then.
         google()
         mavenCentral()
     }
@@ -37,5 +37,5 @@ include(":sample-compose")
 include(":sample-views")
 // minimal "host app" sample: dependency + FarmerChatFab → chat, one customization file:
 include(":sample-jetpack")
-// coordinate-based consumer (distribution proof — depends on the SDK via mavenLocal):
+// coordinate-based consumer (distribution proof — depends on the SDK from Maven Central):
 include(":sample-consumer")

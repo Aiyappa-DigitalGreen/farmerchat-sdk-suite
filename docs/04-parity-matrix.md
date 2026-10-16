@@ -8590,3 +8590,16 @@ old browsers (Chrome 87 / Safari 14): not yet run on a device lab.
 - Outside the repo (`RELEASING.md`): the Portal account, the `org.digitalgreen` namespace (DNS TXT on
   digitalgreen.org), a user token and a GPG key on keyserver.ubuntu.com. NOT YET DONE.
 - `farmerchat-analytics-posthog` is still not published (root CLAUDE.md §6).
+
+## Android consumers resolve from Maven Central (2026-10-16, user decision)
+`versions/v2/android/settings.gradle.kts` no longer declares `mavenLocal()`. `:sample-consumer`
+resolves `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0` from Maven Central only, as
+a host app does. The user chose this knowing it fails until the first Central release; verified:
+Gradle searches only dl.google.com and repo.maven.apache.org and reports "Could not find". So that
+the release which publishes it is not blocked by it, `sdk-android.yml` and `release.yml` build with
+`-x :sample-consumer:assembleDebug -x :sample-consumer:testDebugUnitTest`. Remove that exclusion
+after 2.2.0 (or the first release) is on Central. The hosted guide and the android README now give
+Maven Central as the install path, with `publishToMavenLocal` + `mavenLocal()` as the labelled
+fallback. Not changed: v1 `android/` (1.1.0 is not going to Central); iOS/RN/web are not Maven
+(npm and SPM/CocoaPods are not published). The deployed demo-app keeps its local `file:`
+dependency, because pointing it at npm before a release would break the live site's next deploy.

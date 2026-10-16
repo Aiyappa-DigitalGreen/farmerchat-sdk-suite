@@ -40,9 +40,8 @@ android {
 dependencies {
     // ------------------------------------------------------------------------
     // DISTRIBUTION PROOF: the SDK is consumed by MAVEN COORDINATE from
-    // mavenLocal() — NOT via project(":farmerchat-android-compose").
-    // Run `./gradlew publishToMavenLocal` first, then
-    // `./gradlew :sample-consumer:assembleDebug`.
+    // Maven Central, exactly as a host app does — NOT via project(":farmerchat-android-compose").
+    // Builds once 2.2.0 is published on Central (RELEASING.md).
     // farmerchat-core is pulled in transitively via the compose POM dependency.
     // ------------------------------------------------------------------------
     implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0")

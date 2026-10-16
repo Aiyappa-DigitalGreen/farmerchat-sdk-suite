@@ -164,9 +164,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      # sample-consumer resolves the SDK by coordinate from mavenLocal, so publish it first.
+      # sample-consumer resolves the SDK from Maven Central and is excluded below until the
+      # first release is published there; publishToMavenLocal still proves the artifacts publish.
       - run: ./gradlew publishToMavenLocal
-      - run: ./gradlew testDebugUnitTest assembleDebug
+      - run: ./gradlew testDebugUnitTest assembleDebug -x :sample-consumer:assembleDebug -x :sample-consumer:testDebugUnitTest
       # bundleReleaseAar, not assembleRelease: assembleRelease also runs the views module's
       # verifyReleaseResources, which wrongly reports navigation/fc_nav_graph missing (the AAR does
       # contain it; see docs/04). bundleReleaseAar builds the same AAR that is published.
