@@ -15,8 +15,10 @@ pixels. Every mismatch found on the Language screen was of that kind.
 ## Setup, once
 
 ```bash
-# the app: dev flavour points at the same mobile-app-dev backend the SDK sample uses,
-# so both resolve the same served labels
+# the app: its dev flavour points at mobile-app-dev, but the SDK samples now default to DEMO
+# (testing is DEMO-only, 2026-10-16). For a same-backend comparison build the app's `demo` flavour
+# instead (BASE_URL mobile-app-demo): ./gradlew :app:assembleDemoDebug (apk under outputs/apk/demo/debug/).
+# The dev commands below are the historical setup; a dev-vs-demo pair can differ in labels/languages/feed
 cd /Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic
 ./gradlew :app:assembleDevDebug
 adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk   # org.digitalgreen.farmer.chat
@@ -141,7 +143,7 @@ gaps only between the **same pair of card types** on both sides.
 ## Status — android VIEWS vs the app (started 2026-09-21)
 
 Views had **zero** pixel coverage before this; the harness above is compose-only. Run views on the
-**`agentic`** profile — its bugs differ per profile, and the sample defaults to `dev`.
+**`agentic`** profile — its bugs differ per profile, and the sample defaults to `dev` (a profile name; its backend is DEMO).
 
 | Screen | Tool | Result |
 |---|---|---|

@@ -39,7 +39,7 @@ _Static_assert(FCModeChatOnly    == 1, "FCMode raw values are ABI; do not reorde
     FCFarmerChatConfiguration *cfg =
         [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
 
-    cfg.environment      = FCEnvironmentStage;
+    cfg.environment      = FCEnvironmentDemo;
     cfg.customBaseURL    = @"https://example.invalid/";
     cfg.geoApiKey        = @"geo";
     cfg.farmerChatApiKey = @"fc-key";

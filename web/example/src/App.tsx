@@ -39,7 +39,7 @@ const blueTheme: FarmerChatConfig['theme'] = {
 // Base config shared by all scenarios — every semantic callback (C4) is wired
 // to console.log so the headless run can assert the hooks fire.
 const baseConfig: FarmerChatConfig = {
-  environment: 'dev',
+  environment: 'demo',
   customBaseUrl: MOCK_BASE,
   appearance: 'auto',
   enableVoice: true,

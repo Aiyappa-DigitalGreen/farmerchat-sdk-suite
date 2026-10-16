@@ -30,7 +30,7 @@ const _tokenProvider: TokenProvider = async () => ({ accessToken: 'host-access',
 void _tokenProvider;
 
 const config: FarmerChatConfig = {
-  environment: 'dev',
+  environment: 'demo',
   appearance: 'auto',
   theme,
   authMode,

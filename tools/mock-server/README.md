@@ -46,9 +46,9 @@ The base URL **must end with a trailing `/`** (Retrofit / URL-join requirement).
 Wire it up per platform:
 
 - **Android** — `FarmerChatConfig.builder(env).customBaseUrl("http://10.0.2.2:8899/")…`
-- **iOS** — `FarmerChatConfig(environment: .dev, customBaseURL: "http://localhost:8899/")`
-- **React Native** — `{ environment: 'dev', customBaseUrl: 'http://localhost:8899/' }`
-- **Web** — `{ environment: 'dev', customBaseUrl: 'http://localhost:8899/' }`
+- **iOS** — `FarmerChatConfig(environment: .demo, customBaseURL: "http://localhost:8899/")`
+- **React Native** — `{ environment: 'demo', customBaseUrl: 'http://localhost:8899/' }`
+- **Web** — `{ environment: 'demo', customBaseUrl: 'http://localhost:8899/' }`
 
 `customBaseUrl` overrides the `environment` base URL when set.
 

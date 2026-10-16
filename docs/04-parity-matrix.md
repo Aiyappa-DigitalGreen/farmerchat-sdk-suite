@@ -8944,3 +8944,24 @@ web `tsc`, `npm test`, build, `api:check`, size OK; widget `tsc`, build, size OK
   sheet), Listen, alignment chip, follow-up #30, photo (shrunk 1416×800 → 1000×564), GPS decline,
   ✕ → onExit, deep link: all pass. **RN package size** 244.5 → 162.8 KB gzip: `npm run build` now
   emits comment-free JS (type files keep their docs; Metro hosts compile from `src`).
+
+## DEMO-only backend sweep (2026-10-16)
+User rule: "make sure all platforms use demo only. at any cost no prod" (stage excluded too). Every
+runtime backend choice in both trees, tools and the host apps was audited; SDK defaults were already
+safe (Android/RN/web: `environment` required, no default; iOS `FarmerChatConfig` and ObjC
+`FCFarmerChatConfiguration` default `.demo`; Theme Studio default `DEMO`; site proxies → `mobile-app-demo/`).
+- **Switched to DEMO:** Android sample-compose/views/jetpack/consumer (v1 + v2) `builder(DEV)`;
+  iOS SampleApp + ConsumerApp (v1 + v2) `.dev`; RN example + example-packaged and web example +
+  example-packaged (v1 + v2) `'dev'`; widget demo page (`environment` fixed to `'demo'`, `?env=` now
+  honours only `demo`); v2 `appstage` profiles (compose + views) `mobile-app-stage/` →
+  `mobile-app-demo/` (profile names kept, so `appstage` now equals `agentic` + an explicit DEMO URL);
+  ObjC smoke `FCEnvironmentStage` → `Demo` (compile-only); iOS TokenRefresher skip-list fixture base
+  `v2.api.farmer.chat` → `mobile-app-demo/` (offline); external LastCheckSDKCompose/XML
+  (`DEV` + stage `customBaseUrl` → `DEMO`).
+- **Docs:** docs/08 primary target is DEMO; INTEGRATION.md snippet `STAGE` → `DEMO`; mock-server and
+  fidelity READMEs.
+- **Consequence:** the screen-fidelity flow (app stage flavour vs SDK `appstage`) is no longer a
+  same-backend comparison until the app is built against DEMO; see `tools/fidelity/README.md`.
+- **Left as is (offline, never reaches a network):** RN/web/iOS/Android unit tests that pass
+  `dev`/`stage` only to exercise env→URL mapping or the re-initialize shape rule (storage-only
+  hydration; fetch stubbed where called).

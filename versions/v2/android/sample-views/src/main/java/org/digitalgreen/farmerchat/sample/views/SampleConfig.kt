@@ -26,12 +26,11 @@ object SampleConfig {
     const val MOCK_URL = "http://10.0.2.2:8899/"
 
     /**
-     * The reference app's `stage` flavour host (fc-compose-agentic `app/build.gradle.kts`). The
-     * SDK's own STAGE enum now points at the agentic demo backend, so side-by-side screen checks
-     * against an installed stage build of the app need this exact host to get the same labels,
-     * language list and feed.
+     * Backend for the `appstage` profile (name kept so stored prefs and documented commands keep
+     * working). It used to be the reference app's `stage` flavour host; testing is DEMO-only now
+     * (no stage, no prod), so it is the DEMO host — the same backend as the DEMO enum.
      */
-    const val APP_STAGE_URL = "https://farmerchat.farmstack.co/mobile-app-stage/"
+    const val APP_STAGE_URL = "https://farmerchat.farmstack.co/mobile-app-demo/"
 
     val PROFILES = listOf(
         "dev", "mock", "themed", "themed_mock", "chatonly", "togglesoff", "override", "agentic", "appstage", "econet"
@@ -46,7 +45,7 @@ object SampleConfig {
     }
 
     fun build(profile: String): FarmerChatConfig {
-        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
             .appearance(FarmerChatAppearance.AUTO)
             // The SDK defaults to CHAT_ONLY; this harness exercises the whole journey (onboarding,
             // Home, drawer, settings), so it opts in here. The "chatonly" profile switches back.
@@ -103,7 +102,8 @@ object SampleConfig {
             // Chat (instead of the Photo/Speak/Type row). Without this profile the composer is
             // unreachable at runtime, since `enableAgenticChat` defaults to false.
             "agentic" -> b.enableAgenticChat(true)
-            // Screen-fidelity harness: same backend as the installed stage build of the app.
+            // Screen-fidelity harness (DEMO backend; was the app's stage host before the
+            // DEMO-only testing rule).
             // Agentic ON: the app's source hardcodes `getAgenticChatEnabled()` and
             // `getComposerUiEnabled()` to true (OnboardingRemoteConfig.kt), so a build from
             // source always shows the composer Home and streams agentic answers.
@@ -125,7 +125,7 @@ object SampleConfig {
                         .background(0xFFFFFFFF.toInt())
                         .build()
                 )
-            else -> {} // "dev": plain DEV backend, green brand, full journey
+            else -> {} // "dev" (profile name kept): plain DEMO backend, green brand, full journey
         }
         return b.build()
     }

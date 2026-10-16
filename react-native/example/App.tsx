@@ -12,8 +12,8 @@ import {
 } from '@digitalgreenorg/farmerchat-react-native';
 
 FarmerChat.initialize({
-  environment: 'dev',
-  // E2E verification (docs/08): to prove the paths dev cannot serve deterministically
+  environment: 'demo',
+  // E2E verification (docs/08): to prove the paths DEMO cannot serve deterministically
   // (chat answer, OTP, voice, image, TTS), point the SDK at the local mock by
   // uncommenting the line below and running `adb reverse tcp:8899 tcp:8899`.
   // The committed default stays on the live dev backend per the guardrail.

@@ -6,12 +6,13 @@ app — see `../README.md`) on the same backend, in the same device-pixel frame.
 ## Setup
 
 ```bash
-# 1. real stage backend for the browser (its CORS preflight rejects the SDK headers)
+# 1. real DEMO backend for the browser via the proxy (its CORS preflight rejects the SDK headers);
+#    the proxy is still named stage-proxy.mjs but its UPSTREAM defaults to mobile-app-demo/
 FC_GUEST_API_KEY=<the android DEFAULT_GUEST_USER_API_KEY> node versions/v2/web/widget/demo/stage-proxy.mjs   # :8898
 # 2. serve the widget folder (fidelity.html loads ../dist/farmerchat-widget.iife.js)
 (cd versions/v2/web/widget && npm run build && python3 -m http.server 5182)
 # 3. Android: rs_qa (1080x2400 @420dpi = 411x914dp), LastCheckSDKCompose → "Full FarmerChat"
-#    (appstage backend, agentic on). ANDROID_SERIAL=emulator-5554 always.
+#    (DEMO backend, agentic on). ANDROID_SERIAL=emulator-5554 always.
 # 4. tooling, in a scratch dir:  npm i puppeteer-core@23.11.1 ; Pillow for sbs.py
 ```
 

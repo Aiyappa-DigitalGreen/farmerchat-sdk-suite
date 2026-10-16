@@ -18,7 +18,7 @@ import org.digitalgreen.farmerchat.sdk.FarmerChatTheme
 object FarmerChatSetup {
 
     fun config(): FarmerChatConfig =
-        FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+        FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
 
             // ── Chat-only (the SDK default, spelled out here): the FAB opens
             //    straight into the chat screen (no onboarding/home/drawer). The

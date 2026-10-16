@@ -37,7 +37,7 @@ object SampleConfig {
     }
 
     fun build(profile: String): FarmerChatConfig {
-        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
             .appearance(FarmerChatAppearance.AUTO)
             // The SDK defaults to CHAT_ONLY; this harness exercises the whole journey (onboarding,
             // Home, drawer, settings), so it opts in here. The "chatonly" profile switches back.
@@ -84,9 +84,10 @@ object SampleConfig {
             // false — which left the COMPOSE harness unable to exercise the flagship 2.0.0
             // feature at all. Mirrors the same profile in sample-views.
             "agentic" -> b.enableAgenticChat(true)
-            // Screen-fidelity harness: the reference app's `stage` flavour host, agentic on
-            // (its source hardcodes the agentic + composer flags to true).
-            "appstage" -> b.customBaseUrl("https://farmerchat.farmstack.co/mobile-app-stage/")
+            // Screen-fidelity harness, agentic on (the app's source hardcodes the agentic +
+            // composer flags to true). Profile name kept; backend is DEMO (testing is DEMO-only:
+            // no stage, no prod), so this now equals "agentic" plus an explicit DEMO base URL.
+            "appstage" -> b.customBaseUrl("https://farmerchat.farmstack.co/mobile-app-demo/")
                 .enableAgenticChat(true)
             "themed_mock" -> b.customBaseUrl(MOCK_URL).theme(blueTheme())
             "chatonly" -> b.customBaseUrl(MOCK_URL).mode(FarmerChatMode.CHAT_ONLY)

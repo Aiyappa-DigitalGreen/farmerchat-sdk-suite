@@ -36,7 +36,7 @@ struct SampleApp: App {
 
         // 1. Initialize the SDK once, as early as possible.
         FarmerChat.initialize(config: FarmerChatConfig(
-            environment: .dev,
+            environment: .demo,
             customBaseURL: mockURL,
             // farmerChatApiKey / geoApiKey: both built in — pass only to override.
             appearance: .auto,

@@ -6,16 +6,22 @@ A feature is **DONE** on a platform only when BOTH are true and evidenced:
 
 `docs/04-parity-matrix.md` cells may be ✅ ONLY with that evidence. Everything else stays 🟡/⛔. No "compiles therefore done."
 
-## Primary target = the live DEV instance (NOT prod, NOT mock-by-default)
+## Primary target = the live DEMO instance (NOT prod, NOT stage, NOT mock-by-default)
 
-All samples default to `environment = dev` and MUST stay there. Verification runs against the real dev backend (`https://farmerchat.farmstack.co/mobile-app-dev/`) for every path dev can serve — guest init, languages, labels, feed, weather, profile, history, conversation list, etc. (all confirmed working on dev in earlier runs).
+**User rule (2026-10-16): every platform tests against DEMO only — never PROD, never STAGE.** All
+samples, examples, demo pages and host check apps default to `environment = demo` and MUST stay
+there. Verification runs against the real DEMO backend
+(`https://farmerchat.farmstack.co/mobile-app-demo/`) for every path it can serve. (Earlier runs in
+docs/04 used DEV; those records are historical.)
 
-The mock below is a **targeted fallback**, used ONLY for the paths the dev instance cannot currently serve deterministically, so their UI+logic can still be proven:
-- `get_answer_for_text_query` / `image_analysis` — dev returns HTTP 500.
+The mock below is a **targeted fallback**, used ONLY for the paths the live backend cannot serve
+deterministically, so their UI+logic can still be proven:
 - `verify_otp` / `generate_otp` — no real phone/SMS in a headless run.
 - `transcribe_audio` / `synthesise_audio` — need deterministic audio in/out.
+- any answer path DEMO cannot serve on a given day.
 
-Each screenshot/verification must record WHICH backend served it (dev vs mock), so the evidence is honest. Prefer dev; use mock only where noted.
+Each screenshot/verification must record WHICH backend served it (demo vs mock), so the evidence is
+honest. Prefer DEMO; use mock only where noted.
 
 ## The local mock backend (fallback for the paths dev can't serve)
 

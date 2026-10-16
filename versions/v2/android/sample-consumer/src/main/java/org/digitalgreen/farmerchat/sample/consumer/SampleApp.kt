@@ -21,7 +21,7 @@ class SampleApp : Application() {
 
         FarmerChat.initialize(
             this,
-            FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+            FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
                 .appearance(FarmerChatAppearance.DAY)
                 .theme(
                     FarmerChatTheme.builder()

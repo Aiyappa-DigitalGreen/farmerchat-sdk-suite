@@ -37,7 +37,7 @@ object SampleConfig {
     }
 
     fun build(profile: String): FarmerChatConfig {
-        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
             .appearance(FarmerChatAppearance.AUTO)
             .debugLogging(true)
             .onEvent { name, props -> Log.d(TAG, "onEvent: $name $props") }
@@ -67,7 +67,7 @@ object SampleConfig {
                         "fc_v2_app_label_photo" to "PHOTO✦"
                     )
                 )
-            else -> {} // "dev": plain DEV backend, green brand, full journey
+            else -> {} // "dev" (profile name kept): plain DEMO backend, green brand, full journey
         }
         return b.build()
     }

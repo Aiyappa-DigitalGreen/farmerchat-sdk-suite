@@ -17,7 +17,7 @@ import {
 } from '@digitalgreenorg/farmerchat-react-native';
 
 const config: FarmerChatConfig = {
-  environment: 'dev',
+  environment: 'demo',
   appearance: 'auto',
   // C2 — default SDK-owned OTP.
   authMode: 'SDK_OTP',

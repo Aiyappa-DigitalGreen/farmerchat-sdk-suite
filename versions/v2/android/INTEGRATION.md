@@ -242,7 +242,7 @@ class MyApp : Application() {
 
         FarmerChat.initialize(
             this,
-            FarmerChatConfig.Builder(FarmerChatEnvironment.STAGE)
+            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
                 // No keys to pass: the FarmerChat API key and the geolocation key are
                 // built in (see "API keys" below). Default mode is CHAT_ONLY.
                 .languageCode("en")

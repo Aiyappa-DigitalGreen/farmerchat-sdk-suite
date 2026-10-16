@@ -11,7 +11,7 @@ struct ConsumerApp: App {
     init() {
         // Public API surface, resolved from the binary .swiftinterface:
         FarmerChat.initialize(config: FarmerChatConfig(
-            environment: .dev,
+            environment: .demo,
             appearance: .auto,
             theme: FarmerChatTheme(brandPrimary: Color(hex: 0x1565C0)),
             onEvent: { name, props in print("[binary-consumer] \(name) \(props)") }

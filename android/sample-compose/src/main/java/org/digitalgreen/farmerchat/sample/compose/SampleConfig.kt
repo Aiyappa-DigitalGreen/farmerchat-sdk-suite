@@ -35,7 +35,7 @@ object SampleConfig {
     }
 
     fun build(profile: String): FarmerChatConfig {
-        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEV)
+        val b = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
             .appearance(FarmerChatAppearance.AUTO)
             .debugLogging(true)
             .onEvent { name, props -> Log.d(TAG, "onEvent: $name $props") }

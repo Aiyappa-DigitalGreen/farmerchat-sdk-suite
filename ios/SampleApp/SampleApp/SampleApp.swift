@@ -31,9 +31,9 @@ struct SampleApp: App {
 
         // 1. Initialize the SDK once, as early as possible.
         FarmerChat.initialize(config: FarmerChatConfig(
-            environment: .dev,
+            environment: .demo,
             customBaseURL: mockURL,
-            geoApiKey: "AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo", // Google Geolocation key (the dev server needs coords to resolve your country)
+            geoApiKey: "AIzaSyBr13y53dIh6Pf6G0R6y_870o_x9d-jCSo", // Google Geolocation key (the server needs coords to resolve your country)
             guestApiKey: nil,                  // nil = SDK built-in guest key; set to override
             appearance: .auto,
             theme: theme,

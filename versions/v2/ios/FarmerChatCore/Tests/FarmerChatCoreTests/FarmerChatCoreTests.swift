@@ -92,7 +92,7 @@ final class FarmerChatCoreTests: XCTestCase {
     // MARK: - TokenRefresher skip list
 
     func testRefresherSkipList() {
-        let base = URL(string: "https://v2.api.farmer.chat/")!
+        let base = URL(string: "https://farmerchat.farmstack.co/mobile-app-demo/")!
         for fragment in ["api/user/generate_otp/", "api/user/verify_otp/", "api/user/get_new_access_token/", "api/user/send_tokens/", "api/user/initialize_user/"] {
             XCTAssertTrue(TokenRefresher.shouldSkip(url: URL(string: fragment, relativeTo: base)))
         }
