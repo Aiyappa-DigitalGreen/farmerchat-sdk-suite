@@ -33,7 +33,7 @@ class MyApp : Application() {
         )
 
         val config = FarmerChatPostHog
-            .attachExclusive(FarmerChatConfig.builder(FarmerChatEnvironment.PROD))
+            .attachExclusive(FarmerChatConfig.builder(FarmerChatEnvironment.DEMO))
             .build()
 
         FarmerChat.initialize(this, config)

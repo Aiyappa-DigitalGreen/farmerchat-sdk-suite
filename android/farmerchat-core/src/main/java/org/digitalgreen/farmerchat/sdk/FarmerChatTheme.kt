@@ -16,7 +16,7 @@ import androidx.annotation.FontRes
  * when not supplied.
  *
  * ```
- * FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+ * FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
  *   .theme(
  *     FarmerChatTheme.builder()
  *       .brandPrimary(0xFF1565C0.toInt())

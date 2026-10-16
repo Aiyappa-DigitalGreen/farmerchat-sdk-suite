@@ -100,14 +100,14 @@ test('equivalent re-initialize keeps the instance; first config wins for other f
   assert.equal(lc.currentConfig(), base);
   // CHAT_ONLY default: undefined mode and explicit CHAT_ONLY are the same shape.
   const { lc: lc2, builds: builds2 } = newLifecycle();
-  lc2.initialize({ environment: 'prod' });
-  lc2.initialize({ environment: 'prod', mode: 'CHAT_ONLY' });
+  lc2.initialize({ environment: 'demo' });
+  lc2.initialize({ environment: 'demo', mode: 'CHAT_ONLY' });
   assert.equal(builds2(), 1);
 });
 
 test('each of the five shape fields forces a rebuild', () => {
   const variants: FarmerChatConfig[] = [
-    { ...base, environment: 'prod' },
+    { ...base, environment: 'demo' },
     { ...base, mode: 'CHAT_ONLY' },
     { ...base, showDrawer: false },
     { ...base, showHistory: false },

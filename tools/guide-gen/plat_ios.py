@@ -310,7 +310,7 @@ pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerC
 didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
     FCFarmerChatConfiguration *cfg =
-        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
     cfg.guestApiKey        = @"<your guest API key>";
     cfg.geoApiKey          = @"<your Google Geolocation key>";
     cfg.languageCode       = @"en";
@@ -344,7 +344,7 @@ UIButton *custom =
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
     CB([("Objective-C","objc",None,"""FCFarmerChatConfiguration *cfg =
-    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
 cfg.guestApiKey    = @"<your guest API key>";
 cfg.mode           = FCModeChatOnly;
 cfg.showDrawer     = NO;   // moves history + language into the chat app bar

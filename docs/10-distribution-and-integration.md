@@ -90,7 +90,7 @@ selects a named environment and takes a guest-init key.
 |---|---|
 | `FarmerChatSdk.initialize(context, config)` | `FarmerChat.initialize(context, config)` |
 | `sdkApiKey = "fc_live_…"` | `guestApiKey(…)` — different purpose (the `API-Key` header on guest init / send_tokens) |
-| `baseUrl = "https://…"` | `FarmerChatConfig.builder(FarmerChatEnvironment.PROD)` — one of five named envs |
+| `baseUrl = "https://…"` | `FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)` — one of five named envs |
 | `FarmerChatFabView` + `app:fc_containerColor` | `FarmerChatFab` + `android:backgroundTint` (config `fabBackgroundColor` applies only when XML declares no explicit tint) |
 | `SdkAnalyticsListener` interface | `.onEvent { name, props -> }` |
 | `clearSession(context)` | `logout()` |

@@ -222,7 +222,7 @@ public struct FarmerChatConfig: Sendable {
     public var onSessionStart: (@Sendable () -> Void)?
 
     public init(
-        environment: FarmerChatEnvironment = .prod,
+        environment: FarmerChatEnvironment = .demo,
         customBaseURL: String? = nil,
         geoApiKey: String? = nil,
         guestApiKey: String? = nil,

@@ -37,7 +37,7 @@ _Static_assert(FCModeChatOnly    == 1, "FCMode raw values are ABI; do not reorde
 + (void)exercise {
     // ---- Configuration: every bridged member, in Objective-C ----
     FCFarmerChatConfiguration *cfg =
-        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
 
     cfg.environment      = FCEnvironmentStage;
     cfg.customBaseURL    = @"https://example.invalid/";

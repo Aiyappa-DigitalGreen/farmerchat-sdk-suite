@@ -30,7 +30,7 @@ test.describe("Theme Studio E2E", () => {
     await page.goto("/")
     await expect(page.locator("pre")).toContainText("FarmerChat.initialize({") // web/JS
     await page.getByRole("tab", { name: "Android" }).click()
-    await expect(page.locator("pre")).toContainText("FarmerChatConfig.builder(FarmerChatEnvironment.PROD)")
+    await expect(page.locator("pre")).toContainText("FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)")
     await page.getByRole("tab", { name: "iOS" }).click()
     await expect(page.locator("pre")).toContainText("FarmerChatConfig(")
   })

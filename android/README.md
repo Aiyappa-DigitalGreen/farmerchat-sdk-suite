@@ -47,7 +47,7 @@ Transitive footprint hosts inherit (conservative):
 ```kotlin
 FarmerChat.initialize(
     this,
-    FarmerChatConfig.builder(FarmerChatEnvironment.PROD)   // DEV | STAGE | DEMO | PROD | EKS
+    FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)   // DEV | STAGE | DEMO | PROD | EKS
         .geoApiKey("YOUR_GOOGLE_GEOLOCATION_KEY")          // optional: language auto-detect fallback
         .guestApiKey("YOUR_GUEST_API_KEY")                 // optional: overrides built-in guest key
         .appearance(FarmerChatAppearance.AUTO)             // DAY | NIGHT | AUTO

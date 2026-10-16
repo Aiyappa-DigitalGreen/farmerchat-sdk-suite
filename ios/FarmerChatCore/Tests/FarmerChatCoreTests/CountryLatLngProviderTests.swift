@@ -55,7 +55,7 @@ final class CountryLatLngProviderTests: XCTestCase {
     func testAnUnconfiguredConfigLeavesLocationUnsetSoTheLocaleIsUsed() {
         // If these carried a hardcoded region the whole fallback would be dead code: the config
         // override wins over the locale, so a non-empty default silently disables derivation.
-        let config = FarmerChatConfig(environment: .prod)
+        let config = FarmerChatConfig(environment: .demo)
         XCTAssertEqual("", config.defaultCountryCode)
         XCTAssertEqual("", config.defaultStateCode)
         XCTAssertEqual(FarmerChatConfig.coordinateUnset, config.defaultLatitude)
@@ -67,7 +67,7 @@ final class CountryLatLngProviderTests: XCTestCase {
 
     func testAnExplicitHostOverrideStillWins() {
         let config = FarmerChatConfig(
-            environment: .prod,
+            environment: .demo,
             defaultCountryCode: "NG",
             defaultLatitude: 9.081999,
             defaultLongitude: 8.675277
@@ -81,7 +81,7 @@ final class CountryLatLngProviderTests: XCTestCase {
         // Endpoint #2 400s on a blank `country_code` ({"error": "Country code is required"},
         // verified live 2026-09-03), so the chain must always terminate in something non-blank —
         // the device locale's region, else the "KE" last resort.
-        let resolved = FarmerChatConfig(environment: .prod).resolvedFallbackCountryCode
+        let resolved = FarmerChatConfig(environment: .demo).resolvedFallbackCountryCode
         XCTAssertFalse(resolved.isEmpty)
         let locale = CountryLatLngProvider.fromDeviceLocale().countryCode
         XCTAssertEqual(locale.isEmpty ? FarmerChatConfig.lastResortCountryCode : locale, resolved)

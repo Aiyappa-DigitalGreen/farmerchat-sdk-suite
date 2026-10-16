@@ -24,7 +24,7 @@ export function SupportPage() {
     <div style={{ width: 420, height: 720 }}>
       <FarmerChat
         config={{
-          environment: 'prod',
+          environment: 'demo',
           appearance: 'auto',
           geoApiKey: 'GOOGLE_GEOLOCATION_KEY',
           guestApiKey: 'GUEST_INIT_API_KEY',
@@ -48,7 +48,7 @@ The SDK renders edge-to-edge inside its container element — size the container
   import { FarmerChat } from '@digitalgreenorg/farmerchat-web';
 
   const handle = FarmerChat.mount(document.getElementById('farmerchat'), {
-    environment: 'prod',
+    environment: 'demo',
   });
   // later: handle.unmount();
 </script>
@@ -107,7 +107,7 @@ the SDK derives sensible dark values).
 
 ```tsx
 <FarmerChat config={{
-  environment: 'prod',
+  environment: 'demo',
   theme: {
     colors: { brandPrimary: '#1565C0', brandPrimaryDark: '#0D47A1', brandAccent: '#42A5F5', onBrand: '#fff' },
     dark:   { brandPrimary: '#1E88E5', brandAccent: '#64B5F6' },   // optional

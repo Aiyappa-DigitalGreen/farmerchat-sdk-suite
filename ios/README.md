@@ -69,7 +69,7 @@ SPM package versions come from the git tag (`ios-v1.0.0`).
 import FarmerChatCore
 
 FarmerChat.initialize(config: FarmerChatConfig(
-    environment: .prod,          // dev | stage | demo | prod | eks
+    environment: .demo,          // dev | stage | demo | prod | eks
     geoApiKey: "…",              // Google Geolocation. Also gates the HOME FEED: without it,
                                  // location comes from backend IP only, and endpoint #12 returns
                                  // an empty `sections` list until a location resolves.
@@ -128,7 +128,7 @@ A single resolver overlays the host theme onto the SwiftUI (`FCTheme`) and UIKit
 
 ```swift
 FarmerChat.initialize(config: FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     theme: FarmerChatTheme(
         brandPrimary: Color(hex: 0x1565C0),      // app bars / brand surfaces
         brandPrimaryDark: Color(hex: 0x0D47A1),  // primary buttons / input tiles
@@ -154,7 +154,7 @@ All additive; defaults preserve today's behavior.
 
 ```swift
 FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
 
     // C2 identity injection
     authMode: .hostToken,                 // .sdkOtp (default) | .hostToken

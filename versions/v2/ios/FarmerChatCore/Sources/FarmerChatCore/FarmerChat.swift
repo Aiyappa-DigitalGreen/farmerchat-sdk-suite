@@ -4,7 +4,7 @@ import Combine
 /// SDK entry singleton — the shared public surface (doc 03):
 ///
 /// ```swift
-/// FarmerChat.initialize(config: FarmerChatConfig(environment: .prod))
+/// FarmerChat.initialize(config: FarmerChatConfig(environment: .demo))
 /// FarmerChat.shared.openChat(question: "…")
 /// FarmerChat.shared.logout()
 /// FarmerChat.shared.isAuthenticated

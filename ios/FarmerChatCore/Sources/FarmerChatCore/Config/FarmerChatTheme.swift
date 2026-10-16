@@ -8,7 +8,7 @@ import SwiftUI
 ///
 /// ```swift
 /// FarmerChatConfig(
-///   environment: .prod,
+///   environment: .demo,
 ///   theme: FarmerChatTheme(
 ///     brandPrimary: Color(hex: 0x1565C0),   // host blue instead of green
 ///     cardCornerRadius: 16,

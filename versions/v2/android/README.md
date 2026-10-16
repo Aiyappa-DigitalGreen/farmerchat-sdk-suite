@@ -66,7 +66,7 @@ Transitive footprint hosts inherit (conservative):
 ```kotlin
 FarmerChat.initialize(
     this,
-    FarmerChatConfig.builder(FarmerChatEnvironment.PROD)   // DEV | STAGE | DEMO | PROD | EKS
+    FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)   // DEV | STAGE | DEMO | PROD | EKS
         // No API keys to supply: the FarmerChat API key and the Google Geolocation key are
         // built in. `farmerChatApiKey(...)` / `geoApiKey(...)` exist only as optional overrides.
         // .mode(FarmerChatMode.FULL_JOURNEY)              // default CHAT_ONLY; opt in to onboarding/Home/drawer
@@ -257,7 +257,7 @@ cd android
 so an unchanged host on 2.0.0 artifacts behaves exactly like 1.0.0.
 
 ```kotlin
-FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
     .enableAgenticChat(true)   // streaming answers + alignment surfaces + InputComposer
     .build()
 ```
@@ -273,7 +273,7 @@ The app gates these on **two** independent Firebase Remote Config flags —
 `enableComposerUi` exposes the first separately:
 
 ```kotlin
-FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
     .enableComposerUi(true)      // unified composer bar…
     .enableAgenticChat(false)    // …but keep the synchronous #27 reply
     .build()

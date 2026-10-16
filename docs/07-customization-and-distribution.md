@@ -52,7 +52,7 @@ Everything below is OPTIONAL. Omitted values fall back to the built-in FarmerCha
 
 ```kotlin
 // Android
-FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
   .theme(
     FarmerChatTheme.builder()
       .brandPrimary(0xFF1565C0.toInt())         // host blue instead of green
@@ -67,7 +67,7 @@ FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
 ```swift
 // iOS
 FarmerChatConfig(
-  environment: .prod,
+  environment: .demo,
   theme: FarmerChatTheme(
     brandPrimary: Color(hex: 0x1565C0),
     cardCornerRadius: 16,
@@ -79,7 +79,7 @@ FarmerChatConfig(
 ```tsx
 // React Native / Web (identical shape)
 <FarmerChat config={{
-  environment: 'prod',
+  environment: 'demo',
   theme: {
     colors: { brandPrimary: '#1565C0', brandAccent: '#42A5F5' },
     shape:  { cardCornerRadius: 16 },
@@ -164,7 +164,7 @@ import com.moengage.core.analytics.MoEAnalyticsHelper
 import org.digitalgreen.farmerchat.sdk.FarmerChatConfig
 import org.digitalgreen.farmerchat.sdk.FarmerChatEnvironment
 
-val config = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+val config = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
     .geoApiKey(BuildConfig.GEO_API_KEY)
     .onEvent { name, props ->
         // --- Firebase Analytics -------------------------------------------------
@@ -216,7 +216,7 @@ import FirebaseCrashlytics
 import FarmerChatCore
 
 let config = FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     onEvent: { name, props in
         Analytics.logEvent(name, parameters: props.compactMapValues { $0 as? NSObject })
         Crashlytics.crashlytics().log("fc:\(name)")
@@ -232,7 +232,7 @@ import crashlytics from '@react-native-firebase/crashlytics';
 import type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-react-native';
 
 export const config: FarmerChatConfig = {
-  environment: 'prod',
+  environment: 'demo',
   onEvent: (name, props) => {
     void analytics().logEvent(name, props as Record<string, string | number | boolean>);
     crashlytics().log(`fc:${name}`);
@@ -248,7 +248,7 @@ import type { FarmerChatConfig } from '@digitalgreenorg/farmerchat-web';
 
 const fa = getAnalytics();
 export const config: FarmerChatConfig = {
-  environment: 'prod',
+  environment: 'demo',
   onEvent: (name, props) => logEvent(fa, name, props),
 };
 ```
@@ -337,7 +337,7 @@ val rc = FirebaseRemoteConfig.getInstance()
 rc.fetchAndActivate().addOnCompleteListener {
     FarmerChat.initialize(
         context = this,
-        config = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+        config = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
             .geoApiKey(BuildConfig.GEO_API_KEY)
             .showNameScreen(rc.getBoolean("v2_show_name_screen_onboarding"))
             .enableAgenticChat(rc.getBoolean("v2_agentic_chat_enabled"))

@@ -21,7 +21,7 @@ config: environment dev|stage|demo|prod|eks · appearance day|night|auto ·
 // settings.gradle: include SDK modules or Maven coords org.digitalgreen:farmerchat-android-compose
 // Application.onCreate
 FarmerChat.initialize(this,
-    FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
         .appearance(FarmerChatAppearance.AUTO)
         .onEvent { name, props -> /* forward to your analytics */ }
         .build())
@@ -48,7 +48,7 @@ Example: `android/sample-views/`. Host needs no manifest changes (SDK declares i
 // SPM: add ios/FarmerChatCore + ios/FarmerChatSwiftUI packages
 import FarmerChatCore, FarmerChatSwiftUI
 
-FarmerChat.shared.initialize(config: FarmerChatConfig(environment: .prod))
+FarmerChat.shared.initialize(config: FarmerChatConfig(environment: .demo))
 // SwiftUI:
 FarmerChatView()                       // embed the full journey
 // UIKit host on iOS 16+:
@@ -59,7 +59,7 @@ FarmerChat.shared.present(from: viewController)
 
 ```swift
 import FarmerChatCore, FarmerChatUIKit
-FarmerChat.shared.initialize(config: FarmerChatConfig(environment: .prod))
+FarmerChat.shared.initialize(config: FarmerChatConfig(environment: .demo))
 let vc = FarmerChatViewController()
 present(vc, animated: true)
 ```
@@ -70,7 +70,7 @@ Add to host Info.plist: `NSMicrophoneUsageDescription`, `NSCameraUsageDescriptio
 ```tsx
 import { FarmerChat, FarmerChatProvider, FarmerChatView } from '@digitalgreenorg/farmerchat-react-native';
 
-FarmerChat.initialize({ environment: 'prod', appearance: 'auto',
+FarmerChat.initialize({ environment: 'demo', appearance: 'auto',
   onEvent: (name, props) => {/* forward */} });
 
 export default () => (
@@ -85,9 +85,9 @@ Peer deps: react-navigation (native-stack), expo-av, expo-image-picker, expo-loc
 
 ```tsx
 import { FarmerChat } from '@digitalgreenorg/farmerchat-web';
-<FarmerChat config={{ environment: 'prod', appearance: 'auto' }} />
+<FarmerChat config={{ environment: 'demo', appearance: 'auto' }} />
 // or imperative:
-FarmerChatSDK.mount(document.getElementById('chat')!, { environment: 'prod' });
+FarmerChatSDK.mount(document.getElementById('chat')!, { environment: 'demo' });
 ```
 Styles are scoped (`.fcsdk-*`); embeds in any container. Mic/camera/geolocation are capability-detected. Example: `web/example/`.
 

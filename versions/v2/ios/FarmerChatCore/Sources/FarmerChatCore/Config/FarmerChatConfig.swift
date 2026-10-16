@@ -297,7 +297,7 @@ public struct FarmerChatConfig: Sendable {
     public var onLinkClick: (@Sendable (URL) -> Bool)?
 
     public init(
-        environment: FarmerChatEnvironment = .prod,
+        environment: FarmerChatEnvironment = .demo,
         customBaseURL: String? = nil,
         geoApiKey: String? = nil,
         farmerChatApiKey: String? = nil,

@@ -8656,3 +8656,16 @@ guide never hit production. Kotlin/Java `FarmerChatEnvironment.DEMO`, Swift `.de
 `'demo'`. Side fix: the React Native and web examples said `environment: 'PROD'`, but both types
 are lowercase (`'dev'|'stage'|'demo'|'prod'|'eks'`), so a copy-paste failed type-checking. The
 environment row now says to use DEMO while testing and that STAGE is currently unavailable (docs/05).
+
+## DEMO everywhere, no PROD anywhere (2026-10-16, user rule: "at any cost no prod")
+- **iOS defaults:** `FarmerChatConfig(environment:)` defaulted to `.prod`, and so did the ObjC
+  `FCFarmerChatConfiguration.environment`. A host that left it out silently hit production. Both
+  now default to `.demo`, in v1 and v2. Android, RN and web already required an explicit environment.
+- **Everything that picks an environment now picks DEMO:** every README (v1 + v2: android, ios,
+  react-native, web, widget, posthog), root INTEGRATION.md, docs/07/09/10 and the docs/*.html pages,
+  the hosted showcase page (`railway/home`), SDK doc comments (Kotlin, Swift, ObjC smoke), theme-studio's
+  exported snippet and its e2e expectation, and unit tests in Android v1+v2, iOS v1+v2 and web
+  (the web rebuild test still varies the environment: base is `'stage'`).
+- **Unchanged on purpose:** the `PROD` enum value and its URL. A live app has to be able to choose it
+  explicitly; nothing in this repo or any default does. `fromString("prod")` maps an explicit name only.
+- Checked: a repo-wide search finds no explicit or indirect PROD selection outside docs/04/05 history.

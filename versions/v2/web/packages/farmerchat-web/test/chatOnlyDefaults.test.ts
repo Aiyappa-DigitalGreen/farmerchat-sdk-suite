@@ -20,28 +20,28 @@ import { PrefKeys, SessionStore } from '../src/core/storage';
 import { beginChatOnlyJourney, chatOnlyNeedsLanguage } from '../src/core/chatOnlyBootstrap';
 
 test('mode defaults to CHAT_ONLY and showDrawer then resolves to false', () => {
-  const c = resolveConfig({ environment: 'prod' });
+  const c = resolveConfig({ environment: 'demo' });
   assert.equal(c.mode, 'CHAT_ONLY');
   assert.equal(c.showDrawer, false);
   assert.equal(c.showHistory, false);
 });
 
 test('showHistory follows the mode unless the host sets it', () => {
-  assert.equal(resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY' }).showHistory, true);
-  assert.equal(resolveConfig({ environment: 'prod', showHistory: true }).showHistory, true);
-  assert.equal(resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY', showHistory: false }).showHistory, false);
+  assert.equal(resolveConfig({ environment: 'demo', mode: 'FULL_JOURNEY' }).showHistory, true);
+  assert.equal(resolveConfig({ environment: 'demo', showHistory: true }).showHistory, true);
+  assert.equal(resolveConfig({ environment: 'demo', mode: 'FULL_JOURNEY', showHistory: false }).showHistory, false);
 });
 
 test('FULL_JOURNEY resolves showDrawer to true', () => {
-  const c = resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY' });
+  const c = resolveConfig({ environment: 'demo', mode: 'FULL_JOURNEY' });
   assert.equal(c.mode, 'FULL_JOURNEY');
   assert.equal(c.showDrawer, true);
 });
 
 test('an explicit showDrawer wins over the mode', () => {
-  assert.equal(resolveConfig({ environment: 'prod', showDrawer: true }).showDrawer, true);
+  assert.equal(resolveConfig({ environment: 'demo', showDrawer: true }).showDrawer, true);
   assert.equal(
-    resolveConfig({ environment: 'prod', mode: 'FULL_JOURNEY', showDrawer: false }).showDrawer,
+    resolveConfig({ environment: 'demo', mode: 'FULL_JOURNEY', showDrawer: false }).showDrawer,
     false,
   );
 });
@@ -49,13 +49,13 @@ test('an explicit showDrawer wins over the mode', () => {
 test('unset or blank keys fall back to the bundled defaults; a host value overrides', () => {
   assert.ok(DEFAULT_FARMERCHAT_API_KEY.length > 0);
   assert.ok(DEFAULT_GEO_API_KEY.length > 0);
-  const unset = resolveConfig({ environment: 'prod' });
+  const unset = resolveConfig({ environment: 'demo' });
   assert.equal(unset.farmerChatApiKey, DEFAULT_FARMERCHAT_API_KEY);
   assert.equal(unset.geoApiKey, DEFAULT_GEO_API_KEY);
-  const blank = resolveConfig({ environment: 'prod', farmerChatApiKey: '  ', geoApiKey: '' });
+  const blank = resolveConfig({ environment: 'demo', farmerChatApiKey: '  ', geoApiKey: '' });
   assert.equal(blank.farmerChatApiKey, DEFAULT_FARMERCHAT_API_KEY);
   assert.equal(blank.geoApiKey, DEFAULT_GEO_API_KEY);
-  const custom = resolveConfig({ environment: 'prod', farmerChatApiKey: 'host-key', geoApiKey: 'host-geo' });
+  const custom = resolveConfig({ environment: 'demo', farmerChatApiKey: 'host-key', geoApiKey: 'host-geo' });
   assert.equal(custom.farmerChatApiKey, 'host-key');
   assert.equal(custom.geoApiKey, 'host-geo');
 });
@@ -104,7 +104,7 @@ test('a CHAT_ONLY journey start clears the stored conversation unless opening a 
 
 test('resolveConfig keeps onExit, so the CHAT_ONLY close reaches the host (and the widget)', () => {
   let exited = 0;
-  const c = resolveConfig({ environment: 'prod', onExit: () => { exited += 1; } });
+  const c = resolveConfig({ environment: 'demo', onExit: () => { exited += 1; } });
   c.callbacks.onExit?.();
   assert.equal(exited, 1);
 });

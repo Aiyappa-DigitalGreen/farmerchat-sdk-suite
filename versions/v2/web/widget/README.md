@@ -35,7 +35,7 @@ There is no minimum RAM or CPU: if the device runs the OS or browser version abo
 <script>
   window.farmerChatWidgetSettings = {
     config: {
-      environment: 'prod',
+      environment: 'demo',
       // No keys needed: the FarmerChat API key and the geolocation key are built into the SDK
       // (optional overrides: farmerChatApiKey, geoApiKey).
       onEvent: function (name, props) { /* forward to your analytics */ },
@@ -86,7 +86,7 @@ import { FarmerChatWidget, type FarmerChatConfig } from '@digitalgreenorg/farmer
 
 // A module constant (or useMemo): a new config object rebuilds the SDK and remounts the panel.
 // No keys needed: farmerChatApiKey and geoApiKey are built in (pass them only to override).
-const FC_CONFIG: FarmerChatConfig = { environment: 'prod' };
+const FC_CONFIG: FarmerChatConfig = { environment: 'demo' };
 
 export function App() {
   return <FarmerChatWidget config={FC_CONFIG} launcherLabel="Ask FarmerChat" />;

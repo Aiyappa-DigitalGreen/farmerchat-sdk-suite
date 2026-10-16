@@ -164,7 +164,7 @@ export interface Config {
 
 /** The SDK's own defaults, verbatim from `FarmerChatConfig.kt`. */
 export const CONFIG_DEFAULTS: Config = {
-  environment: "PROD",
+  environment: "DEMO",
   guestApiKey: "",
   geoApiKey: "",
   languageCode: "",

@@ -1768,7 +1768,7 @@
         "label": "Objective-C",
         "lang": "objc",
         "fname": "AppDelegate.m",
-        "code": "@import FarmerChatUIKit;\n\n- (BOOL)application:(UIApplication *)application\ndidFinishLaunchingWithOptions:(NSDictionary *)launchOptions {\n\n    FCFarmerChatConfiguration *cfg =\n        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];\n    cfg.guestApiKey        = @\"<your guest API key>\";\n    cfg.geoApiKey          = @\"<your Google Geolocation key>\";\n    cfg.languageCode       = @\"en\";\n    cfg.defaultCountryCode = @\"IN\";\n\n    [FCFarmerChat initializeWithConfiguration:cfg];\n    return YES;\n}"
+        "code": "@import FarmerChatUIKit;\n\n- (BOOL)application:(UIApplication *)application\ndidFinishLaunchingWithOptions:(NSDictionary *)launchOptions {\n\n    FCFarmerChatConfiguration *cfg =\n        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\n    cfg.guestApiKey        = @\"<your guest API key>\";\n    cfg.geoApiKey          = @\"<your Google Geolocation key>\";\n    cfg.languageCode       = @\"en\";\n    cfg.defaultCountryCode = @\"IN\";\n\n    [FCFarmerChat initializeWithConfiguration:cfg];\n    return YES;\n}"
        }
       ]
      },
@@ -1880,7 +1880,7 @@
         "label": "Objective-C",
         "lang": "objc",
         "fname": null,
-        "code": "FCFarmerChatConfiguration *cfg =\n    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];\ncfg.guestApiKey    = @\"<your guest API key>\";\ncfg.mode           = FCModeChatOnly;\ncfg.showDrawer     = NO;   // moves history + language into the chat app bar\ncfg.showHistory    = YES;\ncfg.showSettings   = NO;\ncfg.showNameScreen = NO;"
+        "code": "FCFarmerChatConfiguration *cfg =\n    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\ncfg.guestApiKey    = @\"<your guest API key>\";\ncfg.mode           = FCModeChatOnly;\ncfg.showDrawer     = NO;   // moves history + language into the chat app bar\ncfg.showHistory    = YES;\ncfg.showSettings   = NO;\ncfg.showNameScreen = NO;"
        }
       ]
      },

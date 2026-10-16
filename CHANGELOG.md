@@ -27,6 +27,10 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 - Minimum requirements per platform in every README and the integration guide; web build target pinned.
 
 ### Changed
+- **iOS: `FarmerChatConfig` and the Objective-C `FCFarmerChatConfiguration` now default to the
+  DEMO environment (were PROD).** No platform selects production on its own any more; a live app
+  must set `environment: .prod` explicitly. All docs, READMEs, guide examples, sample apps and tests
+  use DEMO.
 - Android Maven group is now `io.github.aiyappa-digitalgreen` (was `org.digitalgreen.farmerchat`).
   Artifact names and Kotlin packages are unchanged; update the group in dependency lines.
 - A repeat `initialize` on iOS, React Native and Web now matches Android. It is a no-op unless

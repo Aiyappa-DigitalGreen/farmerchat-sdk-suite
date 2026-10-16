@@ -55,6 +55,8 @@ FarmerChat.ensureChatOnlyBootstrap() / FarmerChat.beginChatOnlyJourney()
 
 FarmerChatConfig {
   environment: dev|stage|demo|prod|eks
+                                  // Required on Android, RN and web. iOS (Swift + ObjC) defaults to
+                                  //   DEMO (was PROD until 2026-10-16): no platform ever picks PROD on its own.
   // v2 2.2.0 (2026-10-09): both keys are BUILT IN on every platform; hosts are not asked for keys.
   farmerChatApiKey?               // optional override of the built-in FarmerChat guest-init API-Key
                                   //   (renamed from guestApiKey — the old name was removed, no alias)

@@ -15,7 +15,7 @@ import org.junit.Test
  */
 class FallbackCountryTest {
 
-    private fun config(country: String = "") = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    private fun config(country: String = "") = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
         .defaultCountryCode(country)
         .build()
 
@@ -42,7 +42,7 @@ class FallbackCountryTest {
     fun `the default config really is unset, so the derivation is reachable`() {
         // If a default ever creeps back in, the locale branch becomes dead code and the SDK
         // silently pins everyone to one region again.
-        val c = FarmerChatConfig.builder(FarmerChatEnvironment.PROD).build()
+        val c = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO).build()
         assertEquals("", c.defaultCountryCode)
         assertEquals("", c.defaultStateCode)
         assertEquals(0.0, c.defaultLatitude, 0.0)

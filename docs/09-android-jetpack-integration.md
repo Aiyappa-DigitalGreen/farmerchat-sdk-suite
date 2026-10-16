@@ -55,7 +55,7 @@ class MyApp : Application() {
         super.onCreate()
         FarmerChat.initialize(
             this,
-            FarmerChatConfig.builder(FarmerChatEnvironment.PROD)   // DEV | STAGE | DEMO | PROD | EKS
+            FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)   // DEV | STAGE | DEMO | PROD | EKS
                 .appearance(FarmerChatAppearance.AUTO)             // DAY | NIGHT | AUTO
                 .onEvent { name, props -> /* forward to your analytics if you like */ }
                 .build()
@@ -100,7 +100,7 @@ Pass a `FarmerChatTheme` at init. **Anything you omit falls back to the FarmerCh
 import androidx.core.content.res.ResourcesCompat
 import org.digitalgreen.farmerchat.sdk.FarmerChatTheme
 
-FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
     .theme(
         FarmerChatTheme.builder()
             // ---- Colors (ARGB ints) ----
@@ -142,7 +142,7 @@ If you set only light colors, sensible dark equivalents are derived automaticall
 ## 5. Optional features (all off/default unless set)
 
 ```kotlin
-FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
     // Point at your own backend instead of a built-in environment:
     .customBaseUrl("https://api.mycompany.com/farmerchat/")
 
@@ -188,7 +188,7 @@ class MyApp : Application() {
         super.onCreate()
         FarmerChat.initialize(
             this,
-            FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+            FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
                 .appearance(FarmerChatAppearance.AUTO)
                 .theme(
                     FarmerChatTheme.builder()

@@ -461,7 +461,7 @@ final class AgenticStreamTests: XCTestCase {
 
     func testAgenticChatIsOptInAndDefaultsOff() {
         // A host that does nothing must keep the 1.0.0 synchronous #27 contract.
-        XCTAssertFalse(FarmerChatConfig(environment: .prod).enableAgenticChat)
-        XCTAssertTrue(FarmerChatConfig(environment: .prod, enableAgenticChat: true).enableAgenticChat)
+        XCTAssertFalse(FarmerChatConfig(environment: .demo).enableAgenticChat)
+        XCTAssertTrue(FarmerChatConfig(environment: .demo, enableAgenticChat: true).enableAgenticChat)
     }
 }

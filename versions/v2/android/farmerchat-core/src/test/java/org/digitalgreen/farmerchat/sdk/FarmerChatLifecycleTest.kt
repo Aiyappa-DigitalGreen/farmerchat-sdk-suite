@@ -43,7 +43,7 @@ class FarmerChatLifecycleTest {
     }
 
     private fun config(mode: FarmerChatMode = FarmerChatMode.FULL_JOURNEY, locale: String? = null) =
-        FarmerChatConfig.builder(FarmerChatEnvironment.PROD).mode(mode).apply {
+        FarmerChatConfig.builder(FarmerChatEnvironment.DEMO).mode(mode).apply {
             if (locale != null) locale(locale)
         }.build()
 

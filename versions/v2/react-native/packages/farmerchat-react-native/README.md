@@ -76,7 +76,7 @@ import {
 } from '@digitalgreenorg/farmerchat-react-native';
 
 FarmerChat.initialize({
-  environment: 'prod', // 'dev' | 'stage' | 'demo' | 'prod' | 'eks'
+  environment: 'demo', // 'dev' | 'stage' | 'demo' | 'prod' | 'eks'
   appearance: 'auto', // 'day' | 'night' | 'auto'
   // mode defaults to 'CHAT_ONLY' (straight into a chat). Pass 'FULL_JOURNEY' for onboarding,
   // Home, drawer and settings.

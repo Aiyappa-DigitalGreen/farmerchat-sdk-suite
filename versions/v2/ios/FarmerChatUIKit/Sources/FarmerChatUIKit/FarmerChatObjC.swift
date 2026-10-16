@@ -115,7 +115,7 @@ public enum FCMode: Int {
 public final class FCFarmerChatConfiguration: NSObject {
 
     // --- Environment / networking
-    @objc public var environment: FCEnvironment = .prod
+    @objc public var environment: FCEnvironment = .demo
     @objc public var customBaseURL: String?
     /// OPTIONAL override; nil/blank = the SDK's built-in Google Geolocation key.
     @objc public var geoApiKey: String?
@@ -331,7 +331,7 @@ public final class FCAuthObservation: NSObject {
 /// Objective-C entry point to the FarmerChat SDK.
 ///
 /// ```objc
-/// FCFarmerChatConfiguration *cfg = [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+/// FCFarmerChatConfiguration *cfg = [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
 /// cfg.languageCode = @"en";
 /// [FCFarmerChat initializeWithConfiguration:cfg];
 /// [FCFarmerChat presentFrom:self animated:YES completion:nil];

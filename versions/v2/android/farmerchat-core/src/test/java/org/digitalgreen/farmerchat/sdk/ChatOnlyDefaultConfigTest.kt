@@ -14,7 +14,7 @@ import org.junit.Test
  */
 class ChatOnlyDefaultConfigTest {
 
-    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
 
     @Test
     fun `defaults to CHAT_ONLY with no drawer and no history`() {

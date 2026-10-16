@@ -11,7 +11,7 @@ import org.junit.Test
  */
 class SimulateAgenticStreamConfigTest {
 
-    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
 
     @Test
     fun `off by default, and the composer still follows agentic chat`() {

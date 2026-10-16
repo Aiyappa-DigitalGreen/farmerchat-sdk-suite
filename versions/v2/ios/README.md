@@ -87,7 +87,7 @@ Android, React Native and web); SPM package versions come from the git tag (`ios
 import FarmerChatCore
 
 FarmerChat.initialize(config: FarmerChatConfig(
-    environment: .prod,          // dev | stage | demo | prod | eks
+    environment: .demo,          // dev | stage | demo | prod | eks
     // geoApiKey / farmerChatApiKey: OPTIONAL. Both keys are BUILT IN — hosts do not supply
     // them. Pass a value only to override the SDK's bundled key (nil/blank = built-in).
     appearance: .auto,           // day | night | auto
@@ -144,7 +144,7 @@ A single resolver overlays the host theme onto the SwiftUI (`FCTheme`) and UIKit
 
 ```swift
 FarmerChat.initialize(config: FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     theme: FarmerChatTheme(
         brandPrimary: Color(hex: 0x1565C0),      // app bars / brand surfaces
         brandPrimaryDark: Color(hex: 0x0D47A1),  // primary buttons / input tiles
@@ -170,7 +170,7 @@ All additive; defaults preserve today's behavior.
 
 ```swift
 FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
 
     // C2 identity injection
     authMode: .hostToken,                 // .sdkOtp (default) | .hostToken
@@ -270,7 +270,7 @@ writing any Swift. Import the module and use the `FC`-prefixed types:
 @import FarmerChatUIKit;
 
 FCFarmerChatConfiguration *cfg =
-    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentProd];
+    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
 cfg.languageCode      = @"en";
 cfg.defaultCountryCode = @"IN";
 // farmerChatApiKey / geoApiKey are built in — set them only to override.
@@ -432,7 +432,7 @@ endpoint **#27a** `api/chat/get_answer_for_text_query_agentic/` (voice
 transcription and image analysis stay synchronous, as on Android).
 
 ```swift
-FarmerChatConfig(environment: .prod, enableAgenticChat: true)
+FarmerChatConfig(environment: .demo, enableAgenticChat: true)
 ```
 
 ### Transport (verified live 2026-09-02 on dev/stage/prod)

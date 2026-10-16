@@ -76,7 +76,7 @@ import {
 } from '@digitalgreenorg/farmerchat-react-native';
 
 FarmerChat.initialize({
-  environment: 'prod', // 'dev' | 'stage' | 'demo' | 'prod' | 'eks'
+  environment: 'demo', // 'dev' | 'stage' | 'demo' | 'prod' | 'eks'
   appearance: 'auto', // 'day' | 'night' | 'auto'
   geoApiKey: '<google-geolocation-key>', // optional — language auto-detect fallback
   // guestApiKey: '<override>',          // optional — overrides the built-in guest key

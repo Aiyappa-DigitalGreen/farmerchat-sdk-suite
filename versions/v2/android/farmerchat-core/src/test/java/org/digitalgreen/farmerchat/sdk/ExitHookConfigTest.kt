@@ -11,7 +11,7 @@ import org.junit.Test
  */
 class ExitHookConfigTest {
 
-    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.PROD)
+    private fun builder() = FarmerChatConfig.builder(FarmerChatEnvironment.DEMO)
 
     @Test
     fun `onExit is unset by default`() {
