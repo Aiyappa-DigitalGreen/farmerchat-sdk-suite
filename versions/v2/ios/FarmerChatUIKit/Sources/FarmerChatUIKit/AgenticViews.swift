@@ -229,7 +229,21 @@ final class FCUILogoSpinnerView: UIView {
 /// low-RAM devices; iOS has no equivalent signal, and Reduce Motion is the one that asks for it).
 final class FCUIShimmerLabel: UIView {
     private static let sweepKey = "fc.shimmer"
-    private static let duration: CFTimeInterval = 1.2
+    /// Sweep period: 1.2 s for the spinner label (ShimmerText.kt default); the composer
+    /// placeholder uses 2.25 s (InputComposer.kt:143).
+    var period: CFTimeInterval = 1.2
+    /// The idle colour; foregroundPrimary unless the owner overrides it (composer placeholder).
+    var baseColor: UIColor? {
+        didSet { base.textColor = baseColor ?? FCUITheme.foregroundPrimary }
+    }
+    var font: UIFont {
+        get { base.font }
+        set { base.font = newValue; highlight.font = newValue; setNeedsLayout() }
+    }
+    var numberOfLines: Int {
+        get { base.numberOfLines }
+        set { base.numberOfLines = newValue; highlight.numberOfLines = newValue }
+    }
 
     private let base = UILabel()
     private let highlight = UILabel()
@@ -311,7 +325,7 @@ final class FCUIShimmerLabel: UIView {
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        base.textColor = FCUITheme.foregroundPrimary
+        base.textColor = baseColor ?? FCUITheme.foregroundPrimary
         highlight.textColor = FCUITheme.brandAccent
     }
 
@@ -333,7 +347,7 @@ final class FCUIShimmerLabel: UIView {
         let sweep = CABasicAnimation(keyPath: "position.x")
         sweep.fromValue = -0.6 * width
         sweep.toValue = 1.6 * width
-        sweep.duration = Self.duration
+        sweep.duration = period
         sweep.repeatCount = .infinity
         band.add(sweep, forKey: Self.sweepKey)
     }
@@ -462,26 +476,31 @@ func fcuiActionChip(
     title: String,
     sweepBorder: Bool = false,
     enabled: Bool = true,
+    loading: Bool = false,
+    identifier: String? = nil,
     action: @escaping () -> Void
 ) -> UIButton {
-    let accent = FCUITheme.brandAccent
+    // ActionButton.kt:54-126 (Share) / ListenButton.kt:76-139 (Listen, `light = true`): a 42pt
+    // pill on surfaceReadingSecondary, a 23pt foregroundPrimary icon and a labelMedium
+    // foregroundPrimary title. Share: 12 start / 16 end, 10 gap, 3pt sweep border. Listen: 12
+    // each side, 6 gap, no border.
+    let ink = FCUITheme.foregroundPrimary
     var config = UIButton.Configuration.plain()
-    config.image = UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
-    config.title = title
-    config.imagePadding = 6
-    config.baseForegroundColor = FCUITheme.foregroundSecondary
-    config.imageColorTransformer = UIConfigurationColorTransformer { _ in accent }
-    config.background.backgroundColor = FCUITheme.surfaceSecondary
+    config.image = UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+    // ListenButton.kt Loading: a 20pt ring in place of the icon.
+    config.showsActivityIndicator = loading
+    var attributed = AttributedString(title)
+    attributed.font = FCUITypography.current.labelMedium.font
+    config.attributedTitle = attributed
+    config.imagePadding = sweepBorder ? 10 : 6
+    config.baseForegroundColor = ink
+    config.background.backgroundColor = FCUITheme.surfaceReadingSecondary
+    config.background.strokeWidth = 0
     config.cornerStyle = .capsule
-    if sweepBorder {
-        config.background.strokeWidth = 0
-    } else {
-        config.background.strokeColor = accent.withAlphaComponent(0.28)
-        config.background.strokeWidth = 1
-    }
-    config.contentInsets = NSDirectionalEdgeInsets(top: 9, leading: 14, bottom: 9, trailing: 14)
+    config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: sweepBorder ? 16 : 12)
     let button = UIButton(configuration: config)
-    button.titleLabel?.font = FCUITypography.current.labelSmall.font
+    button.heightAnchor.constraint(equalToConstant: 42).isActive = true
+    button.accessibilityIdentifier = identifier
     button.addAction(UIAction { _ in action() }, for: .touchUpInside)
     if !enabled {
         button.alpha = 0.4
@@ -726,6 +745,12 @@ final class FCUIAlignmentChipView: UIControl {
         let accent = FCUITheme.brandAccent
         let selectedAccent = isEscalate ? red : accent
         let clickable = enabled && !selected
+        // One accessible button per chip (VoiceOver and UI tests), not three loose texts.
+        isAccessibilityElement = true
+        accessibilityLabel = label
+        accessibilityTraits = clickable ? .button : [.button, .notEnabled]
+        if selected { accessibilityTraits.insert(.selected) }
+        if accessibilityIdentifier == nil { accessibilityIdentifier = "fcAlignmentChip" }
 
         // Chip.kt surfaceColor / labelColor / chevronColor / border tables.
         if selected {

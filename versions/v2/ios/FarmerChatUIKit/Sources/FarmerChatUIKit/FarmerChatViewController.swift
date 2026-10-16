@@ -10,8 +10,11 @@ import FarmerChatCore
 /// `FarmerChatSwiftUI` and call `FarmerChat.shared.present(from:)` — that
 /// package hosts the SwiftUI flow in a `UIHostingController`. This package
 /// stays iOS 15-compatible and has no SwiftUI in its public path.
-public final class FarmerChatViewController: UINavigationController {
+public final class FarmerChatViewController: UINavigationController, UINavigationControllerDelegate {
     private var cancellables = Set<AnyCancellable>()
+    /// Fired whenever a screen finishes appearing at the top of the journey (presenters such as
+    /// FarmerChatFabButton use it to hide their fallback close while the screen has its own).
+    var onTopScreenChanged: ((UIViewController) -> Void)?
 
     // Shared, nav-controller-scoped view models & managers (app parity: the
     // drawer's recent-8 list + language label, and the global location prompt).
@@ -25,6 +28,7 @@ public final class FarmerChatViewController: UINavigationController {
     public convenience init() {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatViewController()")
         self.init(rootViewController: FCUISplashViewController())
+        delegate = self
         modalPresentationStyle = .fullScreen
         setNavigationBarHidden(true, animated: false)
         overrideUserInterfaceStyle = FCUITheme.interfaceStyle(for: FarmerChat.shared.appearance)
@@ -108,6 +112,11 @@ public final class FarmerChatViewController: UINavigationController {
     public override func viewDidLoad() {
         super.viewDidLoad()
         installLocationHost()
+    }
+
+    public func navigationController(_ navigationController: UINavigationController,
+                                     didShow viewController: UIViewController, animated: Bool) {
+        onTopScreenChanged?(viewController)
     }
 
     /// Global location-prompt overlay above the whole nav stack.

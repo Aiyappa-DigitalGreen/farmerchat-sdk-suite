@@ -46,7 +46,7 @@ public final class FarmerChatFabButton: UIButton {
         // Precedence: per-instance override → config default → theme brand / white.
         let bg = backgroundColor ?? config.fabBackgroundColor.map(UIColor.init) ?? FCUITheme.brandSurfacePrimary
         let fg = contentColor ?? config.fabContentColor.map(UIColor.init) ?? .white
-        configureAppearance(title: title ?? config.fabLabel, bg: bg, fg: fg, systemImage: systemImage ?? "leaf.circle.fill")
+        configureAppearance(title: title ?? config.fabLabel, bg: bg, fg: fg, systemImage: systemImage)
         addTarget(self, action: #selector(handleTap), for: .touchUpInside)
     }
 
@@ -55,14 +55,19 @@ public final class FarmerChatFabButton: UIButton {
         fatalError("FarmerChatFabButton is created in code")
     }
 
-    private func configureAppearance(title: String?, bg: UIColor, fg: UIColor, systemImage: String) {
+    private func configureAppearance(title: String?, bg: UIColor, fg: UIColor, systemImage: String?) {
         backgroundColor = bg
         tintColor = fg
-        let symbol = UIImage(systemName: systemImage,
-                             withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .regular))
-        setImage(symbol, for: .normal)
+        // The FarmerChat mark (logo_mark), as the compose FAB draws it, unless the host asked for
+        // a specific SF Symbol.
+        let image: UIImage? = systemImage.map {
+            UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .regular))
+        } ?? Self.logoImage(size: 26)
+        setImage(image?.withRenderingMode(.alwaysTemplate), for: .normal)
         imageView?.contentMode = .scaleAspectFit
-        layer.cornerRadius = 28
+        // Material3 ExtendedFloatingActionButton: 56pt high, radius 16.
+        layer.cornerRadius = 16
+        layer.cornerCurve = .continuous
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = 0.25
         layer.shadowRadius = 8
@@ -72,11 +77,20 @@ public final class FarmerChatFabButton: UIButton {
         if let title {
             setTitle(title, for: .normal)
             setTitleColor(fg, for: .normal)
-            titleLabel?.font = FCUITypography.current.labelMedium.font
-            contentEdgeInsets = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 22)
-            imageEdgeInsets = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 10)
+            titleLabel?.font = FCUITypography.current.labelLarge.font
+            // 12pt icon-to-label gap: shift the title right and widen the content to match.
+            contentEdgeInsets = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 22 + 12)
+            titleEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: -12)
         } else {
             widthAnchor.constraint(equalToConstant: 56).isActive = true
+        }
+    }
+
+    private static func logoImage(size: CGFloat) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { context in
+            context.cgContext.addPath(FCUILogoMark.path(size: size))
+            context.cgContext.setFillColor(UIColor.black.cgColor)
+            context.cgContext.fillPath()
         }
     }
 
@@ -92,19 +106,26 @@ public final class FarmerChatFabButton: UIButton {
         }
     }
 
-    private func addCloseButton(to journey: UIViewController) {
-        let close = UIButton(type: .system)
-        close.setImage(UIImage(systemName: "xmark"), for: .normal)
-        close.tintColor = .white
-        close.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-        close.layer.cornerRadius = 20
-        close.translatesAutoresizingMaskIntoConstraints = false
+    /// Fallback close for screens without their own exit (language, onboarding, Home); iOS has no
+    /// system Back to fall back on. Hidden while the CHAT_ONLY chat — which draws its own ✕ — is on
+    /// top (parity with the SwiftUI FAB, b26efcb), so two ✕'s never overlap the header.
+    private func addCloseButton(to journey: FarmerChatViewController) {
+        let close = FCUIHeaderTile(systemImage: "xmark", accessibilityLabel: fcuiLabel(FCLabels.close, "Close"), identifier: "fcFabClose")
+        let update: (UIViewController?) -> Void = { [weak close, weak journey] top in
+            // Also hidden on any pushed screen: its navigation Back is the way out there.
+            let pushed = (journey?.viewControllers.count ?? 0) > 1
+            close?.isHidden = pushed || (top as? FCUIChatViewController)?.hasOwnExit == true
+        }
+        update(journey.topViewController)
+        let previous = journey.onTopScreenChanged
+        journey.onTopScreenChanged = { top in
+            previous?(top)
+            update(top)
+        }
         close.addAction(UIAction { [weak journey] _ in journey?.dismiss(animated: true) }, for: .touchUpInside)
         journey.view.addSubview(close)
         NSLayoutConstraint.activate([
-            close.widthAnchor.constraint(equalToConstant: 40),
-            close.heightAnchor.constraint(equalToConstant: 40),
-            close.topAnchor.constraint(equalTo: journey.view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            close.topAnchor.constraint(equalTo: journey.view.safeAreaLayoutGuide.topAnchor, constant: 11),
             close.trailingAnchor.constraint(equalTo: journey.view.trailingAnchor, constant: -16),
         ])
     }

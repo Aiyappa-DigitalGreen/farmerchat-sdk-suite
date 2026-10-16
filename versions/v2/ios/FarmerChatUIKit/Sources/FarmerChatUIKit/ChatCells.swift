@@ -5,6 +5,9 @@ import FarmerChatCore
 
 // MARK: - Chat bubble cell (user / AI / loading)
 
+/// ListenButton.kt states the action row renders.
+enum FCUIListenState { case idle, loading, playing }
+
 final class FCUIChatBubbleCell: UICollectionViewCell {
     var onRetry: (() -> Void)?
     var onListen: (() -> Void)?
@@ -45,22 +48,66 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     /// User row: `Row(padding(start = 64))` inside the 20pt list gutter, bubble `widthIn(max 290)`.
     private var userLeadingMinConstraint: NSLayoutConstraint!
     private var userMaxWidthConstraint: NSLayoutConstraint!
-    private var aiMaxWidthConstraint: NSLayoutConstraint!
+    private var aiTrailingConstraint: NSLayoutConstraint!
+    /// The user bubble's exact width (see `preferredLayoutAttributesFitting`).
+    private lazy var userWidthConstraint: NSLayoutConstraint = {
+        let c = bubble.widthAnchor.constraint(equalToConstant: 290)
+        c.priority = .required - 1
+        return c
+    }()
+    private let stack = UIStackView()
     /// The message whose "Read full advice" wobble has already been scheduled (once per answer).
     private var wobbledMessageId: String?
     private var imageTask: URLSessionDataTask?
     private var currentText = ""
+    /// Whether the row is the farmer's right-aligned bubble (padding 16, width ≤ 290).
+    private var isRightAligned = false
+
+    /// Self-sizing: a multi-line UILabel measures against `preferredMaxLayoutWidth`, which is
+    /// unknown before the first layout pass — without it the label is sized for a wider line
+    /// and the cell clips its last line ("How do I control aphids on tomato" lost "plants").
+    override func preferredLayoutAttributesFitting(
+        _ layoutAttributes: UICollectionViewLayoutAttributes
+    ) -> UICollectionViewLayoutAttributes {
+        let width = layoutAttributes.size.width
+        if width > 0 {
+            let labelWidth = max(isRightAligned ? min(290, width - 20 - 84) - 32 : width - 40, 0)
+            if abs(textLabel.preferredMaxLayoutWidth - labelWidth) > 0.5 {
+                textLabel.preferredMaxLayoutWidth = labelWidth
+            }
+            // The farmer's bubble hugs its text: pin its width to the measured line width so
+            // the label is laid out at exactly the width it was measured at.
+            if isRightAligned {
+                var contentWidth = labelWidth
+                if imageView.isHidden && clipButton.isHidden, let text = textLabel.attributedText, text.length > 0 {
+                    let measured = text.boundingRect(
+                        with: CGSize(width: labelWidth, height: .greatestFiniteMagnitude),
+                        options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil
+                    ).width
+                    contentWidth = min(ceil(measured) + 1, labelWidth)
+                }
+                userWidthConstraint.constant = contentWidth + 32
+                userWidthConstraint.isActive = true
+            } else {
+                userWidthConstraint.isActive = false
+            }
+        }
+        return super.preferredLayoutAttributesFitting(layoutAttributes)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         // Chat UI customization (nil = current defaults 18 / 16).
         let cfg = FarmerChat.shared.config
-        bubble.layer.cornerRadius = cfg.bubbleCornerRadius ?? 18
-        bubble.layer.cornerCurve = .continuous
+        // UserChatBubble.kt:78-85 — plain RoundedCornerShape 20, bottom-end square.
+        bubble.layer.cornerRadius = cfg.bubbleCornerRadius ?? 20
         bubble.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubble)
 
         textLabel.numberOfLines = 0
+        // Word wrapping, never tail truncation: a truncating paragraph style clips a multi-line
+        // self-sizing label to its estimated height ("How do I control aphids on tomato...").
+        textLabel.lineBreakMode = .byWordWrapping
         textLabel.font = FCUITypography.current.bodyMedium(atSize: cfg.messageFontSize ?? 17).font
 
         imageView.contentMode = .scaleAspectFill
@@ -101,11 +148,9 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         additiveSurface.onChipTap = { [weak self] chip in self?.onAlignmentChipTap?(chip) }
         stallHint.onStallChanged = { [weak self] in self?.onLayoutInvalidated?() }
 
-        let stack = UIStackView(arrangedSubviews: [
-            imageView, clipButton, textLabel, failedLabel,
-            streamStatusView, stallHint, streamErrorWrap,
-            actionsRow, additiveWrap, spinner
-        ])
+        [imageView, clipButton, textLabel, failedLabel,
+         streamStatusView, stallHint, streamErrorWrap,
+         actionsRow, additiveWrap, spinner].forEach { stack.addArrangedSubview($0) }
         stack.axis = .vertical
         stack.spacing = 8
         stack.isLayoutMarginsRelativeArrangement = true
@@ -118,11 +163,12 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         trailingConstraint = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
         userLeadingMinConstraint = bubble.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20 + 64)
         userMaxWidthConstraint = bubble.widthAnchor.constraint(lessThanOrEqualToConstant: 290)
-        aiMaxWidthConstraint = bubble.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.86)
+        // ChatThreadContent.kt:513-517 — the answer is bare MarkdownText across the full list width.
+        aiTrailingConstraint = bubble.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20)
         NSLayoutConstraint.activate([
             bubble.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
             bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
-            aiMaxWidthConstraint,
+            aiTrailingConstraint,
             stack.topAnchor.constraint(equalTo: bubble.topAnchor),
             stack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor),
@@ -155,6 +201,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     func configure(
         message: ChatMessage,
         isTtsEnabled: Bool,
+        listenState: FCUIListenState = .idle,
         playback: AudioPlaybackService,
         isLatest: Bool = false,
         isBusy: Bool = false,
@@ -164,8 +211,9 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         case .user(let user):
             currentText = user.text
             alignRight(true)
-            bubble.backgroundColor = FarmerChat.shared.config.userBubbleColor.map(UIColor.init) ?? FCUITheme.brandSurfacePrimary
-            textLabel.textColor = FarmerChat.shared.config.userBubbleTextColor.map(UIColor.init) ?? .white
+            // UserChatBubble.kt:91 — surfaceReadingSecondary grey, black bodyMedium, 16 padding.
+            bubble.backgroundColor = FarmerChat.shared.config.userBubbleColor.map(UIColor.init) ?? FCUITheme.surfaceReadingSecondary
+            textLabel.textColor = FarmerChat.shared.config.userBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
             textLabel.fcSetText(user.text, style: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
             textLabel.isHidden = user.text.isEmpty
             spinner.stopAnimating()
@@ -188,11 +236,17 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         case .aiResponse(let ai):
             currentText = ai.text
             alignRight(false)
-            bubble.backgroundColor = FCUITheme.surfaceReadingSecondary
-            textLabel.textColor = FarmerChat.shared.config.aiBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
+            bubble.backgroundColor = .clear
+            let answerColor = FarmerChat.shared.config.aiBubbleTextColor.map(UIColor.init) ?? FCUITheme.foregroundPrimary
+            textLabel.textColor = answerColor
             // A streaming answer grows IN PLACE with no typewriter/reveal animation — the text
-            // already arrives token by token (2.0.0).
-            textLabel.fcSetText(ai.text, style: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
+            // already arrives token by token (2.0.0). MarkdownText.kt: bold/italic, headers,
+            // bullets and the block spacing table.
+            textLabel.attributedText = ai.text.isEmpty ? nil : FCUIMarkdown.render(
+                ai.text,
+                color: answerColor,
+                body: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17)
+            )
             textLabel.isHidden = ai.text.isEmpty
             spinner.stopAnimating()
             failedLabel.isHidden = true
@@ -258,6 +312,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
                 buildActions(
                     showListen: ai.messageId != nil,
                     listenEnabled: isTtsEnabled,
+                    listenState: listenState,
                     readFullAdvice: readFullAdviceAvailable,
                     messageId: ai.id
                 )
@@ -314,19 +369,32 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         streamErrorWrap.isHidden = true
     }
 
+    /// Right = the farmer's grey bubble (padding 16, bottom-end corner square); left = the bare
+    /// answer / spinner across the full list width (no padding).
     private func alignRight(_ right: Bool) {
+        isRightAligned = right
         if right {
             leadingConstraint.isActive = false
-            aiMaxWidthConstraint.isActive = false
+            aiTrailingConstraint.isActive = false
             trailingConstraint.isActive = true
             userLeadingMinConstraint.isActive = true
             userMaxWidthConstraint.isActive = true
+            stack.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+            stack.spacing = 10
+            let rtl = effectiveUserInterfaceLayoutDirection == .rightToLeft
+            bubble.layer.maskedCorners = rtl
+                ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+                : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner]
         } else {
             trailingConstraint.isActive = false
             userLeadingMinConstraint.isActive = false
             userMaxWidthConstraint.isActive = false
+            userWidthConstraint.isActive = false
             leadingConstraint.isActive = true
-            aiMaxWidthConstraint.isActive = true
+            aiTrailingConstraint.isActive = true
+            stack.layoutMargins = .zero
+            stack.spacing = 8
+            bubble.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         }
     }
 
@@ -351,7 +419,8 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
     /// answer whose "Read full advice" is available shows ONLY that primary button; every other
     /// answer — agentic, legacy and pre-generated alike (`useChips = true` everywhere) — shows the
     /// "AI may be wrong" note above compact Share (accent sweep ring) + Listen pills. No Save.
-    private func buildActions(showListen: Bool, listenEnabled: Bool, readFullAdvice: Bool, messageId: String) {
+    private func buildActions(showListen: Bool, listenEnabled: Bool, listenState: FCUIListenState = .idle,
+                              readFullAdvice: Bool, messageId: String) {
         actionsRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         actionsRow.isHidden = false
 
@@ -370,9 +439,10 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         actionsRow.directionalLayoutMargins.bottom = 1
 
         let infoIcon = UIImageView(image: UIImage(
-            systemName: "info.circle",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+            systemName: "info.circle.fill",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)
         ))
+        // ChatResponseActions.kt:101-117 — icon_info 18dp tinted buttonPrimaryAccent.
         infoIcon.tintColor = FCUITheme.brandAccent
         infoIcon.setContentHuggingPriority(.required, for: .horizontal)
         let warning = UILabel()
@@ -394,16 +464,20 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             systemImage: "square.and.arrow.up",
             title: fcuiLabel(FCLabels.shareDownload, "Share"),
             sweepBorder: true,
+            identifier: "fcShare",
             action: { [weak self] in
                 guard let self else { return }
                 self.onShare?(self.currentText)
             }
         ))
         if showListen {
+            // ListenButton.kt:142-192 — Loading: ring + "Loading..."; Playing: Pause; else VolumeUp.
             pills.addArrangedSubview(fcuiActionChip(
-                systemImage: "speaker.wave.2.fill",
-                title: fcuiLabel(FCLabels.listen, "Listen"),
+                systemImage: listenState == .playing ? "pause.fill" : "speaker.wave.2.fill",
+                title: listenState == .loading ? fcuiLabel(FCLabels.loading, "Loading...") : fcuiLabel(FCLabels.listen, "Listen"),
                 enabled: listenEnabled,
+                loading: listenState == .loading,
+                identifier: "fcListen",
                 action: { [weak self] in self?.onListen?() }
             ))
         }
@@ -565,6 +639,7 @@ final class FCUIFollowUpChipCell: UICollectionViewCell {
         chip.accessibilityHint = fcuiLabel(FCLabels.ask, "Ask")
         chip.isAccessibilityElement = true
         chip.accessibilityTraits = .button
+        chip.accessibilityIdentifier = "fcFollowUpChip"
         contentView.alpha = 0
         UIView.animate(withDuration: 0.3) { self.contentView.alpha = 1 }
     }

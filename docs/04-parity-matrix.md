@@ -8816,3 +8816,28 @@ camera. Checks: typecheck, test (33), build, api:check, size (223/250 KB) pass.
 Not fixed: Listen's bars and its ~2 s state lag; alignment chips send `follow_up`, not `align_chip_sel`
 + `parent_message_id`; history follow-ups carry no ids; the question bubble flickers once at answer;
 no haptic tick on tips.
+
+## Cross-platform fidelity pass: iOS UIKit (2026-10-16)
+New host `~/XcodeProjects/FarmerChatUIKitDemo` (xcodegen, iOS 15, local SPM), iPhone 17 Pro simulator,
+XCUITest, DEMO. Closes the old UIKit rows ("system nav bar", "no composer", "no follow-up title/fade").
+Fixed in `FarmerChatUIKit` (new `ChatChrome.swift`): the branded green header with glow, tiles and
+fading logo (replaces the system nav bar); the floating composer with aura, shimmer and slide-away; the
+user bubble (#ECECEE, square bottom-end, ≤290 measured, no truncated last line); the answer as bare
+full-width markdown (no grey bubble, no raw `**`); Share/Listen pills with loading/playing; the previous
+answer drops its actions during a follow-up; tips carousel; a full LanguageScreen port; FAB logo mark;
+the FAB ✕ hidden on the chat-only chat and pushed screens (`FarmerChatViewController` is now its own
+`UINavigationControllerDelegate`; docs/03); accessible chip ids; TTS pause no longer restarts, and a new
+answer no longer replays the old clip (code only, not exercised).
+End to end on DEMO: language, streamed answer, follow-ups decoded (3), Share sheet, Listen
+(`synthesise_audio` 200), chip → `follow_up_question_click` 200, typed follow-up → no #30, ✕ → onExit,
+deep link. UNVERIFIED: voice, camera, audible playback. Checks: UIKit xcodebuild OK; ObjC smoke builds;
+Core 146/0; host UI tests 2/2.
+Not fixed: Listen's playing bars; server-discovered tips (needs a Core API); markdown tables flattened
+("a · b"); the Kannada terms text on the language screen looks unevenly spaced (justified).
+
+## Android Compose end-to-end completion (2026-10-16)
+FarmerChatComposeDemo on emulator-5554, DEMO: Listen → `synthesise_audio` 200; Share → the system
+chooser (`ChooserActivityLauncher`); follow-up chip → `follow_up_question_click` 200, answer 200, new
+follow-ups 200. With the earlier runs, every step of the end-to-end list passes on compose.
+Checked and NOT a compose bug: typed composer text is sent as `SendFollowUpQuestion(question = text)`,
+exactly as the app's composer (`ChatScreen.kt:1811`), and #30 fires only with a follow-up id.

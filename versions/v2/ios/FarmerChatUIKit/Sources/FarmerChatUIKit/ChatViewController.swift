@@ -59,8 +59,16 @@ final class FCUIChatViewController: UIViewController {
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Int, Row>!
     private var messagesById: [String: ChatMessage] = [:]
-    private let inputBar = UIStackView()
-    private let askButton = UIButton(type: .system)
+    /// InputComposer.kt (floating, anchored, compact) — the always-visible text field.
+    private var composer: FCUIComposerView!
+    /// Pins the composer to the keyboard (4pt gap) or the safe area (0 → the home-indicator inset).
+    private var composerBottom: NSLayoutConstraint!
+    /// Slides the composer 400pt down while an answer loads (ChatScreen.kt:1752).
+    private var composerHidden = false
+    /// Tips.kt pager over the bottom while the first answer is generated.
+    private let tips = FCUITipsView()
+    /// LogoAppBar.kt — the branded bar replacing the system navigation bar on this screen.
+    private var appBar: FCUIChatAppBar!
     /// ScrollIndicator.kt — bottom-centre, 16 above the thread's bottom edge (the input bar sits
     /// below the list here rather than over it, so the app's `inputButtonsHeight` is not added).
     private let scrollIndicator = FCUIScrollIndicator()
@@ -70,8 +78,6 @@ final class FCUIChatViewController: UIViewController {
     private var emptyState: FCUIChatEmptyStateView!
     /// The answer id the indicator's timeline last started for (`remember(triggerKey)`).
     private var scrollIndicatorKey: String?
-    /// "FarmerChat" title — LogoAppBar fades its centre mark in (600 ms) / out (300 ms) on `isLoading`.
-    private let titleLabel = UILabel()
     private var didInitialize = false
     // History pagination: track the previous thread shape so a prepended older
     // page (load-earlier) preserves scroll position instead of jumping to the
@@ -84,6 +90,10 @@ final class FCUIChatViewController: UIViewController {
     private var prevRows: [Row] = []
     private var prevMessagesById: [String: ChatMessage] = [:]
     private var prevIsLoading = false
+    private var prevListenKey = ""
+    private var autoPlayedAudioUrl: String?
+    /// The answer the current TTS clip belongs to.
+    private var audioOwnerRowId: String?
     private var prevLastAiRowId: String?
     private var prevIsInitialHistoryLoaded = false
     // Reserve + pinning (port of Android core ChatReserve.kt; see `updateReserveInset`).
@@ -111,6 +121,10 @@ final class FCUIChatViewController: UIViewController {
     /// from starting a flow nothing is listening to (see `observeLocationOutcomes`).
     private var isObservingLocationOutcomes = false
 
+    /// The CHAT_ONLY chat draws its own ✕ that exits the SDK, so a presenter's fallback close
+    /// (FarmerChatFabButton) must not draw a second one over it.
+    var hasOwnExit: Bool { args.source == "chatOnly" }
+
     init(args: FCUIChatArgs) {
         self.args = args
         super.init(nibName: nil, bundle: nil)
@@ -126,27 +140,8 @@ final class FCUIChatViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfaceReadingPrimary
-        navigationController?.setNavigationBarHidden(false, animated: false)
-        title = "FarmerChat"
-        titleLabel.text = "FarmerChat"
-        titleLabel.font = FCUITypography.current.titleMedium.font
-        titleLabel.textColor = FCUITheme.foregroundPrimary
-        navigationItem.titleView = titleLabel
         navigationItem.hidesBackButton = true
-        if args.source == "history" {
-            navigationItem.leftBarButtonItem = UIBarButtonItem(
-                image: UIImage(systemName: "chevron.left"),
-                primaryAction: UIAction { [weak self] _ in self?.close() }
-            )
-        } else {
-            // App parity (ChatScreen.kt LogoAppBar `leftPainter = R.drawable.leftbutton` for the
-            // Home entry): the stroked back arrow on a 42pt #08361B disc. CHAT_ONLY keeps its
-            // close-the-SDK semantics behind the same glyph.
-            let back = FCUILeftButton()
-            back.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
-            navigationItem.leftBarButtonItem = UIBarButtonItem(customView: back)
-        }
-        configureDrawerOffActions()
+        buildAppBar()
 
         buildCollectionView()
         buildInputBar()
@@ -161,6 +156,19 @@ final class FCUIChatViewController: UIViewController {
         FarmerChat.shared.analytics.screenViewed(ScreenNames.chat, extra: ["source": args.source])
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // LogoAppBar replaces the system bar; screens pushed from here (language, history) show
+        // their own again.
+        navigationController?.setNavigationBarHidden(true, animated: animated)
+    }
+
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        // MainActivity.kt: status icons follow the system (dark icons on a light system) over
+        // the green bar.
+        .default
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // The viewport height (keyboard, rotation) is an input to the reserve.
@@ -169,6 +177,9 @@ final class FCUIChatViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        if !isMovingFromParent, navigationController?.topViewController !== self {
+            navigationController?.setNavigationBarHidden(false, animated: animated)
+        }
         if isMovingFromParent {
             playback.stop()
             ttsPlayback.stop()
@@ -177,38 +188,56 @@ final class FCUIChatViewController: UIViewController {
         }
     }
 
-    /// Drawer off (the CHAT_ONLY default): the chat bar carries the only routes to Past Advice
-    /// and Language. Gated as on Android: history on `!showDrawer && showHistory`, language on
-    /// `!showDrawer`. Both screens are pushed, so their back button returns here.
-    private func configureDrawerOffActions() {
+    /// LogoAppBar.kt. Left: CHAT_ONLY → the SDK's ✕ tile (exit to the host); History entry → a
+    /// back tile; Home entry → the app's `leftbutton` disc. Right (drawer off, the CHAT_ONLY
+    /// default): the globe tile (language) and, when `showHistory`, the history tile — SDK
+    /// additions, gated as on Android (`!showDrawer`, `!showDrawer && showHistory`).
+    private func buildAppBar() {
         let config = FarmerChat.shared.config
-        guard !config.showDrawer else { return }
-        var items: [UIBarButtonItem] = []
-        // UIKit lays rightBarButtonItems out right-to-left: language rightmost, history beside it.
-        let language = UIBarButtonItem(
-            image: UIImage(systemName: "globe"),
-            primaryAction: UIAction { [weak self] _ in
-                self?.navigationController?.pushViewController(
-                    FCUILanguageViewController(mode: .settings), animated: true
-                )
-            }
-        )
-        language.accessibilityLabel = "language"
-        items.append(language)
-        if config.showHistory {
-            let history = UIBarButtonItem(
-                image: UIImage(systemName: "clock.arrow.circlepath"),
-                primaryAction: UIAction { [weak self] _ in
-                    self?.navigationController?.pushViewController(
-                        FCUIChatHistoryViewController(), animated: true
-                    )
-                }
-            )
-            history.accessibilityLabel = "history"
-            items.append(history)
+        let left: UIView
+        if args.source == "chatOnly" {
+            let close = FCUIHeaderTile(systemImage: "xmark", accessibilityLabel: fcuiLabel(FCLabels.close, "Close"), identifier: "fcChatClose")
+            close.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
+            left = close
+        } else if args.source == "history" {
+            let back = FCUIHeaderTile(systemImage: "chevron.left", accessibilityLabel: "Back", identifier: "fcChatBack")
+            back.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
+            left = back
+        } else {
+            let back = FCUILeftButton()
+            back.accessibilityIdentifier = "fcChatBack"
+            back.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
+            left = back
         }
-        items.forEach { $0.tintColor = FCUITheme.foregroundPrimary }
-        navigationItem.rightBarButtonItems = items
+        var right: [UIView] = []
+        if !config.showDrawer {
+            if config.showHistory {
+                let history = FCUIHeaderTile(systemImage: "clock.arrow.circlepath", accessibilityLabel: "history", identifier: "fcChatHistory")
+                history.addAction(UIAction { [weak self] _ in
+                    self?.navigationController?.pushViewController(FCUIChatHistoryViewController(), animated: true)
+                }, for: .touchUpInside)
+                right.append(history)
+            }
+            let language = FCUIHeaderTile(systemImage: "globe", accessibilityLabel: "language", identifier: "fcChatLanguage")
+            language.addAction(UIAction { [weak self] _ in
+                self?.navigationController?.pushViewController(FCUILanguageViewController(mode: .settings), animated: true)
+            }, for: .touchUpInside)
+            right.append(language)
+        }
+        if right.isEmpty {
+            // LogoAppBar.kt:144-146 — an empty 42pt spacer keeps the logo centred.
+            let spacer = UIView()
+            spacer.translatesAutoresizingMaskIntoConstraints = false
+            spacer.widthAnchor.constraint(equalToConstant: 42).isActive = true
+            right.append(spacer)
+        }
+        appBar = FCUIChatAppBar(left: [left], right: right)
+        view.addSubview(appBar)
+        NSLayoutConstraint.activate([
+            appBar.topAnchor.constraint(equalTo: view.topAnchor),
+            appBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            appBar.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
     }
 
     private func close() {
@@ -305,8 +334,13 @@ final class FCUIChatViewController: UIViewController {
             cell.configure(
                 message: message,
                 isTtsEnabled: self.viewModel.state.isTtsEnabled,
+                listenState: self.viewModel.state.isLoadingSynthesiseAudio ? .loading
+                    : (self.viewModel.state.isAudioPlaying ? .playing : .idle),
                 playback: self.playback,
-                isLatest: messageId == self.lastAiRowId,
+                // ChatThreadContent.kt `isLastResponse`: once a follow-up is in flight (its
+                // placeholder / stream is the last row) the previous answer drops its actions.
+                isLatest: messageId == self.lastAiRowId
+                    && !(self.viewModel.state.isLoading && self.viewModel.state.messages.last?.id != messageId),
                 isBusy: self.viewModel.state.isLoading,
                 readFullAdviceAvailable: self.readFullAdviceAvailable(messageId: messageId)
             )
@@ -410,31 +444,28 @@ final class FCUIChatViewController: UIViewController {
     }
 
     private func buildInputBar() {
-        inputBar.axis = .horizontal
-        inputBar.spacing = 10
-        inputBar.isLayoutMarginsRelativeArrangement = true
-        inputBar.layoutMargins = UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 16)
-        inputBar.translatesAutoresizingMaskIntoConstraints = false
-        inputBar.backgroundColor = FCUITheme.surfaceReadingPrimary
-
-        if FarmerChat.shared.config.enableImages {
-            inputBar.addArrangedSubview(circleButton(icon: "camera.fill") { [weak self] in self?.photoTapped() })
+        let config = FarmerChat.shared.config
+        composer = FCUIComposerView(showCamera: config.enableImages, showMic: config.enableVoice)
+        composer.onSend = { [weak self] question in
+            self?.viewModel.onAction(.sendFollowUpQuestion(
+                question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil
+            ))
         }
-        if FarmerChat.shared.config.enableVoice {
-            inputBar.addArrangedSubview(circleButton(icon: "mic.fill") { [weak self] in self?.speakTapped() })
+        composer.onCamera = { [weak self] in self?.photoTapped() }
+        composer.onMic = { [weak self] in self?.speakTapped() }
+        composer.onTextChange = { [weak self] in
+            guard let self else { return }
+            self.render(self.viewModel.state)
+        }
+        composer.onFocusChange = { [weak self] focused in
+            guard let self else { return }
+            self.composerBottom.constant = focused ? -4 : 0
+            self.render(self.viewModel.state)
         }
 
-        askButton.setTitle(fcuiLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"), for: .normal)
-        askButton.setTitleColor(FCUITheme.formPlaceholder, for: .normal)
-        askButton.contentHorizontalAlignment = .leading
-        askButton.backgroundColor = FCUITheme.surfaceReadingSecondary
-        askButton.layer.cornerRadius = 23
-        askButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
-        askButton.heightAnchor.constraint(equalToConstant: 46).isActive = true
-        askButton.addAction(UIAction { [weak self] _ in self?.typeTapped() }, for: .touchUpInside)
-        inputBar.addArrangedSubview(askButton)
-
-        view.addSubview(inputBar)
+        view.addSubview(composer)
+        tips.isHidden = true
+        view.addSubview(tips)
         scrollIndicator.addAction(UIAction { [weak self] _ in
             self?.scrollIndicator.cancel()
             self?.scrollToBottom()
@@ -449,6 +480,7 @@ final class FCUIChatViewController: UIViewController {
         )
         emptyState.isHidden = true
         view.addSubview(emptyState)
+        composerBottom = composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         NSLayoutConstraint.activate([
             emptyState.topAnchor.constraint(equalTo: collectionView.topAnchor),
             emptyState.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor),
@@ -456,26 +488,17 @@ final class FCUIChatViewController: UIViewController {
             emptyState.trailingAnchor.constraint(equalTo: collectionView.trailingAnchor),
             scrollIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             scrollIndicator.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor, constant: -16),
-            collectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            collectionView.topAnchor.constraint(equalTo: appBar.bottomAnchor),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: inputBar.topAnchor),
-            inputBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            inputBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+            collectionView.bottomAnchor.constraint(equalTo: composer.topAnchor),
+            composer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            composer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            composerBottom,
+            tips.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tips.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tips.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-    }
-
-    private func circleButton(icon: String, action: @escaping () -> Void) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setImage(UIImage(systemName: icon), for: .normal)
-        button.tintColor = .white
-        button.backgroundColor = FCUITheme.buttonPrimarySurface
-        button.layer.cornerRadius = 23
-        button.heightAnchor.constraint(equalToConstant: 46).isActive = true
-        button.widthAnchor.constraint(equalToConstant: 46).isActive = true
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
-        return button
     }
 
     // MARK: - Rendering
@@ -544,7 +567,11 @@ final class FCUIChatViewController: UIViewController {
         // bubble marked failed) keep the same row identifiers, so ask for an in-place reconfigure
         // of exactly those rows. `isLatest`/`isBusy` are render inputs too, so a change in either
         // reconfigures every surviving message row.
+        // The Listen pill's Loading / Playing state lives on the thread state, not the message.
+        let listenKey = "\(state.isLoadingSynthesiseAudio)-\(state.isAudioPlaying)"
         let flagsChanged = state.isLoading != prevIsLoading || lastAiRowId != prevLastAiRowId
+            || listenKey != prevListenKey
+        prevListenKey = listenKey
         let survivingRows = Set(prevRows)
         let changedRows = rows.filter { row in
             guard let id = row.messageId, survivingRows.contains(row), let message = messagesById[id] else {
@@ -581,8 +608,22 @@ final class FCUIChatViewController: UIViewController {
         prevLastAiRowId = lastAiRowId
         prevIsInitialHistoryLoaded = state.isInitialHistoryLoaded
 
-        inputBar.alpha = state.isLoading ? 0.5 : 1
-        inputBar.isUserInteractionEnabled = !state.isLoading
+        // ChatScreen.kt:1752 — the composer slides 400pt down while an answer loads (Thread &&
+        // isLoading; tween 300 ms) and comes back on success or error.
+        setComposerHidden(state.isLoading && !state.messages.isEmpty)
+        // Tips.kt over the bottom while loading and before any streamed text (ChatThreadContent.kt:680-685).
+        let awaitingText: Bool = {
+            switch state.messages.last {
+            case .loadingPlaceholder?: return true
+            case .aiResponse(let ai)?: return ai.isStreaming && ai.text.isEmpty
+            default: return false
+            }
+        }()
+        let showTips = state.isLoading && awaitingText
+        if showTips != !tips.isHidden {
+            tips.isHidden = !showTips
+            if showTips { tips.start() } else { tips.stop() }
+        }
 
         // Empty-chat placeholder: `messages.isEmpty && !isLoading && !isHistoryEntry`. The UIKit
         // inputs are modal presentations (alert / sheet / picker) that cover it, so "no input
@@ -591,8 +632,11 @@ final class FCUIChatViewController: UIViewController {
         let hasEntryPayload = [args.question, args.preGeneratedAnswer, args.imagePath, args.audioPath]
             .contains { !($0 ?? "").isEmpty }
         // `errorMessage == nil`: parity with SwiftUI, whose chat-error screen takes precedence.
+        // …and no input open: while the composer is focused or holds a draft the placeholder
+        // steps aside (compose 03-typed shows a blank thread above the keyboard).
+        let composerActive = composer.isEditing || composer.hasText
         let showEmpty = state.messages.isEmpty && !state.isLoading && state.errorMessage == nil
-            && (args.conversationId ?? "").isEmpty && !hasEntryPayload
+            && (args.conversationId ?? "").isEmpty && !hasEntryPayload && !composerActive
         if showEmpty && emptyState.isHidden {
             emptyState.isHidden = false
             emptyState.playAppear()
@@ -600,13 +644,10 @@ final class FCUIChatViewController: UIViewController {
             emptyState.isHidden = true
         }
 
-        // LogoAppBar.kt: centre logo fades in 600 ms / out 300 ms (EaseOut) on `!isLoading`.
-        let titleAlpha: CGFloat = state.isLoading ? 0 : 1
-        if titleLabel.alpha != titleAlpha {
-            UIView.animate(withDuration: state.isLoading ? 0.3 : 0.6, delay: 0, options: [.curveEaseOut]) {
-                self.titleLabel.alpha = titleAlpha
-            }
-        }
+        // LogoAppBar.kt: the centre logo shows only for a settled thread (`Thread && !isLoading`,
+        // and not the full-screen error) — fades in 600 ms / out 300 ms (EaseOut).
+        let hasAnswer = state.messages.contains { if case .aiResponse = $0 { return true }; return false }
+        appBar.setLogoVisible(!state.isLoading && hasAnswer)
 
         // ScrollIndicator: only with no error and not loading; one timeline per answer.
         let indicatorKey = (state.errorMessage == nil && !state.isLoading) ? lastAiRowId : nil
@@ -628,10 +669,21 @@ final class FCUIChatViewController: UIViewController {
             }
         }
 
-        if let urlString = state.audioPlaybackUrl, let url = URL(string: urlString), !state.isAudioPlaying {
+        // Auto-play a freshly synthesised clip once. Keyed on the URL: re-playing whenever the
+        // state says "not playing" made Pause restart the audio immediately.
+        if let urlString = state.audioPlaybackUrl, urlString != autoPlayedAudioUrl,
+           let url = URL(string: urlString), !state.isAudioPlaying {
+            autoPlayedAudioUrl = urlString
             ttsPlayback.play(url: url, id: "tts")
             viewModel.onAction(.setAudioPlaying(true))
         }
+        // A new answer owns Listen: stop the previous answer's audio and drop its clip, or the
+        // new pill would show Pause (and Listen would replay the old answer).
+        if let previous = audioOwnerRowId, previous != lastAiRowId, state.audioPlaybackUrl != nil || state.isAudioPlaying {
+            ttsPlayback.stop()
+            DispatchQueue.main.async { [weak self] in self?.viewModel.onAction(.clearAudioPlaybackUrl) }
+        }
+        audioOwnerRowId = lastAiRowId
     }
 
     // MARK: - Row mapping (2.0.0)
@@ -958,6 +1010,16 @@ final class FCUIChatViewController: UIViewController {
         collectionView.setContentOffset(CGPoint(x: collectionView.contentOffset.x, y: y), animated: animated)
     }
 
+    private func setComposerHidden(_ hidden: Bool) {
+        guard hidden != composerHidden else { return }
+        composerHidden = hidden
+        if hidden { composer.textView.resignFirstResponder() }
+        composer.isUserInteractionEnabled = !hidden
+        UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+            self.composer.sheet.transform = hidden ? CGAffineTransform(translationX: 0, y: 400) : .identity
+        }
+    }
+
     private func loadMoreHistory() {
         guard let next = viewModel.state.historyNextPage,
               let conversationId = args.conversationId else { return }
@@ -996,22 +1058,9 @@ final class FCUIChatViewController: UIViewController {
         present(activity, animated: true)
     }
 
+    /// Type (empty-state chip) and the alignment escape hatch focus the composer's field.
     private func typeTapped() {
-        let alert = UIAlertController(
-            title: fcuiLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"),
-            message: nil,
-            preferredStyle: .alert
-        )
-        alert.addTextField()
-        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.send, "Send"), style: .default) { [weak self, weak alert] _ in
-            guard let question = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !question.isEmpty else { return }
-            self?.viewModel.onAction(.sendFollowUpQuestion(
-                question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil
-            ))
-        })
-        alert.addAction(UIAlertAction(title: fcuiLabel(FCLabels.cancel, "Cancel"), style: .cancel))
-        present(alert, animated: true)
+        composer.focus()
     }
 
     private func speakTapped() {

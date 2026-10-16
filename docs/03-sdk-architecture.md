@@ -50,6 +50,8 @@ FarmerChat.ensureChatOnlyBootstrap() / FarmerChat.beginChatOnlyJourney()
 //   Android Views:   <org.digitalgreen.farmerchat.sdk.views.FarmerChatFab/> (Material FAB subclass)
 //   iOS SwiftUI:     FarmerChatFabButton(question?, label?, bottomLeading?) — .fullScreenCover reveal
 //   iOS UIKit:       FarmerChatFabButton(question?, title?) : UIButton — presents FarmerChatViewController
+//                    (FarmerChatViewController is its own UINavigationControllerDelegate so the FAB knows which
+//                    screen is on top; a host must not replace that delegate, or the FAB fallback ✕ can overlap)
 //   React Native:    <FarmerChatFab question? label? position?/> — reveals FarmerChatView in a Modal
 //   Web:             <FarmerChatFab question? label? position?/> + FarmerChat.mountFab() — reveals the overlay
 

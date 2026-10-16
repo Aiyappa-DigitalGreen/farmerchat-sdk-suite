@@ -1,0 +1,884 @@
+#if canImport(UIKit)
+import UIKit
+import FarmerChatCore
+
+// Chat chrome for the UIKit flavour, ported from the app (fc-compose-agentic dev/v2.5):
+// the branded app bar (LogoAppBar.kt), the floating composer (InputComposer.kt), the answer
+// markdown (MarkdownText.kt) and the answer-generation tips (Tips.kt / Tip.kt). Pure UIKit, iOS 15.
+
+// MARK: - Header tile (components/buttons/ActionButton.kt)
+
+/// A 42×42 smooth square, radius 12, `#08361B`, white 23pt icon (ActionButton.kt:60-63). The SDK's
+/// CHAT_ONLY ✕ and globe use it; the app's History-entry menu button is the same component.
+final class FCUIHeaderTile: UIControl {
+    init(systemImage: String, accessibilityLabel label: String, identifier: String) {
+        super.init(frame: CGRect(x: 0, y: 0, width: 42, height: 42))
+        backgroundColor = FCUITheme.green800
+        layer.cornerRadius = 12
+        layer.cornerCurve = .continuous
+        let icon = UIImageView(image: UIImage(
+            systemName: systemImage,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+        ))
+        icon.tintColor = .white
+        icon.contentMode = .center
+        icon.isUserInteractionEnabled = false
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 42),
+            heightAnchor.constraint(equalToConstant: 42),
+            icon.centerXAnchor.constraint(equalTo: centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 23),
+            icon.heightAnchor.constraint(equalToConstant: 23)
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        accessibilityLabel = label
+        accessibilityIdentifier = identifier
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isHighlighted: Bool {
+        didSet { alpha = isHighlighted ? 0.7 : 1 }
+    }
+}
+
+// MARK: - App bar (components/appbars/LogoAppBar.kt)
+
+/// LogoAppBar: solid brand green `#008236`, 64pt + the status-bar inset (edge to edge), the
+/// `glow_yellow.png` bloom drawn over its top 80pt, a 16pt-padded row of [left | logo | right].
+///
+/// The glow is drawn in code: the PNG is a Sun300 (`#F9FF47`) elliptical bloom whose centre column
+/// is ≈50% alpha at the top, ≈37/25/12% at 25/50/75% height and 0 at the bottom, ≈12% at x=12.5%
+/// of the width and 0 at the edge — a radial gradient with a half-width × 80pt radius reproduces
+/// those samples. Logo: `logo_mark` 36pt white, fading in 600 ms / out 300 ms (EaseOut).
+final class FCUIChatAppBar: UIView {
+    static let barHeight: CGFloat = 64
+    private static let glowHeight: CGFloat = 80
+
+    private let glow = CAGradientLayer()
+    private let logo = CAShapeLayer()
+    private let logoHost = UIView()
+    private let leftSlot = UIStackView()
+    private let rightSlot = UIStackView()
+
+    init(left: [UIView], right: [UIView]) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = FCUITheme.brandSurfacePrimary
+
+        glow.type = .radial
+        let sun = FCUITheme.sun300
+        glow.colors = [0.5, 0.37, 0.25, 0.12, 0].map { sun.withAlphaComponent($0).cgColor }
+        glow.locations = [0, 0.25, 0.5, 0.75, 1]
+        layer.addSublayer(glow)
+
+        logo.path = FCUILogoMark.path(size: 36)
+        logo.fillColor = UIColor.white.cgColor
+        logo.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+        logoHost.layer.addSublayer(logo)
+        logoHost.isUserInteractionEnabled = false
+        logoHost.alpha = 0
+        logoHost.isAccessibilityElement = false
+        logoHost.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(logoHost)
+
+        for (slot, views) in [(leftSlot, left), (rightSlot, right)] {
+            slot.axis = .horizontal
+            slot.spacing = 8
+            slot.alignment = .center
+            slot.translatesAutoresizingMaskIntoConstraints = false
+            views.forEach { slot.addArrangedSubview($0) }
+            addSubview(slot)
+        }
+        let row = UILayoutGuide()
+        addLayoutGuide(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            row.heightAnchor.constraint(equalToConstant: Self.barHeight),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            leftSlot.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            leftSlot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            leftSlot.heightAnchor.constraint(equalToConstant: 42),
+            rightSlot.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            rightSlot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            rightSlot.heightAnchor.constraint(equalToConstant: 42),
+            logoHost.centerXAnchor.constraint(equalTo: row.centerXAnchor),
+            logoHost.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            logoHost.widthAnchor.constraint(equalToConstant: 36),
+            logoHost.heightAnchor.constraint(equalToConstant: 36)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glow.frame = CGRect(x: 0, y: 0, width: bounds.width, height: Self.glowHeight)
+        glow.startPoint = CGPoint(x: 0.5, y: 0)
+        glow.endPoint = CGPoint(x: 1, y: 1)
+        CATransaction.commit()
+    }
+
+    /// LogoAppBar.kt:110-121 — shown only for a settled thread (`Thread && !isLoading`).
+    func setLogoVisible(_ visible: Bool, animated: Bool = true) {
+        let target: CGFloat = visible ? 1 : 0
+        guard logoHost.alpha != target else { return }
+        guard animated else { logoHost.alpha = target; return }
+        UIView.animate(withDuration: visible ? 0.6 : 0.3, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+            self.logoHost.alpha = target
+        }
+    }
+}
+
+// MARK: - Aura (InputComposer.kt:147-161, 361-386, 539-571)
+
+/// The idle composer field's breathing sweep-gradient outline: green → cyan → green → yellow →
+/// green, one turn per 7 s; three strokes (halo 10.8pt @16%, mid 7.2pt @30%, core 4.8pt @100%)
+/// clipped to the field, so about half of each shows inside the field edge.
+final class FCUIAuraView: UIView {
+    private let rings: [(width: CGFloat, alpha: Float)] = [(10.8, 0.16), (7.2, 0.30), (4.8, 1.0)]
+    private var gradients: [CAGradientLayer] = []
+    private var masks: [CAShapeLayer] = []
+    private let cornerRadius: CGFloat
+
+    init(cornerRadius: CGFloat) {
+        self.cornerRadius = cornerRadius
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        layer.cornerRadius = cornerRadius
+        layer.cornerCurve = .continuous
+        let colors = [FCUITheme.green500, UIColor(rgb: 0x22D3EE), FCUITheme.green500, UIColor(rgb: 0xFFF947), FCUITheme.green500]
+        for ring in rings {
+            let holder = CALayer()
+            let gradient = CAGradientLayer()
+            gradient.type = .conic
+            gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+            gradient.endPoint = CGPoint(x: 0.5, y: 0)
+            gradient.colors = colors.map(\.cgColor)
+            gradient.locations = [0, 0.25, 0.5, 0.75, 1]
+            let mask = CAShapeLayer()
+            mask.fillColor = UIColor.clear.cgColor
+            mask.strokeColor = UIColor.black.cgColor
+            mask.lineWidth = ring.width
+            holder.mask = mask
+            holder.opacity = ring.alpha
+            holder.addSublayer(gradient)
+            layer.addSublayer(holder)
+            gradients.append(gradient)
+            masks.append(mask)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let side = hypot(bounds.width, bounds.height)
+        for (index, gradient) in gradients.enumerated() {
+            gradient.superlayer?.frame = bounds
+            gradient.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+            gradient.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            masks[index].frame = bounds
+            masks[index].path = UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius).cgPath
+        }
+        CATransaction.commit()
+        startAnimating()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        startAnimating()
+    }
+
+    private func startAnimating() {
+        guard window != nil, bounds.width > 0, !UIAccessibility.isReduceMotionEnabled else { return }
+        for gradient in gradients where gradient.animation(forKey: "fc.aura.spin") == nil {
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            spin.fromValue = 0
+            spin.toValue = 2 * Double.pi
+            spin.duration = 7.0
+            spin.repeatCount = .infinity
+            gradient.add(spin, forKey: "fc.aura.spin")
+        }
+        guard layer.animation(forKey: "fc.aura.breathe") == nil else { return }
+        // Intensity: 1.0↔0.5 twice (2400 ms legs), ebb to 0.04 (2800 ms), swell to 1.0 (2600 ms).
+        let legs: [(value: Float, ms: Double)] = [(0.5, 2400), (1.0, 2400), (0.5, 2400), (1.0, 2400), (0.04, 2800), (1.0, 2600)]
+        let total = legs.reduce(0) { $0 + $1.ms }
+        var values: [Float] = [1.0]
+        var times: [NSNumber] = [0]
+        var elapsed = 0.0
+        for leg in legs {
+            elapsed += leg.ms
+            values.append(leg.value)
+            times.append(NSNumber(value: elapsed / total))
+        }
+        let breathe = CAKeyframeAnimation(keyPath: "opacity")
+        breathe.values = values
+        breathe.keyTimes = times
+        breathe.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: legs.count)
+        breathe.duration = total / 1000
+        breathe.repeatCount = .infinity
+        layer.add(breathe, forKey: "fc.aura.breathe")
+    }
+}
+
+// MARK: - Composer (components/userinput/InputComposer.kt, floating + anchored + compact)
+
+/// The floating composer: a brand-green sheet (smooth radius 24, 10pt side margins) on a white
+/// full-width wrapper, holding [camera 48 | field | mic/send 48] 6pt apart, bottom-aligned.
+///
+/// The camera hides once text is typed; the mic glyph swaps to send (same `#08361B` circle). The
+/// field is white, smooth radius 16, min 48pt, 14pt horizontal padding, bodyMedium 17/25, 1–3
+/// lines. Placeholder `fc_v2_app_label_ask_about_your_farm`, single line: black + green shimmer
+/// (2.25 s) when idle, grey `#71717B` once focused. The breathing aura shows only idle + unfocused.
+final class FCUIComposerView: UIView, UITextViewDelegate {
+    var onSend: ((String) -> Void)?
+    var onCamera: (() -> Void)?
+    var onMic: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
+    var onTextChange: (() -> Void)?
+
+    let sheet = UIView()
+    private let row = UIStackView()
+    private let cameraButton = UIButton(type: .custom)
+    private let actionButton = UIButton(type: .custom)
+    private let field = UIView()
+    let textView = UITextView()
+    private let placeholder = FCUIShimmerLabel()
+    private let aura = FCUIAuraView(cornerRadius: 16)
+    private var textHeight: NSLayoutConstraint!
+    private var sheetTop: NSLayoutConstraint!
+    private var sheetBottomPad: NSLayoutConstraint!
+    private var rowTop: NSLayoutConstraint!
+    private var buttonSizes: [NSLayoutConstraint] = []
+    private let showCamera: Bool
+    private let showMic: Bool
+    private static let maxLines: CGFloat = 3
+    private static let micGlyph = UIImage(systemName: "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold))
+    /// `icon_send`: a right-pointing paper plane — SF `paperplane.fill` turned 45° and baked
+    /// into the image (a transform on UIButton's imageView does not survive its layout).
+    private static let sendGlyph: UIImage? = {
+        guard let plane = UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold)) else { return nil }
+        let side = ceil(max(plane.size.width, plane.size.height) * 1.3)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { context in
+            let cg = context.cgContext
+            cg.translateBy(x: side / 2, y: side / 2)
+            cg.rotate(by: .pi / 4)
+            plane.draw(in: CGRect(x: -plane.size.width / 2, y: -plane.size.height / 2, width: plane.size.width, height: plane.size.height))
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }()
+
+    private var bodyStyle: FCUITextStyle { FCUITypography.current.bodyMedium }
+
+    init(showCamera: Bool, showMic: Bool) {
+        self.showCamera = showCamera
+        self.showMic = showMic
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        // The wrapper behind the floating sheet is the reading surface (ChatInputOverlays.kt).
+        backgroundColor = FCUITheme.surfaceReadingPrimary
+
+        sheet.backgroundColor = FCUITheme.brandSurfacePrimary
+        sheet.layer.cornerRadius = 24
+        sheet.layer.cornerCurve = .continuous
+        sheet.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sheet)
+
+        configureCircle(cameraButton, symbol: "camera.fill", label: fcuiLabel(FCLabels.photo, "Photo"), id: "fcComposerCamera")
+        cameraButton.addAction(UIAction { [weak self] _ in self?.onCamera?() }, for: .touchUpInside)
+        configureCircle(actionButton, symbol: "mic.fill", label: fcuiLabel(FCLabels.speak, "Speak"), id: "fcComposerMic")
+        actionButton.addAction(UIAction { [weak self] _ in self?.actionTapped() }, for: .touchUpInside)
+
+        field.backgroundColor = .white
+        field.layer.cornerRadius = 16
+        field.layer.cornerCurve = .continuous
+        field.translatesAutoresizingMaskIntoConstraints = false
+
+        textView.backgroundColor = .clear
+        textView.isScrollEnabled = false
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.font = bodyStyle.font
+        textView.textColor = .black
+        textView.tintColor = FCUITheme.green700
+        textView.typingAttributes = [
+            .font: bodyStyle.font,
+            .foregroundColor: UIColor.black,
+            .paragraphStyle: bodyStyle.paragraphStyle()
+        ]
+        textView.delegate = self
+        textView.accessibilityIdentifier = "fcComposerField"
+        textView.accessibilityLabel = fcuiLabel(FCLabels.askAboutYourFarm, "Ask about your farm...")
+        textView.translatesAutoresizingMaskIntoConstraints = false
+
+        placeholder.text = fcuiLabel(FCLabels.askAboutYourFarm, "Ask about your farm...")
+        placeholder.font = bodyStyle.font
+        placeholder.numberOfLines = 1
+        placeholder.period = 2.25
+        placeholder.baseColor = .black
+        placeholder.isUserInteractionEnabled = false
+        placeholder.isAccessibilityElement = false
+        placeholder.translatesAutoresizingMaskIntoConstraints = false
+
+        aura.translatesAutoresizingMaskIntoConstraints = false
+        field.addSubview(aura)
+        field.addSubview(placeholder)
+        field.addSubview(textView)
+
+        row.axis = .horizontal
+        row.spacing = 6
+        row.alignment = .bottom
+        row.translatesAutoresizingMaskIntoConstraints = false
+        if showCamera { row.addArrangedSubview(cameraButton) }
+        row.addArrangedSubview(field)
+        row.addArrangedSubview(actionButton)
+        sheet.addSubview(row)
+
+        textHeight = textView.heightAnchor.constraint(equalToConstant: bodyStyle.lineHeight)
+        sheetTop = sheet.topAnchor.constraint(equalTo: topAnchor)
+        rowTop = row.topAnchor.constraint(equalTo: sheet.topAnchor, constant: 12)
+        sheetBottomPad = sheet.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: 12)
+        NSLayoutConstraint.activate([
+            sheetTop,
+            sheet.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            sheet.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            sheet.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rowTop,
+            sheetBottomPad,
+            row.leadingAnchor.constraint(equalTo: sheet.leadingAnchor, constant: 10),
+            row.trailingAnchor.constraint(equalTo: sheet.trailingAnchor, constant: -10),
+            field.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
+            textView.topAnchor.constraint(equalTo: field.topAnchor, constant: 12),
+            textView.bottomAnchor.constraint(equalTo: field.bottomAnchor, constant: -12),
+            textView.leadingAnchor.constraint(equalTo: field.leadingAnchor, constant: 14),
+            textView.trailingAnchor.constraint(equalTo: field.trailingAnchor, constant: -14),
+            textHeight,
+            placeholder.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
+            placeholder.trailingAnchor.constraint(lessThanOrEqualTo: textView.trailingAnchor),
+            placeholder.centerYAnchor.constraint(equalTo: field.centerYAnchor),
+            aura.topAnchor.constraint(equalTo: field.topAnchor),
+            aura.bottomAnchor.constraint(equalTo: field.bottomAnchor),
+            aura.leadingAnchor.constraint(equalTo: field.leadingAnchor),
+            aura.trailingAnchor.constraint(equalTo: field.trailingAnchor)
+        ])
+        refresh(animated: false)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    private func configureCircle(_ button: UIButton, symbol: String, label: String, id: String) {
+        button.backgroundColor = FCUITheme.green800 // light palette forced, also in dark
+        button.layer.cornerRadius = 24
+        button.tintColor = FCUITheme.green500
+        button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
+        button.accessibilityLabel = label
+        button.accessibilityIdentifier = id
+        button.translatesAutoresizingMaskIntoConstraints = false
+        let w = button.widthAnchor.constraint(equalToConstant: 48)
+        let h = button.heightAnchor.constraint(equalToConstant: 48)
+        NSLayoutConstraint.activate([w, h])
+        buttonSizes += [w, h]
+    }
+
+    private var trimmedText: String {
+        textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func actionTapped() {
+        let text = trimmedText
+        if text.isEmpty {
+            onMic?()
+        } else {
+            onSend?(text)
+            clear()
+            textView.resignFirstResponder()
+        }
+    }
+
+    func clear() {
+        textView.text = ""
+        refresh(animated: true)
+    }
+
+    func focus() {
+        textView.becomeFirstResponder()
+    }
+
+    /// Re-applies every state-dependent detail (InputComposer.kt sizes at rest vs focused).
+    private func refresh(animated: Bool) {
+        let focused = textView.isFirstResponder
+        let hasText = !textView.text.isEmpty
+        placeholder.isHidden = hasText
+        placeholder.baseColor = focused ? FCUITheme.formPlaceholder : .black
+        placeholder.isAnimating = !focused
+        aura.isHidden = focused || hasText
+        // Camera hides once text is typed; mic → send glyph swap, same circle.
+        if showCamera { cameraButton.isHidden = hasText }
+        let sending = hasText || !showMic
+        actionButton.isHidden = !sending && !showMic
+        actionButton.setImage(sending ? Self.sendGlyph : Self.micGlyph, for: .normal)
+        actionButton.accessibilityLabel = sending ? fcuiLabel(FCLabels.send, "Send") : fcuiLabel(FCLabels.speak, "Speak")
+        actionButton.accessibilityIdentifier = sending ? "fcComposerSend" : "fcComposerMic"
+        // Focused: 42pt buttons, 10/8 sheet padding (12/12 at rest).
+        buttonSizes.forEach { $0.constant = focused ? 42 : 48 }
+        cameraButton.layer.cornerRadius = focused ? 21 : 24
+        actionButton.layer.cornerRadius = focused ? 21 : 24
+        rowTop.constant = focused ? 10 : 12
+        sheetBottomPad.constant = focused ? 8 : 12
+        updateTextHeight()
+        if animated {
+            UIView.animate(withDuration: 0.22) { self.superview?.layoutIfNeeded() }
+        }
+    }
+
+    private func updateTextHeight() {
+        let width = textView.bounds.width > 0 ? textView.bounds.width : 200
+        let fitted = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let maxHeight = bodyStyle.lineHeight * Self.maxLines
+        textHeight.constant = min(max(fitted, bodyStyle.lineHeight), maxHeight)
+        textView.isScrollEnabled = fitted > maxHeight
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let before = textHeight.constant
+        updateTextHeight()
+        if textHeight.constant != before { setNeedsLayout() }
+    }
+
+    func textViewDidChange(_ textView: UITextView) { refresh(animated: false); onTextChange?() }
+    var isEditing: Bool { textView.isFirstResponder }
+    var hasText: Bool { !textView.text.isEmpty }
+
+    func textViewDidBeginEditing(_ textView: UITextView) { refresh(animated: true); onFocusChange?(true) }
+    func textViewDidEndEditing(_ textView: UITextView) { refresh(animated: true); onFocusChange?(false) }
+}
+
+// MARK: - Markdown (components/MarkdownText.kt)
+
+/// Port of the app's `MarkdownText` (and SwiftUI's `fcParseMarkdownBlocks`) to one attributed
+/// string: paragraphs bodyMedium 17/25; `#` / `##` / `###+` titleLarge / titleMedium / titleSmall
+/// bold; bullets a 5pt filled dot with a 10pt gap and hanging indent; numbered "N." with a 4pt gap;
+/// the block-pair spacing table (paragraph→paragraph 20, before a header 24, after a header 20,
+/// list item→item 5, divider 24, other 12). Inline `**bold**` / `*italic*` via
+/// `AttributedString(markdown:)` on the already-stripped block text.
+enum FCUIMarkdown {
+    enum Block {
+        case header(String, Int)
+        case paragraph(String)
+        case bullet(String)
+        case numbered(String, String)
+        case divider
+        case table([[String]])
+    }
+
+    static func parse(_ text: String) -> [Block] {
+        var blocks: [Block] = []
+        let lines = text.components(separatedBy: .newlines)
+        var i = 0
+        func isTableRow(_ s: String) -> Bool {
+            s.contains("|") && !s.trimmingCharacters(in: CharacterSet(charactersIn: "| ")).isEmpty
+        }
+        func cells(_ s: String) -> [String] {
+            var core = s.trimmingCharacters(in: .whitespaces)
+            if core.hasPrefix("|") { core.removeFirst() }
+            if core.hasSuffix("|") { core.removeLast() }
+            return core.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        func isSeparator(_ s: String) -> Bool {
+            guard s.contains("|"), s.contains("-") else { return false }
+            return cells(s).allSatisfy { $0.range(of: "^:?-{3,}:?$", options: .regularExpression) != nil }
+        }
+        while i < lines.count {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+            if isTableRow(trimmed), i + 1 < lines.count, isSeparator(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+                var rows = [cells(trimmed)]
+                var j = i + 2
+                while j < lines.count, isTableRow(lines[j].trimmingCharacters(in: .whitespaces)) {
+                    rows.append(cells(lines[j]))
+                    j += 1
+                }
+                blocks.append(.table(rows))
+                i = j
+                continue
+            }
+            defer { i += 1 }
+            if trimmed.isEmpty { continue }
+            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                blocks.append(.divider)
+            } else if trimmed.hasPrefix("#"), trimmed.drop(while: { $0 == "#" }).hasPrefix(" ") {
+                let level = min(max(trimmed.prefix(while: { $0 == "#" }).count, 1), 3)
+                blocks.append(.header(trimmed.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces), level))
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("• ") {
+                blocks.append(.bullet(String(trimmed.dropFirst(2))))
+            } else if let match = trimmed.range(of: "^\\d+\\.\\s", options: .regularExpression) {
+                blocks.append(.numbered(String(trimmed.prefix(while: { $0.isNumber })),
+                                        trimmed[match.upperBound...].trimmingCharacters(in: .whitespaces)))
+            } else {
+                blocks.append(.paragraph(trimmed))
+            }
+        }
+        return blocks
+    }
+
+    private static func spacing(_ block: Block, after previous: Block?) -> CGFloat {
+        guard let previous else { return 0 }
+        switch (previous, block) {
+        case (.divider, _), (_, .divider): return 24
+        case (_, .header): return 24
+        case (.header, _): return 20
+        case (.table, _), (_, .table): return 16
+        case (.bullet, .bullet), (.numbered, .numbered): return 5
+        case (.paragraph, .paragraph): return 20
+        default: return 12
+        }
+    }
+
+    /// Inline emphasis on `font`'s family: bold → `.bold`, italic → italic trait.
+    private static func inline(_ text: String, font: UIFont, color: UIColor, paragraph: NSParagraphStyle) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let parsed = (try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
+        for run in parsed.runs {
+            var runFont = font
+            if let intent = run.inlinePresentationIntent {
+                var traits = font.fontDescriptor.symbolicTraits
+                if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
+                if intent.contains(.emphasized) { traits.insert(.traitItalic) }
+                if let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
+                    runFont = UIFont(descriptor: descriptor, size: font.pointSize)
+                }
+            }
+            out.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: [
+                .font: runFont, .foregroundColor: color, .paragraphStyle: paragraph
+            ]))
+        }
+        return out
+    }
+
+    private static func dot(color: UIColor, size: CGFloat) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { _ in
+            color.setFill()
+            UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: size, height: size)).fill()
+        }
+    }
+
+    static func render(_ text: String, color: UIColor, body: FCUITextStyle) -> NSAttributedString {
+        let typography = FCUITypography.current
+        let out = NSMutableAttributedString()
+        var previous: Block?
+        for block in parse(text) {
+            let style: FCUITextStyle
+            var weight: UIFont.Weight? = nil
+            switch block {
+            case .header(_, let level):
+                style = level == 1 ? typography.titleLarge : (level == 2 ? typography.titleMedium : typography.titleSmall)
+                weight = .bold
+            default:
+                style = body
+            }
+            let paragraph = style.paragraphStyle().mutableCopy() as! NSMutableParagraphStyle
+            paragraph.paragraphSpacingBefore = spacing(block, after: previous)
+            let font = weight.map { fcuiFont(style, weight: $0) } ?? style.font
+            if out.length > 0 { out.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: paragraph])) }
+            switch block {
+            case .paragraph(let s), .header(let s, _):
+                out.append(inline(s, font: font, color: color, paragraph: paragraph))
+            case .bullet(let s):
+                // 5pt dot in the text colour, then a 10pt gap; wrapped lines hang under the text.
+                paragraph.headIndent = 15
+                paragraph.tabStops = [NSTextTab(textAlignment: .natural, location: 15)]
+                let attachment = NSTextAttachment()
+                attachment.image = dot(color: color, size: 5)
+                let capCenter = (font.capHeight - 5) / 2
+                attachment.bounds = CGRect(x: 0, y: capCenter, width: 5, height: 5)
+                let item = NSMutableAttributedString(attachment: attachment)
+                item.append(NSAttributedString(string: "\t"))
+                item.addAttributes([.paragraphStyle: paragraph, .font: font], range: NSRange(location: 0, length: item.length))
+                out.append(item)
+                out.append(inline(s, font: font, color: color, paragraph: paragraph))
+            case .numbered(let number, let s):
+                let marker = "\(number)."
+                let markerWidth = (marker as NSString).size(withAttributes: [.font: font]).width
+                paragraph.headIndent = ceil(markerWidth + 4)
+                paragraph.tabStops = [NSTextTab(textAlignment: .natural, location: paragraph.headIndent)]
+                out.append(NSAttributedString(string: marker + "\t", attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]))
+                out.append(inline(s, font: font, color: color, paragraph: paragraph))
+            case .divider:
+                // 3pt `#D4D4D8` pill.
+                let attachment = NSTextAttachment()
+                attachment.image = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 3)).image { _ in
+                    FCUITheme.neutral300.setFill()
+                    UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 320, height: 3), cornerRadius: 1.5).fill()
+                }
+                attachment.bounds = CGRect(x: 0, y: 0, width: 320, height: 3)
+                let item = NSMutableAttributedString(attachment: attachment)
+                item.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: item.length))
+                out.append(item)
+            case .table(let rows):
+                // Degraded: one line per row, cells joined by " · " (header row bold). The app
+                // draws a bordered grid (MarkdownText.kt); recorded as a UIKit gap.
+                for (index, row) in rows.enumerated() {
+                    if index > 0 {
+                        let p = paragraph.mutableCopy() as! NSMutableParagraphStyle
+                        p.paragraphSpacingBefore = 4
+                        out.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: p]))
+                        out.append(inline(row.joined(separator: " · "), font: font, color: color, paragraph: p))
+                    } else {
+                        out.append(inline(row.joined(separator: " · "), font: fcuiFont(style, weight: .bold), color: color, paragraph: paragraph))
+                    }
+                }
+            }
+            previous = block
+        }
+        return out
+    }
+}
+
+// MARK: - Answer-generation tips (components/Tips.kt + Tip.kt)
+
+/// The tips pager shown at the bottom of the chat while the first answer is generated: a 24pt
+/// white fade, then a white band (44pt bottom padding). Pager content padding 24, page gap 8,
+/// auto-advance every 8 s. Card: min height 104, smooth radius 16, `#08361B`, padding 20/16; a
+/// 36pt `#00C950` circle with a white 18pt lightbulb, 12, title labelLarge white, 6, body
+/// bodySmall white. Dots: 8pt `#2900C950`, gap 10; the active one is 24×8, filling with
+/// `#00C950` as the 8 s timer runs.
+///
+/// Tip set: the app's three built-in fallback tips, through their label keys. The app also
+/// discovers server-defined `fc_v2_app_label_tips_<name>_title/_statement` pairs; that needs the
+/// raw label map, which Core does not expose to the UI flavours (see REPORT gap).
+final class FCUITipsView: UIView, UIScrollViewDelegate {
+    private static let advance: TimeInterval = 8
+    private let scroll = UIScrollView()
+    private let pages = UIStackView()
+    private let dots = UIStackView()
+    private var dotWidths: [NSLayoutConstraint] = []
+    private var fills: [UIView] = []
+    private var fillWidths: [NSLayoutConstraint] = []
+    private var cards: [UIView] = []
+    private var current = 0
+    private var timer: Timer?
+    private var cardWidth: NSLayoutConstraint?
+
+    static func fallbackTips() -> [(String, String)] {
+        [
+            (fcuiLabel(FCLabels.didYouKnow, "Did you know?"),
+             fcuiLabel(FCLabels.youCanAskFollowupQuestionsToGetMoreDetails, "You can ask follow-up questions to get more details")),
+            (fcuiLabel(FCLabels.quickTip, "Quick tip"),
+             fcuiLabel(FCLabels.tipsAskSpecificCrops, "Try asking about specific crops or problems")),
+            (fcuiLabel(FCLabels.tryThis, "Try this"),
+             fcuiLabel(FCLabels.uploadPhotosForPlantDiseaseIdentification, "Upload photos for plant disease identification"))
+        ]
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = true
+
+        let fade = CAGradientLayer()
+        fade.colors = [UIColor.white.withAlphaComponent(0).cgColor, UIColor.white.cgColor]
+        let fadeView = FCUIGradientView(layer: fade)
+        fadeView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(fadeView)
+        let band = UIView()
+        band.backgroundColor = FCUITheme.surfaceReadingPrimary
+        band.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(band)
+
+        scroll.showsHorizontalScrollIndicator = false
+        scroll.decelerationRate = .fast
+        scroll.clipsToBounds = false
+        scroll.delegate = self
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        band.addSubview(scroll)
+        band.clipsToBounds = true
+
+        pages.axis = .horizontal
+        pages.spacing = 8
+        pages.alignment = .fill
+        pages.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(pages)
+
+        dots.axis = .horizontal
+        dots.spacing = 10
+        dots.alignment = .center
+        dots.translatesAutoresizingMaskIntoConstraints = false
+        band.addSubview(dots)
+
+        for (index, tip) in Self.fallbackTips().enumerated() {
+            let card = makeCard(title: tip.0, body: tip.1)
+            pages.addArrangedSubview(card)
+            cards.append(card)
+            let dot = UIView()
+            dot.backgroundColor = FCUITheme.green500.withAlphaComponent(0.16)
+            dot.layer.cornerRadius = 4
+            dot.clipsToBounds = true
+            dot.translatesAutoresizingMaskIntoConstraints = false
+            let fill = UIView()
+            fill.backgroundColor = FCUITheme.green500
+            fill.translatesAutoresizingMaskIntoConstraints = false
+            dot.addSubview(fill)
+            let width = dot.widthAnchor.constraint(equalToConstant: index == 0 ? 24 : 8)
+            let fillWidth = fill.widthAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([
+                width, dot.heightAnchor.constraint(equalToConstant: 8),
+                fill.leadingAnchor.constraint(equalTo: dot.leadingAnchor),
+                fill.topAnchor.constraint(equalTo: dot.topAnchor),
+                fill.bottomAnchor.constraint(equalTo: dot.bottomAnchor),
+                fillWidth
+            ])
+            dots.addArrangedSubview(dot)
+            dotWidths.append(width)
+            fills.append(fill)
+            fillWidths.append(fillWidth)
+        }
+
+        NSLayoutConstraint.activate([
+            fadeView.topAnchor.constraint(equalTo: topAnchor),
+            fadeView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fadeView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fadeView.heightAnchor.constraint(equalToConstant: 24),
+            band.topAnchor.constraint(equalTo: fadeView.bottomAnchor),
+            band.leadingAnchor.constraint(equalTo: leadingAnchor),
+            band.trailingAnchor.constraint(equalTo: trailingAnchor),
+            band.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scroll.topAnchor.constraint(equalTo: band.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: band.leadingAnchor, constant: 24),
+            scroll.trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: -24),
+            pages.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            pages.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            pages.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            pages.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            pages.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
+            dots.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 16),
+            dots.centerXAnchor.constraint(equalTo: band.centerXAnchor),
+            dots.bottomAnchor.constraint(equalTo: band.bottomAnchor, constant: -44)
+        ])
+        for card in cards {
+            card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor).isActive = true
+        }
+        accessibilityIdentifier = "fcTips"
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    private func makeCard(title: String, body: String) -> UIView {
+        let card = UIView()
+        card.backgroundColor = FCUITheme.green800
+        card.layer.cornerRadius = 16
+        card.layer.cornerCurve = .continuous
+        card.translatesAutoresizingMaskIntoConstraints = false
+        let circle = UIView()
+        circle.backgroundColor = FCUITheme.green500
+        circle.layer.cornerRadius = 18
+        circle.translatesAutoresizingMaskIntoConstraints = false
+        let bulb = UIImageView(image: UIImage(systemName: "lightbulb", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)))
+        bulb.tintColor = .white
+        bulb.contentMode = .center
+        bulb.translatesAutoresizingMaskIntoConstraints = false
+        circle.addSubview(bulb)
+        let titleLabel = UILabel()
+        titleLabel.numberOfLines = 0
+        titleLabel.textColor = .white
+        titleLabel.fcSetText(title, style: FCUITypography.current.labelLarge)
+        let bodyLabel = UILabel()
+        bodyLabel.numberOfLines = 0
+        bodyLabel.textColor = .white
+        bodyLabel.fcSetText(body, style: FCUITypography.current.bodySmall)
+        let text = UIStackView(arrangedSubviews: [titleLabel, bodyLabel])
+        text.axis = .vertical
+        text.spacing = 6
+        text.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(circle)
+        card.addSubview(text)
+        NSLayoutConstraint.activate([
+            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 104),
+            circle.widthAnchor.constraint(equalToConstant: 36),
+            circle.heightAnchor.constraint(equalToConstant: 36),
+            circle.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 20),
+            circle.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            bulb.centerXAnchor.constraint(equalTo: circle.centerXAnchor),
+            bulb.centerYAnchor.constraint(equalTo: circle.centerYAnchor),
+            text.leadingAnchor.constraint(equalTo: circle.trailingAnchor, constant: 12),
+            text.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -20),
+            text.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            text.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -16)
+        ])
+        card.isAccessibilityElement = true
+        card.accessibilityLabel = "\(title). \(body)"
+        return card
+    }
+
+    func start() {
+        guard timer == nil else { return }
+        show(page: 0, animated: false)
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        fills.forEach { $0.layer.removeAllAnimations() }
+    }
+
+    private func show(page: Int, animated: Bool) {
+        current = page
+        let pageWidth = scroll.bounds.width + pages.spacing
+        scroll.setContentOffset(CGPoint(x: CGFloat(page) * pageWidth, y: 0), animated: animated)
+        for (index, width) in dotWidths.enumerated() {
+            width.constant = index == page ? 24 : 8
+            fillWidths[index].constant = 0
+        }
+        layoutIfNeeded()
+        fillWidths[page].constant = 24
+        UIView.animate(withDuration: Self.advance, delay: 0, options: [.curveLinear]) {
+            self.layoutIfNeeded()
+        }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: Self.advance, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.show(page: (self.current + 1) % max(self.cards.count, 1), animated: true)
+        }
+    }
+
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        let pageWidth = scroll.bounds.width + pages.spacing
+        guard pageWidth > 0 else { return }
+        var page = Int(round(targetContentOffset.pointee.x / pageWidth))
+        page = max(0, min(cards.count - 1, page))
+        targetContentOffset.pointee.x = CGFloat(page) * pageWidth
+        DispatchQueue.main.async { self.show(page: page, animated: true) }
+    }
+}
+
+/// A view whose backing layer is the given gradient (resized with the view).
+final class FCUIGradientView: UIView {
+    private let gradient: CAGradientLayer
+    init(layer gradient: CAGradientLayer) {
+        self.gradient = gradient
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        self.layer.addSublayer(gradient)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        gradient.frame = bounds
+    }
+}
+#endif
