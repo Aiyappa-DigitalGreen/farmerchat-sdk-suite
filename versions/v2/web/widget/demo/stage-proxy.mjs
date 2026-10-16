@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 
-const UPSTREAM = new URL(process.env.UPSTREAM || 'https://farmerchat.farmstack.co/mobile-app-stage/');
+const UPSTREAM = new URL(process.env.UPSTREAM || 'https://farmerchat.farmstack.co/mobile-app-demo/');
 const PORT = Number(process.env.PORT || 8898);
 const GUEST_KEY = process.env.FC_GUEST_API_KEY || '';
 const GUEST_PATHS = /\/(initialize_user|send_tokens)\/?$/;

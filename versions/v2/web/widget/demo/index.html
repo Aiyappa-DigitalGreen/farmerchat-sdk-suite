@@ -380,13 +380,13 @@
     //   ?env=<env>    dev | stage | demo | prod | eks (ignored when base is set)
     //   ?geoKey=…     optional Google geolocation key override (the SDK has one built in;
     //                 the FarmerChat API key is built in too, so none is passed here)
-    //   ?stage=1      the app's real stage backend via demo/stage-proxy.mjs (:8898) + agentic chat
+    //   ?stage=1      the DEMO backend via demo/stage-proxy.mjs (:8898; the route keeps its old name) + agentic chat
     //   ?agentic=1    enableAgenticChat (2.0.0 composer + streaming)
     //   ?appearance=day|night|auto (default day)   ?mode=FULL_JOURNEY (default: the SDK's CHAT_ONLY)
     //   ?left=1   ?label=none
     var q = new URLSearchParams(location.search);
     var useEnv = q.get('env');
-    // Hosted (Railway): stage through the same-origin /stage/ proxy (web/railway/server.mjs →
+    // Hosted (Railway): DEMO through the same-origin /stage/ proxy (web/railway/server.mjs →
     // vercel/api/stage.js), which adds the guest key server-side. Locally the stage proxy runs on :8898.
     var hosted = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     var stage = q.get('stage') === '1' || (hosted && !q.get('base') && !useEnv);
@@ -402,7 +402,7 @@
         position: q.get('left') ? 'bottom-left' : 'bottom-right',
         launcherLabel: q.get('label') === 'none' ? undefined : (q.get('label') || 'Ask FarmerChat'),
         config: {
-          environment: useEnv || 'dev',
+          environment: useEnv || (stage ? 'demo' : 'dev'),
           customBaseUrl: base || undefined,
           enableAgenticChat: stage || q.get('agentic') === '1',
           geoApiKey: q.get('geoKey') || undefined,

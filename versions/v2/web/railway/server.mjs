@@ -7,7 +7,7 @@
  *   /app/*                 → demo-app/dist: the web SDK as a full-page app (npm + React host)
  *   /demo/*                → widget/demo (index.html, mobile.html): the one-script-tag widget
  *   /dist/*                → widget/dist (farmerchat-widget.iife.js + illustrations/)
- *   /stage/*, /stage-replay/*  → the stage proxy, the SAME handler the Vercel deploy used
+ *   /stage/*, /stage-replay/*  → the DEMO backend proxy (route name kept), the SAME handler the Vercel deploy used
  *                            (widget/vercel/api/stage.js), so there is one copy of the logic.
  *                            The OTP endpoints are refused here: this proxy is public, and it must
  *                            not become a way to send login codes to arbitrary phone numbers.

@@ -7,12 +7,12 @@ import { FarmerChat, type FarmerChatConfig } from '@digitalgreenorg/farmerchat-w
  * history, settings) filling the page. This is the npm + React integration; /demo/ shows the
  * one-script-tag widget.
  *
- * Backend: the same-origin /stage/ proxy (web/railway/server.mjs), which adds the guest key
- * server-side because the stage backend's CORS rejects the SDK's headers. The illustrations come
+ * Backend: DEMO, through the same-origin /stage/ proxy (web/railway/server.mjs), which adds the guest key
+ * server-side because the backend's CORS rejects the SDK's headers. The illustrations come
  * from the widget build already served at /dist/illustrations/.
  */
 const config: FarmerChatConfig = {
-  environment: 'stage',
+  environment: 'demo',
   customBaseUrl: `${location.origin}/stage/`,
   assetBaseUrl: `${location.origin}/dist/illustrations/`,
   mode: 'FULL_JOURNEY',

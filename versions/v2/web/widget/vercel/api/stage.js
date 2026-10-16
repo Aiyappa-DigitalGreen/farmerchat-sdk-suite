@@ -11,7 +11,9 @@
  *   currently sends the whole answer at once (only `done` + `metadata`).
  */
 import { REPLAY_EVENTS } from './_replay.js';
-const UPSTREAM = 'https://farmerchat.farmstack.co/mobile-app-stage/';
+// DEMO only (user rule, 2026-10-16: "use demo in all platforms"). The route keeps its old `/stage/`
+// name so existing links work; it no longer reaches the stage backend.
+const UPSTREAM = 'https://farmerchat.farmstack.co/mobile-app-demo/';
 const GUEST_PATHS = /\/(initialize_user|send_tokens)\/?$/;
 const AGENTIC_PATH = /get_answer_for_text_query_agentic\/?$/;
 const HOP = new Set(['host', 'connection', 'content-length', 'origin', 'referer', 'accept-encoding',
