@@ -114,18 +114,28 @@ export function ChatActionChip(props: { icon: IconName; label: string; onClick: 
 
 const STATIC_WAVE = [0.15, 0.23, 0.31, 0.5, 0.31, 0.54, 0.73, 0.5, 0.73, 0.38, 0.5, 0.5, 0.31, 0.15];
 
-/** ListenButton.kt SoundWave: 14 green 2dp bars over 54×26; random jitter while playing. */
+/** Per-bar tween length while playing: `Random.nextInt(80, 150)` ms (ListenButton.kt SoundWave). */
+const waveTweenMs = (): number => 80 + Math.floor(Math.random() * 70);
+
+/**
+ * ListenButton.kt SoundWave: 14 green 2dp bars over 54×26. While playing, every 100-150 ms each
+ * bar retargets to `clamp(base*0.5 + (cur*0.5 + rnd*0.5)*0.5, 0.15, 0.85)` over its own random
+ * 80-150 ms FastOutSlowIn tween; when paused they settle back to the static Figma heights in 200 ms.
+ */
 function SoundWave(props: { playing: boolean }) {
-  const [heights, setHeights] = useState(STATIC_WAVE);
+  const [bars, setBars] = useState(() => STATIC_WAVE.map((h) => ({ h, ms: 200 })));
   useEffect(() => {
     if (!props.playing) {
-      setHeights(STATIC_WAVE);
+      setBars(STATIC_WAVE.map((h) => ({ h, ms: 200 })));
       return;
     }
     let t: number;
     const tick = () => {
-      setHeights((cur) =>
-        cur.map((c, i) => Math.min(0.85, Math.max(0.15, STATIC_WAVE[i] * 0.5 + (c * 0.5 + Math.random() * 0.5) * 0.5))),
+      setBars((cur) =>
+        cur.map((c, i) => ({
+          h: Math.min(0.85, Math.max(0.15, STATIC_WAVE[i] * 0.5 + (c.h * 0.5 + Math.random() * 0.5) * 0.5)),
+          ms: waveTweenMs(),
+        })),
       );
       t = window.setTimeout(tick, 100 + Math.random() * 50);
     };
@@ -134,8 +144,8 @@ function SoundWave(props: { playing: boolean }) {
   }, [props.playing]);
   return (
     <span className="fcsdk-c-wave" aria-hidden>
-      {heights.map((h, i) => (
-        <span key={i} style={{ height: `${h * 26}px`, transitionDuration: props.playing ? '120ms' : '200ms' }} />
+      {bars.map((b, i) => (
+        <span key={i} style={{ height: `${b.h * 26}px`, transitionDuration: `${b.ms}ms` }} />
       ))}
     </span>
   );
@@ -148,6 +158,10 @@ function SoundWave(props: { playing: boolean }) {
 export function ListenButton(props: { enabled?: boolean; loading: boolean; playing: boolean; hasAudio: boolean; onClick: () => void }) {
   const label = useLabel();
   const enabled = props.enabled ?? true;
+  // ListenButton.kt: state = Loading > Playing > Paused (has audio, not playing) > Default, and
+  // `AnimatedContent` fades each state's content in over 500 ms. Keying the content on the state
+  // replays the CSS fade-in on every switch.
+  const state = props.loading ? 'loading' : props.playing ? 'playing' : props.hasAudio ? 'paused' : 'default';
   return (
     <button
       type="button"
@@ -155,7 +169,9 @@ export function ListenButton(props: { enabled?: boolean; loading: boolean; playi
       onClick={enabled ? props.onClick : undefined}
       disabled={props.loading || !enabled}
       style={enabled ? undefined : { opacity: 0.4 }}
+      data-state={state}
     >
+      <span key={state} className="fcsdk-c-listen-state">
       {props.loading ? (
         <>
           <CircularProgress size={20} stroke={2} color="var(--fc-c-fg-primary)" />
@@ -183,6 +199,7 @@ export function ListenButton(props: { enabled?: boolean; loading: boolean; playi
           </span>
         </>
       )}
+      </span>
     </button>
   );
 }

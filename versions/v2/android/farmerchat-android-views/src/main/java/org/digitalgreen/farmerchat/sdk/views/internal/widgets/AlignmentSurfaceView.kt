@@ -134,12 +134,6 @@ internal class AlignmentSurfaceView @JvmOverloads constructor(
         isLoading: Boolean,
         isLatest: Boolean,
         additive: Boolean,
-        /**
-         * The surface's wire `blocking` flag (2.0.0): true withholds the escape hatch, because the
-         * backend cannot proceed until this surface is answered. Live `gps-prompt` sends
-         * `blocking: true`; absent on the wire → false, the pre-2026-09-03 behaviour.
-         */
-        blocking: Boolean = false,
         /** Listen pill for the live prompt; null = never shown (e.g. additive). */
         listen: ListenState? = null,
         /** Non-null while a location fetch started here runs ("Getting your location…"). */
@@ -268,8 +262,10 @@ internal class AlignmentSurfaceView @JvmOverloads constructor(
 
         // Escape hatch: only on an open, exclusive, non-urgent surface that is still the latest.
         // Without it a farmer whose answer is not among the chips has no way forward.
+        // App parity (AlignmentSurface.kt:197-199): NO gate on the wire `blocking` flag; a
+        // blocking clarify/confirm still offers it. Capability prompts (GPS / photo) never do.
         val showEscape = chips.isNotEmpty() && !isEscalate && !isCapabilityPrompt && !additive &&
-            !hasPick && isLatest && !effectiveLoading && !blocking
+            !hasPick && isLatest && !effectiveLoading
         escapeRow.isVisible = showEscape
         if (showEscape) {
             val accent = FcTokens.accent(context)
@@ -280,12 +276,30 @@ internal class AlignmentSurfaceView @JvmOverloads constructor(
                 val start = length
                 append(action)
                 setSpan(android.text.style.ForegroundColorSpan(accent), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                setSpan(android.text.style.TypefaceSpan("sans-serif-medium"), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                // App parity (AlignmentSurface.kt:211): FontWeight.SemiBold (600). The named
+                // "sans-serif-medium" family is 500; an explicit 600 needs API 28.
+                val ctaSpan = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    android.text.style.TypefaceSpan(
+                        android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, 600, false)
+                    )
+                } else {
+                    android.text.style.TypefaceSpan("sans-serif-medium")
+                }
+                setSpan(ctaSpan, start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                // App parity (AlignmentSurface.kt:226-231): ONLY the CTA is tappable — the app's
+                // ClickableText fires onTypeInstead just for the annotated range; the icon and the
+                // hint do nothing. No underline (the app's span has no decoration), and the colour
+                // stays the ForegroundColorSpan's accent.
+                setSpan(object : android.text.style.ClickableSpan() {
+                    override fun onClick(widget: android.view.View) = onTypeInstead()
+                    override fun updateDrawState(ds: android.text.TextPaint) {
+                        ds.isUnderlineText = false
+                    }
+                }, start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-            escapeRow.setOnClickListener { onTypeInstead() }
+            escapePrompt.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+            escapePrompt.highlightColor = android.graphics.Color.TRANSPARENT
             escapeRow.topMarginPx = 12.dp(context)
-        } else {
-            escapeRow.setOnClickListener(null)
         }
     }
 

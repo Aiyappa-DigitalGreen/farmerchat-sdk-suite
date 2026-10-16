@@ -33,6 +33,12 @@ import type {
   TextPromptResponse,
 } from '../core/types';
 import { isTranscriptionAcceptable } from './useHome';
+import {
+  ALIGN_CHIP_SEL,
+  alignmentChipRequestParams,
+  historyFollowUpQuestions,
+  sortHistoryItems,
+} from '../core/chatWire';
 
 /**
  * Minimum on-screen time per tool status, so back-to-back tool events (latency 0) are not
@@ -42,11 +48,6 @@ import { isTranscriptionAcceptable } from './useHome';
  */
 const TOOL_STATUS_MIN_DWELL_MS = 700;
 
-/**
- * `triggered_input_type` for a query re-sent after an alignment chip satisfied a capability.
- * App parity (`ChatViewModel.ALIGN_CHIP_SEL`); the string is part of the #27/#27a contract.
- */
-const ALIGN_CHIP_SEL = 'align_chip_sel';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -862,6 +863,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       staged?: { placeholderId: string; anchorId: string } | null;
       /** User-bubble text when it differs from the sent [question] (gender-select chips). */
       displayText?: string | null;
+      /**
+       * Alignment-chip sends only (app ChatViewModel.fetchTextPromptResponse): the server
+       * `message_id` of the surface the pick answers -> `parent_message_id`.
+       */
+      parentMessageId?: string | null;
+      /** GPS_PROMPT declined -> `location_declined: true`. */
+      locationDeclined?: boolean;
+      /** UPLOAD_PHOTO declined -> `photo_declined: true`. */
+      photoDeclined?: boolean;
     }) => {
       const question = params.question.trim();
       if (question.length === 0) return;
@@ -895,6 +905,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           suggestedQuestionIds: null,
           clarificationRequired: false,
           chatResponseState: UiStates.loading(),
+          // App clearAudioPlayback() on every new send: stop and release the previous answer's clip.
+          audioPlaybackUrl: null,
+          isAudioPlaying: false,
         }));
       } else {
         // retry path — reuse the existing bubble. An interrupted streaming bubble from the
@@ -953,6 +966,11 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         retry: params.isRetry === true,
         // App parity: the selected language's flag (default true); the store is hydrated in memory.
         streaming_required: sdk.store.getBoolean(StorageKeys.STREAMING_REQUIRED, true),
+        // App parity (ChatViewModel.kt:1416-1420): these are null -> omitted by Gson unless set,
+        // so they are spread in only when set and an ordinary query's body is unchanged.
+        ...(params.parentMessageId ? { parent_message_id: params.parentMessageId } : {}),
+        ...(params.locationDeclined === true ? { location_declined: true } : {}),
+        ...(params.photoDeclined === true ? { photo_declined: true } : {}),
       };
       const ctx = {
         userMessageId,
@@ -991,10 +1009,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
    * anything, they shared a location — and a blank address yields no bubble at all, matching
    * the app.
    *
-   * Three deliberate deltas, all mirroring the Android SDK and recorded in docs/04:
-   *  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
-   *    backend can correlate the answer to the prompt. {@link TextPromptRequest} has no such
-   *    field, so no alignment chip send carries it — an SDK-wide gap, not specific to this path.
+   * App parity: `triggered_input_type` is `align_chip_sel` and `parent_message_id` is the
+   * surface's server `message_id` (app ChatViewModel.kt:1069-1071), so the backend correlates
+   * the answer with the prompt. Two deliberate deltas, mirroring the Android SDK (docs/04):
    *  - **no `agentic_chip_*` analytics properties.** This reports as an ordinary text query;
    *    `triggered_input_type` IS `align_chip_sel` (app parity).
    *  - **no endpoint #30 (`track_follow_up_click`).** The chip's text is not the question, so
@@ -1046,6 +1063,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           errorMessage: null,
           failedMessageId: null,
           chatResponseState: UiStates.loading(),
+          // App clearAudioPlayback() on every new send: stop and release the previous answer's clip.
+          audioPlaybackUrl: null,
+          isAudioPlaying: false,
           suggestedQuestions: null,
           suggestedQuestionIds: null,
           clarificationRequired: false,
@@ -1055,6 +1075,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       void sendTextQuery({
         question: query,
         triggeredInputType: ALIGN_CHIP_SEL,
+        parentMessageId: source?.messageId ?? null,
         staged: {
           placeholderId,
           anchorId: resolved.length > 0 ? bubbleId : sourceMessageId,
@@ -1098,6 +1119,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           suggestedQuestions: null,
           suggestedQuestionIds: null,
           chatResponseState: UiStates.loading(),
+          // App clearAudioPlayback() on every new send: stop and release the previous answer's clip.
+          audioPlaybackUrl: null,
+          isAudioPlaying: false,
         }));
       } else {
         const retryId = userMessageId;
@@ -1233,6 +1257,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         errorMessage: null,
         failedMessageId: null,
         chatResponseState: UiStates.loading(),
+        // App clearAudioPlayback() on every new send: stop and release the previous answer's clip.
+        audioPlaybackUrl: null,
+        isAudioPlaying: false,
       }));
 
       lastRequestRef.current = () => void sendVoiceQuery(params);
@@ -1351,6 +1378,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
     async (conversationId: string, page: number) => {
       conversationIdRef.current = conversationId;
       const isFirstPage = page <= 1;
+      // App loadChatHistory -> clearAudioPlayback() (ChatViewModel.kt:1174).
+      patch({ audioPlaybackUrl: null, isAudioPlaying: false });
       if (isFirstPage) {
         patch({ isLoading: true, errorMessage: null });
       } else {
@@ -1422,7 +1451,14 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       });
       if (!mounted.current) return;
       if (result.ok && result.data.audio) {
-        patch({ isLoadingSynthesiseAudio: false, audioPlaybackUrl: result.data.audio });
+        // App ChatViewModel.kt:664-670: the URL and `isAudioPlaying = url != null` land in ONE
+        // update, so the Listen pill goes Loading -> Playing at once. Setting it only after the
+        // player had prepared left ~2 s of plain "Listen" between the two.
+        patch({
+          isLoadingSynthesiseAudio: false,
+          audioPlaybackUrl: result.data.audio,
+          isAudioPlaying: true,
+        });
       } else {
         patch({ isLoadingSynthesiseAudio: false });
       }
@@ -1538,12 +1574,20 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           // calls trackFollowUpQuestionClick (only sendFollowUpQuestion does, :961-963, with a
           // follow-up ID). Sending the chip text as `follow_up_question` 500'd on DEMO and
           // surfaced a spurious onError(500) to the host.
-          // Still differs from the app (docs/04): triggered_input_type "align_chip_sel" and
-          // parent_message_id are not sent.
+          // App parity (ChatViewModel.kt:1019-1022, 1051; ChatScreen.kt:1648-1663):
+          // triggered_input_type "align_chip_sel", parent_message_id = the surface's SERVER
+          // message_id, and the decline flags for a GPS / photo surface's text chip.
+          const surface = stateRef.current.messages.find(
+            (m): m is AiResponse => m.kind === 'ai' && m.id === surfaceId,
+          );
+          const wire = alignmentChipRequestParams(action.kind, surface?.messageId);
           void sendTextQuery({
             question: send.query,
             displayText: send.displayText === send.query ? null : send.displayText,
-            triggeredInputType: 'follow_up',
+            triggeredInputType: wire.triggeredInputType,
+            parentMessageId: wire.parentMessageId,
+            locationDeclined: wire.locationDeclined,
+            photoDeclined: wire.photoDeclined,
             sendQueryProperties: {
               // Segments the funnel by which alignment surface was tapped. Same property name
               // the Android reference documents on AlignmentKind.analyticsType.
@@ -1675,7 +1719,8 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1):
   let clarification = false;
   let lastAiIndex = -1;
 
-  items.forEach((item, index) => {
+  // App ChatViewModel.kt:1255: render in message_input_time order (DEMO sends newest-first).
+  sortHistoryItems(items).forEach((item, index) => {
     const uiId = `${item.message_id ?? makeId('hist')}_${item.message_type_id ?? 'x'}_${page}_${index}`;
     switch (item.message_type_id) {
       case 1: // query_text
@@ -1729,11 +1774,9 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1):
         break;
       case 7: {
         // follow_up_questions — attach to the preceding AI response.
-        // The app returns these as objects ({follow_up_question_id, sequence,
-        // question}); normalize to display strings (accept plain strings too).
-        const questions = (item.questions ?? [])
-          .map((q) => (typeof q === 'string' ? q : q?.question ?? ''))
-          .filter((q) => q.length > 0);
+        // The API returns these as objects ({follow_up_question_id, sequence,
+        // question}); like the app, keep only the display strings (see historyFollowUpQuestions).
+        const questions = historyFollowUpQuestions(item.questions);
         if (lastAiIndex >= 0) {
           const ai = messages[lastAiIndex];
           if (ai && ai.kind === 'ai') {

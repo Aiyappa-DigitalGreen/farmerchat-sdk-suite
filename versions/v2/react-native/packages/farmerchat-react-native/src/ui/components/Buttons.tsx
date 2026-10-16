@@ -3,8 +3,8 @@
  * PrimaryButton (Default/Chevron/Loading; Green800 surface, labelLarge, green
  * chevron/spinner accents; disabled dims content only), SecondaryButton (flat
  * surfaceSecondary), ActionButton (42dp app-bar chip), WeatherButton
- * (Green800 pill with icon + temp + green chevron), ScrollToBottomButton,
- * ListenButton.
+ * (Green800 pill with icon + temp + green chevron), ScrollToBottomButton.
+ * (ListenButton lives in ./ListenButton.)
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -369,42 +369,6 @@ export function ScrollIndicator(props: {
   );
 }
 
-/** Listen (TTS) pill under the latest answer. */
-export function ListenButton(props: {
-  label: string;
-  isLoading: boolean;
-  isPlaying: boolean;
-  onPress: () => void;
-}): React.ReactElement {
-  const theme = useTheme();
-  const c = theme.content;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.listen,
-        { backgroundColor: c.surfaceReadingSecondary, opacity: pressed ? 0.8 : 1 },
-      ]}
-    >
-      {props.isLoading ? (
-        <ActivityIndicator size="small" color={c.buttonPrimaryAccent} />
-      ) : (
-        <FcIcon
-          name={props.isPlaying ? 'pause' : 'speaker'}
-          size={18}
-          tint={c.foregroundPrimary}
-        />
-      )}
-      <Text
-        style={[typography.labelMedium, { color: c.foregroundPrimary, marginLeft: 8 }]}
-      >
-        {props.label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   primary: {
     alignItems: 'center',
@@ -453,13 +417,5 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  listen: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: radius.rounded,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignSelf: 'flex-start',
   },
 });

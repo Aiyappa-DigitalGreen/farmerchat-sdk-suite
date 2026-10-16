@@ -12,7 +12,7 @@
  *     node --import ./test/ts-extension-hook.mjs test/alignmentPick.test.ts
  */
 
-import { alignmentChipSend, recordAlignmentPick } from '../src/core/alignment.ts';
+import { ALIGN_CHIP_SEL, alignmentChipSend, alignmentRequestFields, recordAlignmentPick } from '../src/core/alignment.ts';
 
 let passed = 0;
 const failures: string[] = [];
@@ -128,6 +128,42 @@ check(
   { query: 'Yes', selectionValue: 'Yes', displayText: 'Yes' },
 );
 check('a chip with neither sends nothing', alignmentChipSend('CONFIRM', { label: '', value: null }), null);
+
+// --- alignmentRequestFields: app sendAlignmentChip (ChatViewModel.kt:1015-1052) ----------------
+
+check('align_chip_sel is the app string, verbatim', ALIGN_CHIP_SEL, 'align_chip_sel');
+check(
+  'clarify pick carries the surface server id only',
+  alignmentRequestFields('CLARIFY', 'srv-msg-1'),
+  { parent_message_id: 'srv-msg-1' },
+);
+check('confirm pick: same', alignmentRequestFields('CONFIRM', 'srv-msg-2'), { parent_message_id: 'srv-msg-2' });
+check('escalate pick: same', alignmentRequestFields('ESCALATE', 'srv-msg-3'), { parent_message_id: 'srv-msg-3' });
+check('gender-select pick: no decline flag', alignmentRequestFields('GENDER_SELECT', 'g'), { parent_message_id: 'g' });
+check(
+  'GPS decline chip / denied permission flags location_declined',
+  alignmentRequestFields('GPS_PROMPT', 'gps-1'),
+  { parent_message_id: 'gps-1', location_declined: true },
+);
+check(
+  'photo decline chip flags photo_declined',
+  alignmentRequestFields('UPLOAD_PHOTO', 'photo-1'),
+  { parent_message_id: 'photo-1', photo_declined: true },
+);
+check(
+  'location shared (success) carries the id but no decline flag',
+  alignmentRequestFields('GPS_PROMPT', 'gps-2', true),
+  { parent_message_id: 'gps-2' },
+);
+// Gson omits nulls: an absent id must be an ABSENT key, so JSON never carries "parent_message_id":null.
+check('no server id -> no key at all', JSON.stringify(alignmentRequestFields('CLARIFY', undefined)), '{}');
+check('null server id -> no key at all', JSON.stringify(alignmentRequestFields('CLARIFY', null)), '{}');
+check('blank server id -> no key at all', JSON.stringify(alignmentRequestFields('CLARIFY', '  ')), '{}');
+check(
+  'spread into a request leaves no null keys',
+  JSON.stringify({ query: 'Rice', triggered_input_type: ALIGN_CHIP_SEL, ...alignmentRequestFields('CLARIFY', null) }),
+  '{"query":"Rice","triggered_input_type":"align_chip_sel"}',
+);
 
 // ---------------------------------------------------------------------------
 

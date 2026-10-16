@@ -231,3 +231,50 @@ export function alignmentChipSend(
   if (kind === 'GENDER_SELECT') return { query: marked, selectionValue: marked, displayText: shown };
   return { query: shown, selectionValue: marked, displayText: shown };
 }
+
+/**
+ * `triggered_input_type` of every alignment send: a chip pick, the GPS decline, and the query
+ * re-sent after a shared location. The app's own string (ChatViewModel.kt:1052, :1118), verbatim.
+ */
+export const ALIGN_CHIP_SEL = 'align_chip_sel';
+
+/**
+ * The extra `TextPromptRequest` fields an alignment send carries. Each one is ABSENT rather than
+ * null when unset, because the app's Gson omits nulls: `parent_message_id`, `location_declined`
+ * and `photo_declined` only ever appear on an alignment request.
+ */
+export interface AlignmentRequestFields {
+  parent_message_id?: string;
+  location_declined?: true;
+  photo_declined?: true;
+}
+
+/**
+ * Request fields for a plain-text alignment send. Port of the app's `sendAlignmentChip`
+ * (fc-compose-agentic `ui/chat/ChatViewModel.kt:1015-1052`) and its callers in
+ * `ui/chat/ChatScreen.kt:1639-1663` and `:376-380`:
+ *
+ * - `parent_message_id` is the SERVER `message_id` of the response that showed the chips (the
+ *   app's `AiResponse.messageId`, never its local list id), so the backend links the pick to the
+ *   surface that asked. Omitted when the surface has no server id. (A blank id is omitted too;
+ *   the app would send `""`, which no backend lookup can match.)
+ * - `location_declined: true` when the surface is a GPS_PROMPT. A GPS chip only reaches the text
+ *   path as the decline ("use approximate location") chip or the denied-permission fallback,
+ *   because "Share my location" is routed to the capability instead.
+ * - `photo_declined: true` when the surface is an UPLOAD_PHOTO, for the same reason: only the
+ *   "Continue without photo" chip reaches the text path.
+ *
+ * [shareLocation] marks the "Share my location" success path (`sendLocationSharedQuery`,
+ * ChatViewModel.kt:1071), which carries the parent id but neither decline flag.
+ */
+export function alignmentRequestFields(
+  kind: AlignmentKind | null | undefined,
+  parentMessageId: string | null | undefined,
+  shareLocation = false,
+): AlignmentRequestFields {
+  const fields: AlignmentRequestFields = {};
+  if (parentMessageId && parentMessageId.trim().length > 0) fields.parent_message_id = parentMessageId;
+  if (!shareLocation && kind === 'GPS_PROMPT') fields.location_declined = true;
+  if (!shareLocation && kind === 'UPLOAD_PHOTO') fields.photo_declined = true;
+  return fields;
+}

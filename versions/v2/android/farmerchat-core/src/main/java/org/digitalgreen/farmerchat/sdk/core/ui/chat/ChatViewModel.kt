@@ -1841,50 +1841,10 @@ class ChatViewModel(
                 when (result) {
                     is ApiResult.Success -> {
                         val items = result.data.data
-                        val mapped = mutableListOf<ChatMessage>()
-                        var lastFollowUps: List<org.digitalgreen.farmerchat.sdk.core.model.ConversationChatHistoryQuestion>? = null
-                        var clarification = false
-                        // A query and its response SHARE one `message_id` (verified live
-                        // 2026-09-01: a single turn returns type 1, 3 and 7 all carrying the same
-                        // id). Using it as the list key produced duplicate LazyColumn keys and
-                        // crashed with IllegalArgumentException on every non-empty conversation.
-                        // App parity (fc-compose ChatViewModel.kt:1027): key on
-                        // message_id + message_type_id + index; `page` is added because the index
-                        // restarts per page. `messageId` keeps the raw API id for TTS/follow-ups.
-                        items.forEachIndexed { index, item ->
-                            val uiId = "${item.message_id}_${item.message_type_id}_${page}_$index"
-                            when (item.message_type_id) {
-                                1 -> mapped += ChatMessage.UserMessage(
-                                    text = item.query_text.orEmpty(),
-                                    imageUri = item.query_media_file_url?.let(Uri::parse),
-                                    userBubbleImageWideBanner = item.query_media_file_url != null,
-                                    id = uiId
-                                )
-                                2 -> mapped += ChatMessage.UserMessage(
-                                    text = item.heard_query_text ?: item.query_text.orEmpty(),
-                                    audioUri = item.query_media_file_url?.let(Uri::parse),
-                                    id = uiId
-                                )
-                                3 -> mapped += ChatMessage.AiResponse(
-                                    text = item.response_text.orEmpty(),
-                                    id = uiId,
-                                    messageId = item.message_id,
-                                    // History has no per-message agentic flag: mirror the current
-                                    // UI, as the app does (ChatViewModel.kt:1343-1357).
-                                    isAgentic = agenticUi
-                                )
-                                7 -> {
-                                    lastFollowUps = item.questions
-                                    clarification = item.clarification_required == true
-                                }
-                                11 -> mapped += ChatMessage.UserMessage(
-                                    text = item.query_text.orEmpty(),
-                                    imageUri = item.query_media_file_url?.let(Uri::parse),
-                                    userBubbleImageWideBanner = false,
-                                    id = uiId
-                                )
-                            }
-                        }
+                        // Sort by message_input_time, attach follow-ups to their response, and
+                        // take the chips from the last response: see mapChatHistoryPage.
+                        val historyPage = mapChatHistoryPage(items, page, agenticUi)
+                        val mapped = historyPage.messages
 
                         _state.update { current ->
                             // distinctBy is a hard guard: a duplicate id crashes LazyColumn and
@@ -1899,12 +1859,15 @@ class ChatViewModel(
                                 historyNextPage = if (items.isNotEmpty()) page + 1 else null,
                                 isInitialHistoryLoaded = if (page == 1) true else current.isInitialHistoryLoaded,
                                 suggestedQuestions = if (page == 1) {
-                                    lastFollowUps?.map { it.question }
+                                    historyPage.followUps
                                 } else current.suggestedQuestions,
-                                suggestedQuestionIds = if (page == 1) {
-                                    lastFollowUps?.map { it.follow_up_question_id }
-                                } else current.suggestedQuestionIds,
-                                clarificationRequired = if (page == 1) clarification else current.clarificationRequired
+                                // App parity (ChatViewModel.kt:1296-1299): history chips carry
+                                // no follow_up_question_id, so a tap is a plain `follow_up`
+                                // query with no #30 click.
+                                suggestedQuestionIds = if (page == 1) null else current.suggestedQuestionIds,
+                                clarificationRequired = if (page == 1) {
+                                    historyPage.clarificationRequired
+                                } else current.clarificationRequired
                             )
                         }
                     }

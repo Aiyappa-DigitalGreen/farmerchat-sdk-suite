@@ -200,7 +200,7 @@ const M3_ROTATION_OUTPUT = [0, 144, 360, 504, 720, 864, 1080, 1224, 1440].map((d
  * - the whole assembly turning with the M3 global rotation.
  * Every animated property is a transform/opacity, so it runs on the native driver.
  */
-function MaterialIndeterminateRing(props: {
+export function MaterialIndeterminateRing(props: {
   size: number;
   strokeWidth: number;
   color: string;

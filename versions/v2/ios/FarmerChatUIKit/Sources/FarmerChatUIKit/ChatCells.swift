@@ -5,8 +5,6 @@ import FarmerChatCore
 
 // MARK: - Chat bubble cell (user / AI / loading)
 
-/// ListenButton.kt states the action row renders.
-enum FCUIListenState { case idle, loading, playing }
 
 final class FCUIChatBubbleCell: UICollectionViewCell {
     var onRetry: (() -> Void)?
@@ -471,13 +469,11 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             }
         ))
         if showListen {
-            // ListenButton.kt:142-192 — Loading: ring + "Loading..."; Playing: Pause; else VolumeUp.
-            pills.addArrangedSubview(fcuiActionChip(
-                systemImage: listenState == .playing ? "pause.fill" : "speaker.wave.2.fill",
-                title: listenState == .loading ? fcuiLabel(FCLabels.loading, "Loading...") : fcuiLabel(FCLabels.listen, "Listen"),
+            // ListenButton.kt:142-266 — Default: VolumeUp + "Listen"; Loading: ring + "Loading...";
+            // Playing: Pause + the animated 14-bar wave; Paused: PlayArrow + the wave at rest.
+            pills.addArrangedSubview(fcuiListenPill(
+                state: listenState,
                 enabled: listenEnabled,
-                loading: listenState == .loading,
-                identifier: "fcListen",
                 action: { [weak self] in self?.onListen?() }
             ))
         }

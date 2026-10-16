@@ -652,68 +652,70 @@ enum FCUIMarkdown {
 
 // MARK: - Answer-generation tips (components/Tips.kt + Tip.kt)
 
-/// The tips pager shown at the bottom of the chat while the first answer is generated: a 24pt
-/// white fade, then a white band (44pt bottom padding). Pager content padding 24, page gap 8,
-/// auto-advance every 8 s. Card: min height 104, smooth radius 16, `#08361B`, padding 20/16; a
-/// 36pt `#00C950` circle with a white 18pt lightbulb, 12, title labelLarge white, 6, body
-/// bodySmall white. Dots: 8pt `#2900C950`, gap 10; the active one is 24×8, filling with
-/// `#00C950` as the 8 s timer runs.
+/// Tips.kt (`components/Tips.kt` + `Tip.kt`), shown for the whole answer-generation wait
+/// (ChatThreadContent.kt:676-685): a 24pt fade, then a page-coloured band (44 bottom padding)
+/// holding a pager — content padding 24, page gap 8, so the neighbouring cards peek in on BOTH
+/// sides — that auto-advances every 8000ms with a 400ms slide, forever forward (the app's
+/// 10 000-page virtual pager starts mid-range) and is not user-scrollable; 14, then the dots
+/// (8pt `#2900C950`, gap 10; the active one a 24×8 track filling with `#00C950` over the 8s).
+/// Card: min height 104, radius 16, `#08361B`, padding 20/16, top-aligned; a 36pt `#00C950`
+/// disc with a white 18pt lightbulb, 12, title labelLarge, 6, body bodySmall, all white.
 ///
-/// Tip set: the app's three built-in fallback tips, through their label keys. The app also
-/// discovers server-defined `fc_v2_app_label_tips_<name>_title/_statement` pairs; that needs the
-/// raw label map, which Core does not expose to the UI flavours (see REPORT gap).
-final class FCUITipsView: UIView, UIScrollViewDelegate {
+/// The tip set is the server's (`LabelManager.answerGenerationTips()`, port of
+/// ChatLoadingContent.kt `answerGenerationTips()`), re-read and shuffled on every `start()`, as
+/// `Tips.kt` shuffles per show. Not ported: the haptic tick and the lightbulb wobble.
+final class FCUITipsView: UIView {
     private static let advance: TimeInterval = 8
-    private let scroll = UIScrollView()
-    private let pages = UIStackView()
+    private static let slideDuration: TimeInterval = 0.4
+    /// Cards in the strip: previous, current, next, and the one after (visible mid-slide).
+    private static let stripCount = 4
+
+    private let band = UIView()
+    private let pagerClip = UIView()
+    private let strip = UIStackView()
     private let dots = UIStackView()
+    private var stripLeading: NSLayoutConstraint!
+    private var cards: [FCUITipCardView] = []
     private var dotWidths: [NSLayoutConstraint] = []
     private var fills: [UIView] = []
     private var fillWidths: [NSLayoutConstraint] = []
-    private var cards: [UIView] = []
-    private var current = 0
+    private var tips: [AnswerGenerationTip] = []
+    /// Virtual page, only ever increasing; the shown tip is `page % tips.count`.
+    private var page = 0
     private var timer: Timer?
-    private var cardWidth: NSLayoutConstraint?
-
-    static func fallbackTips() -> [(String, String)] {
-        [
-            (fcuiLabel(FCLabels.didYouKnow, "Did you know?"),
-             fcuiLabel(FCLabels.youCanAskFollowupQuestionsToGetMoreDetails, "You can ask follow-up questions to get more details")),
-            (fcuiLabel(FCLabels.quickTip, "Quick tip"),
-             fcuiLabel(FCLabels.tipsAskSpecificCrops, "Try asking about specific crops or problems")),
-            (fcuiLabel(FCLabels.tryThis, "Try this"),
-             fcuiLabel(FCLabels.uploadPhotosForPlantDiseaseIdentification, "Upload photos for plant disease identification"))
-        ]
-    }
+    private var running = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
-        isUserInteractionEnabled = true
+        // The app's pager has `userScrollEnabled = false`; the overlay never eats thread touches.
+        isUserInteractionEnabled = false
 
         let fade = CAGradientLayer()
-        fade.colors = [UIColor.white.withAlphaComponent(0).cgColor, UIColor.white.cgColor]
+        fade.colors = [FCUITheme.surfaceReadingPrimary.withAlphaComponent(0).cgColor, FCUITheme.surfaceReadingPrimary.cgColor]
         let fadeView = FCUIGradientView(layer: fade)
         fadeView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(fadeView)
-        let band = UIView()
         band.backgroundColor = FCUITheme.surfaceReadingPrimary
         band.translatesAutoresizingMaskIntoConstraints = false
         addSubview(band)
 
-        scroll.showsHorizontalScrollIndicator = false
-        scroll.decelerationRate = .fast
-        scroll.clipsToBounds = false
-        scroll.delegate = self
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        band.addSubview(scroll)
-        band.clipsToBounds = true
+        pagerClip.clipsToBounds = true
+        pagerClip.translatesAutoresizingMaskIntoConstraints = false
+        band.addSubview(pagerClip)
 
-        pages.axis = .horizontal
-        pages.spacing = 8
-        pages.alignment = .fill
-        pages.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(pages)
+        strip.axis = .horizontal
+        strip.spacing = 8
+        strip.alignment = .bottom
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        pagerClip.addSubview(strip)
+        for _ in 0..<Self.stripCount {
+            let card = FCUITipCardView()
+            strip.addArrangedSubview(card)
+            // Each page is the pager width minus the 24 + 24 content padding.
+            card.widthAnchor.constraint(equalTo: pagerClip.widthAnchor, constant: -48).isActive = true
+            cards.append(card)
+        }
 
         dots.axis = .horizontal
         dots.spacing = 10
@@ -721,10 +723,85 @@ final class FCUITipsView: UIView, UIScrollViewDelegate {
         dots.translatesAutoresizingMaskIntoConstraints = false
         band.addSubview(dots)
 
-        for (index, tip) in Self.fallbackTips().enumerated() {
-            let card = makeCard(title: tip.0, body: tip.1)
-            pages.addArrangedSubview(card)
-            cards.append(card)
+        // At rest the CURRENT card (index 1) sits 24 in: strip leading = 24 - (cardWidth + 8).
+        stripLeading = strip.leadingAnchor.constraint(equalTo: pagerClip.leadingAnchor)
+        NSLayoutConstraint.activate([
+            fadeView.topAnchor.constraint(equalTo: topAnchor),
+            fadeView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fadeView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fadeView.heightAnchor.constraint(equalToConstant: 24),
+            band.topAnchor.constraint(equalTo: fadeView.bottomAnchor),
+            band.leadingAnchor.constraint(equalTo: leadingAnchor),
+            band.trailingAnchor.constraint(equalTo: trailingAnchor),
+            band.bottomAnchor.constraint(equalTo: bottomAnchor),
+            pagerClip.topAnchor.constraint(equalTo: band.topAnchor),
+            pagerClip.leadingAnchor.constraint(equalTo: band.leadingAnchor),
+            pagerClip.trailingAnchor.constraint(equalTo: band.trailingAnchor),
+            stripLeading,
+            strip.topAnchor.constraint(equalTo: pagerClip.topAnchor),
+            strip.bottomAnchor.constraint(equalTo: pagerClip.bottomAnchor),
+            dots.topAnchor.constraint(equalTo: pagerClip.bottomAnchor, constant: 14),
+            dots.centerXAnchor.constraint(equalTo: band.centerXAnchor),
+            dots.bottomAnchor.constraint(equalTo: band.bottomAnchor, constant: -44)
+        ])
+        accessibilityIdentifier = "fcTips"
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if !isSliding { stripLeading.constant = restingLeading }
+    }
+
+    private var isSliding = false
+    private var step: CGFloat { max(0, pagerClip.bounds.width - 48) + 8 }
+    private var restingLeading: CGFloat { 24 - step }
+
+    func start() {
+        guard !running else { return }
+        running = true
+        tips = FarmerChat.shared.labels.answerGenerationTips().shuffled()
+        page = 0
+        rebuildDots()
+        configureCards()
+        startTimer()
+    }
+
+    func stop() {
+        running = false
+        timer?.invalidate()
+        timer = nil
+        isSliding = false
+        layer.removeAllAnimations()
+        strip.layer.removeAllAnimations()
+        fills.forEach { $0.layer.removeAllAnimations() }
+    }
+
+    private func tip(at offset: Int) -> AnswerGenerationTip? {
+        let n = tips.count
+        guard n > 0 else { return nil }
+        return tips[((page + offset) % n + n) % n]
+    }
+
+    private func configureCards() {
+        for (i, card) in cards.enumerated() {
+            if let tip = tip(at: i - 1) { card.configure(title: tip.title, body: tip.body) }
+        }
+        let current = tips.isEmpty ? 0 : page % tips.count
+        for (index, width) in dotWidths.enumerated() {
+            width.constant = index == current ? 24 : 8
+            fillWidths[index].constant = 0
+            fills[index].layer.removeAllAnimations()
+        }
+        stripLeading.constant = restingLeading
+        layoutIfNeeded()
+    }
+
+    private func rebuildDots() {
+        dots.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        dotWidths = []; fills = []; fillWidths = []
+        for _ in tips.indices {
             let dot = UIView()
             dot.backgroundColor = FCUITheme.green500.withAlphaComponent(0.16)
             dot.layer.cornerRadius = 4
@@ -734,7 +811,7 @@ final class FCUITipsView: UIView, UIScrollViewDelegate {
             fill.backgroundColor = FCUITheme.green500
             fill.translatesAutoresizingMaskIntoConstraints = false
             dot.addSubview(fill)
-            let width = dot.widthAnchor.constraint(equalToConstant: index == 0 ? 24 : 8)
+            let width = dot.widthAnchor.constraint(equalToConstant: 8)
             let fillWidth = fill.widthAnchor.constraint(equalToConstant: 0)
             NSLayoutConstraint.activate([
                 width, dot.heightAnchor.constraint(equalToConstant: 8),
@@ -748,42 +825,50 @@ final class FCUITipsView: UIView, UIScrollViewDelegate {
             fills.append(fill)
             fillWidths.append(fillWidth)
         }
-
-        NSLayoutConstraint.activate([
-            fadeView.topAnchor.constraint(equalTo: topAnchor),
-            fadeView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            fadeView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            fadeView.heightAnchor.constraint(equalToConstant: 24),
-            band.topAnchor.constraint(equalTo: fadeView.bottomAnchor),
-            band.leadingAnchor.constraint(equalTo: leadingAnchor),
-            band.trailingAnchor.constraint(equalTo: trailingAnchor),
-            band.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.topAnchor.constraint(equalTo: band.topAnchor),
-            scroll.leadingAnchor.constraint(equalTo: band.leadingAnchor, constant: 24),
-            scroll.trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: -24),
-            pages.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
-            pages.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-            pages.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-            pages.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-            pages.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
-            dots.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 16),
-            dots.centerXAnchor.constraint(equalTo: band.centerXAnchor),
-            dots.bottomAnchor.constraint(equalTo: band.bottomAnchor, constant: -44)
-        ])
-        for card in cards {
-            card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor).isActive = true
-        }
-        accessibilityIdentifier = "fcTips"
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    /// One Tips.kt loop turn: fill the active dot over 8s, then slide one page.
+    private func startTimer() {
+        guard running, !tips.isEmpty else { return }
+        let current = page % tips.count
+        fillWidths[current].constant = 24
+        UIView.animate(withDuration: Self.advance, delay: 0, options: [.curveLinear]) {
+            self.dots.layoutIfNeeded()
+        }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: Self.advance, repeats: false) { [weak self] _ in
+            self?.slide()
+        }
+    }
 
-    private func makeCard(title: String, body: String) -> UIView {
-        let card = UIView()
-        card.backgroundColor = FCUITheme.green800
-        card.layer.cornerRadius = 16
-        card.layer.cornerCurve = .continuous
-        card.translatesAutoresizingMaskIntoConstraints = false
+    private func slide() {
+        guard running else { return }
+        isSliding = true
+        stripLeading.constant = restingLeading - step
+        UIView.animate(withDuration: Self.slideDuration, delay: 0, options: [.curveEaseInOut]) {
+            self.pagerClip.layoutIfNeeded()
+        } completion: { [weak self] _ in
+            guard let self, self.running else { return }
+            // Re-centre on the next page without animation, so the loop never runs out.
+            self.page += 1
+            self.isSliding = false
+            self.configureCards()
+            self.startTimer()
+        }
+    }
+}
+
+/// Tip.kt:64-107 — one card of ``FCUITipsView``.
+final class FCUITipCardView: UIView {
+    private let titleLabel = UILabel()
+    private let bodyLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = FCUITheme.green800
+        layer.cornerRadius = 16
+        layer.cornerCurve = .continuous
+        translatesAutoresizingMaskIntoConstraints = false
         let circle = UIView()
         circle.backgroundColor = FCUITheme.green500
         circle.layer.cornerRadius = 18
@@ -793,76 +878,38 @@ final class FCUITipsView: UIView, UIScrollViewDelegate {
         bulb.contentMode = .center
         bulb.translatesAutoresizingMaskIntoConstraints = false
         circle.addSubview(bulb)
-        let titleLabel = UILabel()
         titleLabel.numberOfLines = 0
         titleLabel.textColor = .white
-        titleLabel.fcSetText(title, style: FCUITypography.current.labelLarge)
-        let bodyLabel = UILabel()
         bodyLabel.numberOfLines = 0
         bodyLabel.textColor = .white
-        bodyLabel.fcSetText(body, style: FCUITypography.current.bodySmall)
         let text = UIStackView(arrangedSubviews: [titleLabel, bodyLabel])
         text.axis = .vertical
         text.spacing = 6
         text.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(circle)
-        card.addSubview(text)
+        addSubview(circle)
+        addSubview(text)
         NSLayoutConstraint.activate([
-            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 104),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 104),
             circle.widthAnchor.constraint(equalToConstant: 36),
             circle.heightAnchor.constraint(equalToConstant: 36),
-            circle.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 20),
-            circle.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            circle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            circle.topAnchor.constraint(equalTo: topAnchor, constant: 16),
             bulb.centerXAnchor.constraint(equalTo: circle.centerXAnchor),
             bulb.centerYAnchor.constraint(equalTo: circle.centerYAnchor),
             text.leadingAnchor.constraint(equalTo: circle.trailingAnchor, constant: 12),
-            text.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -20),
-            text.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
-            text.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -16)
+            text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            text.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            text.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16)
         ])
-        card.isAccessibilityElement = true
-        card.accessibilityLabel = "\(title). \(body)"
-        return card
+        isAccessibilityElement = true
     }
 
-    func start() {
-        guard timer == nil else { return }
-        show(page: 0, animated: false)
-    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-        fills.forEach { $0.layer.removeAllAnimations() }
-    }
-
-    private func show(page: Int, animated: Bool) {
-        current = page
-        let pageWidth = scroll.bounds.width + pages.spacing
-        scroll.setContentOffset(CGPoint(x: CGFloat(page) * pageWidth, y: 0), animated: animated)
-        for (index, width) in dotWidths.enumerated() {
-            width.constant = index == page ? 24 : 8
-            fillWidths[index].constant = 0
-        }
-        layoutIfNeeded()
-        fillWidths[page].constant = 24
-        UIView.animate(withDuration: Self.advance, delay: 0, options: [.curveLinear]) {
-            self.layoutIfNeeded()
-        }
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: Self.advance, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.show(page: (self.current + 1) % max(self.cards.count, 1), animated: true)
-        }
-    }
-
-    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-        let pageWidth = scroll.bounds.width + pages.spacing
-        guard pageWidth > 0 else { return }
-        var page = Int(round(targetContentOffset.pointee.x / pageWidth))
-        page = max(0, min(cards.count - 1, page))
-        targetContentOffset.pointee.x = CGFloat(page) * pageWidth
-        DispatchQueue.main.async { self.show(page: page, animated: true) }
+    func configure(title: String, body: String) {
+        titleLabel.fcSetText(title, style: FCUITypography.current.labelLarge)
+        bodyLabel.fcSetText(body, style: FCUITypography.current.bodySmall)
+        accessibilityLabel = "\(title). \(body)"
     }
 }
 

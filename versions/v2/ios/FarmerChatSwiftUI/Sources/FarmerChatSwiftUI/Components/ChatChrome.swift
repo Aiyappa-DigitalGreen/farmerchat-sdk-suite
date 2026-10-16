@@ -449,32 +449,33 @@ enum FCWindowSafeArea {
 
 // MARK: - Tips carousel (components/Tips.kt + Tip.kt)
 
-/// Answer-generation tips shown while the first answer is pending (ChatThreadContent.kt:680-685).
-/// The app's built-in three (ChatLoadingContent.answerGenerationTips): server label keys with the
-/// app's English fallbacks.
-@MainActor
-func fcAnswerGenerationTips() -> [(title: String, body: String)] {
-    [
-        (fcLabel(FCLabels.didYouKnow, "Did you know?"),
-         fcLabel(FCLabels.youCanAskFollowupQuestionsToGetMoreDetails, "You can ask follow-up questions to get more details")),
-        (fcLabel(FCLabels.quickTip, "Quick tip"),
-         fcLabel(FCLabels.tipsAskSpecificCrops, "Try asking about specific crops or problems")),
-        (fcLabel(FCLabels.tryThis, "Try this"),
-         fcLabel(FCLabels.uploadPhotosForPlantDiseaseIdentification, "Upload photos for plant disease identification"))
-    ]
-}
-
-/// Tips.kt: a 24pt white fade, then a white band holding a pager (content padding 24, page gap 8,
-/// auto-advance every 8000ms) and its dots, 44 above the bottom.
+/// Tips.kt (`components/Tips.kt`), shown for the whole answer-generation wait
+/// (ChatThreadContent.kt:676-685): a 24pt fade into the page background, then a page-coloured band
+/// (44 bottom padding) holding a pager — content padding 24, page gap 8, so the neighbouring cards
+/// peek in on BOTH sides — that auto-advances every 8000ms with a 400ms slide, forever forward
+/// (the app's 10 000-page virtual pager starts mid-range), not user-scrollable
+/// (`userScrollEnabled = false`); 14, then the dots.
+///
+/// The tip set is the server's (`LabelManager.answerGenerationTips()`, port of
+/// ChatLoadingContent.kt `answerGenerationTips()`), shuffled once per show as `Tips.kt` does.
+/// Not ported: the haptic tick and the lightbulb's attention wobble after each advance.
 struct FCTipsCarousel: View {
     @Environment(\.fcTheme) private var theme
-    let tips: [(title: String, body: String)]
 
+    @State private var tips: [AnswerGenerationTip]
+    /// Virtual page, only ever increasing; the shown tip is `page % tips.count`.
     @State private var page = 0
+    /// Horizontal slide of the card strip while advancing (0 at rest, -step at the end).
+    @State private var slide: CGFloat = 0
     @State private var progress: CGFloat = 0
-    @State private var dragOffset: CGFloat = 0
+    @State private var cardHeight: CGFloat = 104
 
-    private static let advance: Double = 8
+    private static let tipDuration: Double = 8
+    private static let slideDuration: Double = 0.4
+
+    init() {
+        _tips = State(initialValue: FarmerChat.shared.labels.answerGenerationTips().shuffled())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -483,7 +484,7 @@ struct FCTipsCarousel: View {
                 startPoint: .top, endPoint: .bottom
             )
             .frame(height: 24)
-            VStack(spacing: 20) {
+            VStack(spacing: 14) {
                 pager
                 dots
             }
@@ -491,48 +492,67 @@ struct FCTipsCarousel: View {
             .frame(maxWidth: .infinity)
             .background(theme.content.surfaceReadingPrimary.ignoresSafeArea(edges: .bottom))
         }
-        .task(id: page) {
-            progress = 0
-            withAnimation(.linear(duration: Self.advance)) { progress = 1 }
-            try? await Task.sleep(nanoseconds: UInt64(Self.advance * 1_000_000_000))
-            guard !Task.isCancelled, !tips.isEmpty else { return }
-            withAnimation(.easeInOut(duration: 0.35)) { page = (page + 1) % tips.count }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("fcTips")
+        .task { await cycle() }
+    }
+
+    /// Tips.kt's LaunchedEffect loop: fill the 8s timer, slide one page, repeat.
+    private func cycle() async {
+        guard !tips.isEmpty else { return }
+        while !Task.isCancelled {
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) { progress = 0 }
+            withAnimation(.linear(duration: Self.tipDuration)) { progress = 1 }
+            try? await Task.sleep(nanoseconds: UInt64(Self.tipDuration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: Self.slideDuration)) { slide = -1 }
+            try? await Task.sleep(nanoseconds: UInt64(Self.slideDuration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            // Re-centre on the next page without animation, so the loop never runs out.
+            withTransaction(reset) {
+                page += 1
+                slide = 0
+                progress = 0
+            }
         }
+    }
+
+    private func tip(at offset: Int) -> AnswerGenerationTip {
+        let n = tips.count
+        return tips[((page + offset) % n + n) % n]
     }
 
     private var pager: some View {
         GeometryReader { geo in
             let cardWidth = max(0, geo.size.width - 48)
-            HStack(alignment: .top, spacing: 8) {
-                ForEach(Array(tips.enumerated()), id: \.offset) { _, tip in
-                    FCTipCard(title: tip.title, text: tip.body)
+            let step = cardWidth + 8
+            // prev | current | next | next+1 — the strip is offset so `current` sits at x = 24.
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(-1..<3, id: \.self) { offset in
+                    let t = tip(at: offset)
+                    FCTipCard(title: t.title, text: t.body)
                         .frame(width: cardWidth)
+                        .background(GeometryReader { card in
+                            Color.clear.preference(key: FCTipCardHeightKey.self, value: card.size.height)
+                        })
                 }
             }
-            .offset(x: 24 - CGFloat(page) * (cardWidth + 8) + dragOffset)
-            .gesture(
-                DragGesture()
-                    .onChanged { dragOffset = $0.translation.width }
-                    .onEnded { value in
-                        var next = page
-                        if value.translation.width < -40 { next = min(page + 1, tips.count - 1) }
-                        if value.translation.width > 40 { next = max(page - 1, 0) }
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            dragOffset = 0
-                            page = next
-                        }
-                    }
-            )
+            .offset(x: 24 - step + slide * step)
         }
-        .frame(height: 120)
+        .frame(height: cardHeight)
+        .onPreferenceChange(FCTipCardHeightKey.self) { cardHeight = max(104, $0) }
+        .allowsHitTesting(false)
     }
 
-    /// Tips.kt:176-210: 8pt #2900C950 dots 10 apart; the active one is 24×8 and fills with #00C950
-    /// as the timer runs.
+    /// Tips.kt:176-210: 8pt dots 10 apart; the active one is a 24×8 track that fills with
+    /// feedbackSuccess as the 8s timer runs.
     private var dots: some View {
-        HStack(spacing: 10) {
+        let current = tips.isEmpty ? 0 : page % tips.count
+        return HStack(spacing: 10) {
             ForEach(0..<tips.count, id: \.self) { index in
-                let active = index == page
+                let active = index == current
                 Capsule()
                     .fill(FCPrimitive.green500Alpha16)
                     .frame(width: active ? 24 : 8, height: 8)
@@ -544,11 +564,16 @@ struct FCTipsCarousel: View {
                         }
                     }
                     .clipShape(Capsule())
-                    .animation(.easeInOut(duration: 0.3), value: page)
             }
         }
         .accessibilityHidden(true)
     }
+}
+
+/// Tallest tip card in the strip — the pager is as tall as its tallest page (HorizontalPager).
+private struct FCTipCardHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 /// Tip.kt:64-107: min height 104, radius 16, #08361B, padding 20h / 16v; a 36pt #00C950 disc with
@@ -579,7 +604,8 @@ struct FCTipCard: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .frame(minHeight: 104, alignment: .center)
+        // Tip.kt: heightIn(min = 104), Row verticalAlignment = Top — icon + title anchor to the top.
+        .frame(minHeight: 104, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(FCPrimitive.green800)

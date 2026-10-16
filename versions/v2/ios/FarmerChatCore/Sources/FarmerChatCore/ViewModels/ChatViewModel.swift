@@ -16,6 +16,33 @@ let fcToolStatusMinDwellNanoseconds: UInt64 = 700_000_000
 /// Internal (not private) so the capability-chip tests can assert the literal.
 let FCAlignChipSelInputType = "align_chip_sel"
 
+/// What one alignment-chip tap sends — the arguments the app's `onAlignmentChipClick`
+/// (`ui/chat/ChatScreen.kt:1639-1663`) passes to `SendAlignmentChip`:
+/// - `query`: the chip LABEL (gender-select: its VALUE, which the backend expects raw);
+/// - `selectionValue`: the chip VALUE (label when blank) — marks the picked chip, never sent;
+/// - `displayLabel`: the bubble override, non-nil only when it differs from `query`
+///   (gender-select shows the label while the value is sent).
+/// Nil when the chip carries neither a label nor a value.
+struct AlignmentChipSend: Equatable {
+    let query: String
+    let selectionValue: String
+    let displayLabel: String?
+
+    init?(chip: AlignmentChip, kind: AlignmentKind?) {
+        let label = chip.label.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let value = chip.value.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let query = chip.submittedQuery(for: kind)
+        guard !query.isEmpty else { return nil }
+        self.query = query
+        self.selectionValue = value ?? label ?? query
+        if kind == .genderSelect, let label, label != query {
+            self.displayLabel = label
+        } else {
+            self.displayLabel = nil
+        }
+    }
+}
+
 /// Strips agentic control tokens that trail the streamed text but are absent from the clean
 /// `metadata.response` — e.g. `<<commodities:chickpea>>` and a ```` ```followups ... ``` ```` block.
 /// Without this the farmer watches raw control tokens type themselves into the answer.
@@ -353,8 +380,10 @@ public final class ChatViewModel: ObservableObject {
                     question,
                     transcriptionId: transcriptionId,
                     audioURL: audioURL,
-                    // App parity: keyboard follow-up sends "follow_up" (not "keyboard").
-                    triggeredInputType: audioURL != nil ? "voice" : "follow_up",
+                    triggeredInputType: Self.followUpTriggeredInputType(
+                        followUpQuestionId: followUpQuestionId,
+                        audioURL: audioURL
+                    ),
                     weatherCtaTriggered: false,
                     ssfrCrop: nil,
                     originScreen: ScreenNames.chat
@@ -539,7 +568,11 @@ public final class ChatViewModel: ObservableObject {
         ssfrCrop: String?,
         statementId: FlexibleID?,
         replaceExistingUserBubble: Bool,
-        isRetry: Bool = false
+        isRetry: Bool = false,
+        bubbleText: String? = nil,
+        parentMessageId: String? = nil,
+        locationDeclined: Bool = false,
+        photoDeclined: Bool = false
     ) async {
         guard !state.isLoading else { return }
         state.errorMessage = nil
@@ -550,7 +583,7 @@ public final class ChatViewModel: ObservableObject {
 
         let userMessageId = UUID().uuidString
         if !replaceExistingUserBubble || state.messages.isEmpty {
-            state.messages.append(.user(ChatMessage.UserMessage(text: question, audioURL: audioURL, id: userMessageId)))
+            state.messages.append(.user(ChatMessage.UserMessage(text: bubbleText ?? question, audioURL: audioURL, id: userMessageId)))
         }
         let placeholderId = UUID().uuidString
         state.messages.append(.loadingPlaceholder(id: placeholderId))
@@ -567,14 +600,16 @@ public final class ChatViewModel: ObservableObject {
                         question, transcriptionId: transcriptionId, audioURL: audioURL,
                         triggeredInputType: triggeredInputType, weatherCtaTriggered: weatherCtaTriggered,
                         ssfrCrop: ssfrCrop, statementId: statementId,
-                        replaceExistingUserBubble: true, isRetry: true
+                        replaceExistingUserBubble: true, isRetry: true,
+                        bubbleText: bubbleText, parentMessageId: parentMessageId,
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
                     )
                 }
             )
             return
         }
 
-        let request = TextPromptRequest(
+        var request = TextPromptRequest(
             query: question,
             conversationId: convId,
             // App parity: message_id is sent empty (""); the response id is authoritative.
@@ -588,6 +623,13 @@ public final class ChatViewModel: ObservableObject {
             // Per-LANGUAGE flag persisted on language selection (app ChatViewModel); default true.
             streamingRequired: env.prefs.bool(.streamingRequired, default: true)
         )
+        // Alignment-chip correlation (app `fetchTextPromptResponse`): only ever set on an
+        // `align_chip_sel` send; nil / false are omitted from the body, as the app's Gson does.
+        request.parentMessageId = parentMessageId
+        request.locationDeclined = locationDeclined ? true : nil
+        request.photoDeclined = photoDeclined ? true : nil
+        // debugLogging only. Routing fields, never the query text or tokens.
+        NetworkLog.note("text-prompt request triggered_input_type=\(triggeredInputType) parent_message_id=\(parentMessageId ?? "nil") location_declined=\(request.locationDeclined.map(String.init) ?? "nil") photo_declined=\(request.photoDeclined.map(String.init) ?? "nil")")
         env.analytics.track(AnalyticsEvents.sendQuery, props: [
             "input_type": triggeredInputType,
             "conversation_id": convId
@@ -609,7 +651,9 @@ public final class ChatViewModel: ObservableObject {
                         question, transcriptionId: transcriptionId, audioURL: audioURL,
                         triggeredInputType: triggeredInputType, weatherCtaTriggered: weatherCtaTriggered,
                         ssfrCrop: ssfrCrop, statementId: statementId,
-                        replaceExistingUserBubble: true, isRetry: true
+                        replaceExistingUserBubble: true, isRetry: true,
+                        bubbleText: bubbleText, parentMessageId: parentMessageId,
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
                     )
                 }
             )
@@ -629,7 +673,9 @@ public final class ChatViewModel: ObservableObject {
                         question, transcriptionId: transcriptionId, audioURL: audioURL,
                         triggeredInputType: triggeredInputType, weatherCtaTriggered: weatherCtaTriggered,
                         ssfrCrop: ssfrCrop, statementId: statementId,
-                        replaceExistingUserBubble: true, isRetry: true
+                        replaceExistingUserBubble: true, isRetry: true,
+                        bubbleText: bubbleText, parentMessageId: parentMessageId,
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
                     )
                 }
             )
@@ -648,7 +694,9 @@ public final class ChatViewModel: ObservableObject {
                         question, transcriptionId: transcriptionId, audioURL: audioURL,
                         triggeredInputType: triggeredInputType, weatherCtaTriggered: weatherCtaTriggered,
                         ssfrCrop: ssfrCrop, statementId: statementId,
-                        replaceExistingUserBubble: true, isRetry: true
+                        replaceExistingUserBubble: true, isRetry: true,
+                        bubbleText: bubbleText, parentMessageId: parentMessageId,
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
                     )
                 }
             )
@@ -712,7 +760,11 @@ public final class ChatViewModel: ObservableObject {
         if response.hideTtsSpeaker == true { state.isTtsEnabled = false }
         // Real follow-ups always come from endpoint #29.
         if response.hideFollowUpQuestion != true, let messageId = response.messageId?.stringValue {
-            await fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId)
+            // App parity (`applyFollowUpQuestionsFromApi` launches; finalize sets isLoading=false
+            // first): #29 runs AFTER the answer settles, never inside the loading window. Awaiting
+            // it here held `isLoading` true for the whole #29 round trip — tips stayed over the
+            // finished answer, the composer stayed hidden and the thread's pin anchor flipped.
+            Task { await self.fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId) }
         }
         return true
     }
@@ -955,14 +1007,10 @@ public final class ChatViewModel: ObservableObject {
     /// typed anything, they shared a location — and a **blank address yields no bubble at all**,
     /// matching the app.
     ///
-    /// Two deliberate deltas from the app, both already accepted on Android and recorded in
-    /// docs/04:
-    ///  - **no `parent_message_id`.** The app sends the surface's server `message_id` back so the
-    ///    backend correlates the answer to the prompt. ``TextPromptRequest`` has no such field, so
-    ///    no alignment chip send carries it — an SDK-wide gap, not specific to this path.
-    ///  - **no `agentic_chip_*` analytics properties.** The iOS analytics props are a flat
-    ///    dictionary with no chip type/value/label/status fields, so this reports as an ordinary
-    ///    text query. `triggered_input_type` IS sent as `align_chip_sel` (app parity).
+    /// Sends `triggered_input_type = align_chip_sel` and the surface's SERVER `message_id` as
+    /// `parent_message_id` (app `ChatViewModel.kt:1069-1118`). One delta remains: **no
+    /// `agentic_chip_*` analytics properties** — the iOS analytics props are a flat dictionary
+    /// with no chip type/value/label/status fields, so this reports as an ordinary text query.
     private func sendLocationSharedQuery(sourceMessageId: String, address: String) {
         // Checked BEFORE any mutation: `sendQuestionInternal`'s own guard would bail after the
         // location bubble had already been appended, orphaning it with no answer coming.
@@ -1006,7 +1054,80 @@ public final class ChatViewModel: ObservableObject {
                 weatherCtaTriggered: false,
                 ssfrCrop: nil,
                 statementId: nil,
-                replaceExistingUserBubble: true
+                replaceExistingUserBubble: true,
+                parentMessageId: source.messageId
+            )
+        }
+    }
+
+    // MARK: - Alignment chip send (2.0.0, app `sendAlignmentChip`)
+
+    /// The farmer tapped a non-capability alignment chip. Convenience over
+    /// ``sendAlignmentChip(sourceMessageId:query:selectionValue:displayLabel:locationDeclined:photoDeclined:)``
+    /// that derives what the app's `onAlignmentChipClick` passes (see ``AlignmentChipSend``).
+    ///
+    /// - Parameter sourceMessageId: the raw ``ChatMessage/AiResponse/id`` of the surface that
+    ///   offered the chip (NOT the prefixed ``ChatMessage/id``).
+    public func sendAlignmentChip(_ chip: AlignmentChip, kind: AlignmentKind?, sourceMessageId: String) {
+        guard let send = AlignmentChipSend(chip: chip, kind: kind) else { return }
+        sendAlignmentChip(
+            sourceMessageId: sourceMessageId,
+            query: send.query,
+            selectionValue: send.selectionValue,
+            displayLabel: send.displayLabel
+        )
+    }
+
+    /// 1:1 port of the app's `sendAlignmentChip` (fc-compose-agentic `ui/chat/ChatViewModel.kt:1015-1053`):
+    ///  1. `parent_message_id` = the SOURCE surface's SERVER `message_id` (looked up by its local id);
+    ///  2. appends `selectionValue` to that surface's ``ChatMessage/AiResponse/alignmentSelectedValues``
+    ///     so the tapped chip highlights and locks;
+    ///  3. echoes a user bubble with `displayLabel ?? query`;
+    ///  4. sends `query` with `triggered_input_type = "align_chip_sel"`, plus `location_declined` /
+    ///     `photo_declined` when the chip was a capability decline. No #30 (that is for #29
+    ///     suggestions only).
+    public func sendAlignmentChip(
+        sourceMessageId: String,
+        query: String,
+        selectionValue: String,
+        displayLabel: String? = nil,
+        locationDeclined: Bool = false,
+        photoDeclined: Bool = false
+    ) {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Checked BEFORE any mutation (app: `if (_state.value.isLoading) return`).
+        guard !state.isLoading else { return }
+        var parentMessageId: String?
+        if let index = state.messages.firstIndex(where: { entry in
+            if case .aiResponse(let ai) = entry { return ai.id == sourceMessageId }
+            return false
+        }), case .aiResponse(var source) = state.messages[index] {
+            parentMessageId = source.messageId
+            if !source.alignmentSelectedValues.contains(selectionValue) {
+                source.alignmentSelectedValues.append(selectionValue)
+                state.messages[index] = .aiResponse(source)
+            }
+        }
+        state.suggestedQuestions = nil
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: [
+            "input_type": FCAlignChipSelInputType,
+            "screen": ScreenNames.chat
+        ])
+        env.config.onMessageSent?(query) // C4 semantic callback
+        Task {
+            await self.sendQuestionInternal(
+                query,
+                transcriptionId: nil,
+                audioURL: nil,
+                triggeredInputType: FCAlignChipSelInputType,
+                weatherCtaTriggered: false,
+                ssfrCrop: nil,
+                statementId: nil,
+                replaceExistingUserBubble: false,
+                bubbleText: displayLabel,
+                parentMessageId: parentMessageId,
+                locationDeclined: locationDeclined,
+                photoDeclined: photoDeclined
             )
         }
     }
@@ -1041,6 +1162,17 @@ public final class ChatViewModel: ObservableObject {
         state.messages[idx] = .aiResponse(surface)
     }
 
+    /// `triggered_input_type` of a ``ChatAction/sendFollowUpQuestion(question:followUpQuestionId:transcriptionId:audioURL:)``
+    /// — app `sendFollowUpQuestion` (ChatViewModel.kt:992-996): `voice` for a dictated question,
+    /// `follow_up` for a suggestion-chip tap (`handleFollowUp`, ChatScreen.kt:960-971, sets
+    /// `isFollowupPrompt = true`), and `text` for a question typed into the composer
+    /// (ChatScreen.kt:1775-1811, `isFollowupPrompt = false`). The flavours pass a non-nil
+    /// `followUpQuestionId` exactly for chip taps (history chips included).
+    nonisolated static func followUpTriggeredInputType(followUpQuestionId: String?, audioURL: URL?) -> String {
+        if audioURL != nil { return "voice" }
+        return followUpQuestionId != nil ? "follow_up" : "text"
+    }
+
     // MARK: - Follow-ups (#29)
     /// The server `follow_up_question_id` of a tapped suggestion. Callers pass either the id or (UI
     /// chips that only know the text) the question itself, so resolve the text to its id.
@@ -1052,6 +1184,15 @@ public final class ChatViewModel: ObservableObject {
     }
 
 
+    /// True when `aiId` is still the thread's FINAL row — the only time #29's suggestions may be
+    /// applied. Structural, not `isLoading`: on the agentic path `isLoading` stays true until the
+    /// stream reaches EOF, which can be after #29 returns; a newer send always appends its
+    /// question + placeholder after the answer, so "is it still last" is the staleness test.
+    nonisolated static func isLatestSettledAnswer(_ aiId: String, in state: ChatState) -> Bool {
+        if case .aiResponse(let ai)? = state.messages.last { return ai.id == aiId }
+        return false
+    }
+
     private func fetchFollowUps(messageId: String, aiMessageLocalId: String) async {
         let result = await env.api.followUpQuestions(messageId: messageId)
         guard case .success(let response) = result else { return }
@@ -1061,6 +1202,9 @@ public final class ChatViewModel: ObservableObject {
             .sorted { ($0.sequence ?? Int.max) < ($1.sequence ?? Int.max) }
         let questions = options.compactMap(\.question)
         NetworkLog.note("follow_up_questions decoded \(questions.count) question(s), clarification_required=\(response.clarificationRequired ?? false)")
+        // A newer question was sent while #29 was in flight: these follow-ups belong to an answer
+        // that is no longer the latest, so they must not replace the thread's suggestions.
+        guard Self.isLatestSettledAnswer(aiMessageLocalId, in: state) else { return }
         state.suggestedQuestions = questions.isEmpty ? nil : questions
         state.suggestedQuestionIds = questions.isEmpty ? nil : options.map { $0.followUpQuestionId?.stringValue ?? "" }
         state.clarificationRequired = response.clarificationRequired ?? false
@@ -1202,7 +1346,11 @@ public final class ChatViewModel: ObservableObject {
             state.chatResponseState = .success(text)
             lastRequest = nil
             if let messageId = response.messageId?.stringValue {
-                await fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId)
+                // App parity (`applyFollowUpQuestionsFromApi` launches; finalize sets isLoading=false
+            // first): #29 runs AFTER the answer settles, never inside the loading window. Awaiting
+            // it here held `isLoading` true for the whole #29 round trip — tips stayed over the
+            // finished answer, the composer stayed hidden and the thread's pin anchor flipped.
+            Task { await self.fetchFollowUps(messageId: messageId, aiMessageLocalId: aiId) }
             }
         case .success(let response):
             failCurrent(
@@ -1252,10 +1400,17 @@ public final class ChatViewModel: ObservableObject {
             // or unknown-type items that map to zero bubbles yet still advance.
             state.historyNextPage = response.messages.isEmpty ? nil : page + 1
             state.chatResponseState = .success("")
-            // Latest AI message's follow-ups become the suggestions.
+            // Latest AI message's follow-ups become the suggestions (app `fetchChatHistoryPage`,
+            // ChatViewModel.kt:1210-1230). The app keeps only their TEXT for history — it never
+            // sets `suggestedQuestionIds` there — so a history chip tap carries no id and fires no
+            // #30, and is still sent as `follow_up`. Clear any ids so nothing stale resolves.
             for entry in state.messages.reversed() {
                 if case .aiResponse(let ai) = entry {
                     state.suggestedQuestions = ai.followUpQuestions
+                    state.suggestedQuestionIds = nil
+                    if page == 1, ai.followUpQuestions != nil {
+                        state.clarificationRequired = Self.lastResponseClarification(in: response.messages) ?? false
+                    }
                     break
                 }
             }
@@ -1269,12 +1424,34 @@ public final class ChatViewModel: ObservableObject {
         }
     }
 
+    /// `clarification_required` of the newest type-3 response on a page (app: `lastAiMessage
+    /// ?.clarification_required`, read off the sorted page).
+    nonisolated static func lastResponseClarification(in items: [ConversationChatHistoryMessageItem]) -> Bool? {
+        sortedHistory(items).last { $0.typeId == .responseText }?.clarificationRequired
+    }
+
+    /// App parity (`ChatViewModel.kt:1255`): `data.sortedWith(compareBy(nullsLast(naturalOrder()))
+    /// { it.message_input_time })`. DEMO returns a page's turns NEWEST first (verified 2026-10-16),
+    /// so without this a reopened conversation read bottom-up. Stable, so the items of one turn
+    /// (which share a timestamp) keep their 1 → 3 → 7 order; a missing time sorts last. The
+    /// ISO-8601 strings compare correctly as text, exactly as Kotlin's natural String order does.
+    nonisolated static func sortedHistory(_ items: [ConversationChatHistoryMessageItem]) -> [ConversationChatHistoryMessageItem] {
+        items.enumerated().sorted { a, b in
+            switch (a.element.messageInputTime, b.element.messageInputTime) {
+            case let (x?, y?) where x != y: return x < y
+            case (nil, _?): return false
+            case (_?, nil): return true
+            default: return a.offset < b.offset
+            }
+        }.map(\.element)
+    }
+
     /// Maps thread-history items to chat messages
     /// (message_type_id: 1=query_text, 2=query_audio, 3=response_text,
     /// 7=follow_up_questions, 11=input_image).
     static func mapHistory(_ items: [ConversationChatHistoryMessageItem], page: Int = 1) -> [ChatMessage] {
         var result: [ChatMessage] = []
-        for (index, item) in items.enumerated() {
+        for (index, item) in sortedHistory(items).enumerated() {
             // A query and its response SHARE one `message_id` (verified live 2026-09-01: a single
             // turn returns type 1, 3 and 7 all carrying the same id). Using it directly as the
             // SwiftUI list identity collides two rows — app parity (fc-compose

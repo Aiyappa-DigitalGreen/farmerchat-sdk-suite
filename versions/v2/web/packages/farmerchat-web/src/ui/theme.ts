@@ -1352,6 +1352,9 @@ const css = `
 /* ListenButton.kt (light) */
 .fcsdk-c-listen { display: inline-flex; align-items: center; justify-content: center; height: 42px; margin: 0; padding: 0 12px;
   border: none; border-radius: 999px; background: var(--fc-c-reading-secondary); color: var(--fc-c-fg-primary); max-width: 100%; }
+.fcsdk-c-listen-state { display: inline-flex; align-items: center; justify-content: center; min-width: 0; animation: fcsdk-c-listen-fade 500ms cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes fcsdk-c-listen-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fcsdk-c-listen-state { animation: none; } }
 .fcsdk-c-wave { display: inline-flex; align-items: center; justify-content: space-between; width: 54px; height: 26px; }
 .fcsdk-c-wave span { width: 2px; border-radius: 8px; background: var(--fc-c-button-accent); transition: height 120ms cubic-bezier(.4, 0, .2, 1); }
 /* FollowUpSection / SuggestedCard */

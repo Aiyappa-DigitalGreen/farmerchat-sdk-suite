@@ -7,6 +7,7 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 ## [Unreleased]
 
 ### Added (v2, all four platforms unless noted)
+- iOS FarmerChatCore: `ChatViewModel.sendAlignmentChip` and `LabelManager.answerGenerationTips()`.
 - `FarmerChat.shutdown()`: tears the SDK down; persisted data and host auth listeners are kept.
 - `FarmerChat.clearAllData()`: local-only wipe of every `fc_sdk_` item including tokens and appearance.
   There is no server-side delete. React Native returns a Promise.
@@ -59,6 +60,21 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   `shell-quote` advisory.
 
 ### Fixed
+- All platforms, matched to the app and checked on DEMO: chats reopened from history were shown
+  newest first, with the oldest answer's follow-ups (Android, iOS, React Native, web); history
+  follow-up chips no longer report a follow-up click (#30), as in the app; alignment chips send
+  `align_chip_sel` with `parent_message_id` (iOS, React Native, web); typed questions report
+  `text` (iOS sent `follow_up`, web `card`) and web follow-up chips report `follow_up`; cancelling the
+  photo picker on a photo prompt sends the app's "no photo" answer (iOS, React Native, web).
+- "Type or say it" now shows on clarify questions on Android as in the app (it was hidden whenever
+  the server marked the question blocking).
+- iOS: chat history showed an empty page when any turn had follow-ups (decode bug); tips while
+  waiting now come from the server (`LabelManager.answerGenerationTips()`); the asked follow-up stays
+  in view while its answer loads; UIKit Listen shows the animated bars.
+- React Native: Listen shows the playing state and animated bars right away (it lagged ~2.5 s).
+- Web: the "stopped playing" analytics event fired twice per clip.
+- Android Views: user bubble text was ~2% wider than Compose; Compose language screen showed white
+  under the navigation bar.
 - React Native: `<FarmerChatFab/>` works on the new architecture (overlay instead of `Modal`), and
   taps on Share, Listen and chips after the first answer were silently ignored.
 - iOS: no Listen on normal answers and no follow-up chips (two decode bugs in FarmerChatCore).

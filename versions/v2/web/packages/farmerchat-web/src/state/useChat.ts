@@ -13,26 +13,29 @@ import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
 import type {
   AlignmentChip,
-  ConversationChatHistoryMessageItem,
   TextPromptRequest,
   TextPromptResponse,
 } from '../core/types';
 import { UiState, idle, loading, success, failure } from './uiState';
 import { blobToBase64, nextLocalId } from './helpers';
+import { dedupeById, mapHistoryItems } from './historyMapping';
+import { followUpTriggeredType, initialQueryTriggeredType } from '../core/triggeredInputType';
 import { Events } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
 import { sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
 import {
+  ALIGN_CHIP_SEL,
   alignmentAnalyticsType,
   alignmentChipSend,
   alignmentKindFromType,
+  alignmentRequestFields,
   CapabilityChip,
   isAdditiveAlignment,
   recordAlignmentPick,
 } from '../core/alignment';
-import type { AlignmentKind } from '../core/alignment';
+import type { AlignmentKind, AlignmentRequestFields } from '../core/alignment';
 
 // ---------------------------------------------------------------------------
 // Messages
@@ -198,6 +201,8 @@ export interface ChatActions {
       triggeredInputType?: string;
       /** Display-only Home card image for the question bubble (compose `contentCardImageUrl`). */
       contentCardImageUrl?: string | null;
+      /** Home card kind ("image_card" / "text_card"); see initialQueryTriggeredType. */
+      contentCardTriggerType?: string | null;
     },
   ) => Promise<void>;
   initializeWithPreGeneratedContent: (
@@ -212,6 +217,12 @@ export interface ChatActions {
     question: string,
     opts?: {
       followUpQuestionId?: string | number | null;
+      /**
+       * True for a tapped suggested follow-up chip (app `SendQueryProperties.isFollowupPrompt`,
+       * ChatScreen.kt:959-971): sent as `triggered_input_type: "follow_up"`. False/absent for a
+       * typed composer send ("text"). A transcribed voice send is "voice" either way.
+       */
+      isFollowupPrompt?: boolean;
       transcriptionId?: string | null;
       audioUri?: string | null;
       /** 2.0.0: set when the question came from an alignment chip (see [selectAlignmentChip]). */
@@ -222,8 +233,10 @@ export interface ChatActions {
   ) => Promise<void>;
   /**
    * A tapped alignment chip (2.0.0). Records the pick on [messageId]'s own surface — so the chip
-   * renders selected/locked and the unpicked chips fade back — then sends the chip's value as a
-   * follow-up.
+   * renders selected/locked and the unpicked chips fade back — then sends the chip as the next
+   * query, tagged `triggered_input_type: "align_chip_sel"` with the surface's server id as
+   * `parent_message_id` (+ `location_declined` / `photo_declined` for a GPS / photo decline),
+   * exactly as the app's `sendAlignmentChip` (ChatViewModel.kt:1015-1052).
    *
    * A dedicated action rather than a branch inside [sendFollowUpQuestion], because that one is
    * ALSO the plain text composer's send path: recording there would mark a chip as chosen whenever
@@ -243,11 +256,10 @@ export interface ChatActions {
    * and calls this only on a `location_fetched` outcome. A declined / cancelled / failed outcome
    * sends the decline label through [sendFollowUpQuestion] instead.
    *
-   * Two deliberate deltas from the app, both mirrored from Android and recorded in docs/04:
-   *  - **no `parent_message_id`.** `TextPromptRequest` has no such field, so no alignment-chip
-   *    send carries it — an SDK-wide gap, not specific to this path.
-   *  - **no `agentic_chip_*` analytics properties.** This reports as an ordinary text query;
-   *    `triggered_input_type` IS sent as `align_chip_sel` (app parity).
+   * App parity on the wire: `triggered_input_type` is `align_chip_sel` and `parent_message_id`
+   * is the surface's server `message_id` (ChatViewModel.kt:1071, :1118). One deliberate delta,
+   * mirrored from Android: **no `agentic_chip_*` analytics properties** — this reports as an
+   * ordinary text query.
    */
   sendLocationSharedQuery: (sourceMessageId: string, address: string) => Promise<void>;
   sendQuestionWithImage: (question: string, imageBlob: Blob, imageObjectUrl: string) => Promise<void>;
@@ -270,12 +282,6 @@ export interface ChatActions {
  * `TOOL_STATUS_MIN_DWELL_MS`.
  */
 const TOOL_STATUS_MIN_DWELL_MS = 700;
-
-/**
- * `triggered_input_type` for a query re-sent after an alignment capability chip was satisfied.
- * Kotlin `ChatViewModel.ALIGN_CHIP_SEL` — the app's own string, sent verbatim.
- */
-const ALIGN_CHIP_SEL = 'align_chip_sel';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
 
@@ -728,6 +734,13 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         contentCardImageUrl?: string | null;
         /** User-bubble text when it differs from the sent [question] (gender-select chips). */
         displayText?: string | null;
+        /**
+         * Alignment-send request fields (`parent_message_id`, `location_declined`,
+         * `photo_declined`). See `alignmentRequestFields`. First attempt only: the app's
+         * `retryLastRequest` replays the query and its `triggered_input_type` but none of these
+         * (ChatViewModel.kt:2197), so the retry closure below drops them too.
+         */
+        alignment?: AlignmentRequestFields;
       },
     ) => {
       const userMsgId = opts.reuseUserMessageId ?? nextLocalId('user');
@@ -790,10 +803,12 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         // App ChatViewModel: the selected language's flag, default true when unset. Stage only
         // streams (status + text_delta) when it is true.
         streaming_required: store.getBool(PrefKeys.STREAMING_REQUIRED, true),
+        // Spread, never null-filled: absent keys stay off the wire, as Gson omits nulls.
+        ...(opts.alignment ?? {}),
       };
 
       lastRequestRef.current = () =>
-        runTextQuery(question, { ...opts, retry: true, reuseUserMessageId: userMsgId });
+        runTextQuery(question, { ...opts, retry: true, reuseUserMessageId: userMsgId, alignment: undefined });
 
       const ctx: AnswerContext = {
         placeholderId,
@@ -829,7 +844,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         audioUri: opts.audioUri ?? null,
         contentCardImageUrl: opts.contentCardImageUrl ?? null,
         properties: {
-          triggeredInputType: opts.triggeredInputType ?? (opts.audioUri ? 'voice' : 'text'),
+          // An explicit type wins; otherwise the app's InitializeWithQuestion rule
+          // (ChatViewModel.kt:235-243 → :1391-1395).
+          triggeredInputType: opts.triggeredInputType ?? initialQueryTriggeredType(opts),
           isWeatherAdviceCTA: opts.isWeatherAdviceCTA ?? false,
           isSSFR: opts.isSSFR ?? false,
           ssfrCrop: opts.ssfrCrop ?? null,
@@ -925,7 +942,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         audioUri: opts.audioUri ?? null,
         displayText: opts.displayText ?? null,
         properties: {
-          triggeredInputType: opts.audioUri ? 'mic' : 'card',
+          // App ChatViewModel.sendFollowUpQuestion (ChatViewModel.kt:993-997):
+          // transcription → "voice", tapped follow-up chip → "follow_up", typed → "text".
+          triggeredInputType: followUpTriggeredType(opts),
           agenticChipType: opts.agenticChipType ?? null,
         },
       });
@@ -940,18 +959,31 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       // trimmed) so it still matches the untrimmed comparison `AlignmentSurface` makes.
       const send = alignmentChipSend(kind, chip);
       if (!send) return;
+      // App sendAlignmentChip (ChatViewModel.kt:1015-1052): ignored while an answer is in flight.
+      if (stateRef.current.isLoading) return;
+      // The server id of the surface that showed the chips, sent back as parent_message_id.
+      const source = stateRef.current.messages.find(
+        (m): m is AiResponse => m.kind === 'ai' && m.id === messageId,
+      );
       setState((s) => {
         const messages = recordAlignmentPick(s.messages, messageId, send.selectionValue);
         return messages === s.messages ? s : { ...s, messages: messages as ChatMessage[] };
       });
-      await sendFollowUpQuestion(send.query, {
-        // Segments the funnel by which alignment surface was tapped. Existing event, existing
-        // property name (`AlignmentKind.analyticsType` on Android) — no new event is introduced.
-        agenticChipType: alignmentAnalyticsType(kind),
+      // Straight to the query pipeline, not `sendFollowUpQuestion`: a chip pick is tagged
+      // `align_chip_sel` (never the follow-up chip's type) so the backend can tell it from typed
+      // text, and it never reports a #30 follow-up click.
+      await runTextQuery(send.query, {
         displayText: send.displayText === send.query ? null : send.displayText,
+        alignment: alignmentRequestFields(kind, source?.messageId),
+        properties: {
+          triggeredInputType: ALIGN_CHIP_SEL,
+          // Segments the funnel by which alignment surface was tapped. Existing event, existing
+          // property name (`AlignmentKind.analyticsType` on Android) — no new event is introduced.
+          agenticChipType: alignmentAnalyticsType(kind),
+        },
       });
     },
-    [sendFollowUpQuestion],
+    [runTextQuery],
   );
 
   const sendLocationSharedQuery = useCallback<ChatActions['sendLocationSharedQuery']>(
@@ -995,6 +1027,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       await runTextQuery(query, {
         properties: { triggeredInputType: ALIGN_CHIP_SEL },
         suppressUserMessage: true,
+        // ChatViewModel.kt:1071: the GPS_PROMPT surface's server id; no decline flag on success.
+        alignment: alignmentRequestFields('GPS_PROMPT', source?.messageId, true),
       });
     },
     [runTextQuery],
@@ -1143,6 +1177,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         // Compose LazyColumn), so never trust the wire to be unique.
         messages: dedupeById(page === 1 ? messages : [...messages, ...s.messages]),
         suggestedQuestions: page === 1 ? trailingQuestions : s.suggestedQuestions,
+        // App parity (ChatViewModel.kt:1204-1230, 1296-1300): history keeps only the question
+        // strings and never sets suggestedQuestionIds, so a chip tapped in a reopened conversation
+        // sends no #30 — only the query, as "follow_up".
+        suggestedQuestionIds: page === 1 ? null : s.suggestedQuestionIds,
         clarificationRequired: page === 1 ? clarification : s.clarificationRequired,
         // The #32 response carries no pagination metadata (only
         // {conversation_id, data}); the app pages by "did this page return any
@@ -1200,6 +1238,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         return;
       }
       if (s.audioPlaybackUrl && audioRef.current) {
+        // App SetAudioPlaying(true): the pill flips to Playing on the tap, not on the media event.
+        patch({ isAudioPlaying: true });
         void audioRef.current.play();
         return;
       }
@@ -1217,16 +1257,23 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       const url = res.data.audio;
       const audio = new Audio(url);
       audioRef.current = audio;
+      // A finished clip fires `pause` and then `ended` (HTML media spec), so without this latch
+      // STOPPED_PLAYING_RESPONSE_AUDIO was reported twice per completed clip; the app reports once.
+      let started = false;
       audio.onplay = () => {
+        started = true;
         ttsSecondsStartedRef.current = Date.now();
         analytics.track(Events.STARTED_PLAYING_RESPONSE_AUDIO, { message_id: messageId });
         patch({ isAudioPlaying: true });
       };
       const onStop = () => {
-        analytics.track(Events.STOPPED_PLAYING_RESPONSE_AUDIO, {
-          message_id: messageId,
-          seconds_played: Math.round((Date.now() - ttsSecondsStartedRef.current) / 1000),
-        });
+        if (started) {
+          started = false;
+          analytics.track(Events.STOPPED_PLAYING_RESPONSE_AUDIO, {
+            message_id: messageId,
+            seconds_played: Math.round((Date.now() - ttsSecondsStartedRef.current) / 1000),
+          });
+        }
         patch({ isAudioPlaying: false });
       };
       audio.onpause = onStop;
@@ -1235,10 +1282,18 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         patch({ audioPlaybackUrl: null });
         audioRef.current = null;
       };
-      patch({ isLoadingSynthesiseAudio: false, audioPlaybackUrl: url });
+      // App ChatViewModel.kt:664-670 sets `isAudioPlaying = url != null` in the SAME update that
+      // stores the URL, so the pill goes Loading → Playing (pause icon + animated bars) while the
+      // clip buffers. Waiting for `onplay` instead showed the Paused state (play icon + static
+      // bars) for the whole buffering gap.
+      patch({ isLoadingSynthesiseAudio: false, audioPlaybackUrl: url, isAudioPlaying: true });
       try {
         await audio.play();
-      } catch {
+      } catch (err) {
+        // The farmer paused while the clip was still buffering (the pill already shows Playing):
+        // play() rejects with AbortError. That is a pause, not a failure — `onpause` has already
+        // flipped the pill to Paused, so no error is shown.
+        if (isAbortError(err)) return;
         patch({
           isAudioPlaying: false,
           errorMessage: labels.getLabel('chat_tts_failed', 'Could not play the audio. Please try again.'),
@@ -1287,121 +1342,4 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       clearAudioPlaybackUrl,
     },
   ];
-}
-
-// ---------------------------------------------------------------------------
-// History mapping — message_type_id: 1=query_text, 2=query_audio,
-// 3=response_text, 7=follow_up_questions, 11=input_image (docs/02).
-// ---------------------------------------------------------------------------
-
-/** Keeps the first occurrence of each message id — a duplicate key breaks list identity. */
-function dedupeById<T extends { id: string }>(list: T[]): T[] {
-  const seen = new Set<string>();
-  return list.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
-}
-
-// A query and its response SHARE one `message_id` (verified live 2026-09-01: a single turn returns
-// type 1, 3 and 7 all carrying the same id). Using it as the React key collides two rows — app
-// parity (fc-compose ChatViewModel.kt:1027) keys on message_id + message_type_id + page + index.
-// `messageId` keeps the raw API id for TTS/follow-ups.
-function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1): {
-  messages: ChatMessage[];
-  trailingQuestions: string[] | null;
-  clarification: boolean;
-} {
-  const messages: ChatMessage[] = [];
-  let trailingQuestions: string[] | null = null;
-  let clarification = false;
-
-  for (const [index, item] of items.entries()) {
-    const typeId = item.message_type_id ?? typeIdFromName(item.message_type);
-    const uiId = `${item.message_id ?? nextLocalId('hist')}_${typeId ?? 'x'}_${page}_${index}`;
-    switch (typeId) {
-      case 1:
-        messages.push({
-          kind: 'user',
-          id: uiId,
-          text: item.query_text ?? '',
-          isFailed: false,
-        });
-        trailingQuestions = null;
-        break;
-      case 2:
-        messages.push({
-          kind: 'user',
-          id: uiId,
-          text: item.heard_query_text ?? item.query_text ?? '',
-          audioUri: item.query_media_file_url ?? undefined,
-          isFailed: false,
-        });
-        trailingQuestions = null;
-        break;
-      case 11:
-        messages.push({
-          kind: 'user',
-          id: uiId,
-          text: item.query_text ?? '',
-          imageUri: item.query_media_file_url ?? undefined,
-          userBubbleImageWideBanner: true,
-          isFailed: false,
-        });
-        trailingQuestions = null;
-        break;
-      case 3:
-        messages.push({
-          kind: 'ai',
-          id: uiId,
-          text: item.response_text ?? '',
-          isPreGenerated: false,
-          messageId: item.message_id ?? undefined,
-          hideTtsSpeaker: item.hide_tts_speaker ?? false,
-          actualContentProvider: item.actual_content_provider ?? null,
-          clarificationRequired: item.clarification_required ?? false,
-        });
-        if (item.clarification_required) clarification = true;
-        trailingQuestions = null;
-        break;
-      case 7: {
-        // The app sends type-7 questions as objects
-        // `{ follow_up_question_id, sequence, question }`; tolerate a plain
-        // string form too. Typing them as `string[]` previously discarded
-        // every historical follow-up chip against the real backend.
-        const qs = (item.questions ?? [])
-          .map((q) => (typeof q === 'string' ? q : (q?.question ?? '')))
-          .filter((q): q is string => q.length > 0);
-        // Attach to the previous AI response; keep as trailing suggestions too.
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const m = messages[i]!;
-          if (m.kind === 'ai') {
-            messages[i] = { ...m, followUpQuestions: qs };
-            break;
-          }
-        }
-        trailingQuestions = qs.length > 0 ? qs : null;
-        if (item.clarification_required) clarification = true;
-        break;
-      }
-      default:
-        // Unknown message types are skipped, matching the app's tolerant parsing.
-        break;
-    }
-  }
-  return { messages, trailingQuestions, clarification };
-}
-
-function typeIdFromName(name: string | null | undefined): number {
-  switch (name) {
-    case 'query_text':
-      return 1;
-    case 'query_audio':
-      return 2;
-    case 'response_text':
-      return 3;
-    case 'follow_up_questions':
-      return 7;
-    case 'input_image':
-      return 11;
-    default:
-      return 0;
-  }
 }

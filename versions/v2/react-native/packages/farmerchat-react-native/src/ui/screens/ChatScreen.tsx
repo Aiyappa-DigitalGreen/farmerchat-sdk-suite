@@ -49,6 +49,8 @@ import { Labels } from '../../core/labels';
 import { StreamErrorKinds } from '../../core/agenticModels';
 import {
   AlignmentChipRoutes,
+  AlignmentKinds,
+  alignmentAnalyticsType,
   isAdditiveAlignment,
   routeAlignmentChip,
 } from '../../core/types';
@@ -56,6 +58,7 @@ import type { AlignmentChip, AlignmentKind } from '../../core/types';
 import { StorageKeys } from '../../core/sessionStore';
 import { isLocationObtained, isTerminalLocationOutcome } from '../../core/locationOutcome';
 import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
+import { ListenButton } from '../components/ListenButton';
 import { INLINE_SPINNER_STYLE, LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
 import {
   captureImageFromCamera,
@@ -225,7 +228,13 @@ export function ChatScreen(props: {
   }, []);
 
   // --- TTS playback (expo-av) ---------------------------------------------------
+  // App ChatScreen.kt:1290-1368 + handleListen (:1077-1107): the URL owns the player (created
+  // when it arrives, released when it clears) and `isAudioPlaying` drives play/pause. The state
+  // flips to playing together with the URL (useChat), so a tap while the clip is still
+  // preparing is a pause, not a second synthesise.
   const ttsSound = useRef<Audio.Sound | null>(null);
+  const wantTtsPlaying = useRef(state.isAudioPlaying);
+  wantTtsPlaying.current = state.isAudioPlaying;
   useEffect(() => {
     const url = state.audioPlaybackUrl;
     if (!url) return;
@@ -235,9 +244,10 @@ export function ChatScreen(props: {
         await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
         const { sound } = await Audio.Sound.createAsync(
           { uri: url },
-          { shouldPlay: true },
+          { shouldPlay: wantTtsPlaying.current },
           (status: AVPlaybackStatus) => {
             if (status.isLoaded && status.didJustFinish) {
+              // App setOnCompletionListener: STOPPED_PLAYING_RESPONSE_AUDIO, then clear.
               onAction({ type: 'SetAudioPlaying', isPlaying: false });
               onAction({ type: 'ClearAudioPlaybackUrl' });
             }
@@ -248,34 +258,39 @@ export function ChatScreen(props: {
           return;
         }
         ttsSound.current = sound;
-        onAction({ type: 'SetAudioPlaying', isPlaying: true });
+        // A pause/resume tapped while the clip was preparing wins over `shouldPlay`.
+        if (wantTtsPlaying.current) {
+          await sound.playAsync();
+          // App setOnPreparedListener: STARTED_PLAYING_RESPONSE_AUDIO.
+          sdk.analytics.track(AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO, {});
+        } else {
+          await sound.pauseAsync();
+        }
       } catch {
         onAction({ type: 'ClearAudioPlaybackUrl' });
       }
     };
     void play();
     return () => {
+      // URL cleared (finished / new query) or screen gone: release the player.
       cancelled = true;
+      const sound = ttsSound.current;
+      ttsSound.current = null;
+      if (sound) void sound.unloadAsync().catch(() => undefined);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.audioPlaybackUrl]);
 
-  useEffect(
-    () => () => {
-      const sound = ttsSound.current;
-      ttsSound.current = null;
-      if (sound) void sound.unloadAsync().catch(() => undefined);
-    },
-    [],
-  );
+  useEffect(() => {
+    const sound = ttsSound.current;
+    if (!sound) return;
+    if (state.isAudioPlaying) void sound.playAsync().catch(() => undefined);
+    else void sound.pauseAsync().catch(() => undefined);
+  }, [state.isAudioPlaying]);
 
   const toggleListen = useCallback(() => {
-    if (state.isAudioPlaying && ttsSound.current) {
-      void ttsSound.current.pauseAsync();
-      onAction({ type: 'SetAudioPlaying', isPlaying: false });
-    } else if (state.audioPlaybackUrl && ttsSound.current) {
-      void ttsSound.current.playAsync();
-      onAction({ type: 'SetAudioPlaying', isPlaying: true });
+    if (state.audioPlaybackUrl) {
+      onAction({ type: 'SetAudioPlaying', isPlaying: !state.isAudioPlaying });
     } else {
       onAction({ type: 'SynthesiseAudio' });
     }
@@ -526,16 +541,19 @@ export function ChatScreen(props: {
             address: composeResolvedAddress(),
           });
         } else {
-          // Denied / cancelled / fetch failed: still answer the blocking question, by sending
-          // the decline text as an ordinary follow-up. The app sends this through
-          // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
-          // neither, so the correlation and the chip analytics are lost (docs/04).
+          // Denied / cancelled / fetch failed: still answer the blocking question. App
+          // ChatScreen.kt:376-381 sends the decline text as an alignment-chip pick on the GPS
+          // surface (query = value = the text), so it goes out as `align_chip_sel` with
+          // `location_declined: true` and the surface's `parent_message_id`.
+          const declineText = label(
+            Labels.LOCATION_PERMISSION_DECLINED,
+            'Continue without sharing my location',
+          );
           onAction({
-            type: 'SendFollowUpQuestion',
-            question: label(
-              Labels.LOCATION_PERMISSION_DECLINED,
-              'Continue without sharing my location',
-            ),
+            type: 'SelectAlignmentChip',
+            messageId: srcId,
+            kind: AlignmentKinds.GPS_PROMPT,
+            chip: { label: declineText, value: declineText },
           });
         }
       }),
@@ -544,22 +562,36 @@ export function ChatScreen(props: {
   );
 
   /**
-   * Hands a photo taken/picked FOR A CAPABILITY CHIP to the same place the Camera/Photos sheet
-   * hands its result: attached to the composer in 2.0.0 (so the farmer can add words to it,
-   * app parity), sent immediately on the 1.0.0 surface.
+   * A photo taken/picked FOR A CAPABILITY CHIP goes straight to the conversation, bypassing the
+   * composer (app ChatScreen.kt:430-462 `sendAlignmentPhotoDirect`, :494-497, :544-547): an
+   * image-only query (blank question), reported with the upload-photo chip type.
    */
   const deliverCapabilityImage = (image: PickedImage) => {
-    if (isComposerUi) {
-      setAttachedImage(image);
-      composerRef.current?.focus();
-    } else {
-      onAction({
-        type: 'SendQuestionWithImage',
-        question: '',
-        imageUri: image.uri,
-        imageBase64: image.base64,
-      });
-    }
+    onAction({
+      type: 'SendQuestionWithImage',
+      question: '',
+      imageUri: image.uri,
+      imageBase64: image.base64,
+      sendQueryProperties: { agentic_chip_type: alignmentAnalyticsType(AlignmentKinds.UPLOAD_PHOTO) },
+    });
+  };
+
+  /**
+   * The capability chip produced no photo: answer the surface with a decline so the blocking
+   * question still resolves. App `sendAlignmentPhotoDeclineQuery` (ChatScreen.kt:469-485): an
+   * alignment-chip pick (query = value = the text) on the UPLOAD_PHOTO surface, so it goes out as
+   * `align_chip_sel` + `photo_declined: true` + the surface's `parent_message_id`.
+   */
+  const declineCapabilityPhoto = (messageId: string, permissionDenied: boolean) => {
+    const text = permissionDenied
+      ? label(Labels.PHOTO_PERMISSION_DECLINED, "I don't want to share a photo right now")
+      : label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now");
+    onAction({
+      type: 'SelectAlignmentChip',
+      messageId,
+      kind: AlignmentKinds.UPLOAD_PHOTO,
+      chip: { label: text, value: text },
+    });
   };
 
   /**
@@ -584,16 +616,23 @@ export function ChatScreen(props: {
           props.locationPrompt.triggerFromLocalContext(true);
         }
         return;
-      case AlignmentChipRoutes.CAMERA:
+      case AlignmentChipRoutes.CAMERA: {
+        let denied = false;
         void captureImageFromCamera(sdk, {
           onPermissionPermanentlyDenied: () => setPermissionDialog('camera'),
+          onPermissionDenied: () => {
+            denied = true;
+          },
         }).then((image) => {
           if (image) deliverCapabilityImage(image);
+          else declineCapabilityPhoto(messageId, denied);
         });
         return;
+      }
       case AlignmentChipRoutes.GALLERY:
         void pickImageFromGallery(sdk).then((image) => {
           if (image) deliverCapabilityImage(image);
+          else declineCapabilityPhoto(messageId, false);
         });
         return;
       case AlignmentChipRoutes.TEXT:
@@ -700,14 +739,23 @@ export function ChatScreen(props: {
                 isLoading={state.isLoading}
                 isLatest={isLast}
                 onChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
-                onTypeInstead={() => setTextInputVisible(true)}
+                // App ChatScreen.kt:1666 `onTypeInstead = { focusTextInput?.invoke() }`: the
+                // composer UI focuses its composer (the legacy text overlay is never rendered
+                // there, so opening it was a dead tap); the 1.0.0 surface opens its text input.
+                onTypeInstead={
+                  isComposerUi
+                    ? () => composerRef.current?.focus()
+                    : () => setTextInputVisible(true)
+                }
                 // AlignmentSurface.kt Listen pill: ListenButton(light, enabled = isTtsEnabled).
                 listen={
                   sdk.config.enableVoice && item.hideTtsSpeaker !== true ? (
-                    <ActionChip
-                      icon={state.isAudioPlaying ? 'pause' : 'speaker'}
-                      text={label(Labels.LISTEN, 'Listen')}
+                    <ListenButton
+                      label={label(Labels.LISTEN, 'Listen')}
+                      loadingLabel={label(Labels.LOADING, 'Loading...')}
                       isLoading={state.isLoadingSynthesiseAudio}
+                      isPlaying={state.isAudioPlaying}
+                      hasAudioUrl={state.audioPlaybackUrl != null}
                       enabled={state.isTtsEnabled}
                       onPress={toggleListen}
                     />
@@ -732,6 +780,7 @@ export function ChatScreen(props: {
               isTtsEnabled={state.isTtsEnabled}
               isLoadingTts={state.isLoadingSynthesiseAudio}
               isPlayingTts={state.isAudioPlaying}
+              hasTtsAudio={state.audioPlaybackUrl != null}
               onListen={toggleListen}
               onShare={() => void shareCard.handle.share(sdk)}
               // App parity (ChatThreadContent.kt): offered only on a pre-generated answer with a
@@ -1216,6 +1265,8 @@ function AiBubble(props: {
   isTtsEnabled: boolean;
   isLoadingTts: boolean;
   isPlayingTts: boolean;
+  /** A synthesised clip is loaded (ListenButton.kt `hasAudioUrl`): paused shows Play + bars. */
+  hasTtsAudio: boolean;
   onListen: () => void;
   onShare: () => void;
   onReadFullAdvice?: () => void;
@@ -1365,10 +1416,13 @@ function AiBubble(props: {
                   />
                 ) : null}
                 {props.ttsAvailable && message.hideTtsSpeaker !== true ? (
-                  <ActionChip
-                    icon={props.isPlayingTts ? 'pause' : 'speaker'}
-                    text={label(Labels.LISTEN, 'Listen')}
+                  // ChatResponseActions.kt:131 ListenButton(light = true).
+                  <ListenButton
+                    label={label(Labels.LISTEN, 'Listen')}
+                    loadingLabel={label(Labels.LOADING, 'Loading...')}
                     isLoading={props.isLoadingTts}
+                    isPlaying={props.isPlayingTts}
+                    hasAudioUrl={props.hasTtsAudio}
                     enabled={props.isTtsEnabled}
                     onPress={props.onListen}
                   />

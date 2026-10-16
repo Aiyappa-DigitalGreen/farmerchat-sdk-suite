@@ -83,6 +83,67 @@ public final class LabelManager: @unchecked Sendable {
         return Self.applyTemplate(resolved, params: params)
     }
 
+    // MARK: - Answer-generation tips
+
+    /// The tip cards shown while an answer is generated. Port of the app's
+    /// `ui/chat/component/ChatLoadingContent.kt answerGenerationTips()` (fc-compose-agentic
+    /// dev/v2.5, :103-162), the same rule the Android core and react-native `labelManager.ts` use:
+    ///
+    /// - every served label key `fc_v2_app_label_tips_<name>_title_<lang>` names a tip; names are
+    ///   de-duplicated and sorted;
+    /// - its title is `…_<name>_title_<lang>` then `…_title_en`, its body
+    ///   `…_<name>_statement_<lang>` then `…_statement_en`; a tip missing either side is dropped;
+    /// - when no server tip resolves, the app's three built-in tips, through ``label(_:fallback:params:)``.
+    ///
+    /// Reads the raw server map, as the app does (host overrides only reach the fallback trio).
+    /// Never empty. The caller shuffles, as `Tips.kt` does per show.
+    public func answerGenerationTips() -> [AnswerGenerationTip] {
+        lock.lock()
+        let map = labels
+        lock.unlock()
+        let lang = languageCode
+        let names = Set(map.keys.compactMap(Self.tipName(fromTitleKey:))).sorted()
+        let dynamic: [AnswerGenerationTip] = names.compactMap { name in
+            let titleBase = "\(Self.tipsPrefix)\(name)_title"
+            let statementBase = "\(Self.tipsPrefix)\(name)_statement"
+            guard let title = map["\(titleBase)_\(lang)"] ?? map["\(titleBase)_en"],
+                  let body = map["\(statementBase)_\(lang)"] ?? map["\(statementBase)_en"] else { return nil }
+            return AnswerGenerationTip(title: title, body: body)
+        }
+        if !dynamic.isEmpty { return dynamic }
+        return [
+            AnswerGenerationTip(
+                title: label(FCLabels.didYouKnow, fallback: "Did you know?"),
+                body: label(FCLabels.youCanAskFollowupQuestionsToGetMoreDetails, fallback: "You can ask follow-up questions to get more details")
+            ),
+            AnswerGenerationTip(
+                title: label(FCLabels.quickTip, fallback: "Quick tip"),
+                body: label(FCLabels.tipsAskSpecificCrops, fallback: "Try asking about specific crops or problems")
+            ),
+            AnswerGenerationTip(
+                title: label(FCLabels.tryThis, fallback: "Try this"),
+                body: label(FCLabels.uploadPhotosForPlantDiseaseIdentification, fallback: "Upload photos for plant disease identification")
+            )
+        ]
+    }
+
+    private static let tipsPrefix = "fc_v2_app_label_tips_"
+
+    /// `^fc_v2_app_label_tips_(.+)_title_([a-z]{2,3})$` → the `(.+)` group, else nil.
+    static func tipName(fromTitleKey key: String) -> String? {
+        guard key.hasPrefix(tipsPrefix) else { return nil }
+        let rest = key.dropFirst(tipsPrefix.count)
+        // The language suffix: the text after the LAST "_" — 2-3 lowercase ASCII letters.
+        guard let underscore = rest.lastIndex(of: "_") else { return nil }
+        let lang = rest[rest.index(after: underscore)...]
+        guard (2...3).contains(lang.count), lang.allSatisfy({ ("a"..."z").contains($0) }) else { return nil }
+        let head = rest[..<underscore]
+        let marker = "_title"
+        guard head.hasSuffix(marker) else { return nil }
+        let name = head.dropLast(marker.count)
+        return name.isEmpty ? nil : String(name)
+    }
+
     /// `{name}` and `{{name}}` substitution.
     public static func applyTemplate(_ text: String, params: [String: String]) -> String {
         guard !params.isEmpty else { return text }
@@ -92,5 +153,16 @@ public final class LabelManager: @unchecked Sendable {
             result = result.replacingOccurrences(of: "{\(key)}", with: value)
         }
         return result
+    }
+}
+
+/// One answer-generation tip card (app `components/Tip.kt` `TipData`).
+public struct AnswerGenerationTip: Sendable, Equatable {
+    public let title: String
+    public let body: String
+
+    public init(title: String, body: String) {
+        self.title = title
+        self.body = body
     }
 }

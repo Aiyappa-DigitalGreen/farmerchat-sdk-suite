@@ -487,7 +487,11 @@ export function VoiceInputOverlay(props: {
  */
 export async function captureImageFromCamera(
   sdk: FarmerChatSdk,
-  handlers: { onPermissionPermanentlyDenied: () => void },
+  handlers: {
+    onPermissionPermanentlyDenied: () => void;
+    /** Any denial. A capability-chip caller answers the surface with a decline instead. */
+    onPermissionDenied?: () => void;
+  },
 ): Promise<PickedImage | null> {
   sdk.analytics.track(AnalyticsEvents.IMAGE_OPTION_DIALOG_CLICK_EVENT, {
     option: 'camera',
@@ -503,7 +507,11 @@ export async function captureImageFromCamera(
     });
     const denyCount = sdk.store.getInt(StorageKeys.CAMERA_PERMISSION_DENY_COUNT) + 1;
     sdk.store.set(StorageKeys.CAMERA_PERMISSION_DENY_COUNT, denyCount);
-    if (denyCount >= 2 || permission.canAskAgain === false) {
+    if (handlers.onPermissionDenied) {
+      // App ChatScreen.kt:665-673: in the chip-driven flow a denial never opens the settings
+      // dialog; the caller sends the decline query so the conversation continues.
+      handlers.onPermissionDenied();
+    } else if (denyCount >= 2 || permission.canAskAgain === false) {
       handlers.onPermissionPermanentlyDenied();
     }
     return null;

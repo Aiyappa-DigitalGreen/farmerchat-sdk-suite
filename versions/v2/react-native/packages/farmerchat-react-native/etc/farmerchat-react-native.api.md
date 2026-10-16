@@ -1483,8 +1483,11 @@ export interface SynthesiseAudioResponse {
 export interface TextPromptRequest {
     // (undocumented)
     conversation_id: string;
+    location_declined?: boolean | null;
     // (undocumented)
     message_id: string;
+    parent_message_id?: string | null;
+    photo_declined?: boolean | null;
     // (undocumented)
     query: string;
     // (undocumented)

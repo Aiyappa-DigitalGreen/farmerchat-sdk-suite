@@ -257,6 +257,17 @@ export const Labels = {
    * "Continue without sharing my location" is kept as the usual safety net.
    */
   LOCATION_PERMISSION_DECLINED: 'fc_v2_app_label_location_permission_declined',
+  /**
+   * Sent (with `photo_declined`) when a camera/gallery capability chip produced no photo: picker
+   * cancelled, nothing captured, or no camera app (app ChatScreen.kt:527, 579, 639, 739).
+   * Served on DEMO: "I don't have a photo to share right now".
+   */
+  PHOTO_NOT_SHARED: 'fc_v2_app_label_photo_not_shared',
+  /**
+   * Sent (with `photo_declined`) when the camera permission is denied from a capability chip
+   * (app ChatScreen.kt:669). Served on DEMO: "I don't want to share a photo right now".
+   */
+  PHOTO_PERMISSION_DECLINED: 'fc_v2_app_label_photo_permission_declined',
   /** "Add one clear photo" — UPLOAD_PHOTO heading. */
   ADD_ONE_CLEAR_PHOTO: 'fc_v2_app_label_add_one_clear_photo',
   /** "Please Confirm" — CONFIRM heading. */

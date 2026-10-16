@@ -61,6 +61,10 @@ struct ChatView: View {
     /// the GPS_PROMPT surface whose chip started it. Nil means the collector below is inert, so an
     /// outcome belonging to Home or Settings is ignored.
     @State private var pendingLocationSourceId: String?
+    /// Armed while an UPLOAD_PHOTO capability chip's camera / gallery is open: the raw
+    /// `AiResponse.id` of that surface (app `alignmentPhotoSourceId`). A pick sends the photo; a
+    /// cancel or a camera-permission denial sends the app's decline query with `photo_declined`.
+    @State private var alignmentPhotoSourceId: String?
 
     var body: some View {
         ZStack {
@@ -73,7 +77,7 @@ struct ChatView: View {
                     // Tips.kt overlay: while an answer is pending and before streamed text shows.
                     .overlay(alignment: .bottom) {
                         if showTips {
-                            FCTipsCarousel(tips: fcAnswerGenerationTips())
+                            FCTipsCarousel()
                                 .transition(.opacity)
                         }
                     }
@@ -135,8 +139,9 @@ struct ChatView: View {
         .onReceive(locationPrompt.events) { event in
             handleLocationOutcome(event)
         }
-        .sheet(isPresented: $showCamera) {
+        .sheet(isPresented: $showCamera, onDismiss: alignmentPhotoNotShared) {
             FCCameraPicker { picked in
+                if picked != nil { alignmentPhotoSourceId = nil }
                 showCamera = false
                 if let picked {
                     viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.jpegData, imageURL: picked.fileURL))
@@ -144,8 +149,9 @@ struct ChatView: View {
             }
             .ignoresSafeArea()
         }
-        .sheet(isPresented: $showGallery) {
+        .sheet(isPresented: $showGallery, onDismiss: alignmentPhotoNotShared) {
             FCPhotoLibraryPicker { picked in
+                if picked != nil { alignmentPhotoSourceId = nil }
                 showGallery = false
                 if let picked {
                     viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.jpegData, imageURL: picked.fileURL))
@@ -377,13 +383,13 @@ struct ChatView: View {
                 }
             }
             .onAppear { schedulePin(proxy) }
-            // ChatScreen.kt's auto-scroll LaunchedEffect keys: the tail id (a placeholder → answer
-            // swap changes it without changing the count; a history prepend changes the count
-            // without changing it), `isLoading` (a settling answer starts holding the reserve) and
-            // the first history load. Streaming deltas change none of them, so the question stays
-            // put while the answer grows.
-            .onChange(of: viewModel.state.messages.last?.id) { _ in schedulePin(proxy) }
-            .onChange(of: viewModel.state.isLoading) { _ in schedulePin(proxy) }
+            // ChatThreadContent.kt:228-285: the ONLY programmatic scroll is when a new question
+            // (user bubble, or a shared-location bubble) is appended — it goes to the top and stays
+            // there while its answer loads, streams and settles in the reserve below it. The app
+            // never re-scrolls on stream chunks or when the answer finalizes; re-pinning on the
+            // tail id / `isLoading` (as this view used to) jumped the thread at the
+            // placeholder → stream → final-answer swaps. Plus the first history load.
+            .onChange(of: lastQuestionRowId) { _ in schedulePin(proxy) }
             .onChange(of: viewModel.state.isInitialHistoryLoaded) { _ in schedulePin(proxy) }
             .onChange(of: viewModel.state.messages.count) { _ in
                 if let anchor = pendingScrollAnchorId {
@@ -460,10 +466,15 @@ struct ChatView: View {
     /// thread's 20pt top content padding visible above the pinned row (ChatScreen.kt anchors the
     /// item with `contentPadding top = 20` showing) instead of pressing the row flush to the edge.
     private func pinMarker(for messageId: String) -> some View {
+        // An alignment guide on a `.background` view is not honoured for the scroll target's
+        // frame (DEMO screenshots showed the pinned question flush under the app bar), so the
+        // marker is laid out explicitly: a full-row box grown 20pt upward by negative padding,
+        // with the 1pt marker at its top.
         Color.clear
             .frame(height: 1)
-            .alignmentGuide(.top) { $0[.top] + Self.pinTopGap }
             .id(Self.pinId(messageId))
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, -Self.pinTopGap)
     }
 
     private static func pinId(_ messageId: String) -> String { "fc_pin_\(messageId)" }
@@ -472,23 +483,17 @@ struct ChatView: View {
 
     // MARK: - Reserve + pinning (port of Android core ChatReserve.kt)
 
-    /// `holdsChatReserve` (Android core `ui/chat/ChatReserve.kt`; web `holdsReserve`): whether the
-    /// newest AI response holds a viewport of minimum height. `isLoading` here stays true for the
-    /// whole of a stream and for a blocking alignment surface, so both extra clauses are
-    /// load-bearing (see the Kotlin KDoc). Kept private to each iOS flavour rather than in Core so
-    /// no public API is added; FarmerChatUIKit `FCUIChatViewController.holdsReserve` mirrors it.
-    private func holdsReserve(_ ai: ChatMessage.AiResponse) -> Bool {
-        ai.isStreaming
-            || ai.isInterrupted
-            || !viewModel.state.isLoading
-            || (ai.alignmentKind != nil && ai.alignmentSelectedValues.isEmpty)
-    }
-
     /// Whether the FINAL row holds the reserve: a reserve-holding last answer, the in-flight
     /// loading placeholder, or a failed last question with its inline error under it.
     private func finalRowHoldsReserve(_ last: ChatMessage) -> Bool {
         switch last {
-        case .aiResponse(let ai): return holdsReserve(ai)
+        // The final AI row always holds it on iOS. Kotlin's `!isLoading` clause exists because
+        // there the PREVIOUS answer stays the last response while a follow-up loads; here the
+        // loading placeholder is appended with the question, so a final AI row is always the
+        // answer to the newest question — including the brief finalize window where `isLoading`
+        // is still true after the stream's `metadata` swapped in the settled answer (dropping the
+        // reserve there let the ScrollView clamp and drag the pinned question down).
+        case .aiResponse: return true
         case .loadingPlaceholder: return true
         case .user: return failedUserRowId == last.id
         case .location: return false
@@ -518,17 +523,33 @@ struct ChatView: View {
         guard let last = messages.last else { return nil }
         let holdsSpace: Bool
         switch last {
-        case .aiResponse(let ai): holdsSpace = holdsReserve(ai)
+        case .aiResponse: holdsSpace = true
         case .loadingPlaceholder: holdsSpace = true
         case .user, .location: holdsSpace = false
         }
         return holdsSpace && messages.count > 1 ? messages[messages.count - 2].id : last.id
     }
 
+    /// Id of the newest question row — a user bubble or a shared-location bubble
+    /// (ChatThreadContent.kt `lastUserMessageId` / `lastLocationMessageId`). A history prepend
+    /// never changes it; sending a question always does.
+    private var lastQuestionRowId: String? {
+        for message in viewModel.state.messages.reversed() {
+            switch message {
+            case .user, .location: return message.id
+            default: continue
+            }
+        }
+        return nil
+    }
+
     private func schedulePin(_ proxy: ScrollViewProxy) {
         guard !pinScheduled else { return }
         pinScheduled = true
-        DispatchQueue.main.async {
+        // ChatThreadContent.kt:263 `delay(150) // Let layout start`: scrolling on the next turn
+        // ran before the new question + reserve rows were laid out, so the scroll was a no-op
+        // and the question sat mid-screen under the tips while its answer loaded.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             pinScheduled = false
             pinTail(proxy)
         }
@@ -669,7 +690,13 @@ struct ChatView: View {
                     // App parity (ChatThreadContent.kt, app dev/v2.5): the latest answer always
                     // gets the response actions — pre-generated included. Whether that is the
                     // "Read full advice" button or the Share/Listen row is decided in the bubble.
-                    showActions: isLastAi,
+                    // ChatThreadContent.kt `isLastResponse && !isLoading`: once a follow-up is in
+                    // flight (its placeholder / stream is the final row) the previous answer drops
+                    // its disclaimer + Share/Listen row AT ONCE. Keeping it until the stream bubble
+                    // replaced the placeholder collapsed ~150pt above the pinned question
+                    // mid-load and scrolled it off the top. (UIKit `isLatest` mirrors this.)
+                    showActions: isLastAi
+                        && !(viewModel.state.isLoading && viewModel.state.messages.last?.id != message.id),
                     isTtsEnabled: viewModel.state.isTtsEnabled,
                     isSynthesising: viewModel.state.isLoadingSynthesiseAudio,
                     isAudioPlaying: viewModel.state.isAudioPlaying,
@@ -738,25 +765,44 @@ struct ChatView: View {
             locationPrompt.triggerFromLocalContext()
         case .takePhoto:
             // Straight to the camera — no photo-source sheet, the chip already chose.
-            Task { if await FCCameraPermission.request() { showCamera = true } }
+            alignmentPhotoSourceId = messageId
+            Task {
+                if await FCCameraPermission.request() {
+                    showCamera = true
+                } else {
+                    // ChatScreen.kt:665-672: a chip-driven flow never blocks on the settings
+                    // dialog — the denial is sent as the decline query.
+                    sendAlignmentPhotoDecline(fcLabel(FCLabels.photoPermissionDeclined, "I don't want to share a photo right now"))
+                }
+            }
         case .chooseFromGallery:
+            alignmentPhotoSourceId = messageId
             showGallery = true
         case .none:
-            sendAlignmentChip(chip, kind: kind)
+            // App `SendAlignmentChip` (ChatViewModel.kt:1015-1053): `align_chip_sel` +
+            // `parent_message_id` = the surface's server message_id; the chip's value marks it.
+            viewModel.sendAlignmentChip(chip, kind: kind, sourceMessageId: messageId)
         }
     }
 
-    /// A non-capability alignment chip sends its label (gender-select: its value) as a follow-up,
-    /// the same action a related-question tap uses. See ``AlignmentChip/submittedQuery(for:)``.
-    private func sendAlignmentChip(_ chip: AlignmentChip, kind: AlignmentKind?) {
-        let question = chip.submittedQuery(for: kind)
-        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        viewModel.onAction(.sendFollowUpQuestion(
-            question: question,
-            followUpQuestionId: nil,
-            transcriptionId: nil,
-            audioURL: nil
-        ))
+    /// The UPLOAD_PHOTO camera / gallery closed without a photo (ChatScreen.kt:524-531, 576-583):
+    /// send "I don't have a photo to share right now". No-op outside a chip-driven flow.
+    private func alignmentPhotoNotShared() {
+        guard alignmentPhotoSourceId != nil else { return }
+        sendAlignmentPhotoDecline(fcLabel(FCLabels.photoNotShared, "I don't have a photo to share right now"))
+    }
+
+    /// App `sendAlignmentPhotoDeclineQuery` (ChatScreen.kt:469-485): an alignment-chip send of
+    /// `queryText` with `photo_declined = true` and the surface's `parent_message_id`.
+    private func sendAlignmentPhotoDecline(_ queryText: String) {
+        guard let source = alignmentPhotoSourceId else { return }
+        alignmentPhotoSourceId = nil
+        viewModel.sendAlignmentChip(
+            sourceMessageId: source,
+            query: queryText,
+            selectionValue: queryText,
+            photoDeclined: true
+        )
     }
 
     /// Terminal outcome of the chat share-location flow. Inert unless this screen armed it, so an
@@ -776,19 +822,19 @@ struct ChatView: View {
                 address: resolvedAddress()
             ))
         } else {
-            // Denied / cancelled / fetch failed: still answer the blocking question, by sending the
-            // decline text as an ordinary follow-up. The app sends this through `SendAlignmentChip`
-            // with `locationDeclined` + parent_message_id; the SDK has neither, so the correlation
-            // and the chip analytics are lost (docs/04).
-            viewModel.onAction(.sendFollowUpQuestion(
-                question: fcLabel(
-                    AgenticLabels.locationPermissionDeclined,
-                    AgenticLabels.locationPermissionDeclinedFallback
-                ),
-                followUpQuestionId: nil,
-                transcriptionId: nil,
-                audioURL: nil
-            ))
+            // Denied / cancelled / fetch failed: still answer the blocking question with the
+            // decline text, as the app does (ChatScreen.kt:377-380): an alignment-chip send with
+            // `location_declined = true` and the surface's `parent_message_id`.
+            let decline = fcLabel(
+                AgenticLabels.locationPermissionDeclined,
+                AgenticLabels.locationPermissionDeclinedFallback
+            )
+            viewModel.sendAlignmentChip(
+                sourceMessageId: sourceId,
+                query: decline,
+                selectionValue: decline,
+                locationDeclined: true
+            )
         }
     }
 

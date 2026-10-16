@@ -121,6 +121,9 @@ internal class ChatAdapter(
         const val TYPE_ERROR = 3
         const val TYPE_LOCATION = 4
 
+        /** The user bubble's text size: Compose bodyMedium (Type.kt), the app's UserChatBubble. */
+        const val USER_TEXT_SP = 17f
+
         /**
          * How long a live stream may go without a new token, and without a tool status, before
          * the "Paused, resuming…" hint appears. Compose parity (ChatScreen PAUSE_HINT_DELAY_MS).
@@ -390,7 +393,10 @@ internal class ChatAdapter(
         // recycled views stay consistent.
         val cfg = FarmerChat.requireGraph().config
         cfg.userBubbleTextColor?.let { b.fcUserText.setTextColor(it) }
-        cfg.messageFontSizeSp?.let { b.fcUserText.setTextSize(TypedValue.COMPLEX_UNIT_SP, it) }
+        // Set in code, never left to the XML: android:textSize resolves through
+        // getDimensionPixelSize, which ROUNDS 17sp to a whole 45px at 2.625x, while Compose's
+        // bodyMedium (17sp) lays out at 44.625px. setTextSize(SP, f) keeps the float.
+        b.fcUserText.setTextSize(TypedValue.COMPLEX_UNIT_SP, cfg.messageFontSizeSp ?: USER_TEXT_SP)
         if (!message.isFailed) {
             (b.fcUserBubble.background as? GradientDrawable)?.let { bg ->
                 val d = bg.mutate() as GradientDrawable
@@ -460,7 +466,6 @@ internal class ChatAdapter(
                 isLoading = row.isStateLoading,
                 isLatest = row.isLast,
                 additive = false,
-                blocking = message.alignmentBlocking,
                 listen = AlignmentSurfaceView.ListenState(
                     enabled = row.isTtsEnabled,
                     loading = row.isAudioLoading,

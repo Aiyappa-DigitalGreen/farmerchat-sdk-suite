@@ -295,6 +295,11 @@ fun LanguageScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            // App parity (LanguageScreen.kt:226-233): the nav-bar inset is
+                            // padding OUTSIDE the white panel (`navigationBarsPadding()` comes
+                            // before `roundedTop`), so the strip under the nav bar shows the
+                            // page grey (surfacePrimary), not the panel white.
+                            .padding(bottom = bottomInset)
                             .then(
                                 // App parity, measured on-device against fc-compose-agentic
                                 // (LanguageScreen.kt:225-248) — every number here was wrong:
@@ -309,7 +314,7 @@ fun LanguageScreen(
                                     background = colors.surfaceSecondary
                                 )
                             )
-                            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 16.dp + bottomInset),
+                            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {

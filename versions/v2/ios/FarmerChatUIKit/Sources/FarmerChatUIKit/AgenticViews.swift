@@ -933,7 +933,8 @@ final class FCUIAlignmentSurfaceView: UIView {
     ///   - isLoading: thread-level busy flag; locks every chip while a send is in flight.
     ///   - isLatest: true for the newest AI message — gates the Listen pill and the escape hatch.
     ///   - additive: true when rendering below a real answer; suppresses heading, Listen, hatch.
-    ///   - listen: the Listen pill state, or nil when no pill may show (no server message id).
+    ///   - listenEnabled: ListenButton `enabled`, or nil when no pill may show (no server message id).
+    ///   - listenState: the thread's TTS state (loading / playing / paused) for the pill.
     func configure(
         kind: AlignmentKind,
         message: String,
@@ -942,7 +943,8 @@ final class FCUIAlignmentSurfaceView: UIView {
         isLoading: Bool,
         isLatest: Bool,
         additive: Bool,
-        listenEnabled: Bool? = nil
+        listenEnabled: Bool? = nil,
+        listenState: FCUIListenState = .idle
     ) {
         let isEscalate = kind == .escalate
         let isCapabilityPrompt = kind == .gpsPrompt || kind == .uploadPhoto
@@ -973,9 +975,10 @@ final class FCUIAlignmentSurfaceView: UIView {
         let showListen = !isEscalate && !additive && isLatest && !isLoading && listenEnabled != nil
         listenWrap.isHidden = !showListen
         if showListen {
-            listenRow.addArrangedSubview(fcuiActionChip(
-                systemImage: "speaker.wave.2.fill",
-                title: fcuiLabel(FCLabels.listen, "Listen"),
+            // AlignmentSurface.kt passes listenLoading / listenPlaying / hasAudioUrl through to
+            // ListenButton, so the surface's pill walks the same four states as the answer's.
+            listenRow.addArrangedSubview(fcuiListenPill(
+                state: listenState,
                 enabled: listenEnabled ?? false,
                 action: { [weak self] in self?.onListen?() }
             ))
@@ -1120,7 +1123,8 @@ final class FCUIAlignmentSurfaceCell: UICollectionViewCell {
 
     /// - Parameter isTtsEnabled: ListenButton `enabled`; the pill only shows when the answer has a
     ///   server message id to synthesise.
-    func configure(message: ChatMessage.AiResponse, isLatest: Bool, isBusy: Bool, isTtsEnabled: Bool = true) {
+    func configure(message: ChatMessage.AiResponse, isLatest: Bool, isBusy: Bool, isTtsEnabled: Bool = true,
+                   listenState: FCUIListenState = .idle) {
         guard let kind = message.alignmentKind else { return }
         surface.configure(
             kind: kind,
@@ -1132,7 +1136,8 @@ final class FCUIAlignmentSurfaceCell: UICollectionViewCell {
             isLoading: isBusy,
             isLatest: isLatest,
             additive: false,
-            listenEnabled: message.messageId != nil ? isTtsEnabled : nil
+            listenEnabled: message.messageId != nil ? isTtsEnabled : nil,
+            listenState: listenState
         )
     }
 }
@@ -1261,4 +1266,186 @@ final class FCUIScrollIndicator: UIControl {
         }
     }
 }
+// MARK: - Listen pill (components/buttons/ListenButton.kt, `light = true`)
+
+/// ListenButton.kt states: Default (VolumeUp + "Listen"), Loading (20pt ring + "Loading..."),
+/// Playing (Pause + the animated 14-bar wave) and Paused (a clip exists but is not playing:
+/// PlayArrow + the wave at rest).
+enum FCUIListenState { case idle, loading, playing, paused }
+
+/// The Listen pill for `state`. Default / Loading reuse ``fcuiActionChip(systemImage:title:sweepBorder:enabled:loading:identifier:action:)``;
+/// Playing / Paused are ``FCUIListenWavePill`` (ListenButton.kt:142-192).
+@MainActor
+func fcuiListenPill(state: FCUIListenState, enabled: Bool, action: @escaping () -> Void) -> UIView {
+    switch state {
+    case .idle, .loading:
+        return fcuiActionChip(
+            systemImage: "speaker.wave.2.fill",
+            title: state == .loading ? fcuiLabel(FCLabels.loading, "Loading...") : fcuiLabel(FCLabels.listen, "Listen"),
+            enabled: enabled,
+            loading: state == .loading,
+            identifier: "fcListen",
+            action: action
+        )
+    case .playing, .paused:
+        let pill = FCUIListenWavePill(playing: state == .playing, action: action)
+        if !enabled {
+            pill.alpha = 0.4
+            pill.isUserInteractionEnabled = false
+        }
+        return pill
+    }
+}
+
+/// ListenButton.kt Playing / Paused: a 42pt capsule on surfaceReadingSecondary, 12 side padding,
+/// a 23pt foregroundPrimary Pause (or PlayArrow), 6, then the 54×26 ``FCUISoundWaveView`` in
+/// buttonPrimaryAccent — animating while playing, at its static heights while paused.
+final class FCUIListenWavePill: UIControl {
+    private let wave = FCUISoundWaveView()
+    private let action: () -> Void
+
+    init(playing: Bool, action: @escaping () -> Void) {
+        self.action = action
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = FCUITheme.surfaceReadingSecondary
+        layer.cornerRadius = 21
+        layer.cornerCurve = .continuous
+        let icon = UIImageView(image: UIImage(
+            systemName: playing ? "pause.fill" : "play.fill",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        ))
+        icon.tintColor = FCUITheme.foregroundPrimary
+        icon.contentMode = .center
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        wave.translatesAutoresizingMaskIntoConstraints = false
+        wave.isAnimating = playing
+        addSubview(icon)
+        addSubview(wave)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 42),
+            icon.widthAnchor.constraint(equalToConstant: 23),
+            icon.heightAnchor.constraint(equalToConstant: 23),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            wave.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+            wave.widthAnchor.constraint(equalToConstant: 54),
+            wave.heightAnchor.constraint(equalToConstant: 26),
+            wave.centerYAnchor.constraint(equalTo: centerYAnchor),
+            wave.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        accessibilityIdentifier = "fcListen"
+        accessibilityLabel = fcuiLabel(FCLabels.listen, "Listen")
+        accessibilityValue = playing ? "Pause" : "Play"
+        addAction(UIAction { [weak self] _ in self?.action() }, for: .touchUpInside)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+}
+
+/// ListenButton.kt `SoundWaveAnimation`: 14 rounded 2pt bars spread SpaceBetween across the
+/// frame, at the Figma static heights while paused; while playing each bar steps every
+/// 100-150ms toward `clamp(base*0.5 + (h*0.5 + rand*0.5)*0.5, 0.15, 0.85)` over 80-150ms
+/// (FastOutSlowIn). Driven by a 30fps timer that sets layer frames directly — no Core Animation
+/// animations, so it never keeps the app "busy" for XCUITest, and it stops off-window. Reduce
+/// Motion holds the static heights.
+final class FCUISoundWaveView: UIView {
+    static let staticHeights: [CGFloat] = [
+        0.15, 0.23, 0.31, 0.50, 0.31, 0.54, 0.73, 0.50, 0.73, 0.38, 0.50, 0.50, 0.31, 0.15
+    ]
+
+    var isAnimating = false { didSet { updateTimer() } }
+
+    private var bars: [CALayer] = []
+    private var heights = FCUISoundWaveView.staticHeights
+    /// Per-bar tween: from, to, start time, duration.
+    private var tweens: [(from: CGFloat, to: CGFloat, start: CFTimeInterval, duration: CFTimeInterval)] = []
+    private var nextStep: CFTimeInterval = 0
+    private var timer: Timer?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        for _ in Self.staticHeights {
+            let bar = CALayer()
+            bar.backgroundColor = FCUITheme.brandAccent.cgColor
+            bar.cornerRadius = 1
+            layer.addSublayer(bar)
+            bars.append(bar)
+        }
+        tweens = heights.map { ($0, $0, 0, 0) }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutBars()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateTimer()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        bars.forEach { $0.backgroundColor = FCUITheme.brandAccent.cgColor }
+    }
+
+    private func updateTimer() {
+        let run = isAnimating && window != nil && !UIAccessibility.isReduceMotionEnabled
+        if run, timer == nil {
+            let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.tick() }
+            RunLoop.main.add(t, forMode: .common)
+            timer = t
+        } else if !run {
+            timer?.invalidate()
+            timer = nil
+            heights = Self.staticHeights
+            layoutBars()
+        }
+    }
+
+    private func tick() {
+        let now = CACurrentMediaTime()
+        if now >= nextStep {
+            for i in heights.indices {
+                let base = Self.staticHeights[i]
+                let bias = heights[i] * 0.5 + CGFloat.random(in: 0...0.5)
+                let target = min(max(base * 0.5 + bias * 0.5, 0.15), 0.85)
+                tweens[i] = (heights[i], target, now, Double.random(in: 0.08...0.15))
+            }
+            nextStep = now + Double.random(in: 0.10...0.15)
+        }
+        for i in heights.indices {
+            let tw = tweens[i]
+            let p = tw.duration > 0 ? min(1, (now - tw.start) / tw.duration) : 1
+            heights[i] = tw.from + (tw.to - tw.from) * Self.fastOutSlowIn(CGFloat(p))
+        }
+        layoutBars()
+    }
+
+    /// Material FastOutSlowIn ≈ cubic-bezier(0.4, 0, 0.2, 1), approximated by smootherstep's
+    /// ease-out-weighted shape — the step is 80-150ms, so the curve detail is not visible.
+    private static func fastOutSlowIn(_ t: CGFloat) -> CGFloat {
+        1 - pow(1 - t, 3)
+    }
+
+    private func layoutBars() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let count = CGFloat(bars.count)
+        let gap = count > 1 ? (bounds.width - 2 * count) / (count - 1) : 0
+        for (i, bar) in bars.enumerated() {
+            let h = bounds.height * heights[i]
+            bar.frame = CGRect(x: CGFloat(i) * (2 + gap), y: (bounds.height - h) / 2, width: 2, height: h)
+        }
+        CATransaction.commit()
+    }
+}
+
 #endif

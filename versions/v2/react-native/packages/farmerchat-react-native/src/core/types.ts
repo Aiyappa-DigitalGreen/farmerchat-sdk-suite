@@ -690,6 +690,22 @@ export interface TextPromptRequest {
    * answer arrives at once as done + metadata.
    */
   streaming_required?: boolean;
+  /**
+   * App TextPromptRequest.parent_message_id: the server `message_id` of the alignment surface an
+   * alignment-chip pick answers, so the backend correlates the pick with the surface that asked.
+   * Omitted on an ordinary query.
+   */
+  parent_message_id?: string | null;
+  /**
+   * App TextPromptRequest.location_declined: sent only as `true`, when the farmer declined a
+   * `gps-prompt` surface, so the backend answers from an approximate location. Omitted otherwise.
+   */
+  location_declined?: boolean | null;
+  /**
+   * App TextPromptRequest.photo_declined: sent only as `true`, when the farmer declined an
+   * `upload-photo` surface, so the backend proceeds without an image. Omitted otherwise.
+   */
+  photo_declined?: boolean | null;
 }
 
 export interface IntentClassificationOutput {

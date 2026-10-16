@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import UIKit
+import AVFoundation
 import Combine
 import FarmerChatCore
 
@@ -96,6 +97,8 @@ final class FCUIChatViewController: UIViewController {
     private var audioOwnerRowId: String?
     private var prevLastAiRowId: String?
     private var prevIsInitialHistoryLoaded = false
+    /// The newest question row last rendered — a change is the auto-scroll trigger.
+    private var prevQuestionRowId: String?
     // Reserve + pinning (port of Android core ChatReserve.kt; see `updateReserveInset`).
     /// `ChatMessage.id` of the row the reserve keeps reachable at the TOP of the viewport (the
     /// farmer's question above a reserve-holding final row). Nil when the final row holds none.
@@ -117,6 +120,10 @@ final class FCUIChatViewController: UIViewController {
     /// the GPS_PROMPT surface whose chip started it (2.0.0). Nil leaves the outcome subscription
     /// inert, so an outcome belonging to Home or a widget trigger is ignored.
     private var pendingLocationSourceId: String?
+    /// Armed while an UPLOAD_PHOTO capability chip's camera / gallery is open: the raw
+    /// `AiResponse.id` of that surface (app `alignmentPhotoSourceId`). A pick sends the photo; a
+    /// cancel or a camera-permission denial sends the app's decline query with `photo_declined`.
+    private var alignmentPhotoSourceId: String?
     /// True once the location-outcome subscription is installed. Guards the share-location chip
     /// from starting a flow nothing is listening to (see `observeLocationOutcomes`).
     private var isObservingLocationOutcomes = false
@@ -334,8 +341,7 @@ final class FCUIChatViewController: UIViewController {
             cell.configure(
                 message: message,
                 isTtsEnabled: self.viewModel.state.isTtsEnabled,
-                listenState: self.viewModel.state.isLoadingSynthesiseAudio ? .loading
-                    : (self.viewModel.state.isAudioPlaying ? .playing : .idle),
+                listenState: self.listenState,
                 playback: self.playback,
                 // ChatThreadContent.kt `isLastResponse`: once a follow-up is in flight (its
                 // placeholder / stream is the last row) the previous answer drops its actions.
@@ -377,15 +383,16 @@ final class FCUIChatViewController: UIViewController {
                 message: ai,
                 isLatest: messageId == self.lastAiRowId,
                 isBusy: self.viewModel.state.isLoading,
-                isTtsEnabled: self.viewModel.state.isTtsEnabled
+                isTtsEnabled: self.viewModel.state.isTtsEnabled,
+                listenState: self.listenState
             )
             cell.onChipTap = { [weak self] chip in
                 self?.handleAlignmentChip(messageId: ai.id, kind: ai.alignmentKind, chip: chip)
             }
             // AlignmentSurface.kt Listen pill on the live prompt.
             cell.onListen = { [weak self] in self?.listenTapped() }
-            // The UIKit flavour's text input is a prompt sheet (there is no always-visible field
-            // to focus), so the escape hatch opens it — the same affordance the input bar uses.
+            // AlignmentSurface.kt `onTypeInstead` → ChatScreen.kt:1666 `focusTextInput`: focus the
+            // composer's field (`typeTapped`).
             cell.onTypeInstead = { [weak self] in self?.typeTapped() }
         }
         // 2.0.0: the farmer's shared location, standing in for the text bubble they never typed.
@@ -512,13 +519,16 @@ final class FCUIChatViewController: UIViewController {
         let newCount = state.messages.count
         let newLastId = state.messages.last?.id
         let isPrepend = newLastId != nil && newLastId == prevLastMessageId && newCount > prevMessageCount
-        // ChatScreen.kt's auto-scroll keys: the tail id (a placeholder → answer swap changes it
-        // without changing the count; a prepend changes the count but not it), `isLoading` (a
-        // settling answer starts holding the reserve) and the first history load. A streamed
-        // delta changes none of them, so the question stays put while the answer grows.
-        let shouldPin = newLastId != prevLastMessageId
-            || state.isLoading != prevIsLoading
+        // ChatThreadContent.kt:228-285: the ONLY programmatic scroll is when a new question (user
+        // bubble, or shared-location bubble) is appended — it goes to the top and stays there
+        // while its answer loads, streams and settles into the reserve below it. The app never
+        // re-scrolls on stream chunks or when the answer finalizes; re-pinning on the tail id /
+        // `isLoading` (as this screen used to) jumped the thread at the placeholder → stream →
+        // final-answer swaps. Plus the first history load.
+        let newQuestionId = lastQuestionRowId(in: state.messages)
+        let shouldPin = newQuestionId != prevQuestionRowId
             || state.isInitialHistoryLoaded != prevIsInitialHistoryLoaded
+        prevQuestionRowId = newQuestionId
         let beforeOffsetY = collectionView.contentOffset.y
         let beforeHeight = collectionView.contentSize.height
 
@@ -568,7 +578,7 @@ final class FCUIChatViewController: UIViewController {
         // of exactly those rows. `isLatest`/`isBusy` are render inputs too, so a change in either
         // reconfigures every surviving message row.
         // The Listen pill's Loading / Playing state lives on the thread state, not the message.
-        let listenKey = "\(state.isLoadingSynthesiseAudio)-\(state.isAudioPlaying)"
+        let listenKey = "\(state.isLoadingSynthesiseAudio)-\(state.isAudioPlaying)-\(state.audioPlaybackUrl != nil)"
         let flagsChanged = state.isLoading != prevIsLoading || lastAiRowId != prevLastAiRowId
             || listenKey != prevListenKey
         prevListenKey = listenKey
@@ -594,9 +604,14 @@ final class FCUIChatViewController: UIViewController {
                 let delta = self.collectionView.contentSize.height - beforeHeight
                 self.collectionView.contentOffset.y = beforeOffsetY + delta
             }
-            self.reserveAnchorMessageId = self.reserveAnchorId(in: state)
+            // From the CURRENT state, not this render's: a send appends the question and the
+            // loading placeholder as two state changes, so two animated applies run back to back
+            // and their completions can land out of order. With the captured state the stale
+            // "question is last" render won, cleared the anchor and dropped the reserve inset, so
+            // the pin clamped and the new question never reached the top.
+            self.reserveAnchorMessageId = self.reserveAnchorId(in: self.viewModel.state)
             self.updateReserveInset()
-            if !isPrepend && shouldPin {
+        if !isPrepend && shouldPin {
                 self.schedulePin()
             }
         }
@@ -769,11 +784,15 @@ final class FCUIChatViewController: UIViewController {
             pendingLocationSourceId = messageId
             manager.triggerFromLocalContext()
         case .takePhoto:
-            launchPicker(sourceType: .camera)
+            alignmentPhotoSourceId = messageId
+            launchAlignmentCamera()
         case .chooseFromGallery:
+            alignmentPhotoSourceId = messageId
             launchPicker(sourceType: .photoLibrary)
         case .none:
-            sendAlignmentChip(chip, kind: kind)
+            // App `SendAlignmentChip` (ChatViewModel.kt:1015-1053): `align_chip_sel` +
+            // `parent_message_id` = the surface's server message_id; the chip's value marks it.
+            viewModel.sendAlignmentChip(chip, kind: kind, sourceMessageId: messageId)
         }
     }
 
@@ -814,19 +833,19 @@ final class FCUIChatViewController: UIViewController {
                 address: resolvedAddress()
             ))
         } else {
-            // Denied / cancelled / fetch failed: still answer the blocking question, by sending the
-            // decline text as an ordinary follow-up. The app sends this through `SendAlignmentChip`
-            // with `locationDeclined` + parent_message_id; the SDK has neither, so the correlation
-            // and the chip analytics are lost (docs/04).
-            viewModel.onAction(.sendFollowUpQuestion(
-                question: fcuiLabel(
-                    AgenticLabels.locationPermissionDeclined,
-                    AgenticLabels.locationPermissionDeclinedFallback
-                ),
-                followUpQuestionId: nil,
-                transcriptionId: nil,
-                audioURL: nil
-            ))
+            // Denied / cancelled / fetch failed: still answer the blocking question with the
+            // decline text, as the app does (ChatScreen.kt:377-380): an alignment-chip send with
+            // `location_declined = true` and the surface's `parent_message_id`.
+            let decline = fcuiLabel(
+                AgenticLabels.locationPermissionDeclined,
+                AgenticLabels.locationPermissionDeclinedFallback
+            )
+            viewModel.sendAlignmentChip(
+                sourceMessageId: sourceId,
+                query: decline,
+                selectionValue: decline,
+                locationDeclined: true
+            )
         }
     }
 
@@ -850,6 +869,46 @@ final class FCUIChatViewController: UIViewController {
             .joined(separator: ", ")
     }
 
+    /// UPLOAD_PHOTO "Take photo": camera permission first. A chip-driven flow never blocks on the
+    /// settings dialog — a denial is sent as the decline query (ChatScreen.kt:665-672). No camera
+    /// (simulator) keeps the library fallback below.
+    private func launchAlignmentCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            launchPicker(sourceType: .camera)
+            return
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            launchPicker(sourceType: .camera)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async { [weak self] in
+                    if granted { self?.launchPicker(sourceType: .camera) } else { self?.photoPermissionDeclined() }
+                }
+            }
+        default:
+            photoPermissionDeclined()
+        }
+    }
+
+    private func photoPermissionDeclined() {
+        sendAlignmentPhotoDecline(fcuiLabel(FCLabels.photoPermissionDeclined, "I don't want to share a photo right now"))
+    }
+
+    /// App `sendAlignmentPhotoDeclineQuery` (ChatScreen.kt:469-485): an alignment-chip send of
+    /// `queryText` with `photo_declined = true` and the surface's `parent_message_id`. No-op
+    /// outside a chip-driven flow.
+    fileprivate func sendAlignmentPhotoDecline(_ queryText: String) {
+        guard let source = alignmentPhotoSourceId else { return }
+        alignmentPhotoSourceId = nil
+        viewModel.sendAlignmentChip(
+            sourceMessageId: source,
+            query: queryText,
+            selectionValue: queryText,
+            photoDeclined: true
+        )
+    }
+
     /// A capability chip already chose the source, so this opens it directly — no photo-source
     /// sheet, no composer. Falls back to the library if the camera is unavailable (simulator).
     private func launchPicker(sourceType: UIImagePickerController.SourceType) {
@@ -859,19 +918,6 @@ final class FCUIChatViewController: UIViewController {
             : .photoLibrary
         picker.delegate = self
         present(picker, animated: true)
-    }
-
-    /// A non-capability alignment chip sends the chip's `value` (falling back to its label) as a
-    /// follow-up — the same action a related-question tap uses, exactly as SwiftUI and Compose do.
-    private func sendAlignmentChip(_ chip: AlignmentChip, kind: AlignmentKind?) {
-        let question = chip.submittedQuery(for: kind)
-        guard !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        viewModel.onAction(.sendFollowUpQuestion(
-            question: question,
-            followUpQuestionId: nil,
-            transcriptionId: nil,
-            audioURL: nil
-        ))
     }
 
     /// The scroll indicator's tap: to the end of the REAL content, never the bottom of the reserve
@@ -885,22 +931,30 @@ final class FCUIChatViewController: UIViewController {
 
     // MARK: - Reserve + pinning (port of Android core ChatReserve.kt)
 
-    /// `holdsChatReserve` (Android core `ui/chat/ChatReserve.kt`; web `holdsReserve`): whether the
-    /// newest AI response holds a viewport of space. `isLoading` stays true for the whole of a
-    /// stream and for a blocking alignment surface, so both extra clauses are load-bearing.
-    /// Private per flavour (no new Core API); SwiftUI `ChatView.holdsReserve` mirrors it.
-    private func holdsReserve(_ ai: ChatMessage.AiResponse, isLoading: Bool) -> Bool {
-        ai.isStreaming
-            || ai.isInterrupted
-            || !isLoading
-            || (ai.alignmentKind != nil && ai.alignmentSelectedValues.isEmpty)
+    /// Id of the newest question row — a user bubble or a shared-location bubble
+    /// (ChatThreadContent.kt `lastUserMessageId` / `lastLocationMessageId`). A history prepend
+    /// never changes it; sending a question always does.
+    private func lastQuestionRowId(in messages: [ChatMessage]) -> String? {
+        for message in messages.reversed() {
+            switch message {
+            case .user, .location: return message.id
+            default: continue
+            }
+        }
+        return nil
     }
 
-    /// Whether the final row holds space the way `chatScrollAnchorIndex` counts it: a
-    /// reserve-holding answer or the in-flight loading placeholder.
+    /// Whether the final row holds space the way `chatScrollAnchorIndex` counts it: the answer
+    /// to the newest question or the in-flight loading placeholder. The final AI row always holds
+    /// it on iOS — Kotlin's `!isLoading` clause exists because there the PREVIOUS answer stays the
+    /// last response while a follow-up loads; here the placeholder is appended with the question,
+    /// so a final AI row is always the newest answer, including the brief finalize window where
+    /// `isLoading` is still true after the stream's `metadata` swapped in the settled answer
+    /// (dropping the reserve there let the list clamp and drag the pinned question down).
+    /// SwiftUI `ChatView.finalRowHoldsReserve` mirrors it.
     private func finalRowHoldsSpace(in state: ChatState) -> Bool {
         switch state.messages.last {
-        case .aiResponse(let ai)?: return holdsReserve(ai, isLoading: state.isLoading)
+        case .aiResponse?: return true
         case .loadingPlaceholder?: return true
         default: return false
         }
@@ -962,16 +1016,18 @@ final class FCUIChatViewController: UIViewController {
     private func schedulePin() {
         guard !pinScheduled else { return }
         pinScheduled = true
-        DispatchQueue.main.async { [weak self] in
+        // ChatThreadContent.kt:263 `delay(150) // Let layout start` — pinning on the next turn
+        // ran against the half-applied snapshot (the follow-up rows still leaving), so the
+        // question stayed mid-screen under the tips while its answer loaded.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
             self.pinScheduled = false
             self.pinTail()
         }
     }
 
-    /// The auto-scroll (ChatScreen.kt LaunchedEffect(lastMessageId, isLoading,
-    /// isInitialHistoryLoaded)): the anchor row's top goes 20pt below the viewport's top —
-    /// never the bottom of the reserve.
+    /// The auto-scroll (ChatThreadContent.kt `scrollToAnchorId` effect + the first history load):
+    /// the anchor row's top goes 20pt below the viewport's top — never the bottom of the reserve.
     private func pinTail() {
         let state = viewModel.state
         guard let last = state.messages.last else { return }
@@ -1027,6 +1083,16 @@ final class FCUIChatViewController: UIViewController {
     }
 
     // MARK: - Actions
+
+    /// ListenButton.kt state: `isLoading` → Loading, `isPlaying` → Playing,
+    /// `hasAudioUrl && !isPlaying` → Paused, else Default.
+    private var listenState: FCUIListenState {
+        let state = viewModel.state
+        if state.isLoadingSynthesiseAudio { return .loading }
+        if state.isAudioPlaying { return .playing }
+        if state.audioPlaybackUrl != nil { return .paused }
+        return .idle
+    }
 
     private func listenTapped() {
         if viewModel.state.isAudioPlaying {
@@ -1090,6 +1156,7 @@ extension FCUIChatViewController: UIImagePickerControllerDelegate, UINavigationC
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
+        alignmentPhotoSourceId = nil
         guard let image = info[.originalImage] as? UIImage,
               let data = image.jpegData(compressionQuality: 0.8) else { return }
         let url = FileManager.default.temporaryDirectory
@@ -1100,6 +1167,9 @@ extension FCUIChatViewController: UIImagePickerControllerDelegate, UINavigationC
 
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         picker.dismiss(animated: true)
+        // An UPLOAD_PHOTO chip's camera / gallery closed with no photo (ChatScreen.kt:524-531,
+        // 576-583): keep the blocking surface moving with the default query.
+        sendAlignmentPhotoDecline(fcuiLabel(FCLabels.photoNotShared, "I don't have a photo to share right now"))
     }
 }
 

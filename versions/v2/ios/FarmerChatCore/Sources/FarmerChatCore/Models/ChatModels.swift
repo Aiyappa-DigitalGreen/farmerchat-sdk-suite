@@ -111,9 +111,22 @@ public struct TextPromptRequest: Codable, Sendable {
     /// App `TextPromptRequest.streaming_required`: the selected language's flag, read from
     /// ``PrefKey/streamingRequired`` (default true). Sent on #27 and #27a alike.
     public var streamingRequired: Bool
+    /// App `TextPromptRequest.parent_message_id` (docs/02 #27): the SERVER `message_id` of the
+    /// alignment surface an `align_chip_sel` send answers. Nil (omitted) for every other send.
+    /// Set after `init` — kept out of the initializer so its public signature is unchanged.
+    public var parentMessageId: String? = nil
+    /// App `TextPromptRequest.location_declined`: true only when the farmer declined a GPS_PROMPT;
+    /// nil (omitted) otherwise, as the app sends it.
+    public var locationDeclined: Bool? = nil
+    /// App `TextPromptRequest.photo_declined`: true only when the farmer declined an UPLOAD_PHOTO
+    /// prompt; nil (omitted) otherwise.
+    public var photoDeclined: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case query
+        case parentMessageId = "parent_message_id"
+        case locationDeclined = "location_declined"
+        case photoDeclined = "photo_declined"
         case conversationId = "conversation_id"
         case messageId = "message_id"
         case statementId = "statement_id"
@@ -165,6 +178,9 @@ public struct TextPromptRequest: Codable, Sendable {
         transcriptionId = try c.decodeIfPresent(String.self, forKey: .transcriptionId)
         retry = try c.decodeIfPresent(Bool.self, forKey: .retry) ?? false
         streamingRequired = try c.decodeIfPresent(Bool.self, forKey: .streamingRequired) ?? true
+        parentMessageId = try c.decodeIfPresent(String.self, forKey: .parentMessageId)
+        locationDeclined = try c.decodeIfPresent(Bool.self, forKey: .locationDeclined)
+        photoDeclined = try c.decodeIfPresent(Bool.self, forKey: .photoDeclined)
     }
 }
 
@@ -494,7 +510,12 @@ public struct ConversationChatHistoryMessageItem: Codable, Sendable {
     public var queryText: String?
     public var heardQueryText: String?
     public var responseText: String?
-    public var questions: [String]?
+    /// Type-7 follow-up questions as plain text. The server sends objects
+    /// (`{follow_up_question_id, sequence, question}`, verified on DEMO 2026-10-16); typed as a
+    /// bare `[String]` one such item threw and took the WHOLE page with it, so a reopened
+    /// conversation rendered empty. The app keeps only the text for history
+    /// (`ChatViewModel.kt:1296-1301` `item.questions?.map { it.question }`), so do we.
+    @FollowUpQuestionTexts public var questions: [String]?
     public var queryMediaFileUrl: String?
     public var reaction: String?
     public var responseMediaFileUrl: String?
@@ -817,5 +838,42 @@ public enum AlignmentKind: String, Sendable, Equatable, CaseIterable {
         case "commodity-confirm": return .commodityConfirm
         default: return nil
         }
+    }
+}
+
+/// Decodes a follow-up list sent either as strings or as ``FollowUpQuestionOption`` objects into
+/// the questions' text, in server order, skipping blanks. Never throws: an unknown shape is nil.
+@propertyWrapper
+public struct FollowUpQuestionTexts: Codable, Sendable, Equatable {
+    public var wrappedValue: [String]?
+
+    public init(wrappedValue: [String]? = nil) {
+        self.wrappedValue = wrappedValue
+    }
+
+    public init(from decoder: Decoder) throws {
+        guard let container = try? decoder.singleValueContainer(), !container.decodeNil() else {
+            wrappedValue = nil
+            return
+        }
+        if let strings = try? container.decode([String].self) {
+            wrappedValue = strings
+        } else if let options = try? container.decode([FollowUpQuestionOption].self) {
+            wrappedValue = options.compactMap(\.question)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        } else {
+            wrappedValue = nil
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let wrappedValue { try container.encode(wrappedValue) } else { try container.encodeNil() }
+    }
+}
+
+extension KeyedDecodingContainer {
+    public func decode(_ type: FollowUpQuestionTexts.Type, forKey key: Key) throws -> FollowUpQuestionTexts {
+        (try? decodeIfPresent(FollowUpQuestionTexts.self, forKey: key)) ?? FollowUpQuestionTexts(wrappedValue: nil)
     }
 }

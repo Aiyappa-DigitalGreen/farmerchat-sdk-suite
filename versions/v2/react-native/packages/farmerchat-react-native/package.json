@@ -27,7 +27,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
+    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/chatWire.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "size:check": "node scripts/size-check.mjs",

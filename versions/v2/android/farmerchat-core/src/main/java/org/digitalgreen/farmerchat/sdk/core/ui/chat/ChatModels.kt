@@ -89,9 +89,10 @@ sealed class ChatMessage {
         /**
          * The surface's `blocking` flag (2.0.0, captured live 2026-09-03 — a `gps-prompt` sends
          * `blocking: true`, a `commodity-confirm` `false`). True means the backend needs this
-         * answered before it can proceed, so the surface must NOT offer a way out: the flavours
-         * suppress the "type instead" escape hatch on a blocking surface. Absent on the wire →
-         * false, i.e. dismissible, which is the pre-2026-09-03 behaviour.
+         * answered before it can proceed. Core uses it to settle a mid-stream surface at once
+         * ([ChatViewModel] `applyStreamSurface`). It does NOT gate the "Type or say it" escape
+         * hatch: the app's condition (AlignmentSurface.kt:197-199) has no blocking term, so
+         * neither flavour reads it for that (2026-10-16). Absent on the wire → false.
          */
         val alignmentBlocking: Boolean = false
     ) : ChatMessage()

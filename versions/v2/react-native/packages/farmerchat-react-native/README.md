@@ -22,6 +22,7 @@ the SDK.
 - `<FarmerChatFab/>` opens FarmerChat as a full-screen overlay (not a `Modal`, which failed on the new
   architecture). Place it in a full-screen container, such as your root screen, because the overlay fills
   the FAB's parent.
+- Share sends the answer as text; the FarmerChat app and the web SDK share an image of the answer card.
 
 ## Installation
 

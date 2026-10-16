@@ -27,6 +27,12 @@ export interface ChatRouteParams {
   channel?: string;
   /** Display-only Home card image shown on the question bubble (compose `contentCardImageUrl`). */
   contentCardImageUrl?: string;
+  /**
+   * Home card kind on the agentic path ("image_card" / "text_card"), sent as the opening
+   * question's `triggered_input_type` (app Destination.Chat.contentCardTriggerType,
+   * HomeScreen.kt:653-659).
+   */
+  contentCardTriggerType?: string;
   /** Web addition: pending voice recording for the voice-prototype entry. */
   voiceBase64?: string;
   voiceFormat?: string;

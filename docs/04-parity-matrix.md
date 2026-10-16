@@ -1142,7 +1142,7 @@ re-derive them:
    bubble (blank address → no bubble, app parity), then re-sends that surface's
    `alignmentOriginalQuery` with `triggered_input_type = align_chip_sel` and NO user text bubble
    (new `runTextQuery({ suppressUserMessage })`). Called only from `ChatScreen`'s
-   `location_fetched` outcome. Deltas mirrored from android, not fixed: no `parent_message_id`
+   `location_fetched` outcome. **(Superseded 2026-10-16: alignment sends now carry `parent_message_id` on all platforms; see "Round 2 fidelity gaps closed".)** Deltas mirrored from android, not fixed: no `parent_message_id`
    (`TextPromptRequest` has no such field) and no `agentic_chip_*` properties on this path.
 
    **Closed on react-native (2026-09-02), same reference, same shape.**
@@ -1152,7 +1152,7 @@ re-derive them:
    → no bubble, app parity) then the loading placeholder in ONE atomic update, and re-sends that
    surface's `alignmentOriginalQuery` with `triggered_input_type = align_chip_sel` and no user
    text bubble (new `sendTextQuery({ staged })`). Dispatched only from `ChatScreen`'s armed
-   `location_fetched` outcome. Same deltas mirrored from android, not fixed: no
+   `location_fetched` outcome. **(Superseded 2026-10-16: alignment sends now carry `parent_message_id` on all platforms; see "Round 2 fidelity gaps closed".)** Same deltas mirrored from android, not fixed: no
    `parent_message_id`, no `agentic_chip_*` properties, and no endpoint #30 on this path (the
    chip's text is not the question).
 6. ~~iOS UIKit still renders the 1.0.0 chat.~~ — **stale as of 2026-09-02.** `FarmerChatUIKit`
@@ -1417,7 +1417,7 @@ Compose's `handleAlignmentChip` + armed collector, `CapabilityChipTest`).
   invokes a capability — the wrong string, and precisely the trap these constants exist to avoid.
 - **Not ported.** The app's chat-history `message_type_id 12 → location_shared` mapping stays
   out: its own `TODO(location-history)` says the type id and address field are unconfirmed
-  placeholders. Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
+  placeholders. **(Superseded 2026-10-16: alignment sends now carry `parent_message_id` on all platforms; see "Round 2 fidelity gaps closed".)** Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
   (the SDK's `TextPromptRequest` has no such field) and no `agentic_chip_*` analytics properties
   on the location path.
 
@@ -1681,7 +1681,7 @@ location variant at all**, so there was nothing to render a shared location with
   is marked picked (android does that for location only).
 - **Not ported.** The app's chat-history `message_type_id 12 → location_shared` mapping stays out:
   its own `TODO(location-history)` says the type id and address field are unconfirmed
-  placeholders. Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
+  placeholders. **(Superseded 2026-10-16: alignment sends now carry `parent_message_id` on all platforms; see "Round 2 fidelity gaps closed".)** Deltas mirrored from android, deliberately not "fixed": no `parent_message_id`
   (`TextPromptRequest` has no such field, so no chip send carries it) and no `agentic_chip_*`
   analytics properties (iOS's analytics props are a flat dictionary with no chip
   type/value/label/status fields), so the location send reports as an ordinary text query —
@@ -8841,3 +8841,45 @@ chooser (`ChooserActivityLauncher`); follow-up chip → `follow_up_question_clic
 follow-ups 200. With the earlier runs, every step of the end-to-end list passes on compose.
 Checked and NOT a compose bug: typed composer text is sent as `SendFollowUpQuestion(question = text)`,
 exactly as the app's composer (`ChatScreen.kt:1811`), and #30 fires only with a follow-up id.
+
+## Round 2 fidelity gaps closed (2026-10-16)
+Every gap left by the cross-platform fidelity pass, closed against the app (fc-compose-agentic
+dev/v2.5) and checked on DEMO with request bodies logged. Evidence per platform in the session's
+`fidelity/<platform>/ROUND2.md` reports; checks below were re-run after all four rounds.
+
+| Gap | android (compose + views) | ios (Core + SwiftUI + UIKit) | react-native | web + widget |
+|---|---|---|---|---|
+| "Type or say it" on clarify/confirm (app `AlignmentSurface.kt:195-276`, no `blocking` gate) | FIXED: `blocking` gate removed (compose keeps the param, ignored); views: only the link is tappable, weight 600, no underline | already matched | already matched; the tap now focuses the composer | already matched |
+| Alignment chip = `align_chip_sel` + `parent_message_id` (app `ChatViewModel.kt:1015-1052`) | already matched | FIXED: `ChatViewModel.sendAlignmentChip` (new public, additive); location shared/declined and photo declined carry the same correlation | FIXED, plus location shared/denied | FIXED (was `card`, no parent), plus GPS/photo declines |
+| Photo-chip picker cancel / denial sends `PHOTO_NOT_SHARED` with `photo_declined` (app `ChatScreen.kt:469-585`) | not re-checked this round (decline routing exists: `AlignmentChipRouting.kt`) | FIXED | FIXED; a picked photo goes straight to chat | FIXED; a picked photo goes straight to chat |
+| `triggered_input_type` per send (typed `text`, chip `follow_up`, voice `voice`; app `ChatViewModel.kt:993-997, 235-243`) | matched for typed and chip (compose, verified earlier on 2026-10-16) | FIXED: typed sent `follow_up` | already matched | FIXED: typed and chips sent `card`, voice `mic`; opening question now weather/ssfr/channel/card/text/voice like the app |
+| History sorted by `message_input_time` (DEMO returns newest first; app `ChatViewModel.kt:1255`) | FIXED: new `ChatHistoryMapping.kt` (chips from the newest answer) | FIXED; also history follow-ups arrive as objects and made the whole page decode empty | FIXED | FIXED |
+| History chips: app drops the ids (`ChatViewModel.kt:1296-1300`) → `follow_up`, no #30 | FIXED (fired #30) | matched | matched | matched |
+| Voice history text: `query_text` before `heard_query_text` (app `:1273`) | FIXED | not changed this round | not changed this round | not changed this round |
+| Listen: 14 animated bars, 4 states, 500 ms crossfade (app `ListenButton.kt:142-266`) | already matched | UIKit FIXED (answer row + alignment pill); SwiftUI already matched | FIXED, no ~2.5 s lag; tap toggles play/pause; sends clear the clip | bars matched; FIXED fade, per-bar timing, "stopped playing" event fired twice per clip (now once) |
+| Server tips while waiting (app `ChatLoadingContent.kt:103-162`, `Tips.kt`) | already matched | FIXED: `LabelManager.answerGenerationTips()`; #29 now starts after the answer settles | already matched | already matched |
+| Asked follow-up pinned while its answer loads | matched (compose is the reference) | FIXED, both UIs | pins, but jumps where the app animates | not re-checked this round |
+| Compose language screen: grey under the nav bar (app `LanguageScreen.kt:226-233`) | FIXED | n/a | n/a | n/a |
+| Views bubble text ~2% wider | FIXED: 17sp set in code keeps 44.625 px (XML rounded to 45); line breaks equal compose | n/a | n/a | n/a |
+
+Device checks newly VERIFIED on the Android emulator: camera capture → `image_analysis` 200 (both
+flavours); Listen audible playback (`dumpsys audio` shows a started MediaPlayer). Still UNVERIFIED:
+a recognised voice question (the emulator mic records silence, `confidence_score` 0, correctly
+rejected; `transcribe_audio` itself 200); iOS location/photo-decline sends (DEMO offered no such
+prompt; unit tests only); the real OS share sheet on iOS/web.
+
+Still different from the app (recorded, not fixed):
+- React Native Share sends text; the app (and web) share an image of the answer card (`ChatScreen.kt:904-935`).
+- React Native snaps the Listen pill's width; the app animates it.
+- iOS has no `agentic_chip_*` analytics properties (flat props map; inventing keys is not allowed).
+- Web sends photos to `image_analysis`; the app's agentic request carries image fields.
+- App quirk not copied anywhere: on history page 2+, the app replaces the chips with the older page's.
+- Voice history text order fixed on android only (iOS, RN, web not checked).
+- Android: a reopened conversation opens at its first question (a recorded SDK decision); the app's
+  location history item (type 12) is still a TODO in the app and is not ported.
+
+Checks (all re-run together): android `:farmerchat-core:testDebugUnitTest` (254),
+`:farmerchat-android-views:testDebugUnitTest`, compose compile, `apiCheck` OK; iOS `swift test`
+(162, 0 failures), SwiftUI and UIKit `xcodebuild` for iOS Simulator OK, API diff vs HEAD no breaking
+change; RN `tsc`, `npm test`, `api:check` OK (API report updated); web `tsc`, `npm test`, build,
+`api:check` OK, widget build and size OK.

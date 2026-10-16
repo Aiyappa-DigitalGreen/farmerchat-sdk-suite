@@ -327,8 +327,9 @@ and `docs/04-parity-matrix.md` §"#27a real wire contract".
   object. Chip routing lives in ONE place — `core/ui/chat/AlignmentChipRouting.kt`
   (`routeAlignmentChip`) — used by both flavours; it prefers the backend's explicit
   `behavior`/`capability` and keeps the older `action`/`value` match working.
-- A surface's `blocking` flag now suppresses the "type or say it" escape hatch, because the backend
-  cannot proceed until such a surface is answered.
+- The "type or say it" escape hatch shows on every clarify/confirm surface while awaiting the first
+  pick, as in the app (`AlignmentSurface.kt`). It no longer depends on the surface's `blocking` flag
+  (2026-10-16), which had hidden it on DEMO.
 - `ChatAction.SendAlignmentChip` completes the port of the app's `ChatAction` (18 of 18). Every chip
   tap and both location-decline paths go through it, so a chip pick carries the source surface's
   `parent_message_id` and marks itself on that surface by value.

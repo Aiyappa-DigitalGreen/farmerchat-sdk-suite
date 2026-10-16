@@ -607,6 +607,15 @@ export interface TextPromptRequest {
    * answer arrives at once as done + metadata.
    */
   streaming_required?: boolean;
+  /**
+   * App TextPromptRequest.parent_message_id: the server `message_id` of the alignment surface a
+   * chip pick answers. Alignment sends only; omitted (never null) everywhere else.
+   */
+  parent_message_id?: string;
+  /** App TextPromptRequest.location_declined: only ever `true`, on a GPS_PROMPT decline. */
+  location_declined?: boolean;
+  /** App TextPromptRequest.photo_declined: only ever `true`, on an UPLOAD_PHOTO decline. */
+  photo_declined?: boolean;
 }
 
 export interface IntentClassificationOutput {

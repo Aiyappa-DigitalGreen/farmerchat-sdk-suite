@@ -271,7 +271,14 @@ export function HomeScreen(props: {
         if (question.trim().length > 0) {
           // HomeScreen.kt:1027-1051: the card image rides along display-only, and no
           // homeStatementId is sent on the agentic path.
-          props.onOpenChat({ source: 'home', question, contentCardImageUrl: section.image_url ?? undefined });
+          props.onOpenChat({
+            source: 'home',
+            question,
+            contentCardImageUrl: section.image_url ?? undefined,
+            // HomeScreen.kt:653-657: "image" → image_card, "statement" → text_card, else none.
+            contentCardTriggerType:
+              section.type === 'image' ? 'image_card' : section.type === 'statement' ? 'text_card' : undefined,
+          });
         }
         return;
       }

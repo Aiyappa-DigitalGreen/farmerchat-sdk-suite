@@ -123,23 +123,47 @@ export function ChatScreen(props: {
     return Array.from(new Set(parts)).join(', ');
   }, [services.store]);
 
-  /** A photo picked for an UPLOAD_PHOTO chip: attached in composer mode, sent immediately else. */
+  /**
+   * The UPLOAD_PHOTO surface whose Take photo / Choose from gallery chip opened the picker (app
+   * `alignmentPhotoSourceId`, ChatScreen.kt). Null when no chip-driven pick is pending.
+   */
+  const alignmentPhotoSourceRef = useRef<string | null>(null);
+
+  /**
+   * Outcome of a chip-driven photo pick. Port of the app's camera / gallery launcher callbacks
+   * (ChatScreen.kt:488-533, :537-585):
+   * - a photo → sent straight to chat, never into the composer (`sendAlignmentPhotoDirect`,
+   *   ChatScreen.kt:431-460: `SendQuestionWithImage(question = "")`);
+   * - nothing (picker cancelled) → the decline text `Labels.PHOTO_NOT_SHARED` sent as an alignment
+   *   pick on the surface (`sendAlignmentPhotoDeclineQuery`, ChatScreen.kt:469-482:
+   *   `SendAlignmentChip(query = text, selectionValue = text, photoDeclined = true)`), so the
+   *   blocking question still resolves: `align_chip_sel` + `parent_message_id` + `photo_declined`.
+   * Runs once per pick: the source is cleared first, so a `change` that follows a `cancel` (or vice
+   * versa) cannot send twice.
+   */
   const handleCapabilityPhoto = useCallback(
     (file: File | null | undefined) => {
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      if (isComposerUi) {
-        // App parity (Compose `cameraLauncher`/`galleryLauncher`): in composer mode the photo is
-        // ATTACHED so it can be sent together with typed text. Only one image is allowed, so a
-        // new pick replaces the old.
-        setAttachments([{ url, file, alt: label('photo_attached', 'Attached photo') }]);
-        composerRef.current?.focus();
+      const sourceId = alignmentPhotoSourceRef.current;
+      if (sourceId === null) return;
+      alignmentPhotoSourceRef.current = null;
+      if (file) {
+        void actions.sendQuestionWithImage('', file, URL.createObjectURL(file));
         return;
       }
-      void actions.sendQuestionWithImage('', file, url);
+      const declineText = label('fc_v2_app_label_photo_not_shared', "I don't have a photo to share right now");
+      void actions.selectAlignmentChip(sourceId, 'UPLOAD_PHOTO', { label: declineText, value: declineText });
     },
-    [actions, isComposerUi, label],
+    [actions, label],
   );
+
+  // A dismissed file picker fires `cancel` on the input (no `change`). Listen natively: React 18
+  // does not dispatch `cancel` for <input>.
+  useEffect(() => {
+    const inputs = [cameraInputRef.current, galleryInputRef.current].filter((i): i is HTMLInputElement => !!i);
+    const onCancel = () => handleCapabilityPhoto(null);
+    inputs.forEach((i) => i.addEventListener('cancel', onCancel));
+    return () => inputs.forEach((i) => i.removeEventListener('cancel', onCancel));
+  }, [handleCapabilityPhoto]);
 
   /**
    * Routes an alignment chip tap through the ONE routing table in `core/alignment.ts`: capability
@@ -161,24 +185,26 @@ export function ChatScreen(props: {
               void actions.sendLocationSharedQuery(messageId, resolveLocationAddress());
               return;
             }
-            // Denied / cancelled / fetch failed: still answer the blocking question, by sending
-            // the decline text as an ordinary follow-up. The app sends this through
-            // `SendAlignmentChip` with `locationDeclined` + parent_message_id; the SDK has
-            // neither, so the correlation and the chip analytics are lost (docs/04).
+            // Denied / cancelled / fetch failed: still answer the blocking question with the
+            // decline text, sent as an alignment pick on THIS surface — the app's
+            // `SendAlignmentChip(query = declineText, selectionValue = declineText,
+            // locationDeclined = true)` (ChatScreen.kt:376-380): `align_chip_sel`,
+            // `parent_message_id`, `location_declined: true`, and the decline marked as picked.
             //
             // The label key is real (app `Labels.kt:222`) but endpoint #3 does not serve it yet,
             // so the English fallback is what actually renders today. Do not shorten the key.
-            void actions.sendFollowUpQuestion(
-              label('fc_v2_app_label_location_permission_declined', 'Continue without sharing my location'),
-            );
+            const declineText = label('fc_v2_app_label_location_permission_declined', 'Continue without sharing my location');
+            void actions.selectAlignmentChip(messageId, 'GPS_PROMPT', { label: declineText, value: declineText });
           });
           break;
         case 'CAMERA':
           // Straight to the camera picker — NOT the composer's photo overlay, which would ask the
           // farmer to choose a source they already chose on the chip.
+          alignmentPhotoSourceRef.current = messageId;
           cameraInputRef.current?.click();
           break;
         case 'GALLERY':
+          alignmentPhotoSourceRef.current = messageId;
           galleryInputRef.current?.click();
           break;
         default:
@@ -240,6 +266,7 @@ export function ChatScreen(props: {
           ssfrCrop: params.ssfrCrop ?? null,
           channel: params.channel ?? null,
           contentCardImageUrl: params.contentCardImageUrl ?? null,
+          contentCardTriggerType: params.contentCardTriggerType ?? null,
         });
       }
     }
@@ -437,7 +464,7 @@ export function ChatScreen(props: {
         onClick={(_, q) => {
           const i = chat.suggestedQuestions?.indexOf(q) ?? -1;
           const id = i >= 0 ? chat.suggestedQuestionIds?.[i] : undefined;
-          void actions.sendFollowUpQuestion(q, { followUpQuestionId: id ?? null });
+          void actions.sendFollowUpQuestion(q, { followUpQuestionId: id ?? null, isFollowupPrompt: true });
         }}
       />
     </div>

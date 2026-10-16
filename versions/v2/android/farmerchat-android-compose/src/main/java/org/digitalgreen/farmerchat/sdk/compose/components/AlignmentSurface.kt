@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
@@ -69,10 +70,10 @@ fun AlignmentSurface(
     /** True when rendering below a real answer; suppresses the heading and escape hatch. */
     additive: Boolean = kind.isAdditive,
     /**
-     * The surface's wire `blocking` flag (2.0.0). True means the backend cannot proceed until this
-     * is answered, so the escape hatch is withheld — offering "type or say it" on a blocking
-     * surface invites the farmer down a path the backend will just re-ask. Live `gps-prompt`
-     * sends `blocking: true`; absent on the wire → false, the pre-2026-09-03 behaviour.
+     * The surface's wire `blocking` flag (2.0.0). Kept for source/binary compatibility only: it no
+     * longer gates anything. The app's escape-hatch condition (AlignmentSurface.kt:197-199) has
+     * no `blocking` term, so a blocking clarify/confirm still offers "Type or say it." while it
+     * awaits the first pick. Capability prompts (GPS / photo) never offer it, blocking or not.
      */
     blocking: Boolean = false,
     /** Listen pill (app AlignmentSurface.kt:76-80) — TTS for the live, exclusive surface. */
@@ -151,7 +152,7 @@ fun AlignmentSurface(
     // (accent, SemiBold), bodySmall, with only the CTA clickable.
     val escapeHatch: @Composable ColumnScope.() -> Unit = {
         if (chips.isNotEmpty() && !isEscalate && !isCapabilityPrompt && !additive &&
-            !hasPick && isLatest && !effectiveLoading && !blocking
+            !hasPick && isLatest && !effectiveLoading
         ) {
             Spacer(Modifier.height(12.dp))
             val hint = label(Labels.DONT_SEE_YOUR_OPTION, "Don't see your option?")
@@ -159,11 +160,18 @@ fun AlignmentSurface(
             val text = buildAnnotatedString {
                 withStyle(SpanStyle(color = colors.foregroundSecondary)) { append(hint) }
                 append(" ")
-                withLink(LinkAnnotation.Clickable(tag = "type_instead") { onTypeInstead() }) {
-                    withStyle(
-                        SpanStyle(color = colors.buttonPrimaryAccent, fontWeight = FontWeight.SemiBold)
-                    ) { append(cta) }
-                }
+                // App parity (AlignmentSurface.kt:208-215): accent + SemiBold, NOT underlined.
+                // A LinkAnnotation with null `styles` gets Compose's default link style, which
+                // underlines; the app's ClickableText span has no decoration. So the style goes
+                // in `styles`, which replaces that default.
+                val ctaStyle =
+                    SpanStyle(color = colors.buttonPrimaryAccent, fontWeight = FontWeight.SemiBold)
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = "type_instead",
+                        styles = TextLinkStyles(style = ctaStyle)
+                    ) { onTypeInstead() }
+                ) { append(cta) }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
