@@ -8690,3 +8690,23 @@ sample-question deep link was answered.
   App Store sizes differ (thinning, encryption): not measured.
 - Not changed, noted: no accessibility identifiers on SDK controls (UI tests match visible labels);
   `initialize_user` ran twice on the first open and runs again on every cold launch (not investigated).
+
+## Fresh-host test, React Native (2026-10-16)
+New Expo 52 app `~/ReactNativeProjects/FarmerChatRNDemo` (new architecture on, the Expo default).
+The SDK was installed from an `npm pack` tarball (not on npm yet), DEMO environment, run on the
+rs_qa emulator. PASS: guest init 201; languages, labels, terms, language, new_conversation 200; an
+agentic answer (after the "Please confirm" choice card); the `openChat(question)` deep link answered;
+the chat's X fires `onExit` and returns to the host. 0 crashes.
+- **FAIL: `<FarmerChatFab/>`** shows the red box "ScreenContainer is not attached under
+  ReactRootView". The FAB renders `FarmerChatView` inside a RN `<Modal>`, and the SDK's
+  native-stack (react-native-screens 4.4.0) cannot mount inside a Modal on the new architecture.
+  The repo's own example has the same versions and `newArchEnabled: true`; its FAB path was never
+  exercised. Workaround (in the RN README): render `FarmerChatView` in an absolute-fill View. A fix
+  is pending a decision (docs/05).
+- Gaps: RN `debugLogging` does not log the agentic stream request. Expo 52.0.49 needs RN 0.76.9
+  (0.76.6 fails on a Kotlin 1.9.24/1.9.25 mismatch). Both are in the RN README "Known issues".
+- To check against the app: typed questions in the composer go out as `SendFollowUpQuestion`
+  → `follow_up_question_click` (`ChatScreen.tsx:613`); DEMO answered 500 ×3 and `onError(500)`
+  fired even though the answer succeeded (docs/05).
+- Size: packed tarball 1.5 MB (3.5 MB unpacked, 426 files); Android Hermes bundle 3.7 MB
+  (`expo export`). The on-device APK delta was not measured.

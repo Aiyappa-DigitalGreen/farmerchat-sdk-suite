@@ -52,6 +52,9 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 - Semver-compatible dependency updates in every npm project, which cleared the critical
   `shell-quote` advisory.
 
+### Known issues
+- React Native `<FarmerChatFab/>` fails on the new architecture (Expo 52 default); see the RN README.
+
 ### Fixed
 - iOS SwiftUI `FarmerChatFabButton` drew a second close button over the chat-only chat screen.
 - Web and React Native no longer send FarmerChat headers (including `Device-Info`) to Google's

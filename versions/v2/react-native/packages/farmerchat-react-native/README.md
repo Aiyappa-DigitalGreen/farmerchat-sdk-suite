@@ -14,6 +14,18 @@ the SDK.
 - No third-party analytics/marketing SDKs inside — every event the production
   app tracks is emitted through your `onEvent` callback with identical names.
 
+## Known issues (2026-10-16)
+
+- **`<FarmerChatFab/>` fails on the new architecture** (`newArchEnabled: true`, the Expo 52 default):
+  it opens FarmerChat inside a React Native `<Modal>`, and the SDK's native-stack navigation then
+  reports `ScreenContainer is not attached under ReactRootView` (react-native-screens 4.4). Until
+  this is fixed, render `<FarmerChatView/>` yourself in a full-screen absolutely positioned `View`
+  (not a `Modal`), and remove it in `onExit`.
+- **Expo 52 version pin:** with `expo` 52.0.49, `react-native` 0.76.6 fails to build
+  (`expo-modules-core`: Compose Compiler needs Kotlin 1.9.25). Run `npx expo install --check`; it
+  moves you to 0.76.9, which builds.
+- `debugLogging` covers the regular API calls but not the streamed (agentic) answer request.
+
 ## Installation
 
 ### Expo (recommended)

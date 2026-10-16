@@ -846,3 +846,15 @@ work because `/app/` and `/demo/` go through the same-origin `/stage/` proxy.
 api-key` to `Access-Control-Allow-Headers` (and `Access-Control-Expose-Headers` if the SDK reads
 response headers). Until then the web SDK and the widget work only behind a proxy on the host's
 own domain. Native SDKs (Android, iOS, React Native) are unaffected: CORS is browser-only.
+
+## React Native `<FarmerChatFab/>` on the new architecture (2026-10-16)
+The FAB opens `FarmerChatView` in a RN `<Modal>`. With `newArchEnabled: true` (the Expo 52 default)
+and react-native-screens 4.4, the SDK's native-stack navigator fails inside the Modal ("ScreenContainer
+is not attached under ReactRootView"). Options: (a) the FAB renders an absolute-fill overlay plus
+BackHandler instead of a Modal. Proven in the test app, but the overlay is bounded by the FAB's
+parent, so the FAB must sit at screen level. (b) Keep the Modal and move the SDK to the JS stack
+(`@react-navigation/stack`, a new peer dependency). (c) A newer react-native-screens, if it
+fixes this; Expo 52 pins ~4.4. Needs a decision.
+
+Also: should typed composer questions after an answer use `follow_up_question_click`, as RN does
+now? Check against the app (DEMO answered 500 there).
