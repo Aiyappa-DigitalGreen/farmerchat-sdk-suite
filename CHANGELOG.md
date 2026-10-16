@@ -40,6 +40,12 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 - Android: SDK logs are silent unless `debugLogging` is set. Previously 18 log lines could appear in
   host release builds.
 - Web license changed from MIT to Apache-2.0 to match the rest of the suite.
+- **iOS FarmerChatCore, source-breaking:** `TextPromptResponse.followUpQuestions` and
+  `FollowUpQuestionsResponse.questions` changed from `[String]?` to `[FollowUpQuestionOption]?`.
+  The server sends objects (`follow_up_question_id`, `question`, `sequence`), so the old `[String]`
+  type never decoded the real payload; no host could have received a question through it. Code
+  that names the old type must read `.question` on each item. CI's API check flagged this; under
+  `VERSIONING.md` a public type change is MAJOR, so the next version number needs a decision.
 
 ### Security
 - Chat-answer links open only for `http(s)` on React Native and iOS SwiftUI (v1 and v2). Previously
