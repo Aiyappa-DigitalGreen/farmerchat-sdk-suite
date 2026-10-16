@@ -8733,3 +8733,43 @@ size:check; widget typecheck/build/size; demo-app build: all pass.
 Open: #30 `follow_up_question_click` is sent with the question text on EVERY send (`useChat.ts:915`).
 The app sends it only on a chip tap, with the follow-up id (`ChatViewModel.kt:957-963`). DEMO answers
 500. RN has the same; this is being settled with the RN pass.
+
+## Cross-platform fidelity pass: Android Views (2026-10-16)
+New host `~/AndroidStudioProjects/FarmerChatViewsDemo` (views artifact only, DEMO), emulator-5554,
+before/after screenshots of the 9 states. Fixed in `farmerchat-android-views`:
+1. Chat-header globe: a bare icon, now a 42dp #08361B rounded tile with a 23dp icon (`fc_view_appbar.xml`).
+2. Text field 6dp narrow while typing: the gap now exists only beside visible buttons (app `InputComposer.kt:493-497`).
+3. Question bubble: the 290dp cap had no effect (long questions reached 307dp). The cap is now on the
+   text, 258dp + padding (app `UserChatBubble.kt:89`).
+4. Brand-green strip behind the nav bar while the composer hides during streaming: now white like the
+   app. Composer path only, built in code, so the public API dump is unchanged.
+End to end on DEMO: language, streamed answer, follow-up chip (`follow_up_question_click` 200),
+Share chooser, Listen (`synthesise_audio` 200), ✕ → onExit, deep link. UNVERIFIED: voice, camera.
+Checks: `:farmerchat-android-views:compileDebugKotlin testDebugUnitTest apiCheck` pass.
+Known, not fixed: bubble text ~2% wider than compose (rounding/rasteriser, documented in `FcText.kt`).
+Compose drift found: the app paints the language screen's nav-bar strip grey (`LanguageScreen.kt:226-233`)
+but compose paints it white, so compose needs a fix. SDK-wide: views and compose hide "Type or say it" on a
+`blocking` clarify question; the app has no such check.
+
+## Cross-platform fidelity pass: iOS SwiftUI + Core fix (2026-10-16)
+Host `~/XcodeProjects/FarmerChatSwiftUIDemo`, iPhone 17 simulator, XCUITest with screenshots, DEMO.
+docs/04 had recorded "no branded app bar/glow, answers in a grey card, no composer", never closed and
+never run on a simulator. Fixed in `FarmerChatSwiftUI` (new `Components/ChatChrome.swift`):
+- header: #008236 bar + yellow bloom, #08361B rounded ✕/globe tiles, white logo fading in once answered;
+- answer: no card; disclaimer, Share (ring colour order fixed) and Listen pills restyled; Listen gets its
+  sound-wave playing/paused states;
+- user bubble: padding 16, square bottom-end corner (app over compose);
+- composer: floating green sheet, shimmer placeholder, breathing aura, slide-away while loading, Return = Done;
+- tips carousel during loading; reserve and scroll indicator above the composer;
+- stable accessibility ids (fcChatClose, fcComposerField, fcComposerSend, fcShare, fcListen, fcFollowUp_n, fcAnswerText).
+**Core bug fixed (FarmerChatCore):** `TextPromptResponse.followUpQuestions` was `[String]?`, but the
+agentic `metadata` event sends objects `{follow_up_question_id, sequence, question}`. The decode threw,
+the parser dropped the whole metadata event, and the answer lost its `message_id`, so there was no
+Listen on normal answers and follow-up clicks failed. It is now `@LossyOptional
+[FollowUpQuestionOption]?` like Android (`ChatModels.kt:80,121`). Regression tests use the payload
+captured from DEMO (`AgenticMetadataFollowUpsTests`, 3 tests). Verified after the fix: Listen appears
+on a normal answer and plays (`synthesise_audio` 200), and follow_up_questions returns 200.
+Checks: Core `swift build` + `swift test` (145, 0 failures); SwiftUI `xcodebuild` OK; host UI tests 2/2.
+UNVERIFIED: voice, camera, the shared card's content. Not fixed: a follow-up question isn't pinned to
+the top while its answer loads (it pins once answered). Tips use only the 3 built-in tips (server tip
+keys need a Core API).

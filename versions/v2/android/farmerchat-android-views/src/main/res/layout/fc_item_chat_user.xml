@@ -60,10 +60,15 @@
             android:layout_marginBottom="4dp"
             android:visibility="gone" />
 
+        <!-- maxWidth 258dp = the app bubble's widthIn(max = 290.dp) minus 2 x 16dp padding
+             (UserChatBubble.kt:89). The bubble's own android:maxWidth above is a no-op:
+             LinearLayout does not read it, so a wrapping question stretched the bubble to the
+             full 307dp row (1080px screen) instead of capping at 290dp. -->
         <TextView
             android:id="@+id/fcUserText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:maxWidth="258dp"
             android:textColor="@color/fc_foreground_primary"
             android:textSize="17sp"
             android:lineSpacingExtra="8sp"

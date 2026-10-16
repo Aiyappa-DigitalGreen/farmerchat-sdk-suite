@@ -91,6 +91,9 @@ internal class InputComposerView @JvmOverloads constructor(
         /** Compose slides the bar 400dp off-screen when `visible = false`. */
         const val HIDDEN_OFFSET = 400f
 
+        /** App Row spacedBy(6.dp) between camera | field | mic-send (InputComposer.kt:493-497). */
+        const val FIELD_GAP_DP = 6f
+
         /** Rotating-placeholder dwell and crossfade (Compose delay(3000) + fade 400). */
         const val PLACEHOLDER_ROTATE_MS = 3000L
         const val PLACEHOLDER_FADE_MS = 400L
@@ -408,6 +411,14 @@ internal class InputComposerView @JvmOverloads constructor(
         binding.fcComposerCamera.isVisible = cfg.enableImages &&
             photoUris.isEmpty() && binding.fcComposerInput.text.isNullOrBlank()
         binding.fcComposerAction.isVisible = content || cfg.enableVoice
+        // App Row(spacedBy(6.dp)) (InputComposer.kt:493-497): the 6dp gap exists only between
+        // VISIBLE children. A fixed margin left a phantom 6dp strip where the hidden camera was,
+        // so the focused/typed field sat 6dp narrower than the app's.
+        val gap = FIELD_GAP_DP.dpPx()
+        binding.fcComposerField.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            marginStart = if (binding.fcComposerCamera.isVisible) gap else 0
+            marginEnd = if (binding.fcComposerAction.isVisible) gap else 0
+        }
         binding.fcComposerAction.setImageResource(
             if (content) R.drawable.fc_icon_send else R.drawable.fc_icon_mic
         )

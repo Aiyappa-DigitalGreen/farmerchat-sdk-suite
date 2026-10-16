@@ -79,13 +79,16 @@
       are shown by ChatFragment only when the drawer is off and the feature is enabled.
       Placed before the weather pill so `end|center_vertical` stacking puts weather
       outermost when both are somehow visible.
+      Each action is a 42dp radius-12 dark tile (#08361B) with a 23dp white icon, 8dp apart and
+      16dp from the edge, matching the compose port's chatAppBarActions ActionButtons
+      (compose ChatScreen.kt chatAppBarActions, AppBars.kt spacedBy(8.dp), end = 16.dp).
     -->
     <LinearLayout
         android:id="@+id/fcAppBarActions"
         android:layout_width="wrap_content"
         android:layout_height="42dp"
         android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="16dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
@@ -94,8 +97,8 @@
             android:id="@+id/fcAppBarHistory"
             android:layout_width="42dp"
             android:layout_height="42dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:padding="9dp"
+            android:background="@drawable/fc_bg_appbar_chip"
+            android:padding="9.5dp"
             android:scaleType="fitCenter"
             android:src="@drawable/fc_icon_timer"
             android:visibility="gone"
@@ -105,8 +108,9 @@
             android:id="@+id/fcAppBarLanguage"
             android:layout_width="42dp"
             android:layout_height="42dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:padding="9dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/fc_bg_appbar_chip"
+            android:padding="9.5dp"
             android:scaleType="fitCenter"
             android:src="@drawable/fc_icon_language"
             android:visibility="gone"

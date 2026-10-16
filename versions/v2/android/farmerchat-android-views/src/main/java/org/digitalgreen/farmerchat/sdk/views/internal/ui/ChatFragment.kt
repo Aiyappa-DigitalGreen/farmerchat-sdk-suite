@@ -1,6 +1,10 @@
 package org.digitalgreen.farmerchat.sdk.views.internal.ui
 
 import org.digitalgreen.farmerchat.sdk.views.internal.util.FcInsets
+import android.view.ViewGroup
+import android.view.Gravity
+import android.widget.FrameLayout
+import androidx.core.view.updateLayoutParams
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
@@ -42,6 +46,7 @@ import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatState
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatViewModel
 import org.digitalgreen.farmerchat.sdk.views.R
+import org.digitalgreen.farmerchat.sdk.views.internal.theme.FcTokens
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcFragmentChatBinding
 import org.digitalgreen.farmerchat.sdk.views.databinding.FcShareCardBinding
 import org.digitalgreen.farmerchat.sdk.views.internal.BaseFragment
@@ -118,6 +123,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding = FcFragmentChatBinding.bind(view)
+        installNavBackdrop()
         // App parity (ChatLoadingContent.kt:92): the pre-thread "Getting your answer…" loader is
         // LogoSpinnerHorizontal — compact ring + shimmering label — not the vertical stack.
         binding.fcChatLoading.horizontal = true
@@ -379,6 +385,35 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             uri != null -> vm.onAction(ChatAction.SendQuestionWithImage(text, uri))
             text.isNotBlank() -> vm.onAction(ChatAction.SendFollowUpQuestion(text))
         }
+    }
+
+    /**
+     * The chat root is brand green so the status-bar strip above the app bar matches the bar,
+     * and its `fitsSystemWindows` column leaves the NAV-bar strip transparent - so that strip
+     * showed the same green whenever the composer (whose white wrapper normally covers it) slid
+     * away while an answer streamed. The app's page is white there (surfaceReadingPrimary;
+     * ChatScreen.kt:1752 hides only the composer). This paints the strip in the page colour,
+     * sized to the nav-bar inset. Built in code, not XML, so the generated view binding (part of
+     * the published API dump) does not change.
+     */
+    private fun installNavBackdrop() {
+        // Composer path only: the legacy Photo/Speak/Type row sits on the green root, and its
+        // nav strip stays green exactly as before (a host that does not opt in sees no change).
+        if (!isComposerUi) return
+        val root = binding.root as? FrameLayout ?: return
+        val backdrop = View(requireContext()).apply {
+            setBackgroundColor(FcTokens.color(requireContext(), R.color.fc_surface_reading))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        root.addView(backdrop, 0, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 0, Gravity.BOTTOM))
+        fun size() {
+            val navBottom = FcInsets.overlapping(root, WindowInsetsCompat.Type.navigationBars()).bottom
+            if (backdrop.layoutParams.height != navBottom) {
+                backdrop.updateLayoutParams<ViewGroup.LayoutParams> { height = navBottom }
+            }
+        }
+        // Posted: resizing a view from inside a layout pass would request layout mid-layout.
+        root.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> v.post { size() } }
     }
 
     private fun reserveComposerSpace(barHeightPx: Int) {
