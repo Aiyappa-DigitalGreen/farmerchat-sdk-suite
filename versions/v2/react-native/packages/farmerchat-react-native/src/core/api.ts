@@ -6,6 +6,7 @@
  * follow-ups, synthesise, transcribe, chat history (per the doc, including
  * the "getChatHistory says P2 but code uses P3" quirk); P2 → everything else.
  */
+import { toLocationWire } from './locationWire';
 import type { ApiResult } from './apiResult';
 import { GOOGLE_GEOLOCATE_URL, type ResolvedFarmerChatConfig } from './config';
 import type { HttpClient } from './httpClient';
@@ -161,7 +162,9 @@ export class FarmerChatApi {
       method: 'POST',
       path: 'api/user/update_user_location/',
       apiName: 'update_user_location',
-      body,
+      // The app sends lat/long as strings (`UpdateLocationRequest(lat: String?, long: String?)`), as
+      // the Android SDK does. Numbers made DEMO fail the weather question re-sent after a GPS share.
+      body: toLocationWire(body),
     });
   }
 

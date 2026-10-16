@@ -65,6 +65,9 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- iOS, React Native, web: `update_user_location` sent `lat`/`long` as numbers; the app and the
+  Android SDK send strings. On DEMO, the weather question re-sent after sharing GPS was answered
+  "Sorry, I had a problem just now".
 - Hosted demo site: the web app and widget ran on the stage backend; they now use DEMO.
 - Integration guide and Theme Studio "Get SDK": `guestApiKey` (renamed in 2.2.0), wrong versions and
   Maven group, Objective-C examples on PROD, and "past chats in chat-only mode" corrected.

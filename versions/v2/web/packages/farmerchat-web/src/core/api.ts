@@ -3,6 +3,7 @@
  * methods and ApiPriority assignments (docs/02-api-reference.md).
  */
 
+import { toLocationWire } from './locationWire';
 import { HttpClient, ApiResult } from './http';
 import { GEOLOCATE_URL } from './config';
 import { isAbortError, readAgenticStream, thrownMessage } from './agenticStream';
@@ -147,7 +148,10 @@ export class FarmerChatApi {
   }
 
   updateUserLocation(body: UpdateLocationRequest): Promise<ApiResult<GetLocationResponse>> {
-    return this.http.request({ method: 'POST', path: 'api/user/update_user_location/', body, priority: 'P2' });
+    // The app sends lat/long as strings (`UpdateLocationRequest(lat: String?, long: String?)`), as the
+    // Android SDK does. Numbers made DEMO answer "Sorry, I had a problem" to the weather question
+    // re-sent after a GPS share (2026-10-16), so the wire value is the string form.
+    return this.http.request({ method: 'POST', path: 'api/user/update_user_location/', body: toLocationWire(body), priority: 'P2' });
   }
 
   // --- #12..#15 home ------------------------------------------------------------

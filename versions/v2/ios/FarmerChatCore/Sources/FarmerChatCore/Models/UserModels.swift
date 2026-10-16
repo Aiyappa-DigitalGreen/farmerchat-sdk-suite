@@ -322,6 +322,43 @@ public struct UpdateLocationRequest: Codable, Sendable {
         case osmResponse = "osm_response"
     }
 
+    /// `lat`/`long` go on the wire as strings, as the app sends them
+    /// (`UpdateLocationRequest(lat: String?, long: String?)`) and as the Android SDK does. Numbers
+    /// made DEMO fail the weather question re-sent after a GPS share (2026-10-16).
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(lat.map { String($0) }, forKey: .lat)
+        try c.encodeIfPresent(long.map { String($0) }, forKey: .long)
+        try c.encode(userId, forKey: .userId)
+        try c.encodeIfPresent(country, forKey: .country)
+        try c.encodeIfPresent(level2, forKey: .level2)
+        try c.encodeIfPresent(level3, forKey: .level3)
+        try c.encodeIfPresent(level4, forKey: .level4)
+        try c.encodeIfPresent(level5, forKey: .level5)
+        try c.encodeIfPresent(level6, forKey: .level6)
+        try c.encodeIfPresent(displayAddress, forKey: .displayAddress)
+        try c.encodeIfPresent(osmResponse, forKey: .osmResponse)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func coord(_ key: CodingKeys) throws -> Double? {
+            if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d }
+            return try c.decodeIfPresent(String.self, forKey: key).flatMap(Double.init)
+        }
+        lat = try coord(.lat)
+        long = try coord(.long)
+        userId = try c.decode(String.self, forKey: .userId)
+        country = try c.decodeIfPresent(String.self, forKey: .country)
+        level2 = try c.decodeIfPresent(String.self, forKey: .level2)
+        level3 = try c.decodeIfPresent(String.self, forKey: .level3)
+        level4 = try c.decodeIfPresent(String.self, forKey: .level4)
+        level5 = try c.decodeIfPresent(String.self, forKey: .level5)
+        level6 = try c.decodeIfPresent(String.self, forKey: .level6)
+        displayAddress = try c.decodeIfPresent(String.self, forKey: .displayAddress)
+        osmResponse = try c.decodeIfPresent(JSONValue.self, forKey: .osmResponse)
+    }
+
     public init(
         userId: String,
         lat: Double? = nil,

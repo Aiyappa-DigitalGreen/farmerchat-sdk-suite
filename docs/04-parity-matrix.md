@@ -8922,10 +8922,12 @@ web `tsc`, `npm test`, build, `api:check`, size OK; widget `tsc`, build, size OK
   STAGE against the user rule "use demo in all platforms". Upstream is now `mobile-app-demo/` (also the
   local `stage-proxy.mjs` default); the pages pass `environment: 'demo'`. The `/stage/` route keeps its
   name. Live check (headless Chrome on the deployed widget): "weather" → a real 3-day forecast; the
-  first weather question → `gps-prompt` surface. **Open (backend):** after "Give permission"
-  (`update_user_location` 200) the re-send (original query, `align_chip_sel`, `parent_message_id`,
-  the same body as the app, `ChatViewModel.kt:1061-1110`) returns 200 with the answer text "Sorry, I
-  had a problem just now. Please ask your question again." (DEMO's own text; not in any SDK).
+  first weather question → `gps-prompt` surface. **Fixed (SDK, not backend):** after "Give permission" the re-sent question got DEMO's answer "Sorry,
+  I had a problem just now". Android, on the same DEMO backend, got a real forecast on both the share
+  and decline paths, so it was the SDKs: iOS, RN and web sent `update_user_location` `lat`/`long` as
+  JSON numbers, where the app (`UpdateLocationRequest(lat: String?, long: String?)`) and the Android
+  SDK send strings. All three now send strings (web/RN `core/locationWire.ts`, iOS
+  `UpdateLocationRequest.encode(to:)`, public types unchanged), with tests on each.
 - **Integration guide is generated again.** `tools/guide-gen` had fallen behind the hand-edited hosted
   guide; it now produces `web/railway/guide/index.html` and Theme Studio's `guide.data.json`. Fixed on
   the way: ObjC examples used `FCEnvironmentProd` (3), "past chats show in chat-only" (9, wrong since
