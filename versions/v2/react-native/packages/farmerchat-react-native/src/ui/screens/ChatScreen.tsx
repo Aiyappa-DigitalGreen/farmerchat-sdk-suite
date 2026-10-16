@@ -69,12 +69,17 @@ import {
   type PickedImage,
   type RecordedAudio,
 } from '../components/InputOverlays';
-import { InputComposer, type InputComposerHandle } from '../components/InputComposer';
+import {
+  composerBarHeight,
+  InputComposer,
+  type InputComposerHandle,
+} from '../components/InputComposer';
 import { LocationChatBubble } from '../components/LocationChatBubble';
 import { useShareCard } from '../components/ShareCard';
 import { stopAllVoiceClips, VoiceClip } from '../components/VoiceClip';
 import { FcIcon } from '../components/Icon';
 import { ChatEmptyState } from '../components/ChatEmptyState';
+import { Tips } from '../components/Tips';
 import { SweepBorder } from '../components/Gradients';
 import type { ChatRouteParams } from '../navigation/types';
 import { Green500, radius, spacing, typography } from '../theme';
@@ -105,6 +110,8 @@ export function ChatScreen(props: {
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const [textInputVisible, setTextInputVisible] = useState(false);
+  // Compose SDK ChatScreen.kt:1512: the empty state hides while the text composer is active.
+  const [composerFocused, setComposerFocused] = useState(false);
   const [voiceInputVisible, setVoiceInputVisible] = useState(false);
   const [photoInputVisible, setPhotoInputVisible] = useState(false);
   const [permissionDialog, setPermissionDialog] = useState<'camera' | 'microphone' | null>(null);
@@ -338,13 +345,14 @@ export function ChatScreen(props: {
   const scrollToContentEnd = useCallback(() => {
     const blank = tailBlank();
     if (blank <= 0) {
-      listRef.current?.scrollToEnd({ animated: true });
+      // Not animated: see scrollToAnchor (stuck momentum state swallows taps on Android).
+      listRef.current?.scrollToEnd({ animated: false });
       return;
     }
     const { content, viewport } = scrollMetrics.current;
     listRef.current?.scrollToOffset({
       offset: Math.max(0, content - blank - viewport),
-      animated: true,
+      animated: false,
     });
   }, [tailBlank]);
 
@@ -366,7 +374,13 @@ export function ChatScreen(props: {
   const scrollToAnchor = useCallback((index: number) => {
     // viewOffset 20 = the thread's paddingTop (the cell offsets already include it), i.e. the
     // web's `offsetTop - 20` / Compose's anchor with the 20dp content padding.
-    listRef.current?.scrollToIndex({ index, viewPosition: 0, viewOffset: 20, animated: true });
+    // animated: false on purpose. On RN 0.76 Android an ANIMATED programmatic scroll emits
+    // onMomentumScrollBegin but never onMomentumScrollEnd, which leaves ScrollView's JS
+    // `_isAnimating()` true; its responder-capture then swallows every tap in the list (Share,
+    // Listen, follow-up and clarify chips on every answer after the first) until the farmer
+    // drags. Seen on DEMO, emulator, 2026-10-16. The app animates this scroll
+    // (animateScrollToItem); the instant jump is the recorded difference.
+    listRef.current?.scrollToIndex({ index, viewPosition: 0, viewOffset: 20, animated: false });
   }, []);
   // Without getItemLayout an unmeasured row fails: jump near it, then retry a bounded number of
   // times once FlatList has rendered and measured it.
@@ -424,7 +438,8 @@ export function ChatScreen(props: {
   const sendFollowUpText = useCallback(
     (text: string) => {
       setTextInputVisible(false);
-      onAction({ type: 'SendFollowUpQuestion', question: text });
+      // Typed text is a plain text query, not a follow-up (app ChatScreen.kt:1764-1811).
+      onAction({ type: 'SendFollowUpQuestion', question: text, isFollowupPrompt: false });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -610,7 +625,9 @@ export function ChatScreen(props: {
           imageBase64: image.base64,
         });
       } else if (text.trim().length > 0) {
-        onAction({ type: 'SendFollowUpQuestion', question: text.trim() });
+        // App ChatScreen.kt:1764-1811: the composer sends isFollowupPrompt = false with no
+        // follow-up id, so the request is triggered_input_type "text" and #30 is not called.
+        onAction({ type: 'SendFollowUpQuestion', question: text.trim(), isFollowupPrompt: false });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -735,7 +752,16 @@ export function ChatScreen(props: {
               // App parity (ChatThreadContent.kt): a pre-generated answer never shows the
               // clarification treatment.
               followUpsClarification={state.clarificationRequired && item.isPreGenerated !== true}
-              onFollowUp={(q) => onAction({ type: 'SendFollowUpQuestion', question: q })}
+              // App ChatResponseActions.kt:241-248 -> ChatScreen.kt:959-971: a chip tap carries
+              // its follow-up id (suggestedQuestionIds[index]) and isFollowupPrompt = true.
+              onFollowUp={(q, index) =>
+                onAction({
+                  type: 'SendFollowUpQuestion',
+                  question: q,
+                  followUpQuestionId: state.suggestedQuestionIds?.[index] ?? null,
+                  isFollowupPrompt: true,
+                })
+              }
               onAlignmentChipPress={(chip) => handleAlignmentChip(item.id, alignmentKind, chip)}
               isThreadLoading={state.isLoading}
               onRetryStream={() => onAction({ type: 'RetryLastRequest' })}
@@ -768,7 +794,13 @@ export function ChatScreen(props: {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.surfaceReading }]}>
+    // App parity (LogoAppBar.kt:53-54, MainActivity.kt:126): edge-to-edge, so the green bar and
+    // its glow extend under the status bar. LogoAppBar already pads its row by insets.top; a
+    // top edge here as well left a white status-bar strip and a double inset.
+    <SafeAreaView
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.surfaceReading }]}
+    >
       <LogoAppBar
         // ChatScreen.kt: History → Menu; Home → the self-contained R.drawable.leftbutton back
         // arrow. CHAT_ONLY has no Home behind it, so it keeps the close glyph (as on web).
@@ -793,7 +825,8 @@ export function ChatScreen(props: {
             props.onClose();
           }
         }}
-        showLogo={uiState.kind === 'thread' && !state.isLoading}
+        // The empty chat (SDK addition) has no thread yet: no logo, as on the compose SDK.
+        showLogo={uiState.kind === 'thread' && !state.isLoading && state.messages.length > 0}
         // ChatFragment.setUpAppBarActions / web ChatScreen: with the drawer OFF (the CHAT_ONLY
         // default) there is otherwise no way to reach Past Advice or the language screen. History
         // is gated on showHistory; language is always shown — it is the only way to change
@@ -849,6 +882,8 @@ export function ChatScreen(props: {
               style={INLINE_SPINNER_STYLE}
             />
           </View>
+          {/* ChatScreen.kt:193 / ChatLoadingContent.kt:59-99: the Tips carousel at the bottom. */}
+          <Tips bottomOffset={isComposerUi ? HIDDEN_COMPOSER_HEIGHT : 0} />
         </View>
       ) : uiState.kind === 'error' ? (
         // ChatErrorContent.kt: same column; the question bubble, then InlineErrorContent (fixed
@@ -935,6 +970,12 @@ export function ChatScreen(props: {
               onPress={scrollToContentEnd}
               style={styles.scrollIndicator}
             />
+            {/* App parity (ChatThreadContent.kt:605-685): the tips stay up for the whole wait and
+                go the moment the streamed answer produces its first text. */}
+            {state.isLoading &&
+            !(lastAi?.isStreaming === true && (lastAi.text ?? '').trim().length > 0) ? (
+              <Tips bottomOffset={isComposerUi ? HIDDEN_COMPOSER_HEIGHT : 0} />
+            ) : null}
             {/* SDK addition (no app counterpart — the app always enters chat with a question):
                 a centred placeholder while the thread is empty. It fills the list's box, which
                 ends above the composer / input row (flow siblings), so neither overlaps it, and
@@ -942,6 +983,7 @@ export function ChatScreen(props: {
             {state.messages.length === 0 &&
             !state.isLoading &&
             !isHistoryEntry &&
+            !composerFocused &&
             !textInputVisible &&
             !voiceInputVisible &&
             !photoInputVisible ? (
@@ -989,7 +1031,10 @@ export function ChatScreen(props: {
           bottomInset={0}
           // Slides off-screen while an answer is generating, then back — the same visibility
           // rhythm PrimaryInputButtons has in the legacy layout.
-          visible={!(uiState.kind === 'thread' && state.isLoading)}
+          // App: ChatScreen.kt:193 (first-question Loading content has no composer) and
+          // ChatScreen.kt:1752 (Thread && isLoading slides it away).
+          visible={uiState.kind !== 'loading' && !(uiState.kind === 'thread' && state.isLoading)}
+          onFocusChange={setComposerFocused}
           surfaceColor={theme.brand.surfacePrimary}
           fadeColor={theme.content.surfaceReadingPrimary}
           placeholder={label(Labels.ASK_ABOUT_YOUR_FARM, 'Ask about your farm...')}
@@ -1178,7 +1223,7 @@ function AiBubble(props: {
   followUps: string[] | null;
   /** "Choose an option from the below" title + agentic chips instead of "You can also ask". */
   followUpsClarification: boolean;
-  onFollowUp: (question: string) => void;
+  onFollowUp: (question: string, index: number) => void;
   // ---- agentic (2.0.0) ----
   /** Tapped chip on an ADDITIVE alignment surface rendered below this answer. */
   onAlignmentChipPress?: (chip: AlignmentChip) => void;
@@ -1353,7 +1398,7 @@ function AiBubble(props: {
                         label={q}
                         number={index + 1}
                         visual={props.followUpsClarification ? 'agentic' : 'suggested'}
-                        onPress={() => props.onFollowUp(q)}
+                        onPress={() => props.onFollowUp(q, index)}
                       />
                     ))}
                   </View>
@@ -1609,6 +1654,13 @@ function ThreadFooter(props: { showError: boolean; onRetry: () => void }): React
     </View>
   );
 }
+
+/**
+ * The resting composer's layout height (floating, not compact, bottomInset 0 as mounted below).
+ * While an answer loads the composer slides away but keeps this box; the Tips band extends over
+ * it so it sits at the screen bottom as in the app.
+ */
+const HIDDEN_COMPOSER_HEIGHT = composerBarHeight({ floating: true, compact: false, bottomInset: 0 });
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

@@ -24,3 +24,32 @@ export function onSdkExit(fn: Listener): () => void {
     listeners.delete(fn);
   };
 }
+
+/**
+ * Whether the visible SDK screen draws its own exit (the CHAT_ONLY chat's ✕). Published by the
+ * nav graph on every route change so a presenter (FarmerChatFab) can hide its fallback close
+ * there and only there (iOS FarmerChatFabButton parity, `FCScreenHasOwnExitKey`).
+ */
+type OwnExitListener = (hasOwnExit: boolean) => void;
+const ownExitListeners = new Set<OwnExitListener>();
+let screenHasOwnExit = false;
+
+export function setScreenHasOwnExit(value: boolean): void {
+  if (value === screenHasOwnExit) return;
+  screenHasOwnExit = value;
+  ownExitListeners.forEach((fn) => {
+    try {
+      fn(value);
+    } catch {
+      // a wrapper's error never breaks the SDK
+    }
+  });
+}
+
+export function onScreenHasOwnExit(fn: OwnExitListener): () => void {
+  ownExitListeners.add(fn);
+  fn(screenHasOwnExit);
+  return () => {
+    ownExitListeners.delete(fn);
+  };
+}

@@ -49,6 +49,7 @@
 import type { ResolvedFarmerChatConfig } from './config';
 import { BUILD_VERSION_HEADER_VALUE } from './config';
 import { getDeviceInfoHeader } from './deviceInfo';
+import { logPath } from './httpClient';
 import {
   AgenticEventFramer,
   StreamErrorKinds,
@@ -232,6 +233,25 @@ export class AgenticChatDataSource {
     const queue = new AsyncEventQueue<AgenticEvent>();
     const framer = new AgenticEventFramer();
     const xhr = new Xhr();
+    const startedAt = Date.now();
+    let logged = false;
+    /**
+     * `debugLogging`: one line per attempt in HttpClient's format, written when the status is
+     * known (headers received; time-to-first-byte, as fetch's line is). Path only, never the
+     * query. `rid=-` because this request carries no X-Request-ID (Android agenticClient parity,
+     * see the header comment).
+     */
+    const logOnce = (outcome: string): void => {
+      if (logged || !this.config.debugLogging) return;
+      logged = true;
+      try {
+        console.debug(
+          `[FarmerChat] POST ${logPath(url)} -> ${outcome} (${Date.now() - startedAt}ms) rid=-`,
+        );
+      } catch {
+        // logging never breaks a request
+      }
+    };
 
     let unauthorized = false;
     let terminated = false;
@@ -302,6 +322,7 @@ export class AgenticChatDataSource {
           if (headersChecked) return;
           headersChecked = true;
           const status = xhr.status;
+          if (status !== 0) logOnce(String(status));
           if (status === 401 && canRefreshAuth) {
             unauthorized = true;
             finish();
@@ -328,6 +349,7 @@ export class AgenticChatDataSource {
           if (!terminated) emit(framer.flush());
           if (!terminated) {
             // status 0 at DONE means the transport failed without an HTTP response.
+            logOnce(xhr.status === 0 ? 'ERR network' : String(xhr.status));
             if (xhr.status === 0 && !sawFailure) {
               queue.push({
                 type: 'failure',
@@ -351,10 +373,12 @@ export class AgenticChatDataSource {
     };
 
     xhr.onerror = (): void => {
+      logOnce('ERR network');
       failAndFinish('Network error', StreamErrorKinds.NETWORK);
     };
 
     xhr.ontimeout = (): void => {
+      logOnce('ERR timeout');
       // Should be unreachable: timeout is 0. Kept so a host-patched XHR cannot hang the queue.
       failAndFinish('Request timed out', StreamErrorKinds.NETWORK);
     };

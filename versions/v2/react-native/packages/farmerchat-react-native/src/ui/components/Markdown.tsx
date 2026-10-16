@@ -105,84 +105,146 @@ export function MarkdownText(props: {
   // Chat UI customization: message body font size (undefined = typography.body).
   const sizeStyle = props.fontSize != null ? { fontSize: props.fontSize } : undefined;
   const lines = props.markdown.replace(/\r\n/g, '\n').split('\n');
-  const blocks: React.ReactElement[] = [];
 
-  lines.forEach((rawLine, index) => {
-    const line = rawLine.trimEnd();
-    const key = `md-${index}`;
-    if (line.trim().length === 0) {
-      blocks.push(<View key={key} style={{ height: spacing.sm }} />);
-      return;
+  // App MarkdownText.kt:519-580 parseMarkdownBlocks: blank lines are skipped (spacing is
+  // derived from block kinds, never from blank lines).
+  type Block =
+    | { kind: 'divider' }
+    | { kind: 'header'; level: number; text: string }
+    | { kind: 'quote'; text: string }
+    | { kind: 'bullet'; text: string }
+    | { kind: 'numbered'; number: string; text: string }
+    | { kind: 'paragraph'; text: string };
+  const parsed: Block[] = [];
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (trimmed.length === 0) continue;
+    if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+      parsed.push({ kind: 'divider' });
+      continue;
     }
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
     if (heading) {
-      const level = (heading[1] ?? '#').length;
-      blocks.push(
-        <Text
-          key={key}
-          style={[
-            level <= 2 ? typography.heading : typography.subheading,
-            { color, marginTop: spacing.sm },
-          ]}
-        >
-          {heading[2] ?? ''}
-        </Text>,
-      );
-      return;
+      parsed.push({
+        kind: 'header',
+        level: Math.min(3, (heading[1] ?? '#').length),
+        text: (heading[2] ?? '').trim(),
+      });
+      continue;
     }
-    const quote = /^\s*>\s?(.*)$/.exec(line);
+    const quote = /^>\s?(.*)$/.exec(trimmed);
     if (quote) {
-      blocks.push(
-        <View key={key} style={[styles.quoteRow, { borderLeftColor: theme.brandPrimary }]}>
-          <InlineText
-            text={quote[1] ?? ''}
-            color={theme.textSecondary}
-            linkColor={theme.brandPrimary}
-            baseStyle={{ fontStyle: 'italic', ...sizeStyle }}
-          />
-        </View>,
-      );
-      return;
+      parsed.push({ kind: 'quote', text: quote[1] ?? '' });
+      continue;
     }
-    const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
+    const bullet = /^[-*•]\s+(.*)$/.exec(trimmed);
     if (bullet) {
-      blocks.push(
-        <View key={key} style={styles.listRow}>
-          <Text style={[typography.body, { color }, sizeStyle]}>{'• '}</Text>
-          <View style={{ flex: 1 }}>
-            <InlineText text={bullet[1] ?? ''} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />
-          </View>
-        </View>,
-      );
-      return;
+      parsed.push({ kind: 'bullet', text: bullet[1] ?? '' });
+      continue;
     }
-    const numbered = /^\s*(\d+)[.)]\s+(.*)$/.exec(line);
+    const numbered = /^(\d+)[.)]\s+(.*)$/.exec(trimmed);
     if (numbered) {
-      blocks.push(
-        <View key={key} style={styles.listRow}>
-          <Text style={[typography.body, { color }, sizeStyle]}>{`${numbered[1]}. `}</Text>
-          <View style={{ flex: 1 }}>
-            <InlineText
-              text={numbered[2] ?? ''}
-              color={color}
-              linkColor={theme.brandPrimary}
-              baseStyle={sizeStyle}
-            />
-          </View>
-        </View>,
-      );
-      return;
+      parsed.push({ kind: 'numbered', number: numbered[1] ?? '', text: numbered[2] ?? '' });
+      continue;
     }
-    blocks.push(
-      <InlineText key={key} text={line} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />,
-    );
+    parsed.push({ kind: 'paragraph', text: trimmed });
+  }
+
+  // App MarkdownText.kt:106-122 vertical rhythm.
+  const topSpacing = (block: Block, prev: Block | undefined): number => {
+    if (!prev) return 0;
+    if (block.kind === 'divider' || prev.kind === 'divider') return 24;
+    if (block.kind === 'header') return 24;
+    if (prev.kind === 'header') return 20;
+    if (block.kind === 'bullet' && prev.kind === 'bullet') return 5;
+    if (block.kind === 'numbered' && prev.kind === 'numbered') return 5;
+    if (block.kind === 'paragraph' && prev.kind === 'paragraph') return 20;
+    return 12;
+  };
+
+  const blocks: React.ReactElement[] = [];
+  parsed.forEach((block, index) => {
+    const key = `md-${index}`;
+    const gap = topSpacing(block, parsed[index - 1]);
+    if (gap > 0) blocks.push(<View key={`${key}-gap`} style={{ height: gap }} />);
+    switch (block.kind) {
+      case 'divider':
+        // 3dp borderDefault pill (MarkdownText.kt:125-133).
+        blocks.push(
+          <View
+            key={key}
+            style={{ height: 3, borderRadius: 2, backgroundColor: theme.content.borderDefault }}
+          />,
+        );
+        return;
+      case 'header': {
+        // # titleLarge, ## titleMedium, ###+ titleSmall (MarkdownText.kt:140-149).
+        const headerStyle =
+          block.level === 1
+            ? typography.titleLarge
+            : block.level === 2
+              ? typography.titleMedium
+              : typography.titleSmall;
+        blocks.push(
+          <InlineText
+            key={key}
+            text={block.text}
+            color={color}
+            linkColor={theme.brandPrimary}
+            baseStyle={headerStyle}
+          />,
+        );
+        return;
+      }
+      case 'quote':
+        blocks.push(
+          <View key={key} style={[styles.quoteRow, { borderLeftColor: theme.brandPrimary }]}>
+            <InlineText
+              text={block.text}
+              color={theme.textSecondary}
+              linkColor={theme.brandPrimary}
+              baseStyle={{ fontStyle: 'italic', ...sizeStyle }}
+            />
+          </View>,
+        );
+        return;
+      case 'bullet':
+        // 5dp filled circle in the text colour, 10dp from the top, 10dp gap (:161-182).
+        blocks.push(
+          <View key={key} style={styles.bulletRow}>
+            <View style={[styles.bulletDot, { backgroundColor: color }]} />
+            <View style={{ flex: 1 }}>
+              <InlineText text={block.text} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />
+            </View>
+          </View>,
+        );
+        return;
+      case 'numbered':
+        // "N." then a 4dp gap (:184-198).
+        blocks.push(
+          <View key={key} style={styles.numberedRow}>
+            <Text style={[typography.body, { color }, sizeStyle]}>{`${block.number}.`}</Text>
+            <View style={{ flex: 1 }}>
+              <InlineText text={block.text} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />
+            </View>
+          </View>,
+        );
+        return;
+      case 'paragraph':
+        blocks.push(
+          <InlineText key={key} text={block.text} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />,
+        );
+        return;
+    }
   });
 
   return <View>{blocks}</View>;
 }
 
 const styles = StyleSheet.create({
-  listRow: { flexDirection: 'row', alignItems: 'flex-start', marginVertical: 2 },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  bulletDot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 10 },
+  numberedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
   quoteRow: {
     borderLeftWidth: 3,
     paddingLeft: spacing.sm,

@@ -111,7 +111,7 @@ export function LanguageSelectionScreen(props: {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24 },
+          { paddingTop: insets.top + 32 }, // LanguageScreen.kt:361-370: 32 top
         ]}
       >
         {/* App parity (LanguageScreen.kt:371-376): the mark is 32 dp and tinted borderActive —
@@ -130,7 +130,7 @@ export function LanguageSelectionScreen(props: {
         <Text
           style={[
             typography.bodyMedium,
-            { color: c.foregroundSecondary, textAlign: 'center', marginTop: 6, marginBottom: 24 },
+            { color: c.foregroundSecondary, textAlign: 'center', marginTop: 8, marginBottom: 24 },
           ]}
         >
           {label(Labels.YOU_CHANGE_LATER, 'You can change this later')}
@@ -163,13 +163,14 @@ export function LanguageSelectionScreen(props: {
       <View
         style={[
           styles.bottomBar,
-          { backgroundColor: c.surfaceSecondary, paddingBottom: 12 + insets.bottom },
+          { backgroundColor: c.surfaceSecondary, paddingBottom: 16 + insets.bottom },
         ]}
       >
+        {/* LanguageScreen.kt:250-255: the panel title is titleLarge 22/28 w700, black. */}
         <Text
           style={[
-            typography.bodySmall,
-            { color: c.foregroundSecondary, textAlign: 'center' },
+            typography.titleLarge,
+            { color: c.foregroundPrimary, textAlign: 'center' },
           ]}
         >
           {label(Labels.FARMERCHAT_TAGLINE, 'FarmerChat: Practical advice for your crops & livestock')}
@@ -199,13 +200,15 @@ export function LanguageSelectionScreen(props: {
             `textAlign: 'justify'` is honoured on iOS only — on Android RN falls back to left,
             which is where the app's justified text puts its last line anyway. Recorded in
             docs/04. */}
-        <Text style={[typography.labelSmall, styles.legal, { color: c.foregroundSecondary }]}>
+        {/* LanguageScreen.kt:274-356: caption 13/18 w400 foregroundSecondary, justified, max
+            260; both links underlined in the SAME grey (not black, not bold). */}
+        <Text style={[typography.caption, styles.legal, { color: c.foregroundSecondary }]}>
           {label(
             Labels.BY_CONTINUING_YOU_AGREE_TO_OUR,
             'FarmerChat uses AI. By continuing, you agree to our',
           )}{' '}
           <Text
-            style={[styles.legalLink, { color: c.foregroundPrimary }]}
+            style={[styles.legalLink, { color: c.foregroundSecondary }]}
             onPress={() =>
               state.termsOfUseUrl &&
               props.onOpenLegal(state.termsOfUseUrl, label(Labels.TERMS_OF_USE, 'Terms of use'))
@@ -215,7 +218,7 @@ export function LanguageSelectionScreen(props: {
           </Text>{' '}
           {alsoSee ? `${alsoSee} ` : ''}
           <Text
-            style={[styles.legalLink, { color: c.foregroundPrimary }]}
+            style={[styles.legalLink, { color: c.foregroundSecondary }]}
             onPress={() =>
               state.privacyPolicyUrl &&
               props.onOpenLegal(state.privacyPolicyUrl, label(Labels.PRIVACY_POLICY, 'Privacy policy'))
@@ -233,20 +236,25 @@ export function LanguageSelectionScreen(props: {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: 20, paddingBottom: 16 },
+  // LanguageScreen.kt:361-370: 24h. (The app's 220dp spacer at :510 is not needed: here the
+  // panel is a flow sibling below the list, not drawn over it.)
+  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
+  // LanguageScreen.kt:460-506: 16 above (6 row gap + 10), padding 20h/10v.
   allPill: {
     alignSelf: 'center',
     marginTop: 10,
     borderRadius: radius.rounded,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 10,
   },
+  // LanguageScreen.kt:225-249 + Containers.kt:69-83: top corners 24, padding 24h / 28 top /
+  // 16 bottom, children 20 apart.
   bottomBar: {
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 12,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    gap: 20,
   },
   legal: { alignSelf: 'center', maxWidth: 260, textAlign: 'justify' },
   legalLink: { textDecorationLine: 'underline' },

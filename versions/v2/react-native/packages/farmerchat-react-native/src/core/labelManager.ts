@@ -78,6 +78,49 @@ export class LabelManager {
     for (const l of Array.from(this.listeners)) l();
   }
 
+  /**
+   * The answer-generation tip cards — port of the Android core `AnswerGenerationTips.discover`
+   * (itself the app's `ChatLoadingContent.kt answerGenerationTips()`). Any served label pair
+   * `fc_v2_app_label_tips_<name>_title_<lang>` / `..._<name>_statement_<lang>` is a tip, resolved
+   * in the farmer's language with an English fallback, name-sorted. With none discovered, the
+   * app's three built-in tips. Never empty.
+   */
+  answerGenerationTips(): { title: string; body: string }[] {
+    const prefix = 'fc_v2_app_label_tips_';
+    const titleKey = /^fc_v2_app_label_tips_(.+)_title_([a-z]{2,3})$/;
+    const lang = this.languageCode || 'en';
+    const names = Array.from(
+      new Set(
+        Object.keys(this.labels)
+          .map((k) => titleKey.exec(k)?.[1])
+          .filter((n): n is string => !!n),
+      ),
+    ).sort();
+    const pick = (base: string): string | null => {
+      const v = this.labels[`${base}_${lang}`];
+      if (v && v.trim()) return v;
+      const en = this.labels[`${base}_en`];
+      return en && en.trim() ? en : null;
+    };
+    const dynamic: { title: string; body: string }[] = [];
+    for (const name of names) {
+      const title = pick(`${prefix}${name}_title`);
+      const body = pick(`${prefix}${name}_statement`);
+      if (title && body) dynamic.push({ title, body });
+    }
+    if (dynamic.length > 0) return dynamic;
+    return [
+      ['fc_v2_app_label_tips_did_you_know', 'Did you know?',
+        'fc_v2_app_label_tips_you_can_ask_followup_questions_to_get_more_details',
+        'You can ask follow-up questions to get more details'],
+      ['fc_v2_app_label_tips_quick_tip', 'Quick tip',
+        'fc_v2_app_label_tips_ask_specific_crops', 'Try asking about specific crops or problems'],
+      ['fc_v2_app_label_tips_try_this', 'Try this',
+        'fc_v2_app_label_tips_upload_photos_for_plant_disease_identification',
+        'Upload photos for plant disease identification'],
+    ].map(([tk, td, bk, bd]) => ({ title: this.getLabel(tk, td), body: this.getLabel(bk, bd) }));
+  }
+
   getLabel(baseKey: string, englishFallback: string, params?: LabelParams): string {
     const lang = this.languageCode;
     // Resolution order (C5): host override → server ${key}_${lang} →

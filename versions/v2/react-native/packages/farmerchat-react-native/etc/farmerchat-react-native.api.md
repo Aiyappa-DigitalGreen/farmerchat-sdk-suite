@@ -778,10 +778,12 @@ export interface FollowUpQuestionClickResponse {
 
 // @public (undocumented)
 export interface FollowUpQuestionItem {
-    // (undocumented)
+    follow_up_question_id?: string | null;
+    // @deprecated (undocumented)
     id?: string | null;
     // (undocumented)
     question?: string | null;
+    sequence?: number | null;
 }
 
 // @public (undocumented)

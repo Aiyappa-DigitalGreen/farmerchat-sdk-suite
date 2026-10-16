@@ -37,6 +37,9 @@ import iconPause from '../assets/fc_icon_pause.png';
 import iconTrash from '../assets/fc_icon_trash.png';
 import iconGallery from '../assets/fc_icon_gallery.png';
 import iconSpeaker from '../assets/fc_icon_speaker.png';
+// Material Symbols outlined "lightbulb" (the Compose tip card's Icons.Outlined.Lightbulb),
+// rasterized from the Android views flavour's fc_ic_lightbulb.xml path at 256px.
+import iconLightbulb from '../assets/fc_icon_lightbulb.png';
 import glowYellow from '../assets/fc_glow_yellow.png';
 import glowGreen from '../assets/fc_glow_green.png';
 import weatherSunClouds from '../assets/fc_weather_sunclouds.png';
@@ -83,6 +86,7 @@ export const Icons = {
   trash: iconTrash,
   gallery: iconGallery,
   speaker: iconSpeaker,
+  lightbulb: iconLightbulb,
 } as const;
 
 export type IconName = keyof typeof Icons;

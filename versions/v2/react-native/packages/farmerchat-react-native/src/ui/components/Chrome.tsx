@@ -193,9 +193,9 @@ const M3_ROTATION_OUTPUT = [0, 144, 360, 504, 720, 864, 1080, 1224, 1440].map((d
 
 /**
  * The indeterminate ring with ROUND caps, built from plain Views (this package has no SVG):
- * - two half-width clip windows, each holding a full ring whose top + right borders are the only
- *   coloured sides (an arc covering [-45°, 135°] from 12 o'clock); rotating each ring fills its
- *   half up to the sweep angle θ — right half [0, min(θ, 180)], left half [180, θ];
+ * - two half-width clip windows; each shows the opposite half of a uniform full ring, rotated
+ *   into the window, so it fills its half up to the sweep angle θ — right half
+ *   [0, min(θ, 180)], left half [180, θ];
  * - a stroke-wide dot at 0° and another at θ for the round caps;
  * - the whole assembly turning with the M3 global rotation.
  * Every animated property is a transform/opacity, so it runs on the native driver.
@@ -224,13 +224,17 @@ function MaterialIndeterminateRing(props: {
     inputRange: M3_SWEEP_TABLE.input,
     outputRange: M3_SWEEP_TABLE.output,
   });
+  // Arc of `sweep * 360°` clockwise from 12 o'clock, drawn as two half-rings. Each half is a
+  // UNIFORM full ring clipped to one half and rotated inside the opposite half's window: no
+  // per-side border colours (on the new architecture Android drew the earlier
+  // transparent-left/bottom ring as nothing, so only the two round caps showed).
   const rightRotate = sweep.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: ['-135deg', '45deg', '45deg'],
+    outputRange: ['0deg', '180deg', '180deg'],
   });
   const leftRotate = sweep.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: ['45deg', '45deg', '225deg'],
+    outputRange: ['0deg', '0deg', '180deg'],
   });
   const endCapRotate = sweep.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const globalRotate = progress.interpolate({
@@ -246,9 +250,7 @@ function MaterialIndeterminateRing(props: {
     height: size,
     borderRadius: half,
     borderWidth: w,
-    borderColor: 'transparent',
-    borderTopColor: color,
-    borderRightColor: color,
+    borderColor: color,
   };
   const cap = {
     position: 'absolute' as const,
@@ -264,11 +266,21 @@ function MaterialIndeterminateRing(props: {
       pointerEvents="none"
       style={{ width: size, height: size, transform: [{ rotate: globalRotate }] }}
     >
+      {/* Right window shows the LEFT half-ring rotated clockwise into it: 12 → 6 o'clock. */}
       <View style={{ position: 'absolute', top: 0, left: half, width: half, height: size, overflow: 'hidden' }}>
-        <Animated.View style={[ring, { left: -half, transform: [{ rotate: rightRotate }] }]} />
+        <Animated.View style={{ position: 'absolute', top: 0, left: -half, width: size, height: size, transform: [{ rotate: rightRotate }] }}>
+          <View style={{ position: 'absolute', top: 0, left: 0, width: half, height: size, overflow: 'hidden' }}>
+            <View style={[ring, { left: 0 }]} />
+          </View>
+        </Animated.View>
       </View>
+      {/* Left window shows the RIGHT half-ring rotated clockwise into it: 6 → 12 o'clock. */}
       <View style={{ position: 'absolute', top: 0, left: 0, width: half, height: size, overflow: 'hidden' }}>
-        <Animated.View style={[ring, { left: 0, transform: [{ rotate: leftRotate }] }]} />
+        <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: size, height: size, transform: [{ rotate: leftRotate }] }}>
+          <View style={{ position: 'absolute', top: 0, left: half, width: half, height: size, overflow: 'hidden' }}>
+            <View style={[ring, { left: -half }]} />
+          </View>
+        </Animated.View>
       </View>
       <View style={StyleSheet.absoluteFill}>
         <View style={cap} />

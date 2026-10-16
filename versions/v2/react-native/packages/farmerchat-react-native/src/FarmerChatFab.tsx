@@ -1,15 +1,23 @@
 /**
  * <FarmerChatFab/> — drop-in floating launcher (docs/04 row 52). Renders a
  * pinned circular (or extended) button that, on press, reveals the full
- * FarmerChat journey in a full-screen Modal. Unlike a bare `openChat()` call
+ * FarmerChat journey in an absolute-fill overlay. Unlike a bare `openChat()` call
  * this mounts the SDK view, so it works from a host screen that never renders
  * <FarmerChatView/> itself. Needs only a prior `FarmerChat.initialize(config)`.
+ *
+ * Why an overlay and not an RN `<Modal>`: a Modal is a separate native window, and on the new
+ * architecture react-native-screens' native stack inside it throws "ScreenContainer is not
+ * attached under ReactRootView" (blank chat). The overlay stays in the host's root view. It
+ * fills the FAB's parent, so place `<FarmerChatFab/>` in a full-screen container (e.g. the
+ * app root), as you would any floating button.
  */
 import React from 'react';
 import {
+  BackHandler,
   Image,
-  Modal,
+  Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -17,7 +25,7 @@ import {
 } from 'react-native';
 import { FarmerChat } from './FarmerChat';
 import { FarmerChatView } from './FarmerChatView';
-import { onSdkExit } from './core/exitSignal';
+import { emitSdkExit, onScreenHasOwnExit, onSdkExit } from './core/exitSignal';
 import { Assets } from './ui/assets';
 import { brandLogo, dayTheme } from './ui/theme';
 
@@ -49,8 +57,27 @@ function fabConfigDefaults(): { label?: string; bg?: string; fg?: string } {
 
 export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
-  // The chat's own Close (CHAT_ONLY) fires the SDK exit: dismiss the modal it lives in.
+  const openRef = React.useRef(false);
+  openRef.current = open;
+  // The chat's own Close (CHAT_ONLY) fires the SDK exit: dismiss the overlay it lives in.
   React.useEffect(() => onSdkExit(() => setOpen(false)), []);
+  // Fallback close only where the visible screen has no exit of its own (route-driven).
+  const [screenHasOwnExit, setScreenHasOwnExit] = React.useState(false);
+  React.useEffect(() => onScreenHasOwnExit(setScreenHasOwnExit), []);
+  const showFallbackClose = !screenHasOwnExit;
+  // Android hardware back. Registered ONCE, when the FAB mounts, i.e. before the overlay's
+  // NavigationContainer registers its own listener. BackHandler calls the newest listener first,
+  // so the SDK's navigation (and any SDK screen handler) pops its stack first; only when it has
+  // nothing left to pop does this run: close the overlay and fire `onExit`, as the old Modal's
+  // onRequestClose closed it. Closed overlay: return false so the host's back runs.
+  React.useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!openRef.current) return false;
+      exitOverlay();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
   const defaults = fabConfigDefaults();
   // Precedence: per-instance prop → config default → theme brand.
   const bg = props.backgroundColor ?? defaults.bg ?? dayTheme.brandPrimary;
@@ -59,6 +86,7 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   const hostLogo = brandLogo;
   const iconSource = props.icon ?? hostLogo ?? Assets.logoMark;
   const iconIsCustom = props.icon != null || hostLogo != null;
+
 
   const onPress = () => {
     setOpen(true);
@@ -92,27 +120,46 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
         ) : null}
       </Pressable>
 
-      <Modal
-        visible={open}
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-        presentationStyle="fullScreen"
-      >
-        <View style={styles.modalRoot}>
+      {open ? (
+        // Above the host content and the launcher: zIndex (iOS / layout order) + elevation
+        // (Android draws higher elevation on top). FarmerChatView brings its own
+        // SafeAreaProvider, so every SDK screen pads for the status bar and nav bar itself.
+        <View style={styles.overlay}>
           <FarmerChatView />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close FarmerChat"
-            onPress={() => setOpen(false)}
-            style={styles.close}
-          >
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
+          {showFallbackClose ? (
+            // Home, language and onboarding have no exit of their own (and iOS has no system
+            // Back), so the overlay keeps its fallback close there. The CHAT_ONLY chat draws its
+            // own ✕; a second one would cover the globe button (iOS FAB fix, b26efcb).
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close FarmerChat"
+              onPress={exitOverlay}
+              style={[styles.close, { top: FALLBACK_CLOSE_TOP }]}
+            >
+              <Text style={styles.closeText}>✕</Text>
+            </Pressable>
+          ) : null}
         </View>
-      </Modal>
+      ) : null}
     </>
   );
 }
+
+/**
+ * Overlay back / dismissal: fire the host's `onExit` (C4) — which also emits the internal exit
+ * signal that closes this overlay — without the SDK being initialized being a crash.
+ */
+function exitOverlay(): void {
+  if (FarmerChat.isInitialized) {
+    FarmerChat.getInstance().analytics.fireCallback('onExit');
+  } else {
+    emitSdkExit();
+  }
+}
+
+/** Below the status bar: Android reports its height; iOS keeps the old modal's 44. */
+const FALLBACK_CLOSE_TOP =
+  Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 44;
 
 const styles = StyleSheet.create({
   fab: {
@@ -133,10 +180,14 @@ const styles = StyleSheet.create({
   fabExtended: { paddingHorizontal: 22, columnGap: 10 },
   icon: { width: 26, height: 26 },
   label: { fontSize: 15, fontWeight: '600' },
-  modalRoot: { flex: 1 },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+    backgroundColor: '#FFFFFF',
+  },
   close: {
     position: 'absolute',
-    top: 44,
     right: 16,
     width: 40,
     height: 40,

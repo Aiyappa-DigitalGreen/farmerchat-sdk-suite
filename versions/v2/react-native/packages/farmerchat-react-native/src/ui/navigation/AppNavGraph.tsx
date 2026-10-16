@@ -14,6 +14,7 @@ import {
 } from '@react-navigation/drawer';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AnalyticsEvents } from '../../core/analytics';
+import { setScreenHasOwnExit } from '../../core/exitSignal';
 import { addOpenChatListener } from '../../FarmerChat';
 import type { FarmerChatSdk } from '../../core/sdk';
 import { StorageKeys } from '../../core/sessionStore';
@@ -245,6 +246,13 @@ export function AppNavGraph(): React.ReactElement {
     errorManager.navigateToError(locationState.errorType === 'NoNetwork', 'home', () => undefined);
     locationPrompt.dismiss(false);
   }, [currentRoute, errorManager, locationPrompt, locationState]);
+
+  // The CHAT_ONLY chat draws its own exit ✕; tell an SDK presenter (FarmerChatFab) so it hides
+  // its fallback close there only. Cleared when the journey unmounts.
+  useEffect(() => {
+    setScreenHasOwnExit(currentRoute === 'Chat' && sdk.config.mode === 'CHAT_ONLY');
+  }, [currentRoute, sdk]);
+  useEffect(() => () => setScreenHasOwnExit(false), []);
 
   const currentLanguage = sdk.store.getString(
     StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME,

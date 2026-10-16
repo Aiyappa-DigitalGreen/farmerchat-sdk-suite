@@ -202,6 +202,13 @@ export type ChatAction =
       type: 'SendFollowUpQuestion';
       question: string;
       followUpQuestionId?: string | null;
+      /**
+       * App `SendQueryProperties.isFollowupPrompt`: true for a follow-up chip / related question
+       * (app ChatScreen.kt:959-971 `handleFollowUp`), false for text typed in the composer (app
+       * ChatScreen.kt:1764-1811). Decides `triggered_input_type` (app ChatViewModel.kt:993-997).
+       * Omitted = true (the pre-existing SDK behaviour for non-composer callers).
+       */
+      isFollowupPrompt?: boolean;
       transcriptionId?: string | null;
       audioUri?: string | null;
       sendQueryProperties?: SendQueryProperties | null;
@@ -1484,17 +1491,29 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             triggeredInputType: 'read_full_advice',
           });
           break;
-        case 'SendFollowUpQuestion':
-          // follow-up clicks are tracked server-side via endpoint #30
-          void sdk.api.trackFollowUpClick({ follow_up_question: action.question });
+        case 'SendFollowUpQuestion': {
+          // App ChatViewModel.kt:958-964: endpoint #30 is called only for a tapped follow-up
+          // chip, and its body is the follow-up question's ID (never the question text, never
+          // for typed text).
+          if (action.followUpQuestionId) {
+            void sdk.api.trackFollowUpClick({ follow_up_question: action.followUpQuestionId });
+          }
+          // App ChatViewModel.kt:993-997: voice -> "voice"; follow-up prompt -> "follow_up";
+          // otherwise (typed in the composer) -> "text".
+          const triggeredInputType = action.transcriptionId
+            ? 'voice'
+            : action.isFollowupPrompt !== false
+              ? 'follow_up'
+              : 'text';
           void sendTextQuery({
             question: action.question,
             transcriptionId: action.transcriptionId,
             audioUri: action.audioUri,
-            triggeredInputType: 'follow_up',
+            triggeredInputType,
             sendQueryProperties: action.sendQueryProperties,
           });
           break;
+        }
         case 'SelectAlignmentChip': {
           // App rule (alignmentChipSend): the LABEL is shown and sent, the VALUE only marks the
           // chip; gender-select sends the value under its label.
@@ -1515,7 +1534,12 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
                 : m,
             ),
           }));
-          void sdk.api.trackFollowUpClick({ follow_up_question: send.query });
+          // No endpoint #30 here: the app's sendAlignmentChip (ChatViewModel.kt:1015-1052) never
+          // calls trackFollowUpQuestionClick (only sendFollowUpQuestion does, :961-963, with a
+          // follow-up ID). Sending the chip text as `follow_up_question` 500'd on DEMO and
+          // surfaced a spurious onError(500) to the host.
+          // Still differs from the app (docs/04): triggered_input_type "align_chip_sel" and
+          // parent_message_id are not sent.
           void sendTextQuery({
             question: send.query,
             displayText: send.displayText === send.query ? null : send.displayText,
@@ -1619,7 +1643,9 @@ function extractFollowUps(response: FollowUpQuestionsResponse): {
       ids.push('');
     } else if (q && typeof q.question === 'string') {
       questions.push(q.question);
-      ids.push(q.id ?? '');
+      // App ChatViewModel.kt:1665 reads `follow_up_question_id`; the SDK used to read a
+      // non-existent `id`, so #30 never had an id to send.
+      ids.push(q.follow_up_question_id ?? '');
     }
   }
   return { questions, ids };

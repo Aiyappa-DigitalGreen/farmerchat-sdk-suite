@@ -8789,3 +8789,30 @@ keys need a Core API).
   index-aligned in `sequence` order, and #30 goes only for a tapped follow-up chip, with its id
   (`useChat.ts`, `ChatScreen.tsx`, `types.ts`). Verified on DEMO through the local proxy: typed
   question → no #30; chip tap → #30 200 (once); deep link → no #30. All web checks pass.
+
+## Cross-platform fidelity pass: React Native (2026-10-16)
+Host `~/ReactNativeProjects/FarmerChatRNDemo` (Expo 52, new architecture), emulator-5556 (Pixel_6_Pro), DEMO.
+- **`<FarmerChatFab/>` fixed:** it renders a full-screen overlay instead of an RN `<Modal>` (native-stack
+  failed inside the Modal on the new architecture). Android Back is handled (SDK navigation first, then
+  `onExit` at the root). The fallback ✕ only shows on screens without their own exit (`core/exitSignal.ts`).
+  Props are unchanged. The host must place the FAB in a full-screen container.
+- **#30 follow-up click:** RN read a non-existent `id` and posted the question text, including for typed
+  composer text (DEMO 500 ×3, plus `onError(500)`). It now matches the app (ChatScreen.kt:959-971,
+  ChatViewModel.kt:958-964): a chip tap sends the follow-up's id, typed text sends nothing, and alignment
+  chips send nothing. Public type `FollowUpQuestionItem` gains `follow_up_question_id` and `sequence`
+  (`id` is deprecated); `api:update` was run.
+- `debugLogging` now logs the agentic stream request (`agenticStream.ts`).
+- Visual: green header under the status bar; no logo on the empty chat; composer focus (it lost focus
+  the instant it gained it, so the glow stuck, the empty state stayed while typing, the 2nd line was
+  clipped, and the keyboard stayed after send); composer hidden while the first answer loads; tips
+  carousel; the spinner arc; icon sizes (1.3–1.7× too large); answer text, heading and bullet styles;
+  the language screen's bottom panel.
+- **Pre-existing bug fixed:** after the first answer, an animated auto-scroll left the list "scrolling",
+  so it swallowed every tap (Share, Listen, chips) until the user dragged. Confirmed on the old SDK.
+  The scroll is now instant (the app animates it).
+End to end through the FAB on DEMO: language, streamed answer, follow-up chip (#30 200), Share sheet,
+Listen plays, typed follow-up (no #30), ✕ and hardware Back → onExit, deep link. UNVERIFIED: voice,
+camera. Checks: typecheck, test (33), build, api:check, size (223/250 KB) pass.
+Not fixed: Listen's bars and its ~2 s state lag; alignment chips send `follow_up`, not `align_chip_sel`
++ `parent_message_id`; history follow-ups carry no ids; the question bubble flickers once at answer;
+no haptic tick on tips.

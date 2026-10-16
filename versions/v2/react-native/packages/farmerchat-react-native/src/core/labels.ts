@@ -217,6 +217,8 @@ export const Labels = {
   DID_YOU_KNOW: 'fc_v2_app_label_tips_did_you_know',
   QUICK_TIP: 'fc_v2_app_label_tips_quick_tip',
   TRY_THIS: 'fc_v2_app_label_tips_try_this',
+  /** Tip body "Try asking about specific crops or problems" (note: not ASK_SPECIFIC_CROPS). */
+  TIPS_ASK_SPECIFIC_CROPS: 'fc_v2_app_label_tips_ask_specific_crops',
   INVALID_REQUEST_PLEASE_TRY_AGAIN: 'fc_v2_app_label_invalid_request_please_try_again',
   SESSION_EXPIRED_PLEASE_LOGIN_AGAIN: 'fc_v2_app_label_session_expired_please_login_again',
   ACCESS_DENIED: 'fc_v2_app_label_access_denied',

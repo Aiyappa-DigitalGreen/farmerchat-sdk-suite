@@ -241,6 +241,10 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
 
     const [text, setText] = useState('');
     const [isFocused, setIsFocused] = useState(false);
+    // Measured text height, clamped to Compose's heightIn(min 24, max 72). An explicit height is
+    // what makes the multiline field grow on Android (fabric did not grow it on its own: a
+    // second line was clipped at the top of a 1-line-high box).
+    const [inputHeight, setInputHeight] = useState(24);
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -307,10 +311,20 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
 
     // Compose: `LaunchedEffect(isKeyboardVisible) { if (!visible && focused) clearFocus() }` —
     // dismissing the keyboard with the back gesture must also drop the field's focus.
+    // Keyed on the keyboard only, like the Compose LaunchedEffect: react to the keyboard GOING
+    // AWAY. Also depending on `isFocused` blurred the field the instant it was focused (focus
+    // lands before keyboardDidShow), so the composer never entered its focused state: the aura
+    // stayed on, the empty state stayed up, and the send's blur/dismiss raced a live keyboard.
     const isKeyboardVisible = keyboardHeight > 0;
+    const isFocusedRef = useRef(isFocused);
+    isFocusedRef.current = isFocused;
+    const wasKeyboardVisible = useRef(isKeyboardVisible);
     useEffect(() => {
-      if (!isKeyboardVisible && isFocused) inputRef.current?.blur();
-    }, [isKeyboardVisible, isFocused]);
+      if (wasKeyboardVisible.current && !isKeyboardVisible && isFocusedRef.current) {
+        inputRef.current?.blur();
+      }
+      wasKeyboardVisible.current = isKeyboardVisible;
+    }, [isKeyboardVisible]);
 
     // --- imperative handle ----------------------------------------------------
     const clear = useCallback(() => {
@@ -573,6 +587,10 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                       ref={inputRef}
                       value={text}
                       onChangeText={setText}
+                      onContentSizeChange={(e) => {
+                        const h = Math.min(72, Math.max(24, Math.ceil(e.nativeEvent.contentSize.height)));
+                        setInputHeight((prev) => (prev === h ? prev : h));
+                      }}
                       multiline
                       // Compose: maxLines = 3, heightIn(min 24, max 72).
                       numberOfLines={3}
@@ -592,7 +610,7 @@ export const InputComposer = forwardRef<InputComposerHandle, InputComposerProps>
                       style={[
                         typography.bodyMedium,
                         styles.input,
-                        { color: c.foregroundPrimary },
+                        { color: c.foregroundPrimary, height: text.length === 0 ? 24 : inputHeight },
                       ]}
                     />
                   </View>

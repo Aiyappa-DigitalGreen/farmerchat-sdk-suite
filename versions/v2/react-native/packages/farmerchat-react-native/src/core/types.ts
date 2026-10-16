@@ -993,8 +993,19 @@ export interface PlantixResponse {
 // ---------------------------------------------------------------------------
 
 export interface FollowUpQuestionItem {
-  id?: string | null;
+  /**
+   * The follow-up's id, sent back on endpoint #30 when the chip is tapped. Wire name per the
+   * app's `domain/model/chat/FollowUpQuestionsResponse.kt` `Question.follow_up_question_id`.
+   */
+  follow_up_question_id?: string | null;
   question?: string | null;
+  /** Display order (app `Question.sequence`). */
+  sequence?: number | null;
+  /**
+   * @deprecated The API never sends `id`; read {@link FollowUpQuestionItem.follow_up_question_id}.
+   * Kept only so existing typed code keeps compiling.
+   */
+  id?: string | null;
 }
 
 export interface FollowUpQuestionsResponse {

@@ -52,10 +52,13 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 - Semver-compatible dependency updates in every npm project, which cleared the critical
   `shell-quote` advisory.
 
-### Known issues
-- React Native `<FarmerChatFab/>` fails on the new architecture (Expo 52 default); see the RN README.
-
 ### Fixed
+- React Native: `<FarmerChatFab/>` works on the new architecture (overlay instead of `Modal`), and
+  taps on Share, Listen and chips after the first answer were silently ignored.
+- iOS: no Listen on normal answers and no follow-up chips (two decode bugs in FarmerChatCore).
+- iOS, web, React Native: the follow-up click (#30) sent the question text on every send; it now
+  sends the follow-up's id, only when a suggested follow-up is tapped (as the app does).
+- Chat UI brought up to the FarmerChat app on iOS (SwiftUI), Android Views, React Native and web.
 - iOS SwiftUI `FarmerChatFabButton` drew a second close button over the chat-only chat screen.
 - Web and React Native no longer send FarmerChat headers (including `Device-Info`) to Google's
   geolocation API. On web this had blocked location lookup on every website (CORS).
