@@ -482,7 +482,14 @@ enum FCUIMarkdown {
         case bullet(String)
         case numbered(String, String)
         case divider
-        case table([[String]])
+        /// GFM table: header cells, per-column alignment from the separator row, body rows.
+        case table(headers: [String], alignments: [NSTextAlignment], rows: [[String]])
+    }
+
+    /// A run of consecutive non-table blocks (one attributed string), or one table.
+    enum Segment {
+        case text(NSAttributedString)
+        case table(headers: [String], alignments: [NSTextAlignment], rows: [[String]])
     }
 
     static func parse(_ text: String) -> [Block] {
@@ -505,13 +512,24 @@ enum FCUIMarkdown {
         while i < lines.count {
             let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
             if isTableRow(trimmed), i + 1 < lines.count, isSeparator(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
-                var rows = [cells(trimmed)]
+                let headers = cells(trimmed)
+                // MarkdownText.kt parseAlignments: ":--:" centre, "--:" end, else start.
+                let separator = cells(lines[i + 1].trimmingCharacters(in: .whitespaces))
+                let alignments: [NSTextAlignment] = headers.indices.map { idx in
+                    let cell = idx < separator.count ? separator[idx] : ""
+                    switch (cell.hasPrefix(":"), cell.hasSuffix(":")) {
+                    case (true, true): return .center
+                    case (false, true): return .right
+                    default: return .natural
+                    }
+                }
+                var rows: [[String]] = []
                 var j = i + 2
                 while j < lines.count, isTableRow(lines[j].trimmingCharacters(in: .whitespaces)) {
                     rows.append(cells(lines[j]))
                     j += 1
                 }
-                blocks.append(.table(rows))
+                blocks.append(.table(headers: headers, alignments: alignments, rows: rows))
                 i = j
                 continue
             }
@@ -547,6 +565,11 @@ enum FCUIMarkdown {
         }
     }
 
+    /// ``inline(_:font:color:paragraph:)`` for table cells.
+    static func inlineText(_ text: String, font: UIFont, color: UIColor, paragraph: NSParagraphStyle) -> NSAttributedString {
+        inline(text, font: font, color: color, paragraph: paragraph)
+    }
+
     /// Inline emphasis on `font`'s family: bold → `.bold`, italic → italic trait.
     private static func inline(_ text: String, font: UIFont, color: UIColor, paragraph: NSParagraphStyle) -> NSAttributedString {
         let out = NSMutableAttributedString()
@@ -579,10 +602,40 @@ enum FCUIMarkdown {
     }
 
     static func render(_ text: String, color: UIColor, body: FCUITextStyle) -> NSAttributedString {
+        render(blocks: parse(text), color: color, body: body)
+    }
+
+    /// MarkdownText.kt renders a table as its own composable (cards / grid), not as text: the
+    /// answer becomes text runs and tables, in order. A table is 16pt from its neighbours
+    /// (the block-pair table), which the owning stack applies.
+    static func segments(_ text: String, color: UIColor, body: FCUITextStyle) -> [Segment] {
+        var out: [Segment] = []
+        var run: [Block] = []
+        func flush() {
+            if !run.isEmpty { out.append(.text(render(blocks: run, color: color, body: body))) }
+            run = []
+        }
+        for block in parse(text) {
+            if case .table(let headers, let alignments, let rows) = block {
+                flush()
+                out.append(.table(headers: headers, alignments: alignments, rows: rows))
+            } else {
+                run.append(block)
+            }
+        }
+        flush()
+        return out
+    }
+
+    static func hasTable(_ text: String) -> Bool {
+        parse(text).contains { if case .table = $0 { return true }; return false }
+    }
+
+    static func render(blocks: [Block], color: UIColor, body: FCUITextStyle) -> NSAttributedString {
         let typography = FCUITypography.current
         let out = NSMutableAttributedString()
         var previous: Block?
-        for block in parse(text) {
+        for block in blocks {
             let style: FCUITextStyle
             var weight: UIFont.Weight? = nil
             switch block {
@@ -630,24 +683,130 @@ enum FCUIMarkdown {
                 let item = NSMutableAttributedString(attachment: attachment)
                 item.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: item.length))
                 out.append(item)
-            case .table(let rows):
-                // Degraded: one line per row, cells joined by " · " (header row bold). The app
-                // draws a bordered grid (MarkdownText.kt); recorded as a UIKit gap.
-                for (index, row) in rows.enumerated() {
-                    if index > 0 {
-                        let p = paragraph.mutableCopy() as! NSMutableParagraphStyle
-                        p.paragraphSpacingBefore = 4
-                        out.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: p]))
-                        out.append(inline(row.joined(separator: " · "), font: font, color: color, paragraph: p))
-                    } else {
-                        out.append(inline(row.joined(separator: " · "), font: fcuiFont(style, weight: .bold), color: color, paragraph: paragraph))
-                    }
-                }
+            case .table:
+                // Never reached: `segments` lifts tables out into `FCUIMarkdownTableView`.
+                break
             }
             previous = block
         }
         return out
     }
+}
+
+/// MarkdownText.kt `MarkdownTable` (:214-490), one of three treatments:
+/// - **answer card** — 3 columns, header = `| Title | | |`: the title (labelLarge bold), a 1pt
+///   divider, then per row a label (bodySmall, secondary) / value (bodyMedium bold) / meaning
+///   (bodyMedium, secondary) reading, dividers between readings;
+/// - **row cards** — any other 2+ column table: one card per row, its first cell the bold title
+///   over a divider, then each further column as header label (bodySmall, secondary) above the
+///   value (bodySmall bold);
+/// - **weighted grid** — a lone single-column table: bordered (1pt, radius 8), labelSmall bold
+///   header on surfaceTertiary, body rows alternating surfaceSecondary / surfaceReadingSecondary.
+/// Cards: surfaceReadingSecondary, radius 16, padding 16h / 14v, 12 between cards.
+final class FCUIMarkdownTableView: UIStackView {
+    init(headers: [String], alignments: [NSTextAlignment], rows: [[String]], ink: UIColor) {
+        super.init(frame: .zero)
+        axis = .vertical
+        let type = FCUITypography.current
+        let isCard = headers.count == 3 && !headers[0].isEmpty && headers.dropFirst().allSatisfy(\.isEmpty)
+        func cell(_ row: [String], _ i: Int) -> String { i < row.count ? row[i] : "" }
+        func label(_ text: String, _ style: FCUITextStyle, bold: Bool, color: UIColor,
+                   alignment: NSTextAlignment = .natural) -> UILabel {
+            let l = UILabel()
+            l.numberOfLines = 0
+            l.textAlignment = alignment
+            let font = bold ? fcuiFont(style, weight: .bold) : style.font
+            l.attributedText = FCUIMarkdown.inlineText(text, font: font, color: color,
+                                                       paragraph: style.paragraphStyle(alignment: alignment))
+            return l
+        }
+        func divider() -> UIView {
+            let v = UIView()
+            v.backgroundColor = FCUITheme.borderDefault
+            v.heightAnchor.constraint(equalToConstant: 1).isActive = true
+            return v
+        }
+        func card(spacing: CGFloat, _ views: [UIView]) -> UIView {
+            let inner = UIStackView(arrangedSubviews: views)
+            inner.axis = .vertical
+            inner.spacing = spacing
+            inner.isLayoutMarginsRelativeArrangement = true
+            inner.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+            inner.backgroundColor = FCUITheme.surfaceReadingSecondary
+            inner.layer.cornerRadius = 16
+            inner.layer.cornerCurve = .continuous
+            inner.clipsToBounds = true
+            return inner
+        }
+        func pair(_ top: UIView, _ bottom: UIView?, gap: CGFloat = 2) -> UIView {
+            let v = UIStackView(arrangedSubviews: [top] + (bottom.map { [$0] } ?? []))
+            v.axis = .vertical
+            v.spacing = gap
+            return v
+        }
+
+        if isCard {
+            var views: [UIView] = []
+            if !headers[0].isEmpty {
+                views.append(label(headers[0], type.labelLarge, bold: true, color: ink))
+                views.append(divider())
+            }
+            for (index, row) in rows.enumerated() {
+                var parts: [UIView] = []
+                if !cell(row, 0).isEmpty { parts.append(label(cell(row, 0), type.bodySmall, bold: false, color: FCUITheme.foregroundSecondary)) }
+                parts.append(label(cell(row, 1), type.bodyMedium, bold: true, color: ink))
+                let reading = UIStackView(arrangedSubviews: parts)
+                reading.axis = .vertical
+                reading.spacing = 2
+                if !cell(row, 2).isEmpty {
+                    // `padding(top = 2)` on the meaning: 2 of spacing + 2.
+                    reading.setCustomSpacing(4, after: parts.last!)
+                    reading.addArrangedSubview(label(cell(row, 2), type.bodyMedium, bold: false, color: FCUITheme.foregroundSecondary))
+                }
+                views.append(reading)
+                if index != rows.count - 1 { views.append(divider()) }
+            }
+            addArrangedSubview(card(spacing: 12, views))
+        } else if headers.count >= 2 {
+            spacing = 12
+            for row in rows {
+                var views: [UIView] = []
+                let title = cell(row, 0)
+                if !title.isEmpty {
+                    views.append(label(title, type.labelLarge, bold: true, color: ink))
+                    views.append(divider())
+                }
+                for column in 1..<headers.count {
+                    views.append(pair(
+                        label(headers[column], type.bodySmall, bold: false, color: FCUITheme.foregroundSecondary),
+                        label(cell(row, column), type.bodySmall, bold: true, color: ink)
+                    ))
+                }
+                addArrangedSubview(card(spacing: 10, views))
+            }
+        } else {
+            layer.borderWidth = 1
+            layer.borderColor = FCUITheme.borderDefault.cgColor
+            layer.cornerRadius = 8
+            layer.cornerCurve = .continuous
+            clipsToBounds = true
+            func gridRow(_ text: String, header: Bool, background: UIColor) -> UIView {
+                let style = header ? type.labelSmall : type.bodySmall
+                let l = label(text, style, bold: header, color: ink, alignment: alignments.first ?? .natural)
+                let wrap = FCUIInsetView(l, top: 10, leading: 12, bottom: 10, trailing: 12)
+                wrap.backgroundColor = background
+                return wrap
+            }
+            addArrangedSubview(gridRow(cell(headers, 0), header: true, background: FCUITheme.surfaceTertiary))
+            for (index, row) in rows.enumerated() {
+                addArrangedSubview(gridRow(cell(row, 0), header: false,
+                                           background: index % 2 == 0 ? FCUITheme.surfaceSecondary : FCUITheme.surfaceReadingSecondary))
+            }
+        }
+        accessibilityIdentifier = "fcMarkdownTable"
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }
 
 // MARK: - Answer-generation tips (components/Tips.kt + Tip.kt)

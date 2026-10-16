@@ -42,6 +42,9 @@ import org.digitalgreen.farmerchat.sdk.core.prefs.SdkPreferences
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.AlignmentChipRoute
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.routeAlignmentChip
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.followUpChipSendProperties
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.photoChipDeclineAction
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.photoChipSendAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatState
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatViewModel
@@ -613,14 +616,16 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                 restoreAnchorPage = null
             }
 
-            // A conversation opened from history starts at its FIRST question. Product decision:
-            // deliberately differs from fc-compose-agentic ChatScreen.kt:1210-1227, which pins the
-            // last question. Older pages still load on a user scroll-up (the listener needs dy < 0).
+            // App parity (fc-compose-agentic ChatScreen.kt:1210-1227): a conversation opened from
+            // history pins its LAST question to the top, with its answer below, like a live
+            // question. The old "first question" behaviour was recorded in docs/04 as a product
+            // decision with no user request behind it, so it is reverted (round 3, 2026-10-16).
+            // Older pages still load on a user scroll-up (the listener needs dy < 0).
             if (state.isInitialHistoryLoaded && !initialHistoryScrollDone) {
                 initialHistoryScrollDone = true
                 cancelPendingBottomScroll()
                 (binding.fcChatList.layoutManager as? LinearLayoutManager)
-                    ?.scrollToPositionWithOffset(0, 0)
+                    ?.scrollToPositionWithOffset(reservePinIndex() ?: adapter.rows.lastIndex.coerceAtLeast(0), 0)
                 // This page's last row is not a NEW message: keep the append-scroll below from
                 // moving the viewport straight back to the end.
                 lastRenderedLastKey = adapter.rows.lastOrNull()?.key
@@ -651,19 +656,7 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                     // this mirrors `chatScrollAnchorIndex`'s semantics — shift the anchor only
                     // when the FINAL row is the reserve holder, because if a question or a
                     // placeholder is rendered below it the ordinary bottom anchor is correct.
-                    val lastRowIndex = adapter.rows.lastIndex
-                    val lastRow = adapter.rows.lastOrNull()
-                    // The loading placeholder and a failed question's error row hold the same
-                    // screenful (core `chatScrollAnchorIndex`; app failReserveModifier), so they
-                    // pin the question above them. A freshly shared location pins itself (app
-                    // ChatThreadContent.kt:229-257).
-                    val holdsReserve = lastRow is ChatRow.Loading || lastRow is ChatRow.InlineError ||
-                        (lastRow is ChatRow.Ai && adapter.holdsReserve(lastRow))
-                    val pinIndex = when {
-                        lastRow is ChatRow.Location -> lastRowIndex
-                        holdsReserve && lastRowIndex > 0 -> lastRowIndex - 1
-                        else -> null
-                    }
+                    val pinIndex = reservePinIndex()
                     if (pinIndex != null) {
                         // A follow-up appends [question, placeholder] and the placeholder turns
                         // into the streaming row a frame later. The earlier step's POSTED
@@ -676,6 +669,25 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The row to pin to the top of the viewport, or null when the ordinary bottom anchor is right.
+     * The loading placeholder and a failed question's error row hold the same screenful as a
+     * reserve-holding answer (core `chatScrollAnchorIndex`; app failReserveModifier), so they pin
+     * the question above them. A freshly shared location pins itself (app
+     * ChatThreadContent.kt:229-257).
+     */
+    private fun reservePinIndex(): Int? {
+        val lastRowIndex = adapter.rows.lastIndex
+        val lastRow = adapter.rows.lastOrNull()
+        val holdsReserve = lastRow is ChatRow.Loading || lastRow is ChatRow.InlineError ||
+            (lastRow is ChatRow.Ai && adapter.holdsReserve(lastRow))
+        return when {
+            lastRow is ChatRow.Location -> lastRowIndex
+            holdsReserve && lastRowIndex > 0 -> lastRowIndex - 1
+            else -> null
         }
     }
 
@@ -910,7 +922,13 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             vm.onAction(ChatAction.ReplacePreGeneratedWithQuestion(question))
         } else {
             vm.onAction(
-                ChatAction.SendFollowUpQuestion(question, followUpQuestionId = followUpQuestionId)
+                // App handleFollowUp (ChatScreen.kt:958-972): a chip tap is a follow-up prompt;
+                // a send without props is treated as typed by hand.
+                ChatAction.SendFollowUpQuestion(
+                    question,
+                    followUpQuestionId = followUpQuestionId,
+                    sendQueryProperties = followUpChipSendProperties(question)
+                )
             )
         }
     }
@@ -949,8 +967,12 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
                     // carries agentic_chip_type = gps-prompt (app parity).
                     graph.locationPromptManager.triggerFromLocalContext(fromAgenticChip = true)
                 }
-            AlignmentChipRoute.TakePhoto -> overlays?.launchCameraForCapability()
-            AlignmentChipRoute.ChooseFromGallery -> overlays?.launchGalleryForCapability()
+            // App ChatScreen.kt:1621-1636: open the camera / gallery directly, then route the
+            // outcome. A photo goes straight to the conversation; no photo answers the surface.
+            AlignmentChipRoute.TakePhoto ->
+                overlays?.launchCameraForCapability { onPhotoChipResult(messageId, chip, it) }
+            AlignmentChipRoute.ChooseFromGallery ->
+                overlays?.launchGalleryForCapability { onPhotoChipResult(messageId, chip, it) }
             AlignmentChipRoute.Ignore -> Unit
             is AlignmentChipRoute.SendText -> vm.onAction(
                 ChatAction.SendAlignmentChip(
@@ -967,6 +989,34 @@ internal class ChatFragment : BaseFragment(R.layout.fc_fragment_chat), ChatAdapt
             )
         }
     }
+
+    /** Port of app ChatScreen.kt:431-483 (`sendAlignmentPhotoDirect` / `sendAlignmentPhotoDeclineQuery`). */
+    private fun onPhotoChipResult(
+        sourceMessageId: String,
+        chip: AlignmentChip,
+        result: InputOverlaysController.PhotoChipResult
+    ) {
+        val action = when (result) {
+            is InputOverlaysController.PhotoChipResult.Photo -> photoChipSendAction(
+                result.uri, imageSizeKb(result.uri), chip.value, chip.label
+            )
+            InputOverlaysController.PhotoChipResult.NotShared -> photoChipDeclineAction(
+                sourceMessageId,
+                label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now")
+            )
+            InputOverlaysController.PhotoChipResult.PermissionDenied -> photoChipDeclineAction(
+                sourceMessageId,
+                label(Labels.PHOTO_PERMISSION_DECLINED, "I don't want to share a photo right now")
+            )
+        }
+        vm.onAction(action)
+    }
+
+    /** Image size for the send-query funnel (app ChatScreen.kt:432-436). 0 when unreadable. */
+    private fun imageSizeKb(uri: Uri): Int = runCatching {
+        requireContext().contentResolver.openFileDescriptor(uri, "r")
+            ?.use { (it.statSize / 1024).toInt().coerceAtLeast(0) } ?: 0
+    }.getOrDefault(0)
 
     /** Armed while a chat-initiated location flow is in progress; holds the surface's message id. */
     private var pendingLocationSourceId: String? = null

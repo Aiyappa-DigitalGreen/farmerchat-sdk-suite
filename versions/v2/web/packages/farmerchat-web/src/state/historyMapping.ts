@@ -79,7 +79,9 @@ export function mapHistoryItems(rawItems: readonly ConversationChatHistoryMessag
         messages.push({
           kind: 'user',
           id: uiId,
-          text: item.heard_query_text ?? item.query_text ?? '',
+          // App ChatViewModel.kt:1273: `query_text ?: heard_query_text ?: ""` — the stored query
+          // first, the raw transcription only when there is none (null, not blank, falls through).
+          text: item.query_text ?? item.heard_query_text ?? '',
           audioUri: item.query_media_file_url ?? undefined,
           isFailed: false,
         });

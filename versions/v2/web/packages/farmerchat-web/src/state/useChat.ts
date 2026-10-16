@@ -17,10 +17,20 @@ import type {
   TextPromptResponse,
 } from '../core/types';
 import { UiState, idle, loading, success, failure } from './uiState';
-import { blobToBase64, nextLocalId } from './helpers';
+import { nextLocalId } from './helpers';
+import {
+  ChipStatus,
+  manualSendChipContext,
+  toAnalyticsProperties,
+  withResponseChipStatus,
+  withValidResponse,
+  type IntentOutputLike,
+  type SendQueryProps,
+} from '../core/sendQueryAnalytics';
+import { kotlinDoubleString, prepareImageForUpload } from '../core/imageUpload';
 import { dedupeById, mapHistoryItems } from './historyMapping';
 import { followUpTriggeredType, initialQueryTriggeredType } from '../core/triggeredInputType';
-import { Events } from '../core/analytics';
+import { Events, Screens } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
 import { sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
@@ -47,6 +57,14 @@ export interface UserMessage {
   text: string;
   imageUri?: string;
   audioUri?: string;
+  /**
+   * Length of [audioUri] when known at record time. A MediaRecorder webm blob reports
+   * `duration = Infinity` until it is scanned, so the clip would read 0:00 (the app reads the
+   * file's real duration, ChatScreen.kt:1390-1401).
+   */
+  audioDurationMs?: number;
+  /** True while this voice clip is being transcribed ("One second..." + loading clip). */
+  isTranscribing?: boolean;
   userBubbleImageWideBanner?: boolean;
   isFailed: boolean;
 }
@@ -143,11 +161,6 @@ export interface SendQueryProperties {
   ssfrCrop?: string | null;
   statementId?: number | null;
   channel?: string | null;
-  /**
-   * 2.0.0: which alignment surface a tapped chip came from (`AlignmentKind.analyticsType`).
-   * Reported as the `agentic_chip_type` property on the existing SEND_QUERY_INITIATED event.
-   */
-  agenticChipType?: string | null;
 }
 
 export interface ChatState {
@@ -225,8 +238,6 @@ export interface ChatActions {
       isFollowupPrompt?: boolean;
       transcriptionId?: string | null;
       audioUri?: string | null;
-      /** 2.0.0: set when the question came from an alignment chip (see [selectAlignmentChip]). */
-      agenticChipType?: string | null;
       /** User-bubble text when it differs from the sent [question] (gender-select chips). */
       displayText?: string | null;
     },
@@ -242,7 +253,13 @@ export interface ChatActions {
    * ALSO the plain text composer's send path: recording there would mark a chip as chosen whenever
    * the farmer happened to type a string matching one.
    */
-  selectAlignmentChip: (messageId: string, kind: AlignmentKind, chip: AlignmentChip) => Promise<void>;
+  selectAlignmentChip: (
+    messageId: string,
+    kind: AlignmentKind,
+    chip: AlignmentChip,
+    /** `agentic_chip_value` when it is not the chip's own value (the decline paths send "not_now"). */
+    analyticsChipValue?: string,
+  ) => Promise<void>;
   /**
    * The GPS_PROMPT "Share my location" chip succeeded (2.0.0): show [address] as a
    * `LocationMessage` bubble and re-send the surface's `alignmentOriginalQuery`.
@@ -262,7 +279,13 @@ export interface ChatActions {
    * ordinary text query.
    */
   sendLocationSharedQuery: (sourceMessageId: string, address: string) => Promise<void>;
-  sendQuestionWithImage: (question: string, imageBlob: Blob, imageObjectUrl: string) => Promise<void>;
+  sendQuestionWithImage: (
+    question: string,
+    imageBlob: Blob,
+    imageObjectUrl: string,
+    /** Set when the photo came from an UPLOAD_PHOTO chip: reported as that chip's pick. */
+    fromChip?: { value: string; label: string },
+  ) => Promise<void>;
   sendFollowUpVoiceQuestion: (recording: VoiceRecording) => Promise<void>;
   replacePreGeneratedWithQuestion: (question: string, triggerInputType?: string) => Promise<void>;
   loadChatHistory: (conversationId: string, page?: number) => Promise<void>;
@@ -291,6 +314,8 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeou
  * follow-ups (#29) and alignment handling exist once.
  */
 interface AnswerContext {
+  /** The query sent — its length is Send_Query's `length_of_Text_query` (app base.copy). */
+  question: string;
   /** Loading placeholder (or live streaming bubble) to replace. */
   placeholderId: string;
   /** User bubble to flag on failure. */
@@ -321,6 +346,67 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
   const patch = useCallback((p: Partial<ChatState>) => setState((s) => ({ ...s, ...p })), []);
 
+  // ---- Send_Query_Initiated / Send_Query (app pendingSendQueryProperties, ChatViewModel.kt) ----
+  /** Props of the query in flight; Send_Query fires once, when its answer settles, then clears. */
+  const pendingSendQueryRef = useRef<SendQueryProps | null>(null);
+  const startSendQuery = useCallback(
+    (p: SendQueryProps) => {
+      pendingSendQueryRef.current = p;
+      analytics.track(Events.SEND_QUERY_INITIATED, toAnalyticsProperties(p));
+    },
+    [analytics],
+  );
+  /**
+   * Send_Query on the response: success → `Valid_Query: true` + the intent fields and, when the
+   * answer shows chips, `available` (ChatViewModel.kt:1706-1721, 2028-2042); a `done`-only or
+   * partial answer → true without intent (:1769); failure → false (:1811, :2071, :2153).
+   */
+  const finishSendQuery = useCallback(
+    (valid: boolean, o: { question?: string; intent?: IntentOutputLike | null; shownChipType?: string | null } = {}) => {
+      const base = pendingSendQueryRef.current;
+      if (!base) return;
+      pendingSendQueryRef.current = null;
+      const lengthPatch = o.question !== undefined ? { lengthOfTextQuery: o.question.length } : {};
+      const props =
+        valid && o.intent !== undefined
+          ? withResponseChipStatus(withValidResponse(base, o.intent, o.question?.length), o.shownChipType)
+          : { ...base, ...lengthPatch, isValidQuery: valid };
+      analytics.track(Events.SEND_QUERY, toAnalyticsProperties(props));
+    },
+    [analytics],
+  );
+  /**
+   * `buildMinimalSendQueryProps` (ChatViewModel.kt:115-135) for a send the farmer made by hand:
+   * `manualSendChipContext` over the CURRENT thread (call before the new bubble is added).
+   */
+  const minimalSendQuery = useCallback(
+    (question: string, kind: { image?: boolean; voice?: boolean; sizeKb?: number; audioFormat?: string } = {}): SendQueryProps => {
+      const lastAi = [...stateRef.current.messages].reverse().find((m): m is AiResponse => m.kind === 'ai');
+      const chip = manualSendChipContext(
+        lastAi
+          ? {
+              analyticsType: lastAi.alignmentKind ? alignmentAnalyticsType(lastAi.alignmentKind) : null,
+              chipCount: lastAi.alignmentChips?.length ?? 0,
+              selectedCount: lastAi.alignmentSelectedValues?.length ?? 0,
+            }
+          : null,
+      );
+      return {
+        screenName: Screens.CHAT,
+        isFollowupPrompt: false,
+        isImageQuery: !!kind.image,
+        isTextQuery: !kind.image && !kind.voice,
+        isVoiceQuery: !!kind.voice,
+        lengthOfTextQuery: question.length,
+        sizeOfImageKb: kind.sizeKb ?? 0,
+        audioFormat: kind.voice ? (kind.audioFormat ?? '') : '',
+        agenticChipStatus: chip.status,
+        agenticChipSkippedType: chip.skippedType,
+      };
+    },
+    [],
+  );
+
   // Release the TTS player when unmounting (ON_STOP / onDispose parity), and abort any live
   // agentic stream — leaving the chat must close the request, not keep reading it.
   useEffect(() => {
@@ -341,6 +427,12 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         conversationIdRef.current = null;
       }),
     [session],
+  );
+
+  /** App `getDefaultImageQuery` (ChatViewModel.kt:65, :78-79). */
+  const defaultImageQuery = useCallback(
+    () => labels.getLabel('fc_v2_app_label_what_is_wrong_with_my_crop', 'What is wrong with my crop?'),
+    [labels],
   );
 
   const ensureConversationId = useCallback(async (): Promise<string> => {
@@ -405,6 +497,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
   /** Flags the user bubble, drops the placeholder and surfaces the inline error + retry. */
   const failAnswer = useCallback(
     (ctx: AnswerContext, message: string, code?: number, isNetwork = false) => {
+      finishSendQuery(false, { question: ctx.question });
       setState((s) => ({
         ...s,
         messages: s.messages
@@ -417,7 +510,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       }));
       analytics.error(code, message);
     },
-    [analytics],
+    [analytics, finishSendQuery],
   );
 
   const markFirstQueryAsked = useCallback(() => {
@@ -467,7 +560,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         hideTtsSpeaker: data.hide_tts_speaker ?? false,
         hideFollowUpQuestion: data.hide_follow_up_question ?? false,
         actualContentProvider: data.actual_content_provider ?? null,
-        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
+        // App: clarification comes from #29 only (ChatViewModel.kt:1924); the answer itself
+        // resets it (agentic :1700). `intent_classification_output.clarification_needed` is an
+        // object {asset, concern, additional_context}, not a flag.
+        clarificationRequired: false,
         isAgentic: ctx.isAgentic ?? false,
         // 2.0.0: an alignment surface asks the user to clarify/confirm instead of (or alongside)
         // answering. Exclusive surfaces replace the answer, additive ones sit below it.
@@ -484,13 +580,13 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         errorMessage: null,
         failedMessageId: null,
         chatResponseState: success(answerText),
-        clarificationRequired: data.intent_classification_output?.clarification_needed ?? false,
+        clarificationRequired: false,
       }));
 
-      analytics.track(Events.SEND_QUERY, {
-        triggered_input_type: ctx.triggeredInputType,
-        conversation_id: ctx.conversationId,
-        message_id: data.message_id ?? '',
+      finishSendQuery(true, {
+        question: ctx.question,
+        intent: (data.intent_classification_output ?? null) as IntentOutputLike | null,
+        shownChipType: alignmentKind != null && (data.alignments?.chips?.length ?? 0) > 0 ? alignmentAnalyticsType(alignmentKind) : null,
       });
       analytics.answerReceived(data.message_id ?? '');
 
@@ -499,7 +595,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         void fetchFollowUps(data.message_id, aiId);
       }
     },
-    [analytics, failAnswer, fetchFollowUps, labels, markFirstQueryAsked],
+    [analytics, failAnswer, fetchFollowUps, finishSendQuery, labels, markFirstQueryAsked],
   );
 
   // -------------------------------------------------------------------------
@@ -643,6 +739,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         if (pendingDone && (doneAnswer.length > 0 || fallbackText.length > 0)) {
           // A `done` means the model actually finished → a complete answer, not an interruption,
           // even if the transport dropped right after.
+          finishSendQuery(true, { question: ctx.question });
           finalizeAgenticAnswer(
             streamId,
             doneAnswer.length > 0 ? doneAnswer : fallbackText,
@@ -651,14 +748,18 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         } else if (errorKind && fallbackText.length > 0) {
           // Genuine error after some text arrived: keep the partial and mark it interrupted so
           // the UI can offer retry.
+          // Partial content was delivered: a (partial) valid response (ChatViewModel.kt:1767-1770).
+          finishSendQuery(true, { question: ctx.question });
           interruptAgentic(streamId, fallbackText, errorKind);
         } else if (fallbackText.length > 0) {
           // Clean EOF with partial text and no terminal event: some backends stream deltas
           // without a done/metadata. Treat it as the complete answer — flagging it interrupted
           // would make every normal answer on such a backend look broken.
+          finishSendQuery(true, { question: ctx.question });
           finalizeAgenticAnswer(streamId, fallbackText, undefined);
         } else {
           // Nothing usable arrived.
+          finishSendQuery(false, { question: ctx.question });
           interruptAgentic(streamId, '', errorKind ?? 'UNKNOWN');
         }
       };
@@ -701,7 +802,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         if (streamAbortRef.current === controller) streamAbortRef.current = null;
       }
     },
-    [api, applyTextPromptResponse, finalizeAgenticAnswer, interruptAgentic, updateStreamingResponse],
+    [api, applyTextPromptResponse, finalizeAgenticAnswer, finishSendQuery, interruptAgentic, updateStreamingResponse],
   );
 
   // -------------------------------------------------------------------------
@@ -741,8 +842,22 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
          * (ChatViewModel.kt:2197), so the retry closure below drops them too.
          */
         alignment?: AlignmentRequestFields;
+        /**
+         * A photo question on the agentic path (app ChatViewModel.kt:1866-1882): sent as
+         * `image` + `image_name` on #27a. Kept on retry, as the app's IMAGE retry re-sends it.
+         */
+        image?: { base64: string; imageName: string };
+        /**
+         * Send_Query_Initiated props for this send (built by the caller, as the app builds
+         * `pendingSendQueryProperties`). Absent → `buildMinimalSendQueryProps` over the current
+         * thread. `'pending'` → already fired by the caller (voice: fired when recording was sent).
+         * A retry fires neither event (the app's retryLastRequest sets no props).
+         */
+        sendQuery?: SendQueryProps | 'pending';
       },
     ) => {
+      if (opts.retry) pendingSendQueryRef.current = null;
+      else if (opts.sendQuery !== 'pending') startSendQuery(opts.sendQuery ?? minimalSendQuery(question));
       const userMsgId = opts.reuseUserMessageId ?? nextLocalId('user');
       const placeholderId = nextLocalId('loading');
       const props = opts.properties ?? {};
@@ -779,11 +894,6 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         };
       });
 
-      analytics.track(Events.SEND_QUERY_INITIATED, {
-        triggered_input_type: props.triggeredInputType ?? 'text',
-        // Only present for an alignment-chip tap, so ordinary sends keep their v1 payload.
-        ...(props.agenticChipType ? { agentic_chip_type: props.agenticChipType } : {}),
-      });
       analytics.messageSent(question);
 
       const conversationId = await ensureConversationId();
@@ -805,12 +915,14 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         streaming_required: store.getBool(PrefKeys.STREAMING_REQUIRED, true),
         // Spread, never null-filled: absent keys stay off the wire, as Gson omits nulls.
         ...(opts.alignment ?? {}),
+        ...(opts.image ? { image: opts.image.base64, image_name: opts.image.imageName } : {}),
       };
 
       lastRequestRef.current = () =>
         runTextQuery(question, { ...opts, retry: true, reuseUserMessageId: userMsgId, alignment: undefined });
 
       const ctx: AnswerContext = {
+        question,
         placeholderId,
         userMsgId,
         conversationId,
@@ -830,7 +942,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       }
       applyTextPromptResponse(res.data, ctx);
     },
-    [analytics, api, applyTextPromptResponse, ensureConversationId, failAnswer, services.config, streamAgenticAnswer],
+    [analytics, api, applyTextPromptResponse, ensureConversationId, failAnswer, minimalSendQuery, services.config, startSendQuery, streamAgenticAnswer],
   );
 
   // -------------------------------------------------------------------------
@@ -843,6 +955,20 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
         contentCardImageUrl: opts.contentCardImageUrl ?? null,
+        // InitializeWithQuestion props (ChatViewModel.kt:214-232); no chip status → "none".
+        sendQuery: {
+          screenName: Screens.CHAT,
+          isFollowupPrompt: false,
+          isImageQuery: false,
+          isTextQuery: !opts.audioUri,
+          isVoiceQuery: !!opts.audioUri,
+          lengthOfTextQuery: question.length,
+          isWeatherAdviceCTA: opts.isWeatherAdviceCTA ?? false,
+          isSSFR: opts.isSSFR ?? false,
+          channel: opts.channel ?? null,
+          isImageCard: opts.contentCardTriggerType === 'image_card',
+          isTextCard: opts.contentCardTriggerType === 'text_card',
+        },
         properties: {
           // An explicit type wins; otherwise the app's InitializeWithQuestion rule
           // (ChatViewModel.kt:235-243 → :1391-1395).
@@ -889,7 +1015,56 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
   const initializeVoicePrototype = useCallback<ChatActions['initializeVoicePrototype']>(
     async (recording, _originScreenName) => {
-      patch({ isLoading: true, chatResponseState: loading() });
+      // App sendFollowUpVoiceQuestion / initializeVoicePrototype (ChatViewModel.kt:370-400,
+      // 508-640): the clip shows at once as a user bubble reading `Labels.ONE_SECOND_PLEASE`
+      // ("One second...") with its voice clip in the loading state, above an empty placeholder
+      // (no spinner while transcribing, ChatThreadContent.kt:618-633). The bubble text then
+      // becomes the transcription (success) or the heard text / "Something went wrong" (failure).
+      // Send_Query_Initiated fires when the clip is sent, before transcription (app
+      // buildMinimalSendQueryProps(isVoiceQuery = true), ChatViewModel.kt:375-382, 534-541);
+      // Send_Query then fires on the ANSWER to the transcribed question.
+      startSendQuery(minimalSendQuery('', { voice: true, audioFormat: recording.format }));
+      const userMsgId = nextLocalId('voice');
+      const placeholderId = nextLocalId('loading');
+      const oneSecond = labels.getLabel('fc_v2_app_label_one_second_please', 'One second...');
+      setState((s) => ({
+        ...s,
+        messages: [
+          ...s.messages,
+          {
+            kind: 'user',
+            id: userMsgId,
+            text: oneSecond,
+            audioUri: recording.objectUrl,
+            audioDurationMs: recording.durationMs > 0 ? recording.durationMs : undefined,
+            isTranscribing: true,
+            isFailed: false,
+          } as UserMessage,
+          { kind: 'loading', id: placeholderId } as LoadingPlaceholder,
+        ],
+        isLoading: true,
+        errorMessage: null,
+        failedMessageId: null,
+        suggestedQuestions: null,
+        suggestedQuestionIds: null,
+        chatResponseState: loading(),
+      }));
+      const failVoice = (text: string, message: string) =>
+        setState((s) => ({
+          ...s,
+          messages: s.messages
+            .filter((m) => m.id !== placeholderId)
+            .map((m) => (m.id === userMsgId && m.kind === 'user' ? { ...m, text, isTranscribing: false, isFailed: true } : m)),
+          isLoading: false,
+          errorMessage: message,
+          failedMessageId: userMsgId,
+          chatResponseState: failure(message),
+        }));
+      // A failed clip retries the whole voice send (app lastFailedVoiceAudioUri).
+      lastRequestRef.current = async () => {
+        setState((s) => ({ ...s, messages: s.messages.filter((m) => m.id !== userMsgId) }));
+        await initializeVoicePrototype(recording, _originScreenName);
+      };
       const conversationId = await ensureConversationId();
       const res = await api.transcribeAudio({
         conversation_id: conversationId,
@@ -907,23 +1082,34 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         (res.data.heard_input_query ?? '').trim().length > 0
       ) {
         analytics.track(Events.TRANSCRIPTION_SUCCESS, { confidence_score: res.data.confidence_score ?? 0 });
-        await runTextQuery(res.data.heard_input_query!.trim(), {
+        const heard = res.data.heard_input_query!.trim();
+        // The bubble keeps its clip and now reads the transcription; runTextQuery adds the
+        // answer placeholder, so the transcription placeholder goes.
+        setState((s) => ({
+          ...s,
+          messages: s.messages
+            .filter((m) => m.id !== placeholderId)
+            .map((m) => (m.id === userMsgId && m.kind === 'user' ? { ...m, text: heard, isTranscribing: false } : m)),
+        }));
+        await runTextQuery(heard, {
           transcriptionId: res.data.transcription_id ?? null,
           audioUri: recording.objectUrl,
+          reuseUserMessageId: userMsgId,
+          sendQuery: 'pending',
           properties: { triggeredInputType: 'voice' },
         });
       } else {
         analytics.track(Events.TRANSCRIPTION_FAILED, {
           confidence_score: res.ok ? (res.data.confidence_score ?? 0) : 0,
         });
-        const message = labels.getLabel(
-          'chat_transcription_failed',
-          "We couldn't hear that clearly. Please try speaking again.",
-        );
-        patch({ isLoading: false, errorMessage: message, chatResponseState: failure(message) });
+        const somethingWrong = labels.getLabel('fc_v2_app_label_something_went_wrong', 'Something went wrong');
+        // Low confidence: the bubble shows what was heard; a failed call: "Something went wrong".
+        const heard = res.ok ? (res.data.heard_input_query ?? '') : '';
+        const text = res.ok && heard.trim().length > 0 ? heard : somethingWrong;
+        failVoice(text, text);
       }
     },
-    [analytics, api, ensureConversationId, labels, patch, runTextQuery],
+    [analytics, api, ensureConversationId, labels, minimalSendQuery, runTextQuery, startSendQuery],
   );
 
   // -------------------------------------------------------------------------
@@ -941,19 +1127,31 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
         displayText: opts.displayText ?? null,
+        // A tapped follow-up chip: handleFollowUp's props (ChatScreen.kt:959-971) — follow-up,
+        // text, no chip status (→ "none"). A typed send: buildMinimalSendQueryProps with the
+        // manual chip context (`skipped` when a surface's chips were left unpicked).
+        sendQuery: opts.isFollowupPrompt
+          ? {
+              screenName: Screens.CHAT,
+              isFollowupPrompt: true,
+              isImageQuery: false,
+              isTextQuery: true,
+              isVoiceQuery: false,
+              lengthOfTextQuery: question.length,
+            }
+          : minimalSendQuery(question, { voice: opts.transcriptionId != null }),
         properties: {
           // App ChatViewModel.sendFollowUpQuestion (ChatViewModel.kt:993-997):
           // transcription → "voice", tapped follow-up chip → "follow_up", typed → "text".
           triggeredInputType: followUpTriggeredType(opts),
-          agenticChipType: opts.agenticChipType ?? null,
         },
       });
     },
-    [analytics, api, runTextQuery],
+    [api, minimalSendQuery, runTextQuery],
   );
 
   const selectAlignmentChip = useCallback<ChatActions['selectAlignmentChip']>(
-    async (messageId, kind, chip) => {
+    async (messageId, kind, chip, analyticsChipValue) => {
       // App rule (alignmentChipSend): the LABEL is shown and sent, the VALUE only marks the chip;
       // gender-select sends the value under its label. The selection is stored verbatim (never
       // trimmed) so it still matches the untrimmed comparison `AlignmentSurface` makes.
@@ -961,6 +1159,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       if (!send) return;
       // App sendAlignmentChip (ChatViewModel.kt:1015-1052): ignored while an answer is in flight.
       if (stateRef.current.isLoading) return;
+      const sendQueryBase = minimalSendQuery(send.query);
       // The server id of the surface that showed the chips, sent back as parent_message_id.
       const source = stateRef.current.messages.find(
         (m): m is AiResponse => m.kind === 'ai' && m.id === messageId,
@@ -975,15 +1174,20 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       await runTextQuery(send.query, {
         displayText: send.displayText === send.query ? null : send.displayText,
         alignment: alignmentRequestFields(kind, source?.messageId),
-        properties: {
-          triggeredInputType: ALIGN_CHIP_SEL,
-          // Segments the funnel by which alignment surface was tapped. Existing event, existing
-          // property name (`AlignmentKind.analyticsType` on Android) — no new event is introduced.
+        // SendAlignmentChip props (ChatViewModel.kt:286-302): minimal props over the thread
+        // BEFORE the pick, then a chip pick — selected, the surface type, chip value and label.
+        sendQuery: {
+          ...sendQueryBase,
+          isAlignmentChip: true,
           agenticChipType: alignmentAnalyticsType(kind),
+          agenticChipValue: analyticsChipValue ?? (chip.value || chip.label || ''),
+          agenticChipLabel: chip.label || chip.value || '',
+          agenticChipStatus: ChipStatus.SELECTED,
         },
+        properties: { triggeredInputType: ALIGN_CHIP_SEL },
       });
     },
-    [runTextQuery],
+    [minimalSendQuery, runTextQuery],
   );
 
   const sendLocationSharedQuery = useCallback<ChatActions['sendLocationSharedQuery']>(
@@ -996,6 +1200,16 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       // gps-prompt contract always carries original_query).
       const query = source?.alignmentOriginalQuery ?? '';
       if (query.trim().length === 0) return;
+      // ChatViewModel.kt:1100-1117: reported as a chip pick (gps-prompt, share_precise_location,
+      // `Labels.SHARE_LOCATION`), over the thread BEFORE the location bubble.
+      const locationSendQuery: SendQueryProps = {
+        ...minimalSendQuery(query),
+        isAlignmentChip: true,
+        agenticChipType: alignmentAnalyticsType('GPS_PROMPT'),
+        agenticChipValue: CapabilityChip.VALUE_SHARE_LOCATION,
+        agenticChipLabel: labels.getLabel('fc_v2_app_label_share_location', 'Share my location'),
+        agenticChipStatus: ChipStatus.SELECTED,
+      };
 
       setState((s) => {
         // Mark share_precise_location as picked so the source chip locks/highlights exactly as a
@@ -1022,20 +1236,68 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       });
 
       // `runTextQuery` adds the loading placeholder after the bubble above, sets isLoading and
-      // owns SEND_QUERY_INITIATED — deliberately with NO agenticChipType, so this reports as an
-      // ordinary text query (Android delta, docs/04).
+      // fires Send_Query_Initiated with the chip-pick props built above.
       await runTextQuery(query, {
         properties: { triggeredInputType: ALIGN_CHIP_SEL },
+        sendQuery: locationSendQuery,
         suppressUserMessage: true,
         // ChatViewModel.kt:1071: the GPS_PROMPT surface's server id; no decline flag on success.
         alignment: alignmentRequestFields('GPS_PROMPT', source?.messageId, true),
       });
     },
-    [runTextQuery],
+    [labels, minimalSendQuery, runTextQuery],
   );
 
   const sendQuestionWithImage = useCallback<ChatActions['sendQuestionWithImage']>(
-    async (question, imageBlob, imageObjectUrl) => {
+    async (question, imageBlob, imageObjectUrl, fromChip) => {
+      // App ChatViewModel.sendQuestionWithImage (:1121-1149) → fetchPlantixResponse (:1820-1915).
+      // The bubble shows only what the farmer typed (blank → image-only); the API always gets a
+      // prompt, the default question when the caption is blank.
+      const displayText = question.trim();
+      const apiQuery = displayText || defaultImageQuery();
+      // Send_Query_Initiated at send time. A composer photo: buildMinimalSendQueryProps (image,
+      // size, manual chip context; ChatViewModel.kt:310-323). A photo from an upload-photo chip:
+      // sendAlignmentPhotoDirect's props — a chip pick (`selected`, `upload-photo`, the chip's
+      // value/label, click_type align_chip_sel; ChatScreen.kt:431-455).
+      const sizeKb = Math.max(0, Math.floor(imageBlob.size / 1024));
+      startSendQuery(
+        fromChip
+          ? {
+              screenName: Screens.CHAT,
+              isFollowupPrompt: false,
+              isImageQuery: true,
+              isTextQuery: false,
+              isVoiceQuery: false,
+              lengthOfTextQuery: 0,
+              sizeOfImageKb: sizeKb,
+              isAlignmentChip: true,
+              agenticChipType: alignmentAnalyticsType('UPLOAD_PHOTO'),
+              agenticChipValue: fromChip.value,
+              agenticChipLabel: fromChip.label,
+            }
+          : minimalSendQuery(displayText, { image: true, sizeKb }),
+      );
+      if (services.config.enableAgenticChat) {
+        // Agentic on (ChatViewModel.kt:1858-1882): NOT image_analysis — the photo rides on the
+        // agentic text request as `image` + `image_name`, `triggered_input_type: "image"`, and the
+        // answer streams like any text answer (follow-ups, TTS, alignment surfaces included).
+        const prepared = await prepareImageForUpload(imageBlob);
+        if (!prepared) {
+          finishSendQuery(false); // ChatViewModel.kt:1852
+          const message = labels.getLabel('fc_v2_app_label_failed_to_process_image', 'Failed to process image');
+          patch({ isLoading: false, errorMessage: message, chatResponseState: failure(message) });
+          return;
+        }
+        await runTextQuery(apiQuery, {
+          sendQuery: 'pending',
+          displayText,
+          // The photo shows as the wide 16:9 banner on the question bubble (ChatViewModel.kt:1137).
+          contentCardImageUrl: imageObjectUrl,
+          image: { base64: prepared.base64, imageName: prepared.imageName },
+          properties: { triggeredInputType: 'image' },
+        });
+        return;
+      }
       const userMsgId = nextLocalId('user');
       const placeholderId = nextLocalId('loading');
       setState((s) => ({
@@ -1045,7 +1307,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
           {
             kind: 'user',
             id: userMsgId,
-            text: question,
+            text: displayText,
             imageUri: imageObjectUrl,
             userBubbleImageWideBanner: true,
             isFailed: false,
@@ -1059,25 +1321,41 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         chatResponseState: loading(),
       }));
 
-      analytics.track(Events.SEND_QUERY_INITIATED, { triggered_input_type: 'camera' });
       analytics.messageSent(question);
       const conversationId = await ensureConversationId();
-      const base64 = await blobToBase64(imageBlob);
-      const lat = store.getString(PrefKeys.FARMER_APP_LATITUDE);
-      const lng = store.getString(PrefKeys.FARMER_APP_LONGITUDE);
+      const prepared = await prepareImageForUpload(imageBlob);
+      if (!prepared) {
+        finishSendQuery(false);
+        const message = labels.getLabel('fc_v2_app_label_failed_to_process_image', 'Failed to process image');
+        setState((s) => ({
+          ...s,
+          messages: s.messages.filter((m) => m.id !== placeholderId),
+          isLoading: false,
+          errorMessage: message,
+          failedMessageId: userMsgId,
+          chatResponseState: failure(message),
+        }));
+        return;
+      }
+      // App PlantixRequest latitude/longitude = the fix ImageUtils resolved for the photo (its own
+      // EXIF GPS, else the current location with permission already granted) as Kotlin
+      // Double.toString(), or null (ChatViewModel.kt:1888-1889).
+      const lat = prepared.gps ? kotlinDoubleString(prepared.gps.latitude) : null;
+      const lng = prepared.gps ? kotlinDoubleString(prepared.gps.longitude) : null;
 
       lastRequestRef.current = () => sendQuestionWithImage(question, imageBlob, imageObjectUrl);
 
       const res = await api.imageAnalysis({
         conversation_id: conversationId,
-        image: base64,
+        image: prepared.base64,
         // App parity (PlantixRequest.kt): triggered_input_type "image",
         // latitude/longitude as STRINGs (the store already holds strings).
         triggered_input_type: 'image',
-        query: question || null,
+        // ChatViewModel.kt:1864: a caption-less photo still asks the default question.
+        query: apiQuery,
         latitude: lat ?? null,
         longitude: lng ?? null,
-        image_name: `fc_web_${Date.now()}.jpg`,
+        image_name: prepared.imageName,
         retry: false,
       });
 
@@ -1095,6 +1373,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
           failedMessageId: userMsgId,
           chatResponseState: failure(message, res.ok ? undefined : res.code, !res.ok && (res.isNetworkError || res.isTimeout)),
         }));
+        finishSendQuery(false); // ChatViewModel.kt:2153
         analytics.error(res.ok ? undefined : res.code, message);
         return;
       }
@@ -1112,11 +1391,11 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         isLoading: false,
         chatResponseState: success(res.data.response ?? ''),
       }));
-      analytics.track(Events.SEND_QUERY, { triggered_input_type: 'camera', conversation_id: conversationId });
+      finishSendQuery(true); // Plantix success: Valid_Query true, no intent (ChatViewModel.kt:2125)
       analytics.answerReceived(res.data.message_id ?? '');
       if (res.data.message_id) void fetchFollowUps(res.data.message_id, aiId);
     },
-    [analytics, api, ensureConversationId, fetchFollowUps, labels, store],
+    [analytics, api, defaultImageQuery, ensureConversationId, fetchFollowUps, finishSendQuery, labels, minimalSendQuery, patch, runTextQuery, services.config, startSendQuery],
   );
 
   const sendFollowUpVoiceQuestion = useCallback<ChatActions['sendFollowUpVoiceQuestion']>(
@@ -1139,6 +1418,16 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         // "read_full_advice" (was "card"). (statement_id + append-not-replace
         // remain — tracked in docs/04.)
         properties: { triggeredInputType: 'read_full_advice' },
+        // ChatViewModel.kt:914-922: read-full-advice props.
+        sendQuery: {
+          screenName: Screens.CHAT,
+          isFollowupPrompt: false,
+          isImageQuery: false,
+          isTextQuery: true,
+          isVoiceQuery: false,
+          lengthOfTextQuery: question.length,
+          isReadFullAdvice: true,
+        },
         reuseUserMessageId: stateRef.current.messages.find((m) => m.kind === 'user')?.id,
       });
       patch({ readFullAdviceRequestedForMessageId: null });

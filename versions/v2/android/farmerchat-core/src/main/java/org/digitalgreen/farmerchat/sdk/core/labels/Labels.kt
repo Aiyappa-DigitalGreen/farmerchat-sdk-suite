@@ -345,6 +345,10 @@ object Labels {
      * still resolves. Verified present on endpoint #3.
      */
     const val LOCATION_PERMISSION_DECLINED = "fc_v2_app_label_location_permission_declined"
+    /** "I don't want to share a photo right now": camera permission denied from an upload-photo chip (app Labels.kt:196). */
+    const val PHOTO_PERMISSION_DECLINED = "fc_v2_app_label_photo_permission_declined"
+    /** "I don't have a photo to share right now": picker/camera cancelled, or no camera app (app Labels.kt:197). */
+    const val PHOTO_NOT_SHARED = "fc_v2_app_label_photo_not_shared"
     /** "Add one clear photo" — UPLOAD_PHOTO heading. */
     const val ADD_ONE_CLEAR_PHOTO = "fc_v2_app_label_add_one_clear_photo"
     /** "Please Confirm" — CONFIRM heading. */

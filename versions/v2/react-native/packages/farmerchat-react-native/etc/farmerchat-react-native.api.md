@@ -299,6 +299,16 @@ export interface CheckDeviceRequest {
     phone_country_code?: string | null;
 }
 
+// @public
+export interface ClarificationNeeded {
+    // (undocumented)
+    additional_context?: string | null;
+    // (undocumented)
+    asset?: boolean | null;
+    // (undocumented)
+    concern?: boolean | null;
+}
+
 // @public (undocumented)
 export interface CommunicationChannelItem {
     // (undocumented)
@@ -993,20 +1003,27 @@ export interface InitializeGuestUserResponse {
     user_id?: string | null;
 }
 
-// @public (undocumented)
+// @public
 export interface IntentClassificationOutput {
     // (undocumented)
     [key: string]: unknown;
     // (undocumented)
-    clarification_needed?: boolean | null;
+    asset_name?: string | null;
+    // (undocumented)
+    asset_status?: string | null;
+    // (undocumented)
+    asset_type?: string | null;
+    clarification_needed?: ClarificationNeeded | boolean | null;
     // (undocumented)
     concern?: string | null;
     // (undocumented)
-    confidence?: number | null;
+    confidence?: number | string | null;
     // (undocumented)
     intent?: string | null;
     // (undocumented)
     rephrased_query?: string | null;
+    // (undocumented)
+    stage?: string | null;
 }
 
 // @public
@@ -1483,6 +1500,8 @@ export interface SynthesiseAudioResponse {
 export interface TextPromptRequest {
     // (undocumented)
     conversation_id: string;
+    image?: string | null;
+    image_name?: string | null;
     location_declined?: boolean | null;
     // (undocumented)
     message_id: string;

@@ -27,7 +27,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/chatWire.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
+    "test": "node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/chatWire.test.ts && node --import ./test/ts-extension-hook.mjs test/sendQueryAndExif.test.ts && node --import ./test/ts-extension-hook.mjs test/optionalPeers.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "size:check": "node scripts/size-check.mjs",
@@ -57,9 +57,11 @@
     "expo-av": ">=14.0.0",
     "expo-constants": ">=16.0.0",
     "expo-device": ">=6.0.0",
+    "expo-image-manipulator": ">=12.0.0",
     "expo-image-picker": ">=15.0.0",
     "expo-localization": ">=16.0.0",
     "expo-location": ">=17.0.0",
+    "expo-sharing": ">=12.0.0",
     "react": ">=18.2.0",
     "react-native": ">=0.74.0",
     "react-native-gesture-handler": ">=2.16.0",
@@ -70,7 +72,13 @@
     "react-native-webview": ">=13.8.0"
   },
   "peerDependenciesMeta": {
+    "expo-image-manipulator": {
+      "optional": true
+    },
     "expo-localization": {
+      "optional": true
+    },
+    "expo-sharing": {
       "optional": true
     },
     "react-native-view-shot": {

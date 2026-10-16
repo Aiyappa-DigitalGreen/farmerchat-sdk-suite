@@ -11,7 +11,12 @@ import { readFileSync } from 'node:fs';
 import {
   ALIGN_CHIP_SEL,
   alignmentChipRequestParams,
+  criticallyDampedProgress,
   historyFollowUpQuestions,
+  historyVoiceText,
+  imageQueryName,
+  imageQueryText,
+  shareCardText,
   sortHistoryItems,
 } from '../src/core/chatWire.ts';
 
@@ -111,7 +116,7 @@ test('Listen flips to playing together with the URL (no prepare lag)', () => {
   assert.ok(/audioPlaybackUrl: result\.data\.audio,\s*isAudioPlaying: true,/.test(src));
   const screen = read('src/ui/screens/ChatScreen.tsx');
   assert.ok(
-    screen.includes("onAction({ type: 'SetAudioPlaying', isPlaying: !state.isAudioPlaying })"),
+    /type: 'SetAudioPlaying',\s*isPlaying: !state\.isAudioPlaying,/.test(screen),
     'With a clip loaded, a tap toggles play/pause (app handleListen) instead of re-synthesising.',
   );
 });
@@ -135,4 +140,65 @@ test('the Listen pill has the app wave and four states', () => {
   for (const s of ["'Default'", "'Loading'", "'Playing'", "'Paused'"]) assert.ok(src.includes(s));
   assert.ok(src.includes('const WAVE_WIDTH = 54;') && src.includes('const WAVE_HEIGHT = 26;'));
   assert.ok(src.includes('const FADE_MS = 500;'));
+});
+
+// --- Round 3 ---------------------------------------------------------------------------------
+
+test('voice history text: query_text first, heard_query_text only when it is null', () => {
+  // App ChatViewModel.kt:1273 `item.query_text ?: item.heard_query_text ?: ""`.
+  assert.equal(historyVoiceText({ query_text: 'typed', heard_query_text: 'heard' }), 'typed');
+  assert.equal(historyVoiceText({ query_text: null, heard_query_text: 'heard' }), 'heard');
+  assert.equal(historyVoiceText({ heard_query_text: 'heard' }), 'heard');
+  assert.equal(historyVoiceText({ query_text: '', heard_query_text: 'heard' }), '', 'blank is not null');
+  assert.equal(historyVoiceText({}), '');
+});
+
+test('image query: default crop question when blank; image_<uuid>.jpg name', () => {
+  // App ChatViewModel.kt:1127, 1858-1862.
+  assert.equal(imageQueryText('  ', 'What is wrong with my crop?'), 'What is wrong with my crop?');
+  assert.equal(imageQueryText(' Spots on leaves ', 'D'), 'Spots on leaves');
+  assert.equal(imageQueryName('abc'), 'image_abc.jpg');
+  assert.match(imageQueryName(), /^image_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.jpg$/);
+});
+
+test('agentic image queries ride #27a with image + image_name; Plantix only without agentic', () => {
+  const src = read('src/state/useChat.ts');
+  assert.ok(/if \(sdk\.config\.enableAgenticChat\) \{[\s\S]*?triggered_input_type: 'image',[\s\S]*?image: imageBase64,\s*image_name: imageName,[\s\S]*?await streamAgenticAnswer\(request, placeholderId/.test(src));
+  assert.ok(src.includes('query: queryForApi,') && !src.includes('fc-image-'));
+});
+
+test('animated pin follows the default Compose spring (critically damped, k = 1500)', () => {
+  assert.equal(criticallyDampedProgress(0), 0);
+  assert.ok(criticallyDampedProgress(0.05) > 0.5 && criticallyDampedProgress(0.05) < 0.7);
+  assert.ok(criticallyDampedProgress(0.3) > 0.9998);
+  let prev = 0;
+  for (let t = 0; t <= 0.4; t += 0.01) {
+    const p = criticallyDampedProgress(t);
+    assert.ok(p >= prev && p <= 1, 'monotonic, no overshoot');
+    prev = p;
+  }
+  const screen = read('src/ui/screens/ChatScreen.tsx');
+  assert.ok(!/scrollTo(Index|Offset|End)\(\{[^}]*animated: true/.test(screen), 'no animated programmatic scroll (RN 0.76 dead-tap bug)');
+  assert.ok(screen.includes('requestAnimationFrame(step)') && screen.includes('onScrollBeginDrag={cancelPin}'));
+});
+
+test('share card truncates like ShareCard.kt', () => {
+  const long = 'x'.repeat(2000);
+  assert.deepEqual(
+    [shareCardText(long, long, true).title.length, shareCardText(long, long, true).body.length],
+    [50, 460],
+  );
+  assert.deepEqual(
+    [shareCardText(long, long, false).title.length, shareCardText(long, long, false).body.length],
+    [70, 940],
+  );
+  const src = read('src/ui/screens/ChatScreen.tsx');
+  assert.ok(src.includes('lastUser?.imageUri ?? null'), 'card uses the LAST question and its photo');
+});
+
+test('Listen analytics carry the app properties', () => {
+  // App ChatScreen.kt:1080-1097, 1316-1340; AnalyticsProps.kt:4, 42.
+  const src = read('src/state/useChat.ts');
+  assert.ok(src.includes('? { screen_name: ScreenNames.CHAT }'));
+  assert.ok(src.includes('No_of_seconds_played: Math.max(0, Math.floor(action.secondsPlayed ?? 0))'));
 });

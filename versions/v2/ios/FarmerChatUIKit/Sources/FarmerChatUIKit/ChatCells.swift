@@ -54,6 +54,9 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         return c
     }()
     private let stack = UIStackView()
+    /// An answer that contains a GFM table: its text runs and `FCUIMarkdownTableView`s, in order
+    /// (MarkdownText.kt draws tables as cards / a grid, never as text). Hidden otherwise.
+    private let markdownStack = UIStackView()
     /// The message whose "Read full advice" wobble has already been scheduled (once per answer).
     private var wobbledMessageId: String?
     private var imageTask: URLSessionDataTask?
@@ -146,7 +149,10 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         additiveSurface.onChipTap = { [weak self] chip in self?.onAlignmentChipTap?(chip) }
         stallHint.onStallChanged = { [weak self] in self?.onLayoutInvalidated?() }
 
-        [imageView, clipButton, textLabel, failedLabel,
+        markdownStack.axis = .vertical
+        markdownStack.spacing = 16
+        markdownStack.isHidden = true
+        [imageView, clipButton, textLabel, markdownStack, failedLabel,
          streamStatusView, stallHint, streamErrorWrap,
          actionsRow, additiveWrap, spinner].forEach { stack.addArrangedSubview($0) }
         stack.axis = .vertical
@@ -205,6 +211,11 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         isBusy: Bool = false,
         readFullAdviceAvailable: Bool = false
     ) {
+        // Only an answer with a table uses the segmented stack; every other row is the one label.
+        if case .aiResponse = message {} else {
+            markdownStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            markdownStack.isHidden = true
+        }
         switch message {
         case .user(let user):
             currentText = user.text
@@ -240,12 +251,30 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             // A streaming answer grows IN PLACE with no typewriter/reveal animation — the text
             // already arrives token by token (2.0.0). MarkdownText.kt: bold/italic, headers,
             // bullets and the block spacing table.
-            textLabel.attributedText = ai.text.isEmpty ? nil : FCUIMarkdown.render(
-                ai.text,
-                color: answerColor,
-                body: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17)
-            )
-            textLabel.isHidden = ai.text.isEmpty
+            let answerBody = FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17)
+            markdownStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            if !ai.text.isEmpty, FCUIMarkdown.hasTable(ai.text) {
+                textLabel.attributedText = nil
+                textLabel.isHidden = true
+                for segment in FCUIMarkdown.segments(ai.text, color: answerColor, body: answerBody) {
+                    switch segment {
+                    case .text(let attributed):
+                        let label = UILabel()
+                        label.numberOfLines = 0
+                        label.attributedText = attributed
+                        markdownStack.addArrangedSubview(label)
+                    case .table(let headers, let alignments, let rows):
+                        markdownStack.addArrangedSubview(FCUIMarkdownTableView(
+                            headers: headers, alignments: alignments, rows: rows, ink: answerColor
+                        ))
+                    }
+                }
+                markdownStack.isHidden = false
+            } else {
+                markdownStack.isHidden = true
+                textLabel.attributedText = ai.text.isEmpty ? nil : FCUIMarkdown.render(ai.text, color: answerColor, body: answerBody)
+                textLabel.isHidden = ai.text.isEmpty
+            }
             spinner.stopAnimating()
             failedLabel.isHidden = true
             imageView.isHidden = true

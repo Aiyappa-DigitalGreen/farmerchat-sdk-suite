@@ -33,6 +33,11 @@ import { PrimaryButton, SecondaryButton } from './Buttons';
 export interface PickedImage {
   uri: string;
   base64: string;
+  /** expo-image-picker `exif` of the picked photo (its own GPS, when it has one). */
+  exif?: Record<string, unknown> | null;
+  /** Pixel size, for the 1000x1000 upload downscale. */
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface RecordedAudio {
@@ -523,7 +528,9 @@ export async function captureImageFromCamera(
       sdk,
       await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        quality: 0.7,
+        // App ImageUtils.kt:206: JPEG quality 80.
+        quality: 0.8,
+        exif: true,
         base64: true,
       }),
     );
@@ -545,7 +552,9 @@ export async function pickImageFromGallery(
       sdk,
       await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 0.7,
+        // App ImageUtils.kt:206: JPEG quality 80.
+        quality: 0.8,
+        exif: true,
         base64: true,
       }),
     );
@@ -565,7 +574,13 @@ function assetToPickedImage(
     sdk.analytics.track(AnalyticsEvents.INPUT_CAPTURE_FAILED, { input: 'image' });
     return null;
   }
-  return { uri: asset.uri, base64: asset.base64 };
+  return {
+    uri: asset.uri,
+    base64: asset.base64,
+    exif: (asset.exif as Record<string, unknown> | null | undefined) ?? null,
+    width: asset.width ?? null,
+    height: asset.height ?? null,
+  };
 }
 
 export function PhotoInputSheet(props: {
@@ -585,13 +600,13 @@ export function PhotoInputSheet(props: {
     const image = await captureImageFromCamera(sdk, {
       onPermissionPermanentlyDenied: props.onPermissionPermanentlyDenied,
     });
-    if (image) props.onPicked({ uri: image.uri, base64: image.base64 });
+    if (image) props.onPicked(image);
     else props.onClose();
   };
 
   const openGallery = async () => {
     const image = await pickImageFromGallery(sdk);
-    if (image) props.onPicked({ uri: image.uri, base64: image.base64 });
+    if (image) props.onPicked(image);
     else props.onClose();
   };
 

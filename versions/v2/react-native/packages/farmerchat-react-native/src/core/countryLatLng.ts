@@ -8,6 +8,7 @@
  * This is the app's fallback when the IP-geolocation call (Google `geolocate`) fails. An unknown
  * country code yields (0, 0), which callers MUST treat as "no location", never as a real one.
  */
+import { optionalLocalization } from './optionalPeers';
 export const COUNTRY_LAT_LNG: Record<string, [number, number]> = {
   AD: [42.546245, 1.601554],  // Andorra
   AE: [23.424076, 53.847818],  // United Arab Emirates
@@ -289,8 +290,9 @@ export function regionFromLocaleTag(tag: string | null | undefined): string {
 export function fromDeviceLocale(): { countryCode: string; lat: number; lng: number } {
   let countryCode = '';
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const localization = require('expo-localization');
+    // Resolved once at load (core/optionalPeers.ts): a lazy require of a missing optional package
+    // is reported as fatal by metro-runtime before any catch sees it.
+    const localization = optionalLocalization();
     const direct = localization?.getLocales?.()?.[0]?.regionCode ?? localization?.region ?? null;
     if (direct && /^[A-Za-z]{2}$/.test(direct)) {
       countryCode = String(direct).toUpperCase();

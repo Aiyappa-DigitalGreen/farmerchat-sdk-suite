@@ -835,7 +835,7 @@ final class FCUIAlignmentChipView: UIControl {
 /// 16) for the capability prompts (GPS_PROMPT / UPLOAD_PHOTO), then the escape hatch (clarify /
 /// confirm only). Escalate wraps the whole body in a 16-radius red-tinted card.
 ///
-/// The UIKit flavour has no markdown renderer, so the message is plain bodyMedium text.
+/// The message goes through ``FCUIMarkdown`` (bold / lists / headers), as MarkdownText does.
 final class FCUIAlignmentSurfaceView: UIView {
     var onChipTap: ((AlignmentChip) -> Void)?
     var onTypeInstead: (() -> Void)?
@@ -967,7 +967,12 @@ final class FCUIAlignmentSurfaceView: UIView {
         }
 
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        messageLabel.fcSetText(message, style: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
+        // AlignmentSurface.kt renders the prompt through MarkdownText.
+        messageLabel.attributedText = trimmedMessage.isEmpty ? nil : FCUIMarkdown.render(
+            message,
+            color: FCUITheme.foregroundPrimary,
+            body: FCUITypography.current.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17)
+        )
         messageLabel.isHidden = trimmedMessage.isEmpty
 
         // Listen pill: only on the live prompt (latest + idle), never on escalate / additive.

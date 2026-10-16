@@ -187,14 +187,19 @@ class ChatViewModel(
                 // tapped chip never shows a check, never locks, and the unpicked chips never
                 // fade back. Matched on value OR label because a chip may carry only a label.
                 recordAlignmentPick(action.question)
+                // App parity (ChatViewModel.kt:278-282 + ChatScreen.kt:1776-1795): without
+                // explicit props this is a MANUAL send from the composer, so it is not a
+                // follow-up prompt (click_type and triggered_input_type "text") and it carries
+                // the chip context: `skipped` when unpicked chips were on screen. A follow-up
+                // chip tap passes its own props (`followUpChipSendProperties`, app :958-972).
                 pendingSendQueryProperties = action.sendQueryProperties ?: SendQueryProperties(
                     screenName = AnalyticsScreens.CHAT,
-                    isFollowupPrompt = true,
+                    isFollowupPrompt = false,
                     isImageQuery = false,
                     isTextQuery = action.audioUri == null,
                     isVoiceQuery = action.audioUri != null,
                     lengthOfTextQuery = action.question.length
-                )
+                ).withManualChipContext(manualSendChipContext(_state.value.messages))
                 pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
                 sendFollowUpQuestion(action.question, action.transcriptionId, action.audioUri, action.followUpQuestionId)
             }
@@ -202,6 +207,8 @@ class ChatViewModel(
             is ChatAction.SendLocationSharedQuery ->
                 sendLocationSharedQuery(action.sourceMessageId, action.address)
             is ChatAction.SendQuestionWithImage -> {
+                // A chip photo passes its own props (`photoChipSendProperties`: selected,
+                // upload-photo, align_chip_sel). A composer photo is a manual send.
                 pendingSendQueryProperties = action.sendQueryProperties ?: SendQueryProperties(
                     screenName = AnalyticsScreens.CHAT,
                     isFollowupPrompt = false,
@@ -209,7 +216,7 @@ class ChatViewModel(
                     isTextQuery = false,
                     isVoiceQuery = false,
                     lengthOfTextQuery = action.question.length
-                )
+                ).withManualChipContext(manualSendChipContext(_state.value.messages))
                 pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
                 sendQuestionWithImage(action.question, action.imageUri)
             }
@@ -622,7 +629,11 @@ class ChatViewModel(
 
     private fun sendQuestionWithImage(question: String, imageUri: Uri) {
         clearAudioPlayback()
-        val questionForDisplayAndApi = question.ifBlank { getDefaultImageQuery() }
+        // App parity (ChatViewModel.kt:1121-1127): the bubble shows only what the farmer typed. A
+        // photo with no caption is an image-only bubble. The default query ("What is wrong with my
+        // crop?") goes to the API only, never into the bubble.
+        val displayText = question.trim()
+        val apiQuery = displayText.ifBlank { getDefaultImageQuery() }
         val messagesWithPreGenerated = ensurePreGeneratedContentAdded(_state.value.messages)
         val placeholderId = UUID.randomUUID().toString()
 
@@ -630,7 +641,7 @@ class ChatViewModel(
             current.copy(
                 messages = messagesWithPreGenerated +
                     ChatMessage.UserMessage(
-                        questionForDisplayAndApi,
+                        displayText,
                         imageUri = imageUri,
                         // App parity (ChatViewModel.kt:1138): a sent photo is the wide banner.
                         userBubbleImageWideBanner = true
@@ -643,8 +654,8 @@ class ChatViewModel(
             )
         }
 
-        rememberForRetry(questionForDisplayAndApi, InputType.IMAGE, null, imageUri, null, false, null, null)
-        fetchPlantixResponse(questionForDisplayAndApi, imageUri, placeholderId)
+        rememberForRetry(apiQuery, InputType.IMAGE, null, imageUri, null, false, null, null)
+        fetchPlantixResponse(apiQuery, imageUri, placeholderId)
     }
 
     /**
@@ -722,15 +733,17 @@ class ChatViewModel(
                                 }
                             )
                         }
+                        // App buildMinimalSendQueryProps (ChatViewModel.kt:535-539): a voice send
+                        // is a manual send, not a follow-up prompt, with the chip context.
                         pendingSendQueryProperties = SendQueryProperties(
                             screenName = AnalyticsScreens.CHAT,
-                            isFollowupPrompt = !replaceMessages,
+                            isFollowupPrompt = false,
                             isImageQuery = false,
                             isTextQuery = false,
                             isVoiceQuery = true,
                             audioFormat = format,
                             lengthOfTextQuery = 0
-                        )
+                        ).withManualChipContext(manualSendChipContext(_state.value.messages))
                         pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
                         rememberForRetry(text, InputType.AUDIO, data.transcription_id, null, "voice", false, null, null)
                         fetchTextPromptResponse(
@@ -1216,9 +1229,11 @@ class ChatViewModel(
         rememberForRetry(
             action.query, InputType.TEXT, null, null, ALIGN_CHIP_SEL, false, null, null
         )
+        // App buildMinimalSendQueryProps(...).copy(isAlignmentChip = true, ...): a chip pick
+        // is not a follow-up prompt (follow_up_prompt false; click_type align_chip_sel).
         pendingSendQueryProperties = SendQueryProperties(
             screenName = AnalyticsScreens.CHAT,
-            isFollowupPrompt = true,
+            isFollowupPrompt = false,
             isImageQuery = false,
             isTextQuery = true,
             isVoiceQuery = false,
@@ -1295,9 +1310,11 @@ class ChatViewModel(
             )
         }
         rememberForRetry(query, InputType.TEXT, null, null, ALIGN_CHIP_SEL, false, null, null)
+        // App buildMinimalSendQueryProps(...).copy(isAlignmentChip = true, ...): a chip pick
+        // is not a follow-up prompt (follow_up_prompt false; click_type align_chip_sel).
         pendingSendQueryProperties = SendQueryProperties(
             screenName = AnalyticsScreens.CHAT,
-            isFollowupPrompt = true,
+            isFollowupPrompt = false,
             isImageQuery = false,
             isTextQuery = true,
             isVoiceQuery = false,
@@ -1650,6 +1667,10 @@ class ChatViewModel(
                             intent = ico?.intent,
                             clarificationNeededAsset = ico?.clarification_needed?.asset == true,
                             clarificationNeededConcern = ico?.clarification_needed?.concern == true
+                            // App ChatViewModel.kt:1721 / :2042: a response that presents chips
+                            // turns a none-status query into `available` + agentic_chip_shown_type.
+                        ).withResponseChipStatus(
+                            alignmentKind?.takeIf { !data.alignments?.chips.isNullOrEmpty() }?.analyticsType
                         ).toAnalyticsProperties()
                     )
                 }
@@ -1693,14 +1714,37 @@ class ChatViewModel(
                 return@launch
             }
 
+            val queryForApi = question?.takeIf { it.isNotBlank() } ?: getDefaultImageQuery()
+            val imageName = "image_${UUID.randomUUID()}.jpg"
+
+            // App parity (ChatViewModel.kt:1863-1879): with agentic chat on, a photo does NOT go
+            // to #28 (image_analysis). The base64 image and image_name ride on the agentic text
+            // request (#27a, triggered_input_type "image"), and the answer streams like any other.
+            // simulateAgenticStream keeps #28: it presents a synchronous wire, and the app's
+            // switch is the agentic flag alone.
+            if (config.enableAgenticChat) {
+                streamAgenticAnswer(
+                    buildAgenticImageRequest(
+                        conversationId = conversationId(),
+                        query = queryForApi,
+                        base64Image = imageResult.base64Image,
+                        imageName = imageName,
+                        retry = retry,
+                        streamingRequired = prefs.getBoolean(SdkPreferences.Keys.STREAMING_REQUIRED, true)
+                    ),
+                    placeholderId
+                )
+                return@launch
+            }
+
             val request = PlantixRequest(
                 conversation_id = conversationId(),
                 image = imageResult.base64Image,
-                query = question?.takeIf { it.isNotBlank() } ?: getDefaultImageQuery(),
+                query = queryForApi,
                 triggered_input_type = "image",
                 latitude = imageResult.latitude?.toString(),
                 longitude = imageResult.longitude?.toString(),
-                image_name = "image_${UUID.randomUUID()}.jpg",
+                image_name = imageName,
                 retry = retry
             )
 

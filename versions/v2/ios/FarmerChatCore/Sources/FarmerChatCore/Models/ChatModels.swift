@@ -121,9 +121,17 @@ public struct TextPromptRequest: Codable, Sendable {
     /// App `TextPromptRequest.photo_declined`: true only when the farmer declined an UPLOAD_PHOTO
     /// prompt; nil (omitted) otherwise.
     public var photoDeclined: Bool? = nil
+    /// App `TextPromptRequest.image`: the base64 JPEG of a photo question on the AGENTIC path
+    /// (ChatViewModel.kt:1866-1880 — with agentic chat on, photos do not hit #28). Nil (omitted)
+    /// otherwise. docs/02 §TextPromptRequest fields.
+    public var image: String? = nil
+    /// App `TextPromptRequest.image_name` (`image_<uuid>.jpg`), sent with ``image``.
+    public var imageName: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case query
+        case image
+        case imageName = "image_name"
         case parentMessageId = "parent_message_id"
         case locationDeclined = "location_declined"
         case photoDeclined = "photo_declined"
@@ -181,6 +189,8 @@ public struct TextPromptRequest: Codable, Sendable {
         parentMessageId = try c.decodeIfPresent(String.self, forKey: .parentMessageId)
         locationDeclined = try c.decodeIfPresent(Bool.self, forKey: .locationDeclined)
         photoDeclined = try c.decodeIfPresent(Bool.self, forKey: .photoDeclined)
+        image = try c.decodeIfPresent(String.self, forKey: .image)
+        imageName = try c.decodeIfPresent(String.self, forKey: .imageName)
     }
 }
 

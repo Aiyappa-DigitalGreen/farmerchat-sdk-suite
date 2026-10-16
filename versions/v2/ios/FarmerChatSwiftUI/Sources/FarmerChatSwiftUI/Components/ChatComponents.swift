@@ -328,7 +328,11 @@ private struct FCMarkdownTable: View {
         } else if isWide {
             rowCards
         } else {
-            grid.clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            // Radius.SM (8) with a 1pt borderDefault outline (MarkdownText.kt:437-441).
+            grid
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(theme.content.borderDefault, lineWidth: 1))
         }
     }
 
@@ -344,6 +348,7 @@ private struct FCMarkdownTable: View {
                     if !title.isEmpty {
                         Text(fcInlineMarkdown(title))
                             .fcTextStyle(theme.typography.labelLarge)
+                            .fontWeight(.bold) // MarkdownText.kt:368 labelLarge.copy(Bold)
                             .foregroundColor(ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         theme.content.borderDefault.frame(height: 1)
@@ -359,6 +364,7 @@ private struct FCMarkdownTable: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Text(fcInlineMarkdown(cell(cells, column)))
                                 .fcTextStyle(theme.typography.bodySmall)
+                                .fontWeight(.bold) // MarkdownText.kt:404 bodySmall.copy(Bold)
                                 .foregroundColor(ink)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -385,6 +391,7 @@ private struct FCMarkdownTable: View {
             if !title.isEmpty {
                 Text(fcInlineMarkdown(title))
                     .fcTextStyle(theme.typography.labelLarge)
+                    .fontWeight(.bold) // MarkdownText.kt:285 labelLarge.copy(Bold)
                     .foregroundColor(ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 theme.content.borderDefault.frame(height: 1)
@@ -444,8 +451,10 @@ private struct FCMarkdownTable: View {
     private func row(_ cells: [String], isHeader: Bool, index: Int) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(cells.enumerated()), id: \.offset) { column, cell in
+                // MarkdownText.kt:448-485: header labelSmall Bold, body bodySmall.
                 Text(fcInlineMarkdown(cell))
-                    .fcTextStyle(isHeader ? theme.typography.labelMedium : theme.typography.bodySmall)
+                    .fcTextStyle(isHeader ? theme.typography.labelSmall : theme.typography.bodySmall)
+                    .fontWeight(isHeader ? .bold : nil)
                     .foregroundColor(ink)
                     .multilineTextAlignment(alignment(column).textAlignment)
                     .padding(.horizontal, 12)
@@ -453,11 +462,13 @@ private struct FCMarkdownTable: View {
                     .frame(maxWidth: .infinity, alignment: alignment(column).frameAlignment)
             }
         }
+        // Header on surfaceTertiary; body rows alternate surfaceSecondary (first) /
+        // surfaceReadingSecondary (MarkdownText.kt:441-473). `index` is 1-based for body rows.
         .background(
             isHeader
-                ? theme.content.surfaceSecondary
-                : (index.isMultiple(of: 2)
-                   ? theme.content.surfaceReadingTertiary
+                ? theme.content.surfaceTertiary
+                : ((index - 1).isMultiple(of: 2)
+                   ? theme.content.surfaceSecondary
                    : theme.content.surfaceReadingSecondary)
         )
     }

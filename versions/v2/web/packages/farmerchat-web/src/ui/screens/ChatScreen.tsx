@@ -14,7 +14,7 @@ import { FcIcon } from '../components/FcIcon';
 import { ChatEmptyState, ChatResponseActions, FollowUpSection, LogoAppBar, ScrollIndicator, Tips } from '../components/chatParts';
 import { AiAnswerBlock } from '../components/AiAnswerBlock';
 import { AlignmentSurface, StreamErrorCard, StreamProgress } from '../components/agentic';
-import { capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
+import { CapabilityChip, capabilityChipRoute, isAdditiveAlignment } from '../../core/alignment';
 import type { AlignmentKind } from '../../core/alignment';
 import type { AlignmentChip } from '../../core/types';
 import { PrefKeys } from '../../core/storage';
@@ -128,6 +128,8 @@ export function ChatScreen(props: {
    * `alignmentPhotoSourceId`, ChatScreen.kt). Null when no chip-driven pick is pending.
    */
   const alignmentPhotoSourceRef = useRef<string | null>(null);
+  /** The photo chip that opened the picker (value + label), for the chip-pick analytics. */
+  const alignmentPhotoChipRef = useRef<{ value: string; label: string } | null>(null);
 
   /**
    * Outcome of a chip-driven photo pick. Port of the app's camera / gallery launcher callbacks
@@ -147,11 +149,13 @@ export function ChatScreen(props: {
       if (sourceId === null) return;
       alignmentPhotoSourceRef.current = null;
       if (file) {
-        void actions.sendQuestionWithImage('', file, URL.createObjectURL(file));
+        // Reported as the photo chip's pick (ChatScreen.kt:431-455: alignmentPhotoChipValue/Label).
+        const chip = alignmentPhotoChipRef.current;
+        void actions.sendQuestionWithImage('', file, URL.createObjectURL(file), chip ?? undefined);
         return;
       }
       const declineText = label('fc_v2_app_label_photo_not_shared', "I don't have a photo to share right now");
-      void actions.selectAlignmentChip(sourceId, 'UPLOAD_PHOTO', { label: declineText, value: declineText });
+      void actions.selectAlignmentChip(sourceId, 'UPLOAD_PHOTO', { label: declineText, value: declineText }, CapabilityChip.VALUE_NOT_NOW);
     },
     [actions, label],
   );
@@ -194,17 +198,20 @@ export function ChatScreen(props: {
             // The label key is real (app `Labels.kt:222`) but endpoint #3 does not serve it yet,
             // so the English fallback is what actually renders today. Do not shorten the key.
             const declineText = label('fc_v2_app_label_location_permission_declined', 'Continue without sharing my location');
-            void actions.selectAlignmentChip(messageId, 'GPS_PROMPT', { label: declineText, value: declineText });
+            // agentic_chip_value "not_now" (ChatScreen.kt:379, AlignmentChip.VALUE_NOT_NOW).
+            void actions.selectAlignmentChip(messageId, 'GPS_PROMPT', { label: declineText, value: declineText }, CapabilityChip.VALUE_NOT_NOW);
           });
           break;
         case 'CAMERA':
           // Straight to the camera picker — NOT the composer's photo overlay, which would ask the
           // farmer to choose a source they already chose on the chip.
           alignmentPhotoSourceRef.current = messageId;
+          alignmentPhotoChipRef.current = { value: chip.value ?? '', label: chip.label ?? '' };
           cameraInputRef.current?.click();
           break;
         case 'GALLERY':
           alignmentPhotoSourceRef.current = messageId;
+          alignmentPhotoChipRef.current = { value: chip.value ?? '', label: chip.label ?? '' };
           galleryInputRef.current?.click();
           break;
         default:
@@ -374,15 +381,26 @@ export function ChatScreen(props: {
     }
   }, [actions, chat.historyNextPage, chat.isLoadingMoreHistory, params.conversationId]);
 
+  /**
+   * ShareCard inputs (ChatScreen.kt:1721-1726): the LAST user message's text (blank for a
+   * photo-only ask) and photo, and the answer text.
+   */
+  const shareCardContent = (ai: AiResponse) => {
+    const asked = lastUserMessageBefore(chat.messages, ai.id);
+    return {
+      title: asked?.text.trim() ? asked.text : '',
+      body: ai.text,
+      imageUrl: asked?.imageUri ?? null,
+      tagline: label('fc_v2_app_label_practical_advice_your_farm', 'Practical advice for your farm'),
+    };
+  };
+
   const share = useCallback(
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SHARE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
-      const question = lastUserQuestionBefore(chat.messages, ai.id);
       const result = await shareAnswerCard(
-        question,
-        ai.text,
-        label('fc_v2_app_label_farmerchat', 'FarmerChat'),
-        label('fc_v2_app_label_share_app_message', 'Answered by FarmerChat'),
+        shareCardContent(ai),
+        label('fc_v2_app_label_share_app_message', SHARE_CAPTION_FALLBACK),
       );
       if (result === 'failed') toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
     },
@@ -392,13 +410,7 @@ export function ChatScreen(props: {
   const download = useCallback(
     async (ai: AiResponse) => {
       services.analytics.track(Events.ANSWER_SAVE_BUTTON_CLICKED, { message_id: ai.messageId ?? '' });
-      const question = lastUserQuestionBefore(chat.messages, ai.id);
-      const ok = await downloadAnswerCard(
-        question,
-        ai.text,
-        label('fc_v2_app_label_farmerchat', 'FarmerChat'),
-        label('fc_v2_app_label_share_app_message', 'Answered by FarmerChat'),
-      );
+      const ok = await downloadAnswerCard(shareCardContent(ai));
       if (!ok) toast.show(label('fc_v2_app_label_failed_to_save', 'Failed to save'), { kind: 'error' });
       else toast.show(label('fc_v2_app_label_saved_to_gallery', 'Saved to gallery'));
     },
@@ -533,9 +545,13 @@ export function ChatScreen(props: {
                 <div key={msg.id} ref={setRowRef(msg.id)} style={isFinal ? reserveStyle : undefined}>
                   {/* ChatThreadContent.kt LoadingPlaceholder: LogoSpinnerHorizontal with the shimmering
                       primary-colour label — the same component the streaming status uses. */}
-                  <div role="status" aria-live="polite">
-                    <LogoSpinner horizontal message={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />
-                  </div>
+                  {/* ChatThreadContent.kt:618-633: no spinner while the voice clip above it is still
+                      being transcribed — the "One second..." bubble is the progress. */}
+                  {isTranscribingVoice(chat.messages) ? null : (
+                    <div role="status" aria-live="polite">
+                      <LogoSpinner horizontal message={label('fc_v2_app_label_getting_your_answer', 'Getting your answer…')} />
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -810,7 +826,7 @@ function UserBubble(props: { message: UserMessage }) {
   }
   return (
     <div className="fcsdk-c-user">
-      {m.audioUri ? <VoiceClip src={m.audioUri} /> : null}
+      {m.audioUri ? <VoiceClip src={m.audioUri} durationMs={m.audioDurationMs} loading={!!m.isTranscribing} failed={m.isFailed} /> : null}
       {m.imageUri ? (
         <img
           src={m.imageUri}
@@ -822,6 +838,32 @@ function UserBubble(props: { message: UserMessage }) {
     </div>
   );
 }
+
+/** The last user message is a voice clip still being transcribed (ChatThreadContent.kt:620-623). */
+function isTranscribingVoice(messages: ReturnType<typeof useChat>[0]['messages']): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.kind === 'user') return !!m.audioUri && !!m.isTranscribing;
+  }
+  return false;
+}
+
+/** The user message the answer [aiId] replies to (the last one before it). */
+function lastUserMessageBefore(messages: ReturnType<typeof useChat>[0]['messages'], aiId: string): UserMessage | null {
+  let last: UserMessage | null = null;
+  for (const m of messages) {
+    if (m.kind === 'ai' && m.id === aiId) break;
+    if (m.kind === 'user') last = m;
+  }
+  return last;
+}
+
+/**
+ * Share caption fallback, verbatim from the app (ChatScreen.kt:2088-2089), used until endpoint #3
+ * serves `fc_v2_app_label_share_app_message`.
+ */
+const SHARE_CAPTION_FALLBACK =
+  'Sharing what FarmerChat taught me—super useful. \uD83D\uDC4D\uD83C\uDFFE Give it a try: https://play.google.com/store/apps/details?id=org.digitalgreen.farmer.chat&hl=en_IN';
 
 function lastUserQuestionBefore(messages: ReturnType<typeof useChat>[0]['messages'], aiId: string): string {
   let lastQuestion = '';

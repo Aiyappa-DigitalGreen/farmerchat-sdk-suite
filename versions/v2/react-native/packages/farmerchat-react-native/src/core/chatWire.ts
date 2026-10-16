@@ -77,3 +77,67 @@ export function sortHistoryItems<T extends { message_input_time?: string | null 
     })
     .map((e) => e.item);
 }
+
+/**
+ * Bubble text of a history voice turn (message_type_id 2). App ChatViewModel.kt:1273:
+ * `item.query_text ?: item.heard_query_text ?: ""`. Kotlin's `?:` falls back on null only, so a
+ * blank `query_text` stays blank (no fallback), exactly as here.
+ */
+export function historyVoiceText(item: {
+  query_text?: string | null;
+  heard_query_text?: string | null;
+}): string {
+  return item.query_text ?? item.heard_query_text ?? '';
+}
+
+/**
+ * App image name (ChatViewModel.kt:1861-1862): `image_<random UUID>.jpg`, on both the agentic and
+ * the Plantix image paths. `uuid` is injectable for tests.
+ */
+export function imageQueryName(uuid: string = randomUuid()): string {
+  return `image_${uuid}.jpg`;
+}
+
+/** RFC 4122 v4 from Math.random (no crypto module on every RN runtime). */
+export function randomUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = Math.floor(Math.random() * 16);
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+/**
+ * The query an image request carries (ChatViewModel.kt:1127, 1858): what the farmer typed, or the
+ * `what_is_wrong_with_my_crop` default when blank. The user bubble still shows only the typed text.
+ */
+export function imageQueryText(question: string, defaultQuery: string): string {
+  const typed = question.trim();
+  return typed.length > 0 ? typed : defaultQuery;
+}
+
+/**
+ * Progress (0..1) of Compose's default `spring()` (dampingRatio 1, stiffness 1500, unit mass)
+ * started from rest: x(t) = 1 - (1 + wt) e^(-wt), w = sqrt(1500). Drives the chat's animated pin
+ * (the app's `animateScrollToItem` seek, compose-foundation LazyLayoutScrollScope.kt:264).
+ */
+export function criticallyDampedProgress(seconds: number): number {
+  const w = Math.sqrt(1500);
+  const wt = w * Math.max(0, seconds);
+  return 1 - (1 + wt) * Math.exp(-wt);
+}
+
+/** ShareCard.kt:21-24 (Figma character limits). */
+export const SHARE_CARD_LIMITS = {
+  photo: { title: 50, body: 460 },
+  textOnly: { title: 70, body: 940 },
+} as const;
+
+/** ShareCard.kt:33-35: truncation by character count (Kotlin `take`). */
+export function shareCardText(
+  title: string,
+  body: string,
+  hasPhoto: boolean,
+): { title: string; body: string } {
+  const limits = hasPhoto ? SHARE_CARD_LIMITS.photo : SHARE_CARD_LIMITS.textOnly;
+  return { title: title.slice(0, limits.title), body: body.slice(0, limits.body) };
+}

@@ -121,7 +121,7 @@ Navigation graph, back-stack semantics (`popUpTo` equivalents), and the `routeFr
 | MediaRecorder OGG/OPUS | keep | AVAudioRecorder (Opus/CAF→m4a, format field per platform) | expo-av (m4a) / MediaRecorder (webm/opus) |
 | MediaPlayer TTS/voice | keep | AVPlayer | expo-av / HTMLAudioElement |
 | FileProvider camera | keep | UIImagePickerController/PHPicker | expo-image-picker / `<input capture>` |
-| Share/download answer card | keep (graphicsLayer→PNG) | UIGraphicsImageRenderer + share sheet | react-native-view-shot / canvas + navigator.share |
+| Share/download answer card | keep (graphicsLayer→PNG) | UIGraphicsImageRenderer + share sheet | react-native-view-shot + expo-sharing (optional peers; text fallback) / canvas + navigator.share |
 | Play in-app update/review | omitted (host concern) | omitted | omitted |
 | Plotline/MoEngage/Adjust/Firebase | omitted → analytics listener | same | same |
 | Google geolocate fallback | keep (config key) | keep | keep (web: navigator.geolocation first) |

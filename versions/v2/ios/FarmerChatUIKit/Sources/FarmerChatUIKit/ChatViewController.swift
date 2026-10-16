@@ -124,6 +124,8 @@ final class FCUIChatViewController: UIViewController {
     /// `AiResponse.id` of that surface (app `alignmentPhotoSourceId`). A pick sends the photo; a
     /// cancel or a camera-permission denial sends the app's decline query with `photo_declined`.
     private var alignmentPhotoSourceId: String?
+    /// The UPLOAD_PHOTO chip that opened the camera / gallery (its value + label go on Send_Query).
+    private var alignmentPhotoChip: AlignmentChip?
     /// True once the location-outcome subscription is installed. Guards the share-location chip
     /// from starting a flow nothing is listening to (see `observeLocationOutcomes`).
     private var isObservingLocationOutcomes = false
@@ -785,9 +787,11 @@ final class FCUIChatViewController: UIViewController {
             manager.triggerFromLocalContext()
         case .takePhoto:
             alignmentPhotoSourceId = messageId
+            alignmentPhotoChip = chip
             launchAlignmentCamera()
         case .chooseFromGallery:
             alignmentPhotoSourceId = messageId
+            alignmentPhotoChip = chip
             launchPicker(sourceType: .photoLibrary)
         case .none:
             // App `SendAlignmentChip` (ChatViewModel.kt:1015-1053): `align_chip_sel` +
@@ -836,16 +840,7 @@ final class FCUIChatViewController: UIViewController {
             // Denied / cancelled / fetch failed: still answer the blocking question with the
             // decline text, as the app does (ChatScreen.kt:377-380): an alignment-chip send with
             // `location_declined = true` and the surface's `parent_message_id`.
-            let decline = fcuiLabel(
-                AgenticLabels.locationPermissionDeclined,
-                AgenticLabels.locationPermissionDeclinedFallback
-            )
-            viewModel.sendAlignmentChip(
-                sourceMessageId: sourceId,
-                query: decline,
-                selectionValue: decline,
-                locationDeclined: true
-            )
+            viewModel.sendCapabilityDecline(.location, sourceMessageId: sourceId)
         }
     }
 
@@ -892,21 +887,16 @@ final class FCUIChatViewController: UIViewController {
     }
 
     private func photoPermissionDeclined() {
-        sendAlignmentPhotoDecline(fcuiLabel(FCLabels.photoPermissionDeclined, "I don't want to share a photo right now"))
+        sendAlignmentPhotoDecline(.photoPermissionDenied)
     }
 
     /// App `sendAlignmentPhotoDeclineQuery` (ChatScreen.kt:469-485): an alignment-chip send of
     /// `queryText` with `photo_declined = true` and the surface's `parent_message_id`. No-op
     /// outside a chip-driven flow.
-    fileprivate func sendAlignmentPhotoDecline(_ queryText: String) {
+    fileprivate func sendAlignmentPhotoDecline(_ decline: CapabilityDecline) {
         guard let source = alignmentPhotoSourceId else { return }
         alignmentPhotoSourceId = nil
-        viewModel.sendAlignmentChip(
-            sourceMessageId: source,
-            query: queryText,
-            selectionValue: queryText,
-            photoDeclined: true
-        )
+        viewModel.sendCapabilityDecline(decline, sourceMessageId: source)
     }
 
     /// A capability chip already chose the source, so this opens it directly — no photo-source
@@ -1119,7 +1109,9 @@ final class FCUIChatViewController: UIViewController {
     private func share(text: String) {
         FarmerChat.shared.analytics.track(AnalyticsEvents.shareResponseClicked)
         let image = FCUIShareCardRenderer.render(answer: text)
-        let activity = UIActivityViewController(activityItems: [image ?? text], applicationActivities: nil)
+        // ChatScreen.kt:2113-2117: the card image plus the `share_app_message` caption.
+        let items: [Any] = image.map { [$0, FCShareCopy.caption()] } ?? [text]
+        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
         activity.popoverPresentationController?.sourceView = view
         present(activity, animated: true)
     }
@@ -1156,20 +1148,30 @@ extension FCUIChatViewController: UIImagePickerControllerDelegate, UINavigationC
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
+        let photoChip = alignmentPhotoSourceId != nil ? alignmentPhotoChip : nil
         alignmentPhotoSourceId = nil
+        alignmentPhotoChip = nil
         guard let image = info[.originalImage] as? UIImage,
               let data = image.jpegData(compressionQuality: 0.8) else { return }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("fc_sdk_img_\(UUID().uuidString).jpg")
         try? data.write(to: url)
-        viewModel.onAction(.sendQuestionWithImage(question: "", imageData: data, imageURL: url))
+        // A library pick hands over the original file, whose EXIF carries the photo's own GPS
+        // (app ImageUtils.readGpsFromImage); Core re-encodes it (1000×1000, JPEG 80, GPS EXIF).
+        let original = (info[.imageURL] as? URL).flatMap { try? Data(contentsOf: $0) }
+        if let photoChip {
+            // An UPLOAD_PHOTO chip's photo is reported as that chip's pick (ChatScreen.kt:425-460).
+            viewModel.sendAlignmentPhoto(chip: photoChip, imageData: original ?? data, imageURL: url)
+        } else {
+            viewModel.onAction(.sendQuestionWithImage(question: "", imageData: original ?? data, imageURL: url))
+        }
     }
 
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         picker.dismiss(animated: true)
         // An UPLOAD_PHOTO chip's camera / gallery closed with no photo (ChatScreen.kt:524-531,
         // 576-583): keep the blocking surface moving with the default query.
-        sendAlignmentPhotoDecline(fcuiLabel(FCLabels.photoNotShared, "I don't have a photo to share right now"))
+        sendAlignmentPhotoDecline(.photoNotShared)
     }
 }
 

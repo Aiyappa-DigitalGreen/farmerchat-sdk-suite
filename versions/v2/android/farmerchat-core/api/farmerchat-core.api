@@ -1122,6 +1122,8 @@ public final class org/digitalgreen/farmerchat/sdk/core/labels/Labels {
 	public static final field PERMISSIONS_ARE_REQUIRED_TO_AUTO_DETECT_SIM_NUMBER Ljava/lang/String;
 	public static final field PHOTO Ljava/lang/String;
 	public static final field PHOTOS Ljava/lang/String;
+	public static final field PHOTO_NOT_SHARED Ljava/lang/String;
+	public static final field PHOTO_PERMISSION_DECLINED Ljava/lang/String;
 	public static final field PLEASE_ALSO_SEE_OUR Ljava/lang/String;
 	public static final field PLEASE_CHECK_TRY_AGAIN Ljava/lang/String;
 	public static final field PLEASE_CONFIRM Ljava/lang/String;
@@ -4839,6 +4841,16 @@ public final class org/digitalgreen/farmerchat/sdk/core/ui/chat/ChatViewModel : 
 }
 
 public final class org/digitalgreen/farmerchat/sdk/core/ui/chat/ChatViewModel$Companion {
+}
+
+public final class org/digitalgreen/farmerchat/sdk/core/ui/chat/ChipAnalyticsKt {
+	public static final fun followUpChipSendProperties (Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/core/analytics/SendQueryProperties;
+}
+
+public final class org/digitalgreen/farmerchat/sdk/core/ui/chat/PhotoChipOutcomeKt {
+	public static final fun photoChipDeclineAction (Ljava/lang/String;Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/core/ui/chat/ChatAction$SendAlignmentChip;
+	public static final fun photoChipSendAction (Landroid/net/Uri;ILjava/lang/String;Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/core/ui/chat/ChatAction$SendQuestionWithImage;
+	public static final fun photoChipSendProperties (ILjava/lang/String;Ljava/lang/String;)Lorg/digitalgreen/farmerchat/sdk/core/analytics/SendQueryProperties;
 }
 
 public final class org/digitalgreen/farmerchat/sdk/core/ui/history/ChatHistoryUiState {

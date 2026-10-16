@@ -96,6 +96,17 @@ check(
   ['a1', 'a2', 'b', 'n1', 'n2'],
 );
 
+// --- voice turns (ChatViewModel.kt:1273: query_text ?: heard_query_text ?: "") ------------------
+const voice = (item: ConversationChatHistoryMessageItem) =>
+  mapHistoryItems([{ message_type_id: 2, message_id: 'v', ...item }]).messages[0];
+check('voice turn shows query_text first', voice({ query_text: 'edited text', heard_query_text: 'heard text' }), {
+  kind: 'user', id: 'v_2_1_0', text: 'edited text', audioUri: undefined, isFailed: false,
+});
+check('…falls back to heard_query_text when query_text is null', voice({ query_text: null, heard_query_text: 'heard text' })?.kind === 'user' ? (voice({ query_text: null, heard_query_text: 'heard text' }) as { text: string }).text : null, 'heard text');
+check('…a blank query_text is kept, like Kotlin ?:', (voice({ query_text: '', heard_query_text: 'heard' }) as { text: string }).text, '');
+check('…neither -> empty', (voice({}) as { text: string }).text, '');
+check('…audio url carried', (voice({ query_text: 'q', query_media_file_url: 'https://x/a.wav' }) as { audioUri?: string }).audioUri, 'https://x/a.wav');
+
 if (failures.length > 0) {
   console.log(`\n${passed} passed, ${failures.length} FAILED\n`);
   for (const failure of failures) console.log(`  ✗ ${failure}`);

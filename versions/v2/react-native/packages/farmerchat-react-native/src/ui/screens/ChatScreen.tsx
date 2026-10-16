@@ -49,6 +49,7 @@ import { Labels } from '../../core/labels';
 import { StreamErrorKinds } from '../../core/agenticModels';
 import {
   AlignmentChipRoutes,
+  AlignmentChipWire,
   AlignmentKinds,
   alignmentAnalyticsType,
   isAdditiveAlignment,
@@ -59,6 +60,8 @@ import { StorageKeys } from '../../core/sessionStore';
 import { isLocationObtained, isTerminalLocationOutcome } from '../../core/locationOutcome';
 import type { UseLocationPromptResult } from '../../state/useLocationPrompt';
 import { ListenButton } from '../components/ListenButton';
+import { criticallyDampedProgress } from '../../core/chatWire';
+import { base64SizeKb } from '../../core/sendQueryAnalytics';
 import { INLINE_SPINNER_STYLE, LogoAppBar, LogoSpinner, Toast, useToastState } from '../components/Chrome';
 import {
   captureImageFromCamera,
@@ -233,6 +236,7 @@ export function ChatScreen(props: {
   // flips to playing together with the URL (useChat), so a tap while the clip is still
   // preparing is a pause, not a second synthesise.
   const ttsSound = useRef<Audio.Sound | null>(null);
+  const ttsPositionMs = useRef(0);
   const wantTtsPlaying = useRef(state.isAudioPlaying);
   wantTtsPlaying.current = state.isAudioPlaying;
   useEffect(() => {
@@ -246,9 +250,14 @@ export function ChatScreen(props: {
           { uri: url },
           { shouldPlay: wantTtsPlaying.current },
           (status: AVPlaybackStatus) => {
+            if (status.isLoaded) ttsPositionMs.current = status.positionMillis;
             if (status.isLoaded && status.didJustFinish) {
               // App setOnCompletionListener: STOPPED_PLAYING_RESPONSE_AUDIO, then clear.
-              onAction({ type: 'SetAudioPlaying', isPlaying: false });
+              onAction({
+                type: 'SetAudioPlaying',
+                isPlaying: false,
+                secondsPlayed: (status.durationMillis ?? status.positionMillis) / 1000,
+              });
               onAction({ type: 'ClearAudioPlaybackUrl' });
             }
           },
@@ -261,8 +270,10 @@ export function ChatScreen(props: {
         // A pause/resume tapped while the clip was preparing wins over `shouldPlay`.
         if (wantTtsPlaying.current) {
           await sound.playAsync();
-          // App setOnPreparedListener: STARTED_PLAYING_RESPONSE_AUDIO.
-          sdk.analytics.track(AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO, {});
+          // App setOnPreparedListener: STARTED_PLAYING_RESPONSE_AUDIO (screen_name Chat).
+          sdk.analytics.track(AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO, {
+            screen_name: ScreenNames.CHAT,
+          });
         } else {
           await sound.pauseAsync();
         }
@@ -276,6 +287,7 @@ export function ChatScreen(props: {
       cancelled = true;
       const sound = ttsSound.current;
       ttsSound.current = null;
+      ttsPositionMs.current = 0;
       if (sound) void sound.unloadAsync().catch(() => undefined);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,7 +302,11 @@ export function ChatScreen(props: {
 
   const toggleListen = useCallback(() => {
     if (state.audioPlaybackUrl) {
-      onAction({ type: 'SetAudioPlaying', isPlaying: !state.isAudioPlaying });
+      onAction({
+        type: 'SetAudioPlaying',
+        isPlaying: !state.isAudioPlaying,
+        secondsPlayed: ttsPositionMs.current / 1000,
+      });
     } else {
       onAction({ type: 'SynthesiseAudio' });
     }
@@ -386,16 +402,73 @@ export function ChatScreen(props: {
     },
     [],
   );
-  const scrollToAnchor = useCallback((index: number) => {
+  // --- animated pin --------------------------------------------------------------------
+  // The app animates the pin (ChatThreadContent.kt:281 `animateScrollToItem`), whose final seek is
+  // `AnimationState.animateTo(target)` with the default `spring()` — critically damped,
+  // stiffness 1500 (compose-foundation 1.9.2 LazyLayoutScrollScope.kt:264). RN must NOT use an
+  // animated programmatic scroll for it: on RN 0.76 Android an ANIMATED scrollToIndex/Offset emits
+  // onMomentumScrollBegin but never onMomentumScrollEnd, which leaves ScrollView's JS
+  // `_isAnimating()` true; its responder-capture then swallows every tap in the list (Share,
+  // Listen, follow-up and clarify chips on every answer after the first) until the farmer drags
+  // (DEMO, emulator, 2026-10-16). So the spring is driven here, one NON-animated scrollToOffset per
+  // frame, which never enters the momentum state.
+  const rowRefs = useRef(new Map<string, View>());
+  const listBoxRef = useRef<View | null>(null);
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
+  const pinFrame = useRef<number | null>(null);
+  const cancelPin = useCallback(() => {
+    if (pinFrame.current !== null) cancelAnimationFrame(pinFrame.current);
+    pinFrame.current = null;
+  }, []);
+  useEffect(() => cancelPin, [cancelPin]);
+  const jumpToAnchor = useCallback((index: number) => {
     // viewOffset 20 = the thread's paddingTop (the cell offsets already include it), i.e. the
     // web's `offsetTop - 20` / Compose's anchor with the 20dp content padding.
-    // animated: false on purpose. On RN 0.76 Android an ANIMATED programmatic scroll emits
-    // onMomentumScrollBegin but never onMomentumScrollEnd, which leaves ScrollView's JS
-    // `_isAnimating()` true; its responder-capture then swallows every tap in the list (Share,
-    // Listen, follow-up and clarify chips on every answer after the first) until the farmer
-    // drags. Seen on DEMO, emulator, 2026-10-16. The app animates this scroll
-    // (animateScrollToItem); the instant jump is the recorded difference.
     listRef.current?.scrollToIndex({ index, viewPosition: 0, viewOffset: 20, animated: false });
+  }, []);
+  const scrollToAnchor = useCallback(
+    (index: number) => {
+      cancelPin();
+      const id = messagesRef.current[index]?.id;
+      const row = id === undefined ? undefined : rowRefs.current.get(id);
+      const box = listBoxRef.current;
+      if (!row || !box) {
+        // Not rendered yet: jump (onScrollToIndexFailed retries).
+        jumpToAnchor(index);
+        return;
+      }
+      row.measureInWindow((_rx, rowY) => {
+        box.measureInWindow((_bx, boxY) => {
+          const from = scrollMetrics.current.offset;
+          const target = Math.max(0, from + (rowY - boxY) - THREAD_TOP_PADDING);
+          const distance = target - from;
+          if (Math.abs(distance) < 1) {
+            jumpToAnchor(index);
+            return;
+          }
+          const start = Date.now();
+          const step = () => {
+            const t = (Date.now() - start) / 1000;
+            const p = criticallyDampedProgress(t);
+            listRef.current?.scrollToOffset({ offset: from + distance * p, animated: false });
+            if (Math.abs(distance) * (1 - p) > 0.5) {
+              pinFrame.current = requestAnimationFrame(step);
+            } else {
+              pinFrame.current = null;
+              // Settle exactly on the row (corrects a stale `from` after a content shift).
+              jumpToAnchor(index);
+            }
+          };
+          pinFrame.current = requestAnimationFrame(step);
+        });
+      });
+    },
+    [cancelPin, jumpToAnchor],
+  );
+  const registerRow = useCallback((id: string, view: View | null) => {
+    if (view) rowRefs.current.set(id, view);
+    else rowRefs.current.delete(id);
   }, []);
   // Without getItemLayout an unmeasured row fails: jump near it, then retry a bounded number of
   // times once FlatList has rendered and measured it.
@@ -407,9 +480,9 @@ export function ChatScreen(props: {
       });
       if (anchorRetries.current >= 3) return;
       anchorRetries.current += 1;
-      scheduleScroll(() => scrollToAnchor(info.index), 50);
+      scheduleScroll(() => jumpToAnchor(info.index), 50);
     },
-    [scheduleScroll, scrollToAnchor],
+    [scheduleScroll, jumpToAnchor],
   );
 
   // History entry: the tail id at the first load. Until a NEW tail appears nothing auto-scrolls
@@ -447,7 +520,16 @@ export function ChatScreen(props: {
     () => state.messages.find((m): m is UserMessage => m.kind === 'user') ?? null,
     [state.messages],
   );
-  const shareCard = useShareCard(firstUser?.text ?? '', lastAi?.text ?? '');
+  // App ChatScreen.kt:1720-1725: the card is the LAST question (and its photo) with the LAST answer.
+  const lastUser = useMemo(
+    () => [...state.messages].reverse().find((m): m is UserMessage => m.kind === 'user') ?? null,
+    [state.messages],
+  );
+  const shareCard = useShareCard(
+    lastUser?.text?.trim() ? lastUser.text : '',
+    lastAi?.text ?? '',
+    lastUser?.imageUri ?? null,
+  );
 
   // --- follow-up sends ---------------------------------------------------------------
   const sendFollowUpText = useCallback(
@@ -480,6 +562,9 @@ export function ChatScreen(props: {
         question: '',
         imageUri: image.uri,
         imageBase64: image.base64,
+        imageExif: image.exif ?? null,
+        imageWidth: image.width ?? null,
+        imageHeight: image.height ?? null,
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -554,6 +639,8 @@ export function ChatScreen(props: {
             messageId: srcId,
             kind: AlignmentKinds.GPS_PROMPT,
             chip: { label: declineText, value: declineText },
+            // App ChatScreen.kt:380: chipValue VALUE_NOT_NOW, chipLabel = the decline text.
+            analyticsChipValue: AlignmentChipWire.VALUE_NOT_NOW,
           });
         }
       }),
@@ -566,13 +653,31 @@ export function ChatScreen(props: {
    * composer (app ChatScreen.kt:430-462 `sendAlignmentPhotoDirect`, :494-497, :544-547): an
    * image-only query (blank question), reported with the upload-photo chip type.
    */
-  const deliverCapabilityImage = (image: PickedImage) => {
+  const deliverCapabilityImage = (image: PickedImage, chip: AlignmentChip) => {
     onAction({
       type: 'SendQuestionWithImage',
       question: '',
       imageUri: image.uri,
       imageBase64: image.base64,
-      sendQueryProperties: { agentic_chip_type: alignmentAnalyticsType(AlignmentKinds.UPLOAD_PHOTO) },
+        imageExif: image.exif ?? null,
+        imageWidth: image.width ?? null,
+        imageHeight: image.height ?? null,
+      // App ChatScreen.kt:437-452: an image query reported as a chip pick (click_type
+      // align_chip_sel, upload-photo, the tapped chip's value + label; status left to derive).
+      sendQueryProperties: {
+        screenName: ScreenNames.CHAT,
+        isFollowupPrompt: false,
+        isImageQuery: true,
+        isTextQuery: false,
+        isVoiceQuery: false,
+        lengthOfTextQuery: 0,
+        sizeOfImageKb: base64SizeKb(image.base64),
+        audioFormat: '',
+        isAlignmentChip: true,
+        agenticChipType: alignmentAnalyticsType(AlignmentKinds.UPLOAD_PHOTO),
+        agenticChipValue: chip.value ?? null,
+        agenticChipLabel: chip.label ?? null,
+      },
     });
   };
 
@@ -591,6 +696,8 @@ export function ChatScreen(props: {
       messageId,
       kind: AlignmentKinds.UPLOAD_PHOTO,
       chip: { label: text, value: text },
+      // App ChatScreen.kt:476-482: chipValue VALUE_NOT_NOW, chipLabel = the decline text.
+      analyticsChipValue: AlignmentChipWire.VALUE_NOT_NOW,
     });
   };
 
@@ -624,14 +731,14 @@ export function ChatScreen(props: {
             denied = true;
           },
         }).then((image) => {
-          if (image) deliverCapabilityImage(image);
+          if (image) deliverCapabilityImage(image, chip);
           else declineCapabilityPhoto(messageId, denied);
         });
         return;
       }
       case AlignmentChipRoutes.GALLERY:
         void pickImageFromGallery(sdk).then((image) => {
-          if (image) deliverCapabilityImage(image);
+          if (image) deliverCapabilityImage(image, chip);
           else declineCapabilityPhoto(messageId, false);
         });
         return;
@@ -662,6 +769,9 @@ export function ChatScreen(props: {
           question: text,
           imageUri: image.uri,
           imageBase64: image.base64,
+        imageExif: image.exif ?? null,
+        imageWidth: image.width ?? null,
+        imageHeight: image.height ?? null,
         });
       } else if (text.trim().length > 0) {
         // App ChatScreen.kt:1764-1811: the composer sends isFollowupPrompt = false with no
@@ -959,11 +1069,18 @@ export function ChatScreen(props: {
         </View>
       ) : (
         <View style={{ flex: 1 }}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }} ref={listBoxRef} collapsable={false}>
             <FlatList
               ref={listRef}
               data={state.messages}
-              renderItem={renderMessage}
+              // Each row registers its view so the animated pin can measure where it is.
+              renderItem={(info) => (
+                <View collapsable={false} ref={(v) => registerRow(info.item.id, v)}>
+                  {renderMessage(info)}
+                </View>
+              )}
+              // A drag takes over from an in-flight pin, as a touch stops Compose's animation.
+              onScrollBeginDrag={cancelPin}
               keyExtractor={(m) => m.id}
               contentContainerStyle={styles.thread}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
@@ -1527,6 +1644,9 @@ function ActionChip(props: {
         <SweepBorder
           width={ACCENT_BORDER_WIDTH}
           radius={ACTION_CHIP_HEIGHT / 2}
+          // The ring draws on the pill's first frame (the app's ActionButton has it from the
+          // start); onLayout then sizes it exactly. ~100x42 English pill -> 109 diagonal.
+          initialDiameter={140}
           innerStyle={[
             styles.actionChipInner,
             { backgroundColor: c.surfaceReadingSecondary, paddingLeft: 12 - ACCENT_BORDER_WIDTH, paddingRight: 16 - ACCENT_BORDER_WIDTH },
@@ -1561,6 +1681,9 @@ function ActionChip(props: {
 /** ActionButton.kt: 42dp pill; the accent border is 3dp of it. */
 const ACTION_CHIP_HEIGHT = 42;
 const ACCENT_BORDER_WIDTH = 3;
+
+/** ChatThreadContent.kt:305 contentPadding top = 20.dp: the pinned question sits 20 below the top. */
+const THREAD_TOP_PADDING = 20;
 
 /** ChatThreadContent.kt: LazyColumn spacedBy(16) — also the gap after the last item. */
 const THREAD_BOTTOM_GAP = 16;

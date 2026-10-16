@@ -22,7 +22,8 @@ the SDK.
 - `<FarmerChatFab/>` opens FarmerChat as a full-screen overlay (not a `Modal`, which failed on the new
   architecture). Place it in a full-screen container, such as your root screen, because the overlay fills
   the FAB's parent.
-- Share sends the answer as text; the FarmerChat app and the web SDK share an image of the answer card.
+- Share sends the app's image card only when `react-native-view-shot` and `expo-sharing` are installed;
+  otherwise it shares text. On Android the image is shared without the caption.
 
 ## Installation
 
@@ -42,7 +43,8 @@ Optional (recommended) peers:
 
 ```sh
 npx expo install react-native-webview      # in-app legal/FAQ pages (else external browser)
-npx expo install react-native-view-shot    # share answers as image cards (else text share)
+npx expo install react-native-view-shot expo-sharing   # share answers as the app's image card (else text share)
+npx expo install expo-image-manipulator    # shrink photos to 1000×1000 before upload, as the app does
 ```
 
 #### app.json — permissions via config plugins
@@ -281,8 +283,10 @@ the app's `CountryLatLngProvider`, accepting it only when `lat != 0 && lng != 0`
 - SMS auto-read (Android SMS Retriever) is not available in RN — the OTP field
   uses `textContentType="oneTimeCode"` / `autoComplete="sms-otp"` for keyboard
   suggestions and manual entry.
-- Without `react-native-view-shot` answers are shared as text; without
-  `react-native-webview` legal/FAQ pages open in the external browser. The SDK
+- Without `react-native-view-shot` + `expo-sharing` answers are shared as text; without
+  `expo-image-manipulator` photos are sent at the picker's size (JPEG 80, not shrunk); without
+  `react-native-webview` legal/FAQ pages open in the external browser. Optional packages are
+  required once at load (`core/optionalPeers.ts`), so a missing one is never a red box or a crash. The SDK
   logs a console warning and degrades — it never crashes on a missing optional
   peer.
 

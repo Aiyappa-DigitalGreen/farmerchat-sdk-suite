@@ -93,7 +93,17 @@ function useReduceMotion(): boolean {
  * parent's `overflow: 'hidden'` + `borderRadius`. `rotateMs` > 0 rotates it clockwise forever
  * (the composer aura's 7s flow).
  */
-export function SweepGradient(props: { stops: readonly SweepStop[]; rotateMs?: number }) {
+export function SweepGradient(props: {
+  stops: readonly SweepStop[];
+  rotateMs?: number;
+  /**
+   * Diameter to draw with before the first layout arrives. Without it the gradient waits for
+   * onLayout + one more render, which a busy JS thread can delay by a second or more (the Share
+   * pill's ring showed up ~1.5 s after the pill on DEMO, emulator, 2026-10-16). The spokes are
+   * centred by percentage, so only their length depends on the measured size.
+   */
+  initialDiameter?: number;
+}) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const reduceMotion = useReduceMotion();
   const spin = useRef(new Animated.Value(0)).current;
@@ -110,12 +120,12 @@ export function SweepGradient(props: { stops: readonly SweepStop[]; rotateMs?: n
   }, [rotateMs, reduceMotion, spin]);
 
   const spokes = useMemo(() => {
-    if (!size) return null;
-    const d = Math.ceil(Math.hypot(size.w, size.h)) + 2;
+    if (!size && !props.initialDiameter) return null;
+    const d = size ? Math.ceil(Math.hypot(size.w, size.h)) + 2 : Math.ceil(props.initialDiameter ?? 0);
     // Height of a spoke at the rim: the chord of one step, plus overlap so no gaps show.
     const h = Math.max(2, d * Math.tan(Math.PI / SPOKES) * 1.4);
     return { d, h, colors: Array.from({ length: SPOKES }, (_, i) => colorAt(props.stops, i / SPOKES)) };
-  }, [size, props.stops]);
+  }, [size, props.stops, props.initialDiameter]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -125,14 +135,16 @@ export function SweepGradient(props: { stops: readonly SweepStop[]; rotateMs?: n
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return (
     <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none">
-      {spokes && size ? (
+      {spokes ? (
         <Animated.View
           style={{
             position: 'absolute',
             width: spokes.d,
             height: spokes.d,
-            left: (size.w - spokes.d) / 2,
-            top: (size.h - spokes.d) / 2,
+            left: '50%',
+            top: '50%',
+            marginLeft: -spokes.d / 2,
+            marginTop: -spokes.d / 2,
             transform: [{ rotate }],
           }}
         >
@@ -180,6 +192,8 @@ export function SweepBorder(props: {
   style?: StyleProp<ViewStyle>;
   innerStyle?: StyleProp<ViewStyle> | Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
   children?: React.ReactNode;
+  /** See {@link SweepGradient}'s `initialDiameter`: draw the ring on the very first frame. */
+  initialDiameter?: number;
 }) {
   const visible = props.visible ?? true;
   return (
@@ -192,7 +206,11 @@ export function SweepBorder(props: {
     >
       {visible ? (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: props.opacity ?? 1 }]} pointerEvents="none">
-          <SweepGradient stops={props.stops ?? ACCENT_SWEEP_STOPS} rotateMs={props.rotateMs} />
+          <SweepGradient
+            stops={props.stops ?? ACCENT_SWEEP_STOPS}
+            rotateMs={props.rotateMs}
+            initialDiameter={props.initialDiameter}
+          />
         </Animated.View>
       ) : null}
       <Animated.View style={[{ borderRadius: Math.max(0, props.radius - props.width) }, props.innerStyle as ViewStyle]}>

@@ -16,6 +16,44 @@ let fcToolStatusMinDwellNanoseconds: UInt64 = 700_000_000
 /// Internal (not private) so the capability-chip tests can assert the literal.
 let FCAlignChipSelInputType = "align_chip_sel"
 
+/// Why a capability prompt (GPS_PROMPT / UPLOAD_PHOTO) ended without its capability.
+public enum CapabilityDecline: Sendable, Equatable {
+    /// Location permission denied, the flow cancelled, or the fix failed.
+    case location
+    /// Camera permission denied on an UPLOAD_PHOTO "take photo" chip.
+    case photoPermissionDenied
+    /// The camera / gallery closed without a photo.
+    case photoNotShared
+}
+
+/// The wire + analytics fields of one ``CapabilityDecline`` (pure, for tests).
+struct CapabilityDeclineSend: Equatable {
+    let query: String
+    let locationDeclined: Bool
+    let photoDeclined: Bool
+    let chipType: String
+
+    init(_ decline: CapabilityDecline, labels: LabelManager) {
+        switch decline {
+        case .location:
+            query = labels.label(AgenticLabels.locationPermissionDeclined, fallback: AgenticLabels.locationPermissionDeclinedFallback)
+            locationDeclined = true
+            photoDeclined = false
+            chipType = AlignmentKind.gpsPrompt.analyticsType
+        case .photoPermissionDenied:
+            query = labels.label(FCLabels.photoPermissionDeclined, fallback: "I don't want to share a photo right now")
+            locationDeclined = false
+            photoDeclined = true
+            chipType = AlignmentKind.uploadPhoto.analyticsType
+        case .photoNotShared:
+            query = labels.label(FCLabels.photoNotShared, fallback: "I don't have a photo to share right now")
+            locationDeclined = false
+            photoDeclined = true
+            chipType = AlignmentKind.uploadPhoto.analyticsType
+        }
+    }
+}
+
 /// What one alignment-chip tap sends — the arguments the app's `onAlignmentChipClick`
 /// (`ui/chat/ChatScreen.kt:1639-1663`) passes to `SendAlignmentChip`:
 /// - `query`: the chip LABEL (gender-select: its VALUE, which the backend expects raw);
@@ -542,10 +580,14 @@ public final class ChatViewModel: ObservableObject {
         ssfrCrop: String?,
         originScreen: String
     ) async {
-        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: [
+        // App: typed / voice sends carry `manualSendChipContext()` (ChatScreen.kt:1780-1791);
+        // suggestion chips, cards, weather and SSFR sends carry no chip context.
+        let chip = ["text", "voice"].contains(triggeredInputType)
+            ? ChipAnalytics.manualSend(messages: state.messages) : .none
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: chip.merged(into: [
             "input_type": triggeredInputType,
             "screen": originScreen
-        ])
+        ], triggeredInputType: triggeredInputType))
         env.config.onMessageSent?(question) // C4 semantic callback
         await sendQuestionInternal(
             question,
@@ -555,7 +597,8 @@ public final class ChatViewModel: ObservableObject {
             weatherCtaTriggered: weatherCtaTriggered,
             ssfrCrop: ssfrCrop,
             statementId: nil,
-            replaceExistingUserBubble: false
+            replaceExistingUserBubble: false,
+            chip: chip
         )
     }
 
@@ -572,7 +615,8 @@ public final class ChatViewModel: ObservableObject {
         bubbleText: String? = nil,
         parentMessageId: String? = nil,
         locationDeclined: Bool = false,
-        photoDeclined: Bool = false
+        photoDeclined: Bool = false,
+        chip: ChipAnalytics = .none
     ) async {
         guard !state.isLoading else { return }
         state.errorMessage = nil
@@ -602,18 +646,17 @@ public final class ChatViewModel: ObservableObject {
                         ssfrCrop: ssfrCrop, statementId: statementId,
                         replaceExistingUserBubble: true, isRetry: true,
                         bubbleText: bubbleText, parentMessageId: parentMessageId,
-                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined,
+                        chip: chip
                     )
                 }
             )
             return
         }
 
-        var request = TextPromptRequest(
+        let request = Self.makeTextPromptRequest(
             query: question,
             conversationId: convId,
-            // App parity: message_id is sent empty (""); the response id is authoritative.
-            messageId: "",
             statementId: statementId,
             weatherCtaTriggered: weatherCtaTriggered,
             triggeredInputType: triggeredInputType,
@@ -621,19 +664,22 @@ public final class ChatViewModel: ObservableObject {
             transcriptionId: transcriptionId,
             retry: isRetry,
             // Per-LANGUAGE flag persisted on language selection (app ChatViewModel); default true.
-            streamingRequired: env.prefs.bool(.streamingRequired, default: true)
+            streamingRequired: env.prefs.bool(.streamingRequired, default: true),
+            parentMessageId: parentMessageId,
+            locationDeclined: locationDeclined,
+            photoDeclined: photoDeclined
         )
-        // Alignment-chip correlation (app `fetchTextPromptResponse`): only ever set on an
-        // `align_chip_sel` send; nil / false are omitted from the body, as the app's Gson does.
-        request.parentMessageId = parentMessageId
-        request.locationDeclined = locationDeclined ? true : nil
-        request.photoDeclined = photoDeclined ? true : nil
         // debugLogging only. Routing fields, never the query text or tokens.
         NetworkLog.note("text-prompt request triggered_input_type=\(triggeredInputType) parent_message_id=\(parentMessageId ?? "nil") location_declined=\(request.locationDeclined.map(String.init) ?? "nil") photo_declined=\(request.photoDeclined.map(String.init) ?? "nil")")
-        env.analytics.track(AnalyticsEvents.sendQuery, props: [
-            "input_type": triggeredInputType,
-            "conversation_id": convId
-        ])
+        // App parity: Send_Query fires on the RESPONSE (ChatViewModel.kt:1706-1722, 2027-2045,
+        // failures :1852/:1908/:2153), carrying Valid_Query, the intent fields and — when the
+        // response presents chips — `agentic_chip_status = available`. Armed here, fired by
+        // `firePendingSendQuery`.
+        pendingSendQuery = PendingSendQuery(
+            base: ["input_type": triggeredInputType, "conversation_id": convId],
+            chip: chip,
+            triggeredInputType: triggeredInputType
+        )
         if !env.prefs.bool(.firstQueryAsked) {
             env.prefs.setBool(true, .firstQueryAsked)
             env.analytics.track(AnalyticsEvents.firstQueryAsked)
@@ -653,7 +699,8 @@ public final class ChatViewModel: ObservableObject {
                         ssfrCrop: ssfrCrop, statementId: statementId,
                         replaceExistingUserBubble: true, isRetry: true,
                         bubbleText: bubbleText, parentMessageId: parentMessageId,
-                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined,
+                        chip: chip
                     )
                 }
             )
@@ -675,7 +722,8 @@ public final class ChatViewModel: ObservableObject {
                         ssfrCrop: ssfrCrop, statementId: statementId,
                         replaceExistingUserBubble: true, isRetry: true,
                         bubbleText: bubbleText, parentMessageId: parentMessageId,
-                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined,
+                        chip: chip
                     )
                 }
             )
@@ -696,7 +744,8 @@ public final class ChatViewModel: ObservableObject {
                         ssfrCrop: ssfrCrop, statementId: statementId,
                         replaceExistingUserBubble: true, isRetry: true,
                         bubbleText: bubbleText, parentMessageId: parentMessageId,
-                        locationDeclined: locationDeclined, photoDeclined: photoDeclined
+                        locationDeclined: locationDeclined, photoDeclined: photoDeclined,
+                        chip: chip
                     )
                 }
             )
@@ -732,6 +781,17 @@ public final class ChatViewModel: ObservableObject {
             return false
         }
 
+        firePendingSendQuery(
+            valid: true,
+            response: response,
+            shownChipType: (response.alignments?.chips ?? []).isEmpty ? nil : alignmentKind?.analyticsType
+        )
+        if let alignmentKind, let chips = response.alignments?.chips {
+            // debugLogging only: the routing fields of a surface's chips (no user text).
+            NetworkLog.note("alignment \(alignmentKind.analyticsType) chips=" + chips.map {
+                "[value=\($0.value ?? "nil") action=\($0.action ?? "nil")]"
+            }.joined(separator: " "))
+        }
         state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
         if let streamId {
             // Drop the streaming bubble; `metadata` is the authoritative, clean answer.
@@ -922,6 +982,7 @@ public final class ChatViewModel: ObservableObject {
 
     /// Settles a streamed answer that finished without a `metadata` event.
     private func finalizeAgenticAnswer(text: String, followUps: [String]?, streamId: String) {
+        firePendingSendQuery(valid: true)
         upsertStreamMessage(ChatMessage.AiResponse(
             text: text,
             followUpQuestions: followUps,
@@ -944,6 +1005,7 @@ public final class ChatViewModel: ObservableObject {
         kind: StreamErrorKind,
         retry: @escaping @MainActor () async -> Void
     ) {
+        firePendingSendQuery(valid: !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         upsertStreamMessage(ChatMessage.AiResponse(
             text: text,
             id: streamId,
@@ -966,6 +1028,7 @@ public final class ChatViewModel: ObservableObject {
     }
 
     private func failCurrent(placeholderId: String, userMessageId: String, message: String, retry: @escaping @MainActor () async -> Void) {
+        firePendingSendQuery(valid: false)
         state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
         // Mark user bubble failed.
         state.messages = state.messages.map { entry in
@@ -1037,10 +1100,16 @@ public final class ChatViewModel: ObservableObject {
         }
 
         state.suggestedQuestions = nil
-        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: [
+        // App ChatViewModel.kt:1090-1110: a successful share is reported as a chip pick.
+        let chip = ChipAnalytics.selected(
+            type: AlignmentKind.gpsPrompt.analyticsType,
+            value: AlignmentChip.valueShareLocation,
+            label: env.labels.label(FCLabels.shareLocation, fallback: "Share my location")
+        )
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: chip.merged(into: [
             "input_type": FCAlignChipSelInputType,
             "screen": ScreenNames.chat
-        ])
+        ], triggeredInputType: FCAlignChipSelInputType))
         env.config.onMessageSent?(query) // C4 semantic callback
         Task {
             // `replaceExistingUserBubble: true` with a non-empty thread suppresses the user text
@@ -1055,7 +1124,8 @@ public final class ChatViewModel: ObservableObject {
                 ssfrCrop: nil,
                 statementId: nil,
                 replaceExistingUserBubble: true,
-                parentMessageId: source.messageId
+                parentMessageId: source.messageId,
+                chip: chip
             )
         }
     }
@@ -1074,7 +1144,10 @@ public final class ChatViewModel: ObservableObject {
             sourceMessageId: sourceMessageId,
             query: send.query,
             selectionValue: send.selectionValue,
-            displayLabel: send.displayLabel
+            displayLabel: send.displayLabel,
+            chipType: kind?.analyticsType,
+            chipValue: chip.value,
+            chipLabel: chip.label
         )
     }
 
@@ -1092,27 +1165,40 @@ public final class ChatViewModel: ObservableObject {
         selectionValue: String,
         displayLabel: String? = nil,
         locationDeclined: Bool = false,
-        photoDeclined: Bool = false
+        photoDeclined: Bool = false,
+        chipType: String? = nil,
+        chipValue: String? = nil,
+        chipLabel: String? = nil
     ) {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // Checked BEFORE any mutation (app: `if (_state.value.isLoading) return`).
         guard !state.isLoading else { return }
         var parentMessageId: String?
+        var sourceKind: AlignmentKind?
         if let index = state.messages.firstIndex(where: { entry in
             if case .aiResponse(let ai) = entry { return ai.id == sourceMessageId }
             return false
         }), case .aiResponse(var source) = state.messages[index] {
             parentMessageId = source.messageId
+            sourceKind = source.alignmentKind
             if !source.alignmentSelectedValues.contains(selectionValue) {
                 source.alignmentSelectedValues.append(selectionValue)
                 state.messages[index] = .aiResponse(source)
             }
         }
         state.suggestedQuestions = nil
-        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: [
+        // App `SendAlignmentChip` analytics (ChatScreen.kt:1639-1663 → ChatViewModel.kt:1105):
+        // `selected`, the surface's wire type (falls back to the source surface's kind), the chip
+        // value and label; `click_type = align_chip_sel`.
+        let chip = ChipAnalytics.selected(
+            type: chipType ?? sourceKind?.analyticsType,
+            value: chipValue ?? selectionValue,
+            label: chipLabel ?? displayLabel ?? query
+        )
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: chip.merged(into: [
             "input_type": FCAlignChipSelInputType,
             "screen": ScreenNames.chat
-        ])
+        ], triggeredInputType: FCAlignChipSelInputType))
         env.config.onMessageSent?(query) // C4 semantic callback
         Task {
             await self.sendQuestionInternal(
@@ -1127,9 +1213,89 @@ public final class ChatViewModel: ObservableObject {
                 bubbleText: displayLabel,
                 parentMessageId: parentMessageId,
                 locationDeclined: locationDeclined,
-                photoDeclined: photoDeclined
+                photoDeclined: photoDeclined,
+                chip: chip
             )
         }
+    }
+
+    // MARK: - Send_Query (fired on the response, as the app does)
+
+    struct PendingSendQuery {
+        var base: [String: String]
+        var chip: ChipAnalytics
+        var triggeredInputType: String
+    }
+
+    /// The Send_Query armed by the in-flight send; fired once by its outcome.
+    private var pendingSendQuery: PendingSendQuery?
+
+    private func firePendingSendQuery(valid: Bool, response: TextPromptResponse? = nil, shownChipType: String? = nil) {
+        guard let pending = pendingSendQuery else { return }
+        pendingSendQuery = nil
+        env.analytics.track(AnalyticsEvents.sendQuery, props: Self.sendQueryProps(
+            pending, valid: valid, intent: response?.intentClassificationOutput, shownChipType: shownChipType
+        ))
+    }
+
+    /// The Send_Query payload: the send's base keys, the chip keys (upgraded to `available` when
+    /// the response presents chips and the send was not itself a chip reaction —
+    /// `withResponseChipStatus`, ChatViewModel.kt:169-176), `click_type`, `Valid_Query` and the
+    /// intent fields (`SendQueryAnalytics.kt:152-160`).
+    nonisolated static func sendQueryProps(
+        _ pending: PendingSendQuery,
+        valid: Bool,
+        intent: IntentClassificationOutput?,
+        shownChipType: String?
+    ) -> [String: String] {
+        var chip = pending.chip
+        if let shownChipType, chip.status == ChipAnalytics.statusNone {
+            chip.status = ChipAnalytics.statusAvailable
+            chip.shownType = shownChipType
+        }
+        var props = chip.merged(into: pending.base, triggeredInputType: pending.triggeredInputType)
+        props["Valid_Query"] = valid ? "true" : "false"
+        props["asset_type"] = intent?.assetType ?? ""
+        props["asset_name"] = intent?.assetName ?? ""
+        props["concern"] = intent?.concern ?? ""
+        props["stage"] = intent?.stage ?? ""
+        props["intent"] = intent?.intent ?? ""
+        props["clarification_needed_asset"] = intent?.clarificationNeeded?.asset == true ? "true" : "false"
+        props["clarification_needed_concern"] = intent?.clarificationNeeded?.concern == true ? "true" : "false"
+        return props
+    }
+
+    /// The photo an UPLOAD_PHOTO "take photo" / "choose from gallery" chip produced. Sent like any
+    /// photo (`SendQuestionWithImage`), but its analytics are a chip pick, as the app's
+    /// `sendAlignmentPhotoDirect` stamps them (ChatScreen.kt:425-460).
+    public func sendAlignmentPhoto(chip: AlignmentChip, imageData: Data, imageURL: URL?) {
+        let analytics = ChipAnalytics.selected(
+            type: AlignmentKind.uploadPhoto.analyticsType, value: chip.value, label: chip.label
+        )
+        Task { await self.sendImageQuestion(question: "", imageData: imageData, imageURL: imageURL, chipOverride: analytics) }
+    }
+
+    // MARK: - Capability declines (2.0.0)
+
+    /// The farmer did not complete a capability prompt. Port of the app's two decline sends:
+    /// GPS (ChatScreen.kt:377-380) and UPLOAD_PHOTO (`sendAlignmentPhotoDeclineQuery`,
+    /// ChatScreen.kt:469-485 — permission denied :665-672, nothing picked/taken :524-531, :576-583).
+    /// Each is an alignment-chip send of the label text, flagged `location_declined` /
+    /// `photo_declined`, with `parent_message_id` = the surface's server id.
+    ///
+    /// - Parameter sourceMessageId: the raw ``ChatMessage/AiResponse/id`` of the surface.
+    public func sendCapabilityDecline(_ decline: CapabilityDecline, sourceMessageId: String) {
+        let send = CapabilityDeclineSend(decline, labels: env.labels)
+        sendAlignmentChip(
+            sourceMessageId: sourceMessageId,
+            query: send.query,
+            selectionValue: send.query,
+            locationDeclined: send.locationDeclined,
+            photoDeclined: send.photoDeclined,
+            chipType: send.chipType,
+            chipValue: AlignmentChip.valueNotNow,
+            chipLabel: send.query
+        )
     }
 
     // MARK: - Alignment chip selection (2.0.0)
@@ -1160,6 +1326,54 @@ public final class ChatViewModel: ObservableObject {
         guard matches, !surface.alignmentSelectedValues.contains(question) else { return }
         surface.alignmentSelectedValues.append(question)
         state.messages[idx] = .aiResponse(surface)
+    }
+
+    /// App `queryForApi` (ChatViewModel.kt:1854): the typed caption, else the default prompt.
+    nonisolated static func imageQueryForApi(_ question: String, defaultQuery: String) -> String {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultQuery : question
+    }
+
+    /// The #27 / #27a body, exactly as the app's `fetchTextPromptResponse` builds it
+    /// (ChatViewModel.kt:1403-1420): `message_id` "", `use_entity_extraction` true, and the three
+    /// alignment fields only when set — `parent_message_id` on an `align_chip_sel` send,
+    /// `location_declined` / `photo_declined` only as `true` (else omitted). `image` +
+    /// `image_name` carry a photo on the agentic path (ChatViewModel.kt:1866-1880).
+    nonisolated static func makeTextPromptRequest(
+        query: String,
+        conversationId: String,
+        statementId: FlexibleID? = nil,
+        weatherCtaTriggered: Bool = false,
+        triggeredInputType: String,
+        ssfrCrop: String? = nil,
+        transcriptionId: String? = nil,
+        retry: Bool = false,
+        streamingRequired: Bool,
+        parentMessageId: String? = nil,
+        locationDeclined: Bool = false,
+        photoDeclined: Bool = false,
+        image: String? = nil,
+        imageName: String? = nil
+    ) -> TextPromptRequest {
+        var request = TextPromptRequest(
+            query: query,
+            conversationId: conversationId,
+            // App parity: message_id is sent empty (""); the response id is authoritative.
+            messageId: "",
+            statementId: statementId,
+            weatherCtaTriggered: weatherCtaTriggered,
+            triggeredInputType: triggeredInputType,
+            ssfrCrop: ssfrCrop,
+            transcriptionId: transcriptionId,
+            retry: retry,
+            streamingRequired: streamingRequired
+        )
+        request.parentMessageId = parentMessageId
+        request.locationDeclined = locationDeclined ? true : nil
+        request.photoDeclined = photoDeclined ? true : nil
+        request.image = image
+        request.imageName = imageName
+        return request
     }
 
     /// `triggered_input_type` of a ``ChatAction/sendFollowUpQuestion(question:followUpQuestionId:transcriptionId:audioURL:)``
@@ -1292,8 +1506,12 @@ public final class ChatViewModel: ObservableObject {
 
     // MARK: - Image question (#28)
 
-    private func sendImageQuestion(question: String, imageData: Data, imageURL: URL?) async {
+    private func sendImageQuestion(question: String, imageData: Data, imageURL: URL?, chipOverride: ChipAnalytics? = nil) async {
         guard !state.isLoading else { return }
+        // App: a composer photo carries `manualSendChipContext()` like a typed send
+        // (ChatScreen.kt:1780); an UPLOAD_PHOTO chip's photo is reported as that chip's pick
+        // (ChatScreen.kt:430-452 `isAlignmentChip = true`, type upload-photo, the chip's value/label).
+        let chip = chipOverride ?? ChipAnalytics.manualSend(messages: state.messages)
         state.isLoading = true
         state.errorMessage = nil
         state.suggestedQuestions = nil
@@ -1320,21 +1538,75 @@ public final class ChatViewModel: ObservableObject {
             return
         }
 
-        env.analytics.track(AnalyticsEvents.sendQuery, props: ["input_type": "camera", "conversation_id": convId])
+        pendingSendQuery = PendingSendQuery(
+            base: ["input_type": "camera", "conversation_id": convId],
+            chip: chip,
+            triggeredInputType: "image"
+        )
+        // App `fetchPlantixResponse` (ChatViewModel.kt:1819-1895): the bubble shows only what the
+        // farmer typed, but the API always gets a prompt — the typed text, else the
+        // `what_is_wrong_with_my_crop` label — and the image is named `image_<uuid>.jpg`.
+        let queryForApi = Self.imageQueryForApi(
+            question,
+            defaultQuery: env.labels.label(FCLabels.whatIsWrongWithMyCrop, fallback: "What is wrong with my crop?")
+        )
+        let imageName = "image_\(UUID().uuidString.lowercased()).jpg"
+        // App `ImageUtils.addGpsToImageAndConvertToBase64` (ImageUtils.kt:170-245): the photo's
+        // own GPS, else the current location if permission is ALREADY granted (no prompt); fit
+        // 1000×1000; JPEG 80; GPS written into the EXIF. A photo that cannot be decoded fails the
+        // send ("Failed to process image", Valid_Query false) as in the app (ChatViewModel.kt:1840-1854).
+        let deviceLocation = PhotoUploadEncoder.readGPS(from: imageData) == nil
+            ? await PhotoUploadEncoder.currentLocationIfAuthorized()
+            : nil
+        guard let encoded = await Task.detached(priority: .userInitiated, operation: {
+            PhotoUploadEncoder.encode(imageData, fallbackLocation: deviceLocation)
+        }).value else {
+            failCurrent(
+                placeholderId: placeholderId,
+                userMessageId: userMessageId,
+                message: env.labels.label(FCLabels.failedToProcessImage, fallback: "Failed to process image"),
+                retry: { [weak self] in await self?.sendImageQuestion(question: question, imageData: imageData, imageURL: imageURL) }
+            )
+            return
+        }
+        let base64 = encoded.base64
+        NetworkLog.note("photo encoded \(encoded.pixelWidth)x\(encoded.pixelHeight) bytes=\(encoded.data.count) (source \(imageData.count)) gps=\(encoded.latitude != nil)")
+        if env.config.enableAgenticChat {
+            // Agentic chat on: the photo goes through the agentic text stream (#27a) with `image` +
+            // `image_name` and `triggered_input_type = image` — NOT #28 — and the answer streams
+            // like any text answer (ChatViewModel.kt:1862-1880).
+            let request = Self.makeTextPromptRequest(
+                query: queryForApi,
+                conversationId: convId,
+                triggeredInputType: "image",
+                streamingRequired: env.prefs.bool(.streamingRequired, default: true),
+                image: base64,
+                imageName: imageName
+            )
+            NetworkLog.note("text-prompt request triggered_input_type=image image_name=\(imageName) image_base64_chars=\(base64.count) default_query=\(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
+            await streamAgenticAnswer(
+                request: request,
+                placeholderId: placeholderId,
+                retry: { [weak self] in await self?.sendImageQuestion(question: question, imageData: imageData, imageURL: imageURL) }
+            )
+            return
+        }
         let request = PlantixRequest(
             conversationId: convId,
-            image: imageData.base64EncodedString(),
+            image: base64,
             triggeredInputType: "image",
-            query: question.isEmpty ? nil : question,
-            // App parity: latitude/longitude sent as STRINGs.
-            latitude: env.prefs.double(.latitude).map { String($0) },
-            longitude: env.prefs.double(.longitude).map { String($0) },
-            imageName: "fc_sdk_\(Int(Date().timeIntervalSince1970)).jpg",
+            query: queryForApi,
+            // App parity: the location the image was stamped with, as STRINGs
+            // (`imageResult.latitude?.toString()`, ChatViewModel.kt:1884-1885).
+            latitude: encoded.latitude.map { String($0) },
+            longitude: encoded.longitude.map { String($0) },
+            imageName: imageName,
             retry: false
         )
         let result = await env.api.imageAnalysis(request)
         switch result {
         case .success(let response) where response.error != true && response.response != nil:
+            firePendingSendQuery(valid: true) // ChatViewModel.kt:2125
             let text = response.response ?? ""
             state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
             let aiId = UUID().uuidString
@@ -1468,7 +1740,8 @@ public final class ChatViewModel: ObservableObject {
                 )))
             case .queryAudio:
                 result.append(.user(ChatMessage.UserMessage(
-                    text: item.heardQueryText ?? item.queryText ?? "",
+                    // App ChatViewModel.kt:1273: `query_text ?: heard_query_text ?: ""`.
+                    text: item.queryText ?? item.heardQueryText ?? "",
                     audioURL: item.queryMediaFileUrl.flatMap(URL.init(string:)),
                     id: idBase
                 )))

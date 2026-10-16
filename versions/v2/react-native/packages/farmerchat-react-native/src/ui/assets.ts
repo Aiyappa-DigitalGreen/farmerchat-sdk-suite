@@ -4,6 +4,9 @@
  * Icon PNGs are black + alpha and recolored at runtime via Image tintColor.
  */
 import logoMark from '../assets/fc_logo_mark.png';
+// Share card (app ShareCard.kt footer): rasterized from the app's logo_wordmark / google_play vectors.
+import logoWordmark from '../assets/fc_logo_wordmark.png';
+import googlePlay from '../assets/fc_google_play.png';
 import iconCamera from '../assets/fc_icon_camera.png';
 import iconMic from '../assets/fc_icon_mic.png';
 import iconKeyboard from '../assets/fc_icon_keyboard.png';
@@ -93,6 +96,8 @@ export type IconName = keyof typeof Icons;
 
 export const Assets = {
   logoMark,
+  logoWordmark,
+  googlePlay,
   glowYellow,
   glowGreen,
   weatherSunClouds,

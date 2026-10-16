@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 import SafariServices
 import WebKit
 import AVFoundation
@@ -12,9 +13,13 @@ public struct FCPickedImage {
     public let jpegData: Data
     /// Temp file the chat bubble renders from.
     public let fileURL: URL
+    /// The picked file's ORIGINAL bytes (with its EXIF, so the upload encoder can read the photo's
+    /// own GPS), else ``jpegData``. Core re-encodes it before sending.
+    public let sourceData: Data
 
-    init?(image: UIImage) {
+    init?(image: UIImage, sourceData: Data? = nil) {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return nil }
+        self.sourceData = sourceData ?? data
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("fc_sdk_img_\(UUID().uuidString).jpg")
         do {
@@ -56,14 +61,26 @@ public struct FCPhotoLibraryPicker: UIViewControllerRepresentable {
         }
 
         public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
+            // The owner dismisses the sheet through its binding in `onPicked`. Calling `picker.dismiss`
+            // here as well dismissed TWICE: the second dismissal landed on the sheet's presenter —
+            // the SDK's own full-screen cover — and closed the whole chat (seen on DEMO after a
+            // gallery cancel, round 3).
             guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
                 onPicked(nil)
                 return
             }
-            provider.loadObject(ofClass: UIImage.self) { [onPicked] object, _ in
-                DispatchQueue.main.async {
-                    onPicked((object as? UIImage).flatMap(FCPickedImage.init(image:)))
+            // The original file bytes keep the photo's EXIF (GPS) for the upload encoder
+            // (app ImageUtils.readGpsFromImage); a decoded UIImage would drop it.
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [onPicked] data, _ in
+                let image = data.flatMap(UIImage.init(data:))
+                if let image {
+                    DispatchQueue.main.async { onPicked(FCPickedImage(image: image, sourceData: data)) }
+                    return
+                }
+                provider.loadObject(ofClass: UIImage.self) { object, _ in
+                    DispatchQueue.main.async {
+                        onPicked((object as? UIImage).flatMap { FCPickedImage(image: $0) })
+                    }
                 }
             }
         }
@@ -81,7 +98,9 @@ public struct FCCameraPicker: UIViewControllerRepresentable {
 
     public func makeUIViewController(context: Context) -> UIImagePickerController {
         let controller = UIImagePickerController()
-        controller.sourceType = .camera
+        // `.camera` on a device without one (the simulator) raises NSInvalidArgumentException;
+        // fall back to the library, as the UIKit flavour does.
+        controller.sourceType = Self.isCameraAvailable ? .camera : .photoLibrary
         controller.delegate = context.coordinator
         return controller
     }
@@ -103,13 +122,16 @@ public struct FCCameraPicker: UIViewControllerRepresentable {
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
-            picker.dismiss(animated: true)
+            // The owner dismisses the sheet through its binding in `onPicked`. Calling `picker.dismiss`
+            // here as well dismissed TWICE: the second dismissal landed on the sheet's presenter —
+            // the SDK's own full-screen cover — and closed the whole chat (seen on DEMO after a
+            // gallery cancel, round 3).
             let image = (info[.originalImage] as? UIImage)
-            onPicked(image.flatMap(FCPickedImage.init(image:)))
+            onPicked(image.flatMap { FCPickedImage(image: $0) })
         }
 
         public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
+            // No `picker.dismiss` — see above.
             onPicked(nil)
         }
     }

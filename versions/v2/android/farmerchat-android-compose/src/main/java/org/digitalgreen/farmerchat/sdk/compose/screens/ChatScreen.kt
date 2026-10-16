@@ -70,6 +70,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -147,6 +148,9 @@ import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.ChatMessage
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.chatScrollAnchorIndex
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.holdsChatReserve
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.followUpChipSendProperties
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.photoChipDeclineAction
+import org.digitalgreen.farmerchat.sdk.core.ui.chat.photoChipSendAction
 import org.digitalgreen.farmerchat.sdk.core.ui.chat.routeAlignmentChip
 import java.io.File
 import androidx.compose.ui.platform.LocalConfiguration
@@ -239,6 +243,12 @@ fun ChatScreen(
     val animationsEnabled = remember { android.animation.ValueAnimator.areAnimatorsEnabled() }
     val emptyRisePx = with(LocalDensity.current) { 6.dp.roundToPx() }
     var cameraTempUri by remember { mutableStateOf<Uri?>(null) }
+    // App parity (ChatScreen.kt:414-417): set while the camera / gallery was opened from an
+    // upload-photo chip. The launchers then send the photo straight to the conversation, or the
+    // decline answer when no photo came back. Saveable: the camera activity can outlive this one.
+    var alignmentPhotoSourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var alignmentPhotoChipValue by rememberSaveable { mutableStateOf<String?>(null) }
+    var alignmentPhotoChipLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var permissionDialogType by remember { mutableStateOf<String?>(null) }
 
     // History pagination scroll restore
@@ -471,14 +481,17 @@ fun ChatScreen(
         if (prependOldCount != null || state.messages.isEmpty()) return@LaunchedEffect
         if (isHistoryEntry && !initialScrollDone) {
             if (!state.isInitialHistoryLoaded) return@LaunchedEffect
-            // A conversation opened from Chat History starts at its FIRST question (the first
-            // message of the loaded page), not the last. Product decision: this deliberately
-            // differs from fc-compose-agentic ChatScreen.kt:1210-1227, which pins the last
-            // question. Item index skips the pagination spinner so it sits just above the
-            // viewport and older pages load only on a scroll-up (see the collector above).
+            // App parity (fc-compose-agentic ChatScreen.kt:1210-1227): a conversation opened from
+            // Chat History pins its LAST question to the top, with its answer below, like a live
+            // question. The app scrolls to `totalItems - 2`. `chatScrollAnchorIndex()` gives the same
+            // row: the settled last answer holds the reserve, so the anchor is the question above
+            // it. The old "first question" behaviour was recorded in docs/04 as a product decision
+            // with no user request behind it, so it is reverted (round 3, 2026-10-16). The index
+            // skips the pagination spinner (an item emitted before the message loop). Older pages
+            // load only on a scroll-up (see the collector above).
             val spinnerItems = if (state.historyNextPage != null) 1 else 0
             historyOpenedTailId = lastMessageId
-            listState.scrollToItem(spinnerItems)
+            listState.scrollToItem(state.chatScrollAnchorIndex() + spinnerItems)
             initialScrollDone = true
             return@LaunchedEffect
         }
@@ -606,11 +619,34 @@ fun ChatScreen(
     }
 
     // ------------------------------------------------------------------ camera / gallery / mic
+    /** Image size for the send-query funnel (app ChatScreen.kt:432-436). 0 when unreadable. */
+    fun imageSizeKb(uri: Uri): Int = runCatching {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { (it.statSize / 1024).toInt().coerceAtLeast(0) } ?: 0
+    }.getOrDefault(0)
+
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
         val uri = cameraTempUri
-        if (success && uri != null) {
+        val alignmentSource = alignmentPhotoSourceId
+        alignmentPhotoSourceId = null
+        if (alignmentSource != null) {
+            // Upload-photo chip (app ChatScreen.kt:539-585): the photo goes straight to the chat;
+            // no photo sends the decline answer to the surface.
+            if (success && uri != null) {
+                closePhotoInput?.invoke()
+                vm.onAction(
+                    photoChipSendAction(uri, imageSizeKb(uri), alignmentPhotoChipValue, alignmentPhotoChipLabel)
+                )
+            } else {
+                vm.onAction(
+                    photoChipDeclineAction(
+                        alignmentSource,
+                        label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now")
+                    )
+                )
+            }
+        } else if (success && uri != null) {
             closePhotoInput?.invoke()
             if (isComposerUi) {
                 // App parity: in composer mode a picked photo is ATTACHED so it can be sent
@@ -627,7 +663,24 @@ fun ChatScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
+        val alignmentSource = alignmentPhotoSourceId
+        alignmentPhotoSourceId = null
+        if (alignmentSource != null) {
+            // Upload-photo chip (app ChatScreen.kt:487-533).
+            if (uri != null) {
+                closePhotoInput?.invoke()
+                vm.onAction(
+                    photoChipSendAction(uri, imageSizeKb(uri), alignmentPhotoChipValue, alignmentPhotoChipLabel)
+                )
+            } else {
+                vm.onAction(
+                    photoChipDeclineAction(
+                        alignmentSource,
+                        label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now")
+                    )
+                )
+            }
+        } else if (uri != null) {
             closePhotoInput?.invoke()
             if (isComposerUi) {
                 // App parity: in composer mode a picked photo is ATTACHED so it can be sent
@@ -651,6 +704,13 @@ fun ChatScreen(
             cameraLauncher.launch(uri)
         }.onFailure {
             toast.show(label(Labels.NO_CAMERA_APP_AVAILABLE, "No camera app available on this device"), ToastState.Error)
+            // App ChatScreen.kt:732-743: no camera app on an upload-photo chip still answers it.
+            alignmentPhotoSourceId?.let { src ->
+                alignmentPhotoSourceId = null
+                vm.onAction(
+                    photoChipDeclineAction(src, label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now"))
+                )
+            }
         }
     }
 
@@ -663,7 +723,20 @@ fun ChatScreen(
         } else {
             val denyCount = graph.prefs.getInt(SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT, 0) + 1
             graph.prefs.putInt(SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT, denyCount)
-            if (denyCount >= 2) permissionDialogType = "camera"
+            val alignmentSource = alignmentPhotoSourceId
+            if (alignmentSource != null) {
+                // App ChatScreen.kt:660-667: a chip-driven flow never blocks behind the settings
+                // dialog; the denial is sent as the surface's answer so the chat continues.
+                alignmentPhotoSourceId = null
+                vm.onAction(
+                    photoChipDeclineAction(
+                        alignmentSource,
+                        label(Labels.PHOTO_PERMISSION_DECLINED, "I don't want to share a photo right now")
+                    )
+                )
+            } else if (denyCount >= 2) {
+                permissionDialogType = "camera"
+            }
         }
     }
 
@@ -688,7 +761,10 @@ fun ChatScreen(
             launchCamera()
         } else {
             val denyCount = graph.prefs.getInt(SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT, 0)
-            if (denyCount >= 2) permissionDialogType = "camera"
+            // App ChatScreen.kt:676-694: the upload-photo chip always asks the system (a
+            // permanently denied permission returns at once, and the denial answers the surface);
+            // only the composer camera falls back to the settings dialog.
+            if (denyCount >= 2 && alignmentPhotoSourceId == null) permissionDialogType = "camera"
             else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
@@ -770,9 +846,28 @@ fun ChatScreen(
                         // carries agentic_chip_type = gps-prompt (app parity).
                         graph.locationPromptManager.triggerFromLocalContext(fromAgenticChip = true)
                     }
-                AlignmentChipRoute.TakePhoto -> requestCamera()
-                AlignmentChipRoute.ChooseFromGallery ->
-                    runCatching { galleryLauncher.launch("image/*") }
+                // App ChatScreen.kt:1621-1636: remember the surface and the chip, then open the
+                // camera / gallery directly; the launchers route the outcome.
+                AlignmentChipRoute.TakePhoto -> {
+                    alignmentPhotoSourceId = messageId
+                    alignmentPhotoChipValue = chip.value
+                    alignmentPhotoChipLabel = chip.label
+                    requestCamera()
+                }
+                AlignmentChipRoute.ChooseFromGallery -> {
+                    alignmentPhotoSourceId = messageId
+                    alignmentPhotoChipValue = chip.value
+                    alignmentPhotoChipLabel = chip.label
+                    runCatching { galleryLauncher.launch("image/*") }.onFailure {
+                        alignmentPhotoSourceId = null
+                        vm.onAction(
+                            photoChipDeclineAction(
+                                messageId,
+                                label(Labels.PHOTO_NOT_SHARED, "I don't have a photo to share right now")
+                            )
+                        )
+                    }
+                }
                 AlignmentChipRoute.Ignore -> Unit
                 is AlignmentChipRoute.SendText -> vm.onAction(
                     ChatAction.SendAlignmentChip(
@@ -866,7 +961,10 @@ fun ChatScreen(
             vm.onAction(
                 ChatAction.SendFollowUpQuestion(
                     question = question,
-                    followUpQuestionId = state.suggestedQuestionIds?.getOrNull(index)
+                    followUpQuestionId = state.suggestedQuestionIds?.getOrNull(index),
+                    // App handleFollowUp (ChatScreen.kt:958-972): a chip tap is a follow-up
+                    // prompt; a send without props is treated as typed by hand.
+                    sendQueryProperties = followUpChipSendProperties(question)
                 )
             )
         }

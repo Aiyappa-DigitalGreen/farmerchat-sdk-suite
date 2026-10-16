@@ -4,9 +4,14 @@ All notable changes to the FarmerChat SDK suite. Built from the git history and 
 The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 1.x is the top-level
 `android/`, `ios/`, `react-native/`, `web/`. Upgrading from 1.x: see `versions/v2/MIGRATION.md`.
 
-## [Unreleased]
+## [2.2.0] - not yet released
+
+Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all changes since the
+2026-10-09 snapshot ship in it (user decision, 2026-10-16).
 
 ### Added (v2, all four platforms unless noted)
+- React Native: optional peers `expo-sharing` (image-card share) and `expo-image-manipulator`
+  (photo shrink). Without them the SDK falls back to text share and an unshrunk JPEG 80.
 - iOS FarmerChatCore: `ChatViewModel.sendAlignmentChip` and `LabelManager.answerGenerationTips()`.
 - `FarmerChat.shutdown()`: tears the SDK down; persisted data and host auth listeners are kept.
 - `FarmerChat.clearAllData()`: local-only wipe of every `fc_sdk_` item including tokens and appearance.
@@ -60,6 +65,19 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   `shell-quote` advisory.
 
 ### Fixed
+- All platforms, matched to the app and checked on DEMO: photos go on the agentic request
+  (`image`, `image_name`, `triggered_input_type:"image"`) instead of `image_analysis`, shrunk to
+  1000×1000 JPEG 80 with GPS EXIF as the app writes it; a photo-chip cancel or denial sends the app's
+  decline answer; `Send_Query` fires on the response with `Valid_Query`, intent fields and every
+  `agentic_chip_status` value; voice turns in history show `query_text` first; Share sends the app's
+  answer card image with its caption.
+- Android: typed questions went out as `follow_up` (now `text`, as the app); a reopened conversation
+  opens at its last question, as the app; Views composer field height.
+- iOS: cancelling the SwiftUI photo picker closed the chat; the SwiftUI camera crashed on a device
+  without a camera; UIKit markdown tables and Kannada justified text.
+- React Native: a missing optional package could crash the app at runtime (Metro lazy require);
+  Listen pill width and the follow-up pin scroll now animate; empty-state disc gradient.
+- Web: "One second, please..." while a voice clip transcribes; clips showed 0:00.
 - All platforms, matched to the app and checked on DEMO: chats reopened from history were shown
   newest first, with the oldest answer's follow-ups (Android, iOS, React Native, web); history
   follow-up chips no longer report a follow-up click (#30), as in the app; alignment chips send
@@ -89,21 +107,21 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
 - Web `typecheck:test` failed (missing Node types). RN example apps were committed pointing at
   the local mock server and used an invalid `appearance` value.
 
-## [2.2.0] - 2026-10-09
+### Earlier in 2.2.0 (2026-10-09 snapshot, never published)
 
-### Breaking
+#### Breaking
 - `mode` defaults to `CHAT_ONLY` (was `FULL_JOURNEY`) on every platform.
 - `guestApiKey` renamed to `farmerChatApiKey`, with no alias. The FarmerChat and Geolocation keys
   are built in.
 
-### Added
+#### Added
 - A first-time chat-only user picks a language once before the chat.
 - Empty-chat placeholder. History is hidden by default in chat-only mode.
 - The chat's close (X) closes the SDK on every platform; `onExit` added on Android and iOS.
 - Streaming answers: `streaming_required` is sent like the app, so stage streams typed answers.
 - Web widget (`@digitalgreenorg/farmerchat-widget`) and a hosted demo with an integration guide.
 
-### Fixed
+#### Fixed
 - The newest question stays pinned after an unanswered alignment surface.
 
 ## [1.1.0] - 2026-09-28 (Android)

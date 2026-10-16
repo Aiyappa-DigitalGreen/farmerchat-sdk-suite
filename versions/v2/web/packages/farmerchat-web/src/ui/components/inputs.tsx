@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { onSuspendMedia } from '../../core/mediaSuspend';
 import { FcIcon } from './FcIcon';
+import { CircularProgress } from './common';
 import { useLabel, useSdk } from '../context';
 import { useVoiceRecorder, VoiceRecording } from '../../state/useVoiceRecorder';
 import { Events } from '../../core/analytics';
@@ -332,7 +333,15 @@ export function PhotoInputOverlay(props: {
  * UserInput.kt VoiceClip in a user bubble: a 50dp pill (surfaceSecondary) — a 38dp forced-light
  * play button, 26 waveform bars (green up to the playhead while playing) and an m:ss timer.
  */
-export function VoiceClip(props: { src: string }) {
+export function VoiceClip(props: {
+  src: string;
+  /** Known clip length (from the recorder); used until the media reports a finite duration. */
+  durationMs?: number;
+  /** Transcribing: spinner in the button, not tappable (app VoiceClipState.Loading). */
+  loading?: boolean;
+  /** Failed send: red Close button, flat 9dp bars, half-opacity timer (app VoiceClipState.Error). */
+  failed?: boolean;
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -343,9 +352,27 @@ export function VoiceClip(props: { src: string }) {
   useEffect(() => {
     const audio = new Audio(props.src);
     audio.preload = 'metadata';
-    audio.onloadedmetadata = () => {
-      if (Number.isFinite(audio.duration)) setDuration(audio.duration);
+    // A MediaRecorder webm blob has no duration header: Chrome reports Infinity until the file
+    // is scanned. Seeking far past the end forces the scan; the real duration then arrives on
+    // `durationchange` and the playhead is put back. (The app reads the file's real length,
+    // ChatScreen.kt:1390-1401 getAudioDurationMs.)
+    let probing = false;
+    const takeDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+        if (probing) {
+          probing = false;
+          audio.currentTime = 0;
+        }
+      }
     };
+    audio.onloadedmetadata = () => {
+      if (audio.duration === Infinity) {
+        probing = true;
+        audio.currentTime = Number.MAX_SAFE_INTEGER;
+      } else takeDuration();
+    };
+    audio.ondurationchange = takeDuration;
     audio.onplay = () => setIsPlaying(true);
     audio.onpause = () => setIsPlaying(false);
     audio.onended = () => {
@@ -354,6 +381,7 @@ export function VoiceClip(props: { src: string }) {
       setPosition(0);
     };
     audio.ontimeupdate = () => {
+      if (probing) return;
       setPosition(audio.currentTime);
       if (audio.duration && Number.isFinite(audio.duration)) setProgress(audio.currentTime / audio.duration);
     };
@@ -373,19 +401,37 @@ export function VoiceClip(props: { src: string }) {
     if (audio.paused) void audio.play().catch(() => setIsPlaying(false));
     else audio.pause();
   };
-  const shown = isPlaying ? position : duration;
+  // VoiceClip.kt:172-186: Playback/Loading show the clip length, Playing the position.
+  const clipSeconds = duration > 0 ? duration : (props.durationMs ?? 0) / 1000;
+  const shown = isPlaying ? position : clipSeconds;
+  const failed = !!props.failed;
+  const loading = !!props.loading && !failed;
 
   return (
     <div className="fcsdk-c-voiceclip">
-      <button type="button" className="fcsdk-c-voiceclip-btn" onClick={toggle} aria-label={isPlaying ? 'pause' : 'play'}>
-        <FcIcon name={isPlaying ? 'm_pause' : 'm_play_arrow'} size={24} tint="#00C950" />
+      <button
+        type="button"
+        className="fcsdk-c-voiceclip-btn"
+        onClick={loading || failed ? undefined : toggle}
+        disabled={loading || failed}
+        aria-label={failed ? 'Error' : loading ? 'loading' : isPlaying ? 'pause' : 'play'}
+        style={failed ? { background: 'var(--fc-c-feedback-fail)' } : undefined}
+      >
+        {loading ? (
+          // InputActionButton isLoading: accent ring, (24 - 2) dp, 2.5 dp stroke.
+          <CircularProgress size={22} stroke={2.5} color="#00C950" />
+        ) : failed ? (
+          <FcIcon name="m_close" size={28} tint="#FFFFFF" />
+        ) : (
+          <FcIcon name={isPlaying ? 'm_pause' : 'm_play_arrow'} size={24} tint="#00C950" />
+        )}
       </button>
       <span className="fcsdk-c-voiceclip-wave" aria-hidden>
         {heights.map((h, i) => (
-          <span key={i} style={{ height: h, background: isPlaying && i / heights.length <= progress ? 'var(--fc-c-button-accent)' : 'var(--fc-c-fg-tertiary)' }} />
+          <span key={i} style={{ height: failed ? 9 : h, background: isPlaying && i / heights.length <= progress ? 'var(--fc-c-button-accent)' : 'var(--fc-c-fg-tertiary)' }} />
         ))}
       </span>
-      <span className="fc-t-labelSmall" style={{ color: 'var(--fc-c-fg-secondary)' }}>
+      <span className="fc-t-labelSmall" style={{ color: 'var(--fc-c-fg-secondary)', opacity: failed ? 0.5 : 1 }}>
         {formatSeconds(Math.floor(shown))}
       </span>
     </div>

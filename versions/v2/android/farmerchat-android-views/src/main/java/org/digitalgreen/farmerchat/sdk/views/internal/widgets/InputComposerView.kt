@@ -78,6 +78,9 @@ internal class InputComposerView @JvmOverloads constructor(
 
         /** Max field height (Compose heightIn(min = 24, max = 72) + maxLines = 3). */
         const val FIELD_MAX_HEIGHT = 72f
+        /** bodyMedium (app InputComposer.kt:640): 17sp text on a 25sp line. */
+        const val COMPOSER_TEXT_SP = 17f
+        const val COMPOSER_LINE_HEIGHT_SP = 25f
 
         /** Compose `animateDpAsState(tween(250))` for the compact/standard transition. */
         const val SIZE_ANIM_MS = 250L
@@ -274,6 +277,7 @@ internal class InputComposerView @JvmOverloads constructor(
         }
 
         binding.fcComposerInput.maxHeight = FIELD_MAX_HEIGHT.dpPx()
+        applyComposeTextMetrics(binding.fcComposerInput)
 
         applyImeInsets()
         applySizes(animate = false)
@@ -606,6 +610,33 @@ internal class InputComposerView @JvmOverloads constructor(
      * a sibling that consumes the insets first would leave this callback seeing 0 — the same
      * mechanism (and reason) as InputOverlaysController.applyImeInsets(), which must not regress.
      */
+    /**
+     * Gives the EditText the line box of the app's BasicTextField: bodyMedium, 17sp on a 25sp line
+     * (app InputComposer.kt:640-644). Compose trims that line box at the top of the first line and
+     * the bottom of the last line (`LineHeightStyle` Trim.Both), so n lines measure
+     * n x 25sp - (25sp - font height). Before this, the EditText kept its font padding (an EditText
+     * takes `editTextStyle`, not the theme's `textViewStyle`) and had no line height, so a focused
+     * 2-line field was 127px tall against Compose's 118px (about 3dp, round-1 report row 8).
+     *
+     * - `includeFontPadding = false`, as in Compose.
+     * - Line height 25sp: TextView adds the extra spacing between lines, not after the last, which
+     *   is the same trim.
+     * - The text size is set in code so it stays 44.625px; XML `17sp` rounds to a whole 45px, which
+     *   would wrap earlier than Compose (the same fix as the user bubble).
+     */
+    private fun applyComposeTextMetrics(field: android.widget.EditText) {
+        field.includeFontPadding = false
+        field.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, COMPOSER_TEXT_SP)
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            field.setLineHeight(android.util.TypedValue.COMPLEX_UNIT_SP, COMPOSER_LINE_HEIGHT_SP)
+        } else {
+            val px = android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_SP, COMPOSER_LINE_HEIGHT_SP, resources.displayMetrics
+            )
+            androidx.core.widget.TextViewCompat.setLineHeight(field, Math.round(px))
+        }
+    }
+
     private fun applyImeInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             // Trimmed to this view's bounds: an embedding host may already keep it clear of them.

@@ -706,14 +706,37 @@ export interface TextPromptRequest {
    * `upload-photo` surface, so the backend proceeds without an image. Omitted otherwise.
    */
   photo_declined?: boolean | null;
+  /**
+   * App TextPromptRequest.image: the base64 (NO_WRAP, no data-URI prefix) photo of an image query
+   * sent through the agentic endpoint. Omitted for text and voice.
+   */
+  image?: string | null;
+  /** App TextPromptRequest.image_name: `image_<uuid>.jpg` for an agentic image query. */
+  image_name?: string | null;
 }
 
+/** App `ClarificationNeeded` (domain/model/chat/TextPromptResponse.kt:192-199). */
+export interface ClarificationNeeded {
+  additional_context?: string | null;
+  asset?: boolean | null;
+  concern?: boolean | null;
+}
+
+/**
+ * App `IntentClassificationOutput` (domain/model/chat/TextPromptResponse.kt:167-190). The asset /
+ * concern / stage / intent fields feed the Send_Query analytics properties.
+ */
 export interface IntentClassificationOutput {
-  clarification_needed?: boolean | null;
+  asset_name?: string | null;
+  asset_status?: string | null;
+  asset_type?: string | null;
+  /** An object in the app's model; a bare boolean is still tolerated. */
+  clarification_needed?: ClarificationNeeded | boolean | null;
   concern?: string | null;
-  confidence?: number | null;
+  confidence?: number | string | null;
   intent?: string | null;
   rephrased_query?: string | null;
+  stage?: string | null;
   [key: string]: unknown;
 }
 

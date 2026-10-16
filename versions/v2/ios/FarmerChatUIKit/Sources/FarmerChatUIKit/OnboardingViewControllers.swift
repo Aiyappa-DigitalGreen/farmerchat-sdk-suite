@@ -78,6 +78,7 @@ final class FCUILanguageViewController: UIViewController {
         // LanguageScreen.kt:510 — the list stays clear of the panel.
         let inset = panel.frame.height - view.safeAreaInsets.bottom + 24
         if abs(scroll.contentInset.bottom - inset) > 0.5 { scroll.contentInset.bottom = inset }
+        justifyLegalIfNeeded()
     }
 
     // MARK: Page
@@ -235,6 +236,11 @@ final class FCUILanguageViewController: UIViewController {
         ]
         legal.translatesAutoresizingMaskIntoConstraints = false
         legal.widthAnchor.constraint(lessThanOrEqualToConstant: 260).isActive = true
+        // A multi-line `widthIn(max = 260.dp)` Text fills its max width; the inter-word
+        // justification below needs that fixed width to lay the lines out against.
+        let preferredWidth = legal.widthAnchor.constraint(equalToConstant: 260)
+        preferredWidth.priority = .defaultHigh
+        preferredWidth.isActive = true
 
         let stack = UIStackView(arrangedSubviews: [taglineLabel, startButton, legal])
         stack.axis = .vertical
@@ -369,7 +375,10 @@ final class FCUILanguageViewController: UIViewController {
     /// Use, the served `also_see` connector, underlined Privacy Policy, ".". Links in the same grey.
     private func renderLegal(termsUrl: String?, privacyUrl: String?) {
         let caption = FCUITypography.current.caption
-        let paragraph = caption.paragraphStyle(alignment: .justified).mutableCopy() as! NSMutableParagraphStyle
+        // Laid out LEFT, then justified by widening the SPACES only (`fcuiInterWordJustified`):
+        // TextKit's `.justified` also spreads the glyphs inside Kannada / Devanagari words, which
+        // read as unevenly letter-spaced; Android's `TextAlign.Justify` is inter-word only.
+        let paragraph = caption.paragraphStyle(alignment: .natural).mutableCopy() as! NSMutableParagraphStyle
         let base: [NSAttributedString.Key: Any] = [
             .font: caption.font, .foregroundColor: FCUITheme.foregroundSecondary, .paragraphStyle: paragraph
         ]
@@ -388,7 +397,21 @@ final class FCUILanguageViewController: UIViewController {
         if !alsoSee.isEmpty { text.append(NSAttributedString(string: alsoSee + " ", attributes: base)) }
         text.append(link(fcuiLabel(FCLabels.privacyPolicy, "Privacy policy"), privacyUrl))
         text.append(NSAttributedString(string: ".", attributes: base))
-        legal.attributedText = text
+        legalSource = text
+        legalJustifiedWidth = 0
+        justifyLegalIfNeeded()
+    }
+
+    /// The un-justified legal paragraph and the width it was last justified for.
+    private var legalSource: NSAttributedString?
+    private var legalJustifiedWidth: CGFloat = 0
+
+    private func justifyLegalIfNeeded() {
+        guard let source = legalSource else { return }
+        let width = legal.bounds.width > 0 ? legal.bounds.width : 260
+        guard abs(width - legalJustifiedWidth) > 0.5 else { return }
+        legalJustifiedWidth = width
+        legal.attributedText = fcuiInterWordJustified(source, width: width)
     }
 
     private func select(_ language: SupportedLanguage) {
@@ -666,5 +689,55 @@ final class UIPaddedLabel: UILabel {
         let size = super.intrinsicContentSize
         return CGSize(width: size.width + 32, height: size.height + 20)
     }
+}
+/// Android `TextAlign.Justify` (inter-word): every line but the last of a paragraph is widened
+/// to `width` by adding kerning to its interior SPACES only — never between the letters of a word,
+/// which is what TextKit's `.justified` does to Kannada / Devanagari and what read as uneven
+/// letter-spacing on the language screen. Lay `text` out with a natural (left) alignment first.
+func fcuiInterWordJustified(_ text: NSAttributedString, width: CGFloat) -> NSAttributedString {
+    guard width > 0, text.length > 0 else { return text }
+    let storage = NSTextStorage(attributedString: text)
+    let layout = NSLayoutManager()
+    let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+    container.lineFragmentPadding = 0
+    layout.addTextContainer(container)
+    storage.addLayoutManager(layout)
+    layout.ensureLayout(for: container)
+
+    let result = NSMutableAttributedString(attributedString: text)
+    let ns = text.string as NSString
+    var lines: [(range: NSRange, used: CGFloat)] = []
+    layout.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: layout.numberOfGlyphs)) { _, used, _, glyphRange, _ in
+        lines.append((layout.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil), used.width))
+        _ = used
+    }
+    for (index, line) in lines.enumerated() where index < lines.count - 1 {
+        // Trailing whitespace / a hard break does not count; the paragraph's last line stays ragged.
+        var end = line.range.location + line.range.length
+        var trailing = 0
+        while end > line.range.location,
+              let scalar = UnicodeScalar(ns.character(at: end - 1)),
+              CharacterSet.whitespacesAndNewlines.contains(scalar) {
+            if CharacterSet.newlines.contains(scalar) { trailing = -1; break }
+            end -= 1
+            trailing += 1
+        }
+        if trailing < 0 { continue }
+        // The ink width of the line WITHOUT its trailing spaces.
+        let contentWidth = layout.boundingRect(
+            forGlyphRange: layout.glyphRange(forCharacterRange: NSRange(location: line.range.location, length: end - line.range.location), actualCharacterRange: nil),
+            in: container
+        ).width
+        var spaces: [Int] = []
+        for i in line.range.location..<end where ns.character(at: i) == 0x20 { spaces.append(i) }
+        let extra = width - contentWidth - 1
+        guard !spaces.isEmpty, extra > 0 else { continue }
+        let perSpace = extra / CGFloat(spaces.count)
+        for i in spaces {
+            let existing = (result.attribute(.kern, at: i, effectiveRange: nil) as? CGFloat) ?? 0
+            result.addAttribute(.kern, value: existing + perSpace, range: NSRange(location: i, length: 1))
+        }
+    }
+    return result
 }
 #endif

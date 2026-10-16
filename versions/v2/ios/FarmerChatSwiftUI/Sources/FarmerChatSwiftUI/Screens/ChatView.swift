@@ -65,6 +65,8 @@ struct ChatView: View {
     /// `AiResponse.id` of that surface (app `alignmentPhotoSourceId`). A pick sends the photo; a
     /// cancel or a camera-permission denial sends the app's decline query with `photo_declined`.
     @State private var alignmentPhotoSourceId: String?
+    /// The UPLOAD_PHOTO chip that opened the camera / gallery (its value + label go on Send_Query).
+    @State private var alignmentPhotoChip: AlignmentChip?
 
     var body: some View {
         ZStack {
@@ -141,26 +143,21 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showCamera, onDismiss: alignmentPhotoNotShared) {
             FCCameraPicker { picked in
-                if picked != nil { alignmentPhotoSourceId = nil }
                 showCamera = false
-                if let picked {
-                    viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.jpegData, imageURL: picked.fileURL))
-                }
+                if let picked { sendPicked(picked) }
             }
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showGallery, onDismiss: alignmentPhotoNotShared) {
             FCPhotoLibraryPicker { picked in
-                if picked != nil { alignmentPhotoSourceId = nil }
                 showGallery = false
-                if let picked {
-                    viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.jpegData, imageURL: picked.fileURL))
-                }
+                if let picked { sendPicked(picked) }
             }
         }
         .sheet(isPresented: Binding(get: { shareImage != nil }, set: { if !$0 { shareImage = nil } })) {
             if let shareImage {
-                FCShareSheet(items: [shareImage])
+                // ChatScreen.kt:2113-2117: the card image plus the `share_app_message` caption.
+                FCShareSheet(items: [shareImage, FCShareCopy.caption()])
             }
         }
     }
@@ -766,17 +763,19 @@ struct ChatView: View {
         case .takePhoto:
             // Straight to the camera — no photo-source sheet, the chip already chose.
             alignmentPhotoSourceId = messageId
+            alignmentPhotoChip = chip
             Task {
                 if await FCCameraPermission.request() {
                     showCamera = true
                 } else {
                     // ChatScreen.kt:665-672: a chip-driven flow never blocks on the settings
                     // dialog — the denial is sent as the decline query.
-                    sendAlignmentPhotoDecline(fcLabel(FCLabels.photoPermissionDeclined, "I don't want to share a photo right now"))
+                    sendAlignmentPhotoDecline(.photoPermissionDenied)
                 }
             }
         case .chooseFromGallery:
             alignmentPhotoSourceId = messageId
+            alignmentPhotoChip = chip
             showGallery = true
         case .none:
             // App `SendAlignmentChip` (ChatViewModel.kt:1015-1053): `align_chip_sel` +
@@ -785,24 +784,32 @@ struct ChatView: View {
         }
     }
 
+    /// A picked photo: an UPLOAD_PHOTO chip's photo is reported as that chip's pick; a composer
+    /// photo as a manual send. Core re-encodes either (ImageUtils port).
+    private func sendPicked(_ picked: FCPickedImage) {
+        if alignmentPhotoSourceId != nil, let chip = alignmentPhotoChip {
+            alignmentPhotoSourceId = nil
+            alignmentPhotoChip = nil
+            viewModel.sendAlignmentPhoto(chip: chip, imageData: picked.sourceData, imageURL: picked.fileURL)
+        } else {
+            alignmentPhotoSourceId = nil
+            viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.sourceData, imageURL: picked.fileURL))
+        }
+    }
+
     /// The UPLOAD_PHOTO camera / gallery closed without a photo (ChatScreen.kt:524-531, 576-583):
     /// send "I don't have a photo to share right now". No-op outside a chip-driven flow.
     private func alignmentPhotoNotShared() {
         guard alignmentPhotoSourceId != nil else { return }
-        sendAlignmentPhotoDecline(fcLabel(FCLabels.photoNotShared, "I don't have a photo to share right now"))
+        sendAlignmentPhotoDecline(.photoNotShared)
     }
 
     /// App `sendAlignmentPhotoDeclineQuery` (ChatScreen.kt:469-485): an alignment-chip send of
     /// `queryText` with `photo_declined = true` and the surface's `parent_message_id`.
-    private func sendAlignmentPhotoDecline(_ queryText: String) {
+    private func sendAlignmentPhotoDecline(_ decline: CapabilityDecline) {
         guard let source = alignmentPhotoSourceId else { return }
         alignmentPhotoSourceId = nil
-        viewModel.sendAlignmentChip(
-            sourceMessageId: source,
-            query: queryText,
-            selectionValue: queryText,
-            photoDeclined: true
-        )
+        viewModel.sendCapabilityDecline(decline, sourceMessageId: source)
     }
 
     /// Terminal outcome of the chat share-location flow. Inert unless this screen armed it, so an
@@ -825,16 +832,7 @@ struct ChatView: View {
             // Denied / cancelled / fetch failed: still answer the blocking question with the
             // decline text, as the app does (ChatScreen.kt:377-380): an alignment-chip send with
             // `location_declined = true` and the surface's `parent_message_id`.
-            let decline = fcLabel(
-                AgenticLabels.locationPermissionDeclined,
-                AgenticLabels.locationPermissionDeclinedFallback
-            )
-            viewModel.sendAlignmentChip(
-                sourceMessageId: sourceId,
-                query: decline,
-                selectionValue: decline,
-                locationDeclined: true
-            )
+            viewModel.sendCapabilityDecline(.location, sourceMessageId: sourceId)
         }
     }
 

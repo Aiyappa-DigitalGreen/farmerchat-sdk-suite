@@ -73,6 +73,7 @@ export function ChatEmptyState(props: {
       {/* 64dp brand disc + 8dp halo ring at ~12% brand (the halo is the outer disc). */}
       <View style={[styles.halo, { backgroundColor: tint12 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <View style={[styles.mark, { backgroundColor: brand }]}>
+          <RadialHighlight brand={brand} />
           <LogoMark size={34} color="#FFFFFF" />
         </View>
       </View>
@@ -119,7 +120,69 @@ export function ChatEmptyState(props: {
   );
 }
 
+/** `#rgb` / `#rrggbb` -> [r, g, b]; null for anything else (rgba(), named). */
+function parseHex(color: string): [number, number, number] | null {
+  const m6 = /^#([0-9a-fA-F]{6})$/.exec(color.trim());
+  if (m6) {
+    const h = m6[1] ?? '';
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  const m3 = /^#([0-9a-fA-F]{3})$/.exec(color.trim());
+  if (m3) {
+    const h = m3[1] ?? '';
+    return [0, 1, 2].map((i) => parseInt((h[i] ?? '0') + (h[i] ?? '0'), 16)) as [number, number, number];
+  }
+  return null;
+}
+
+/** Disc diameter, and the highlight per compose ChatScreen.kt:2164-2178. */
+const DISC = 64;
+const HIGHLIGHT = '#2BD46B';
+const RING_STEP = 1;
+
+/**
+ * The compose SDK's radial highlight (compose ChatScreen.kt:2164-2178):
+ * `Brush.radialGradient(0f to #2BD46B, 0.7f to brand, center = (30%, 25%), radius = 64dp)`, clipped
+ * to the 64dp disc. No SVG in this package, so it is drawn as concentric 1dp-step circles from the
+ * 0.7 stop (44.8dp, pure brand — the disc's own background beyond it) inwards, each a linear mix
+ * of brand -> #2BD46B. Brand comes from the theme, so a host's `surfacePrimary` still applies; a
+ * non-hex brand colour falls back to the flat disc.
+ */
+function RadialHighlight(props: { brand: string }): React.ReactElement | null {
+  const from = parseHex(HIGHLIGHT);
+  const to = parseHex(props.brand);
+  if (!from || !to) return null;
+  const cx = DISC * 0.3;
+  const cy = DISC * 0.25;
+  const outer = DISC * 0.7;
+  const rings: React.ReactElement[] = [];
+  for (let r = outer; r > 0; r -= RING_STEP) {
+    const t = r / outer; // 0 at the centre (#2BD46B) .. 1 at the 0.7 stop (brand)
+    const c = from.map((v, i) => Math.round(v + ((to[i] ?? v) - v) * t));
+    rings.push(
+      <View
+        key={r}
+        style={{
+          position: 'absolute',
+          left: cx - r,
+          top: cy - r,
+          width: r * 2,
+          height: r * 2,
+          borderRadius: r,
+          backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})`,
+        }}
+      />,
+    );
+  }
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.highlight]}>
+      {rings}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  highlight: { borderRadius: DISC / 2, overflow: 'hidden' },
   root: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -143,6 +206,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },

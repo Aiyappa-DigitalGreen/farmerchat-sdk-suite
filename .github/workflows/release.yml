@@ -7,7 +7,7 @@
 #   github-release  -> creates a DRAFT GitHub release (never published automatically)
 #
 # TRIGGERS
-#   - push a tag `vX.Y.Z` (e.g. v2.3.0)                     -> real run (publishes where secrets exist)
+#   - push a tag `vX.Y.Z` (e.g. v2.2.0)                     -> real run (publishes where secrets exist)
 #   - Actions > Release > Run workflow, version=X.Y.Z       -> dry_run defaults to true: verify + build +
 #                                                             pack only; publish/release steps just print
 #                                                             what they would do
@@ -44,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, without the v (e.g. 2.3.0)'
+        description: 'Version to release, without the v (e.g. 2.2.0)'
         required: true
         type: string
       dry_run:

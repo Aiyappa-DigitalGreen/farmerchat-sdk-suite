@@ -1,8 +1,8 @@
 # Releasing the FarmerChat SDKs
 
 Releases run from GitHub Actions only (`.github/workflows/release.yml`). Pushing a tag such as
-`v2.3.0` checks that every package's version matches the tag and that `CHANGELOG.md` has a
-`## [2.3.0]` section, builds and tests all four platforms, uploads to each registry whose secrets are
+`v2.2.0` checks that every package's version matches the tag and that `CHANGELOG.md` has a
+`## [2.2.0]` section, builds and tests all four platforms, uploads to each registry whose secrets are
 set, and creates a **draft** GitHub release for review. To rehearse without publishing, run the
 workflow manually (Actions → Release (v2) → Run workflow) with `dry_run` ticked.
 

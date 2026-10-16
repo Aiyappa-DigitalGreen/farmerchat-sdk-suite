@@ -42,9 +42,10 @@ data class TextPromptRequest(
     @SerializedName("streaming_required") val streaming_required: Boolean = true,
     /**
      * Unique name for an image-based agentic query (e.g. `image_<uuid>.jpg`). Null for text/voice,
-     * and Gson omits it, so those requests are unchanged on the wire. The SDK's image questions
-     * still go through #26 (`PlantixRequest`), so nothing populates this yet — it exists so the
-     * request model matches the app's (docs/04).
+     * and Gson omits it, so those requests are unchanged on the wire. Set, together with
+     * [image], when agentic chat sends a photo question through #27a (app ChatViewModel.kt:1863);
+     * see `buildAgenticImageRequest`. Without agentic chat, photos still go to #28
+     * (`PlantixRequest`).
      */
     @SerializedName("image_name") val image_name: String? = null,
     /** Base64 image for an image-based agentic query. Null (omitted) for text/voice. */

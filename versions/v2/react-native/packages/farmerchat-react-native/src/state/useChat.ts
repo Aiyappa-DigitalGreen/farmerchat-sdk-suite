@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiSuccess, UiStates, type ApiResult, type UiState } from '../core/apiResult';
-import { AnalyticsEvents } from '../core/analytics';
+import { AnalyticsEvents, ScreenNames } from '../core/analytics';
 import {
   sanitizeAgenticStreamText,
   sanitizeAgenticFinalText,
@@ -17,10 +17,24 @@ import {
 } from '../core/agenticModels';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
+import { Labels } from '../core/labels';
+import { gpsFromPickerExif, writeGpsExif } from '../core/imageExif';
+import { shrinkForUpload } from '../core/imageShrink';
+import { currentLocationIfPermitted } from './imageLocation';
+import {
+  ChipStatus,
+  minimalSendQueryProps,
+  sendQueryAnalyticsProperties,
+  withResponseChipStatus,
+  withSendQueryResult,
+  base64SizeKb,
+  type SendQueryProps,
+} from '../core/sendQueryAnalytics';
 import {
   alignmentAnalyticsType,
   alignmentChipSend,
   AlignmentChipWire,
+  AlignmentKinds,
   alignmentKindFromType,
   isAdditiveAlignment,
 } from '../core/types';
@@ -37,6 +51,9 @@ import {
   ALIGN_CHIP_SEL,
   alignmentChipRequestParams,
   historyFollowUpQuestions,
+  historyVoiceText,
+  imageQueryName,
+  imageQueryText,
   sortHistoryItems,
 } from '../core/chatWire';
 
@@ -157,9 +174,11 @@ export type ChatMessage = UserMessage | AiResponse | LoadingPlaceholder | Locati
 
 export type ChatEntrySource = 'home' | 'history';
 
-export interface SendQueryProperties {
-  [key: string]: unknown;
-}
+/**
+ * The app's `SendQueryProperties` (core/analytics/SendQueryAnalytics.kt), carried from a send to
+ * its Send_Query. See core/sendQueryAnalytics.ts.
+ */
+export type SendQueryProperties = SendQueryProps;
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -219,6 +238,10 @@ export type ChatAction =
       question: string;
       imageUri: string;
       imageBase64: string;
+      /** expo-image-picker `exif` (the photo's own GPS). */
+      imageExif?: Record<string, unknown> | null;
+      imageWidth?: number | null;
+      imageHeight?: number | null;
       sendQueryProperties?: SendQueryProperties | null;
     }
   /**
@@ -239,6 +262,11 @@ export type ChatAction =
       messageId: string;
       chip: AlignmentChip;
       kind: AlignmentKind;
+      /**
+       * `agentic_chip_value` when it differs from the chip's own value: the app reports a
+       * decline sent on the farmer's behalf (permission denied / picker cancelled) as `not_now`.
+       */
+      analyticsChipValue?: string;
     }
   /**
    * The OUTCOME of a satisfied `gps-prompt` capability chip (2.0.0): the farmer shared a real
@@ -264,7 +292,12 @@ export type ChatAction =
   | { type: 'ClearMessages' }
   | { type: 'SynthesiseAudio'; messageId?: string | null; text?: string | null }
   | { type: 'ClearAudioPlaybackUrl' }
-  | { type: 'SetAudioPlaying'; isPlaying: boolean };
+  | {
+      type: 'SetAudioPlaying';
+      isPlaying: boolean;
+      /** Seconds of the clip played so far, reported on a stop (app `No_of_seconds_played`). */
+      secondsPlayed?: number;
+    };
 
 // ---------------------------------------------------------------------------
 // State
@@ -432,6 +465,31 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
     [mutate, sdk],
   );
 
+  // --- Send_Query (app: fired when the answer lands, ChatViewModel.kt pending props) ---------
+  const reportSendQuery = useCallback(
+    (
+      ctx: { sendQueryProperties?: SendQueryProperties | null; question?: string },
+      outcome: {
+        isValid: boolean;
+        intent?: TextPromptResponse['intent_classification_output'];
+        shownChipType?: string | null;
+      },
+    ) => {
+      const base = ctx.sendQueryProperties;
+      if (!base) return;
+      const stamped = withResponseChipStatus(
+        withSendQueryResult(base, {
+          isValid: outcome.isValid,
+          question: ctx.question,
+          intent: outcome.intent ?? null,
+        }),
+        outcome.shownChipType ?? null,
+      );
+      sdk.analytics.track(AnalyticsEvents.SEND_QUERY, sendQueryAnalyticsProperties(stamped));
+    },
+    [sdk],
+  );
+
   // --- shared answer settling (#27 AND the agentic #27a `metadata` event) --------
 
   /** Marks the user bubble failed, drops the placeholder / streaming bubble, shows the error. */
@@ -474,18 +532,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         userMessageId: string;
         triggeredInputType: string;
         sendQueryProperties?: SendQueryProperties | null;
+        /** The query as sent (Send_Query `length_of_Text_query`). */
+        question?: string;
         /** Agentic answers reuse the stream bubble's id so it settles in place. */
         isAgentic?: boolean;
       },
     ) => {
       if (!result.ok) {
-        if (ctx.sendQueryProperties) {
-          sdk.analytics.track(AnalyticsEvents.SEND_QUERY, {
-            triggered_input_type: ctx.triggeredInputType,
-            ...ctx.sendQueryProperties,
-            is_valid_query: false,
-          });
-        }
+        // App ChatViewModel.kt:2066-2076: a failed answer still reports Send_Query, Valid_Query false.
+        reportSendQuery(ctx, { isValid: false });
         const message =
           result.isNetworkError || result.isTimeout
             ? sdk.labels.getLabel(
@@ -580,9 +635,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         };
       });
 
-      sdk.analytics.track(AnalyticsEvents.SEND_QUERY, {
-        triggered_input_type: ctx.triggeredInputType,
-        ...(ctx.sendQueryProperties ?? {}),
+      // App ChatViewModel.kt:1706-1722 / 2028-2043: Send_Query fires on the answer, Valid_Query
+      // true + the intent fields, and `available` when this answer presents chips.
+      reportSendQuery(ctx, {
+        isValid: true,
+        intent: data.intent_classification_output ?? null,
+        shownChipType:
+          alignmentKind !== null && (data.alignments?.chips ?? []).length > 0
+            ? alignmentAnalyticsType(alignmentKind)
+            : null,
       });
       // Semantic callback (C4).
       sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId);
@@ -591,7 +652,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         void fetchFollowUps(serverMessageId, aiLocalId);
       }
     },
-    [failQuery, fetchFollowUps, markFirstQueryAsked, mutate, sdk],
+    [failQuery, fetchFollowUps, markFirstQueryAsked, mutate, reportSendQuery, sdk],
   );
 
   // --- agentic streaming (#27a, SDK 2.0.0) ---------------------------------------
@@ -727,6 +788,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         userMessageId: string;
         triggeredInputType: string;
         sendQueryProperties?: SendQueryProperties | null;
+        question?: string;
       },
     ) => {
       let accumulated = '';
@@ -755,18 +817,24 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             done.followUps.length > 0 ? done.followUps : null,
             null,
           );
+          reportSendQuery(ctx, { isValid: true });
         } else if (errorKind !== null && fallbackText.length > 0) {
           // Genuine error after some text arrived: keep the partial and mark it interrupted so
           // the UI can offer retry.
           interruptAgentic(streamId, fallbackText, errorKind);
+          // App ChatViewModel.kt:1766-1771: partial content counts as a valid response.
+          reportSendQuery(ctx, { isValid: true });
         } else if (fallbackText.length > 0) {
           // Clean EOF with partial text and no terminal event: some backends stream deltas
           // without a done/metadata. Treat it as the complete answer — flagging it interrupted
           // would make every normal answer on such a backend look broken.
           finalizeAgenticAnswer(streamId, fallbackText, null, null);
+          reportSendQuery(ctx, { isValid: true });
         } else {
           // Nothing usable arrived.
           interruptAgentic(streamId, '', errorKind ?? StreamErrorKinds.UNKNOWN);
+          // App ChatViewModel.kt:1808-1816: nothing usable → Valid_Query false.
+          reportSendQuery(ctx, { isValid: false });
         }
       };
 
@@ -830,6 +898,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       finalizeAgenticAnswer,
       handleTextPromptResult,
       interruptAgentic,
+      reportSendQuery,
       sdk,
       updateStreamingResponse,
     ],
@@ -875,6 +944,18 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
     }) => {
       const question = params.question.trim();
       if (question.length === 0) return;
+
+      // App buildMinimalSendQueryProps: callers that know more (chip picks, follow-up chips, read
+      // full advice, voice) pass their own props; anything else is a manual text/voice send whose
+      // chip context is read from the thread BEFORE this send changes it.
+      const analyticsProps: SendQueryProps =
+        params.sendQueryProperties ??
+        minimalSendQueryProps({
+          question,
+          isImageQuery: false,
+          isVoiceQuery: Boolean(params.transcriptionId),
+          lastAi: lastAiMessage(stateRef.current.messages),
+        });
 
       // Hoisted so the agentic path can reuse it as the stream id (the loading bubble becomes
       // the answer bubble in place) and so both paths remove exactly this placeholder.
@@ -933,12 +1014,19 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         // `staged: null` so a retry of a capability-chip send does not append a SECOND location
         // bubble; `userMessageId` (the staged anchor) keeps it off the user-bubble path too, so
         // the retry just adds a fresh placeholder — Android's retry behaviour for this path.
-        void sendTextQuery({ ...params, staged: null, userMessageId, isRetry: true });
+        void sendTextQuery({
+          ...params,
+          staged: null,
+          userMessageId,
+          isRetry: true,
+          sendQueryProperties: analyticsProps,
+        });
 
-      sdk.analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, {
-        triggered_input_type: params.triggeredInputType,
-        ...(params.sendQueryProperties ?? {}),
-      });
+      // App AnalyticsManager.trackSendQueryInitiated: the same property map Send_Query uses.
+      sdk.analytics.track(
+        AnalyticsEvents.SEND_QUERY_INITIATED,
+        sendQueryAnalyticsProperties(analyticsProps),
+      );
       // Semantic callback (C4).
       sdk.analytics.fireCallback('onMessageSent', question);
 
@@ -975,7 +1063,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       const ctx = {
         userMessageId,
         triggeredInputType: params.triggeredInputType,
-        sendQueryProperties: params.sendQueryProperties,
+        sendQueryProperties: analyticsProps,
+        question,
       };
 
       if (sdk.config.enableAgenticChat) {
@@ -1075,6 +1164,16 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       void sendTextQuery({
         question: query,
         triggeredInputType: ALIGN_CHIP_SEL,
+        // App ChatViewModel.kt:1102-1117: reported as a chip selection (gps-prompt /
+        // share_precise_location / the "Share my location" label).
+        sendQueryProperties: {
+          ...minimalSendQueryProps({ question: query, isImageQuery: false, isVoiceQuery: false }),
+          isAlignmentChip: true,
+          agenticChipType: alignmentAnalyticsType(AlignmentKinds.GPS_PROMPT),
+          agenticChipValue: AlignmentChipWire.VALUE_SHARE_LOCATION,
+          agenticChipLabel: sdk.labels.getLabel(Labels.SHARE_LOCATION, 'Share my location'),
+          agenticChipStatus: ChipStatus.SELECTED,
+        },
         parentMessageId: source?.messageId ?? null,
         staged: {
           placeholderId,
@@ -1082,7 +1181,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         },
       });
     },
-    [mutate, sendTextQuery],
+    [mutate, sdk, sendTextQuery],
   );
 
   // --- image query (endpoint #28) ------------------------------------------------
@@ -1092,9 +1191,27 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       question: string;
       imageUri: string;
       imageBase64: string;
+      imageExif?: Record<string, unknown> | null;
+      imageWidth?: number | null;
+      imageHeight?: number | null;
       userMessageId?: string | null;
       sendQueryProperties?: SendQueryProperties | null;
+      isRetry?: boolean;
     }) => {
+      // Hoisted: on the agentic path it is also the stream id, so the loading bubble becomes the
+      // answer in place (as sendTextQuery does).
+      const placeholderId = makeId('ld');
+      // App ChatViewModel.kt:310-322: an image send's props (manual chip context read before the
+      // thread changes), unless the caller supplied its own (a photo-chip pick).
+      const analyticsProps: SendQueryProps =
+        params.sendQueryProperties ??
+        minimalSendQueryProps({
+          question: params.question,
+          isImageQuery: true,
+          isVoiceQuery: false,
+          sizeOfImageKb: base64SizeKb(params.imageBase64),
+          lastAi: lastAiMessage(stateRef.current.messages),
+        });
       let userMessageId = params.userMessageId ?? null;
       if (userMessageId === null) {
         userMessageId = makeId('user');
@@ -1111,7 +1228,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
               userBubbleImageWideBanner: true,
               isFailed: false,
             },
-            { kind: 'loading', id: makeId('ld') },
+            { kind: 'loading', id: placeholderId },
           ],
           isLoading: true,
           errorMessage: null,
@@ -1131,7 +1248,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             ...prev.messages.map((m) =>
               m.kind === 'user' && m.id === retryId ? { ...m, isFailed: false } : m,
             ),
-            { kind: 'loading', id: makeId('ld') },
+            { kind: 'loading', id: placeholderId },
           ],
           isLoading: true,
           errorMessage: null,
@@ -1141,34 +1258,89 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       }
 
       lastRequestRef.current = () =>
-        void sendImageQuery({ ...params, userMessageId });
+        void sendImageQuery({
+          ...params,
+          userMessageId,
+          isRetry: true,
+          sendQueryProperties: analyticsProps,
+        });
 
-      sdk.analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, {
-        triggered_input_type: 'image',
-        ...(params.sendQueryProperties ?? {}),
-      });
+      sdk.analytics.track(
+        AnalyticsEvents.SEND_QUERY_INITIATED,
+        sendQueryAnalyticsProperties(analyticsProps),
+      );
       // Semantic callback (C4) — image queries may have empty question text.
       sdk.analytics.fireCallback('onMessageSent', params.question);
 
       const conversationId = await ensureConversationId();
-      const lat = sdk.store.getDouble(StorageKeys.FARMER_APP_LATITUDE);
-      const lng = sdk.store.getDouble(StorageKeys.FARMER_APP_LONGITUDE);
       if (!conversationId) {
         fail(sdk.labels.getLabel('chat_error_generic', 'Something went wrong. Please try again.'));
         return;
       }
 
+      // App ChatViewModel.kt:1858-1862: the typed text, else the default crop question; and an
+      // `image_<uuid>.jpg` name. The bubble keeps showing only what was typed.
+      const queryForApi = imageQueryText(
+        params.question,
+        sdk.labels.getLabel(Labels.WHAT_IS_WRONG_WITH_MY_CROP, 'What is wrong with my crop?'),
+      );
+      const imageName = imageQueryName();
+      const isRetry = params.isRetry === true;
+      // App ImageUtils.kt:155-252: the photo's own GPS, else the current location (only with a
+      // permission already granted), written into the JPEG as a GPS-only EXIF; the same point is
+      // Plantix's latitude/longitude.
+      const gps = gpsFromPickerExif(params.imageExif) ?? (await currentLocationIfPermitted());
+      // App ImageUtils.kt:198-207: fit within 1000x1000 at JPEG 80 (optional peer
+      // expo-image-manipulator; absent → the picker's JPEG 80 as-is), THEN the GPS EXIF.
+      const shrunk = await shrinkForUpload({
+        uri: params.imageUri,
+        base64: params.imageBase64,
+        width: params.imageWidth,
+        height: params.imageHeight,
+      });
+      if (!mounted.current) return;
+      const imageBase64 = writeGpsExif(shrunk.base64, gps);
+      const lat = gps?.latitude ?? null;
+      const lng = gps?.longitude ?? null;
+
+      if (sdk.config.enableAgenticChat) {
+        // App ChatViewModel.kt:1864-1881: with agentic chat on, an image query does NOT hit
+        // Plantix (#28). The base64 image + image_name ride on the agentic text request (#27a)
+        // and the answer streams like any text answer. Not ported: the app first writes the
+        // device GPS into the photo's EXIF (ImageUtils.addGpsToImageAndConvertToBase64), which
+        // needs a native module.
+        const request: TextPromptRequest = {
+          query: queryForApi,
+          conversation_id: conversationId,
+          message_id: '',
+          weather_cta_triggered: false,
+          triggered_input_type: 'image',
+          use_entity_extraction: true,
+          retry: isRetry,
+          image: imageBase64,
+          image_name: imageName,
+          streaming_required: sdk.store.getBoolean(StorageKeys.STREAMING_REQUIRED, true),
+        };
+        await streamAgenticAnswer(request, placeholderId, {
+          userMessageId: userMessageId as string,
+          triggeredInputType: 'image',
+          sendQueryProperties: analyticsProps,
+          question: queryForApi,
+        });
+        return;
+      }
+
       const result = await sdk.api.imageAnalysis({
         conversation_id: conversationId,
-        image: params.imageBase64,
-        // App parity (PlantixRequest.kt): triggered_input_type "image",
-        // latitude/longitude sent as STRINGs.
+        image: imageBase64,
+        // App parity (PlantixRequest.kt, ChatViewModel.kt:1884-1893): triggered_input_type
+        // "image", latitude/longitude sent as STRINGs.
         triggered_input_type: 'image',
-        query: params.question.length > 0 ? params.question : null,
+        query: queryForApi,
         latitude: lat != null ? String(lat) : null,
         longitude: lng != null ? String(lng) : null,
-        image_name: `fc-image-${Date.now()}.jpg`,
-        retry: false,
+        image_name: imageName,
+        retry: isRetry,
       });
       if (!mounted.current) return;
 
@@ -1196,7 +1368,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           isLoading: false,
           chatResponseState: UiStates.success(result.data.response ?? ''),
         }));
-        sdk.analytics.track(AnalyticsEvents.SEND_QUERY, { triggered_input_type: 'image' });
+        // App ChatViewModel.kt:2121-2127: Plantix success → Send_Query, Valid_Query true.
+        reportSendQuery({ sendQueryProperties: analyticsProps }, { isValid: true });
         // Semantic callback (C4).
         sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId);
         if (serverMessageId) void fetchFollowUps(serverMessageId, aiLocalId);
@@ -1206,6 +1379,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             sdk.labels.getLabel('chat_error_generic', 'Something went wrong. Please try again.')
           : result.message ??
             sdk.labels.getLabel('chat_error_generic', 'Something went wrong. Please try again.');
+        // App ChatViewModel.kt:2149-2155: Plantix failure → Send_Query, Valid_Query false.
+        reportSendQuery({ sendQueryProperties: analyticsProps }, { isValid: false });
         fail(message);
       }
 
@@ -1225,7 +1400,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         }));
       }
     },
-    [ensureConversationId, fetchFollowUps, mutate, sdk],
+    [ensureConversationId, fetchFollowUps, mutate, reportSendQuery, sdk, streamAgenticAnswer],
   );
 
   // --- voice query: transcribe (endpoint #16) → text query -----------------------
@@ -1300,6 +1475,14 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           transcriptionId: transcription.data.transcription_id ?? null,
           triggeredInputType: 'voice',
           audioUri: params.audioUri,
+          // App buildMinimalSendQueryProps(voice): voice_query + audio_format.
+          sendQueryProperties: minimalSendQueryProps({
+            question: heard,
+            isImageQuery: false,
+            isVoiceQuery: true,
+            audioFormat: params.audioFormat,
+            lastAi: lastAiMessage(stateRef.current.messages),
+          }),
         });
       } else {
         sdk.analytics.track(AnalyticsEvents.TRANSCRIPTION_FAILED, {
@@ -1500,6 +1683,17 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             isSSFR: action.isSSFR,
             ssfrCrop: action.ssfrCrop,
             statementId: action.statementId,
+            // App ChatViewModel.kt:213-233 (InitializeWithQuestion props): weather / SSFR flags.
+            sendQueryProperties: {
+              ...minimalSendQueryProps({
+                question: action.question,
+                isImageQuery: false,
+                isVoiceQuery: Boolean(action.audioUri),
+                lastAi: lastAiMessage(stateRef.current.messages),
+              }),
+              isWeatherAdviceCTA: action.isWeatherAdviceCTA === true,
+              isSSFR: action.isSSFR === true,
+            },
           });
           break;
         case 'ReplacePreGeneratedWithQuestion':
@@ -1525,6 +1719,11 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             // remain — tracked in docs/04.)
             question: action.question,
             triggeredInputType: 'read_full_advice',
+            // App SendQueryProperties.isReadFullAdvice → click_type "read_full_advice".
+            sendQueryProperties: {
+              ...minimalSendQueryProps({ question: action.question, isImageQuery: false, isVoiceQuery: false }),
+              isReadFullAdvice: true,
+            },
           });
           break;
         case 'SendFollowUpQuestion': {
@@ -1546,7 +1745,20 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             transcriptionId: action.transcriptionId,
             audioUri: action.audioUri,
             triggeredInputType,
-            sendQueryProperties: action.sendQueryProperties,
+            // App ChatScreen.kt:959-971 `handleFollowUp`: a follow-up chip is a follow-up prompt
+            // (no chip context → status none). Typed / voice sends get the manual-send props.
+            sendQueryProperties:
+              action.sendQueryProperties ??
+              (triggeredInputType === 'follow_up'
+                ? {
+                    screenName: ScreenNames.CHAT,
+                    isFollowupPrompt: true,
+                    isImageQuery: false,
+                    isTextQuery: true,
+                    isVoiceQuery: false,
+                    lengthOfTextQuery: action.question.length,
+                  }
+                : null),
           });
           break;
         }
@@ -1588,10 +1800,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             parentMessageId: wire.parentMessageId,
             locationDeclined: wire.locationDeclined,
             photoDeclined: wire.photoDeclined,
+            // App ChatViewModel.kt:286-302: a chip pick — click_type align_chip_sel, status
+            // selected, and the surface kind / chip value / chip label.
             sendQueryProperties: {
-              // Segments the funnel by which alignment surface was tapped. Same property name
-              // the Android reference documents on AlignmentKind.analyticsType.
-              agentic_chip_type: alignmentAnalyticsType(action.kind),
+              ...minimalSendQueryProps({ question: send.query, isImageQuery: false, isVoiceQuery: false }),
+              isAlignmentChip: true,
+              agenticChipType: alignmentAnalyticsType(action.kind),
+              agenticChipValue: action.analyticsChipValue ?? action.chip.value ?? action.chip.label ?? null,
+              agenticChipLabel: action.chip.label ?? action.chip.value ?? null,
+              agenticChipStatus: ChipStatus.SELECTED,
             },
           });
           break;
@@ -1604,6 +1821,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             question: action.question,
             imageUri: action.imageUri,
             imageBase64: action.imageBase64,
+            imageExif: action.imageExif ?? null,
+            imageWidth: action.imageWidth ?? null,
+            imageHeight: action.imageHeight ?? null,
             sendQueryProperties: action.sendQueryProperties,
           });
           break;
@@ -1645,11 +1865,18 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
           break;
         case 'SetAudioPlaying':
           patch({ isAudioPlaying: action.isPlaying });
+          // App ChatScreen.kt:1080-1097, 1316-1340: screen_name on both; a stop also reports the
+          // seconds played (AnalyticsProps.NO_OF_SECONDS_PLAYED = "No_of_seconds_played").
           sdk.analytics.track(
             action.isPlaying
               ? AnalyticsEvents.STARTED_PLAYING_RESPONSE_AUDIO
               : AnalyticsEvents.STOPPED_PLAYING_RESPONSE_AUDIO,
-            {},
+            action.isPlaying
+              ? { screen_name: ScreenNames.CHAT }
+              : {
+                  screen_name: ScreenNames.CHAT,
+                  No_of_seconds_played: Math.max(0, Math.floor(action.secondsPlayed ?? 0)),
+                },
           );
           break;
       }
@@ -1674,6 +1901,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** The latest AI message — the surface a manual send may be skipping. */
+function lastAiMessage(messages: ChatMessage[]): AiResponse | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m && m.kind === 'ai') return m;
+  }
+  return null;
+}
 
 function extractFollowUps(response: FollowUpQuestionsResponse): {
   questions: string[];
@@ -1738,7 +1974,8 @@ function mapHistoryItems(items: ConversationChatHistoryMessageItem[], page = 1):
         messages.push({
           kind: 'user',
           id: uiId,
-          text: item.heard_query_text ?? item.query_text ?? '',
+          // App ChatViewModel.kt:1273: query_text first, heard_query_text only when it is null.
+          text: historyVoiceText(item),
           imageUri: null,
           audioUri: item.query_media_file_url ?? null,
           userBubbleImageWideBanner: false,

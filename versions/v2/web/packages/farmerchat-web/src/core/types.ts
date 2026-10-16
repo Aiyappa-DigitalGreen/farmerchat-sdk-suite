@@ -616,10 +616,25 @@ export interface TextPromptRequest {
   location_declined?: boolean;
   /** App TextPromptRequest.photo_declined: only ever `true`, on an UPLOAD_PHOTO decline. */
   photo_declined?: boolean;
+  /**
+   * App TextPromptRequest.image: base64 JPEG of a photo question on the AGENTIC path (the app
+   * stops calling image_analysis when agentic chat is on, ChatViewModel.kt:1862-1882). Omitted
+   * for text / voice.
+   */
+  image?: string;
+  /** App TextPromptRequest.image_name: `image_<uuid>.jpg`, with [image] only. */
+  image_name?: string;
 }
 
 export interface IntentClassificationOutput {
-  clarification_needed?: boolean | null;
+  /**
+   * App `ClarificationNeeded` (TextPromptResponse.kt:192-199): `{ additional_context, asset,
+   * concern }` — feeds Send_Query's clarification_needed_asset / _concern. Not a flag.
+   */
+  clarification_needed?: { additional_context?: string | null; asset?: boolean | null; concern?: boolean | null } | boolean | null;
+  asset_type?: string | null;
+  asset_name?: string | null;
+  stage?: string | null;
   concern?: string | null;
   confidence?: number | null;
   intent?: string | null;

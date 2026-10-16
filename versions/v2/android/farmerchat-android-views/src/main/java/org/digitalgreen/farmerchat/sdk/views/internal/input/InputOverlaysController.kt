@@ -62,6 +62,25 @@ internal class InputOverlaysController(
 
     private var cameraOutputUri: Uri? = null
 
+    /** Outcome of a camera / gallery opened from an upload-photo chip (app ChatScreen.kt:414-583). */
+    sealed class PhotoChipResult {
+        /** A photo came back: send it straight to the conversation. */
+        data class Photo(val uri: Uri) : PhotoChipResult()
+        /** Cancelled, or no camera app: answer the surface with `PHOTO_NOT_SHARED`. */
+        data object NotShared : PhotoChipResult()
+        /** Camera permission denied: answer the surface with `PHOTO_PERMISSION_DECLINED`. */
+        data object PermissionDenied : PhotoChipResult()
+    }
+
+    /**
+     * Set while the camera / gallery was opened from an upload-photo chip. The next outcome goes
+     * here instead of [onImagePicked] (the composer attachment). It is consumed exactly once.
+     */
+    private var photoChipCallback: ((PhotoChipResult) -> Unit)? = null
+
+    private fun takePhotoChipCallback(): ((PhotoChipResult) -> Unit)? =
+        photoChipCallback.also { photoChipCallback = null }
+
     /** XML bottom paddings of the three panels, captured before init's applyImeInsets() so the inset is added, not stacked. */
     private val voicePanelBasePadding = binding.fcVoicePanel.paddingBottom
     private val photoPanelBasePadding = binding.fcPhotoPanel.paddingBottom
@@ -83,17 +102,23 @@ internal class InputOverlaysController(
             "${keyPrefix}_camera", owner, ActivityResultContracts.TakePicture()
         ) { success ->
             val uri = cameraOutputUri
+            val chip = takePhotoChipCallback()
             if (success && uri != null) {
                 hide()
-                onImagePicked(uri)
+                if (chip != null) chip(PhotoChipResult.Photo(uri)) else onImagePicked(uri)
+            } else {
+                chip?.invoke(PhotoChipResult.NotShared)
             }
         }
         galleryLauncher = registry.register(
             "${keyPrefix}_gallery", owner, ActivityResultContracts.GetContent()
         ) { uri ->
+            val chip = takePhotoChipCallback()
             if (uri != null) {
                 hide()
-                onImagePicked(uri)
+                if (chip != null) chip(PhotoChipResult.Photo(uri)) else onImagePicked(uri)
+            } else {
+                chip?.invoke(PhotoChipResult.NotShared)
             }
         }
         cameraPermissionLauncher = registry.register(
@@ -365,11 +390,16 @@ internal class InputOverlaysController(
      * `take_photo` capability (app: the chip launches the device camera, not the composer).
      * Permission handling and the settings-dialog fallback are shared with the panel path.
      */
-    fun launchCameraForCapability() = requestCamera()
+    fun launchCameraForCapability(onResult: (PhotoChipResult) -> Unit) {
+        photoChipCallback = onResult
+        requestCamera()
+    }
 
     /** Open the gallery directly — the UPLOAD_PHOTO chip's `choose_from_gallery` capability. */
-    fun launchGalleryForCapability() {
+    fun launchGalleryForCapability(onResult: (PhotoChipResult) -> Unit) {
+        photoChipCallback = onResult
         runCatching { galleryLauncher.launch("image/*") }
+            .onFailure { takePhotoChipCallback()?.invoke(PhotoChipResult.NotShared) }
     }
 
     private fun requestCamera() {
@@ -377,7 +407,12 @@ internal class InputOverlaysController(
             launchCamera()
         } else {
             bumpAttempt(SdkPreferences.Keys.CAMERA_PERMISSION_ATTEMPT_COUNT)
-            if (denyCount(SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT) >= 2) {
+            // App ChatScreen.kt:676-694: the upload-photo chip always asks the system (a
+            // permanently denied permission returns at once, and the denial answers the
+            // surface); only the panel camera falls back to the settings dialog.
+            if (denyCount(SdkPreferences.Keys.CAMERA_PERMISSION_DENY_COUNT) >= 2 &&
+                photoChipCallback == null
+            ) {
                 showSettingsDialog(isCamera = true)
             } else {
                 runCatching { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }
@@ -396,6 +431,8 @@ internal class InputOverlaysController(
             cameraOutputUri = uri
             cameraLauncher.launch(uri)
         }.onFailure {
+            // App ChatScreen.kt:732-743: no camera app on an upload-photo chip still answers it.
+            takePhotoChipCallback()?.invoke(PhotoChipResult.NotShared)
             graph.analytics.track(
                 AnalyticsEvents.INPUT_CAPTURE_FAILED,
                 // App HomeScreen.kt:437 / ChatScreen.kt:616.
@@ -472,7 +509,11 @@ internal class InputOverlaysController(
                 )
             )
             prefs.putInt(denyKey, denies)
-            if (denies >= 2) showSettingsDialog(isCamera)
+            // App ChatScreen.kt:660-667: a chip-driven flow never blocks behind the settings
+            // dialog; the denial answers the surface so the chat continues.
+            val chip = if (isCamera) takePhotoChipCallback() else null
+            if (chip != null) chip(PhotoChipResult.PermissionDenied)
+            else if (denies >= 2) showSettingsDialog(isCamera)
         }
     }
 
