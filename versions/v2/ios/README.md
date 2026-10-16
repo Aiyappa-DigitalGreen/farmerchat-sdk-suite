@@ -13,6 +13,17 @@ built in (`farmerChatApiKey` / `geoApiKey` are optional overrides). Behavior is
 specified by `docs/01-app-specification.md`, `docs/02-api-reference.md` and
 `docs/03-sdk-architecture.md` at the repository root.
 
+## Requirements
+
+| | Minimum |
+|---|---|
+| FarmerChatCore, FarmerChatUIKit | iOS 15 |
+| FarmerChatSwiftUI | iOS 16 |
+| Toolchain | Swift 5.9 / Xcode 15+ |
+| Your Info.plist | `NSMicrophoneUsageDescription`, `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSLocationWhenInUseUsageDescription`. Features without a granted permission are turned off. |
+
+There is no minimum RAM or CPU: if the device runs the OS or browser version above, the SDK runs. Full matrix for every platform: the integration guide's "What your app needs" section.
+
 ## Packages
 
 | Package | Min iOS | What it is |

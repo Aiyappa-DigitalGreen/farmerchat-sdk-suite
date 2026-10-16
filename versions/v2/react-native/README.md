@@ -3,6 +3,16 @@
 - **Package:** [`packages/farmerchat-react-native`](packages/farmerchat-react-native) — `@digitalgreenorg/farmerchat-react-native` (TypeScript strict, Expo SDK 52+/RN 0.76+, no custom native modules). See its README for install/permissions/usage.
 - **Example:** [`example/`](example) — minimal Expo host app consuming the package via a `file:` dependency, with SDK init + analytics event logging.
 
+## Requirements
+
+| | Minimum |
+|---|---|
+| Framework | React Native 0.76 / Expo SDK 52 |
+| Device | whatever your React Native version supports (RN 0.76: Android 7.0+, iOS 15.1+) |
+| Peers | the modules in the package's `peerDependencies`; `react-native-webview` and `react-native-view-shot` are optional (without them, legal pages open in the browser and answers share as text) |
+
+There is no minimum RAM or CPU: if the device runs the OS or browser version above, the SDK runs. Full matrix for every platform: the integration guide's "What your app needs" section.
+
 ## Verification status
 
 - `npx tsc --noEmit` and the `tsc` build both pass cleanly (root CLAUDE.md §5 minimum check — recorded in `docs/04-parity-matrix.md`).

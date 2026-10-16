@@ -2,6 +2,17 @@
 
 Embeds the complete FarmerChat journey — splash → language onboarding → name → home feed → AI chat (text / voice / image) → history / settings / help, with phone + OTP sign-up — into any Android app. Direct port of the production `fc-compose` app, re-packaged per `docs/03-sdk-architecture.md`.
 
+## Requirements
+
+| | Minimum |
+|---|---|
+| Device | Android 8.0 (API 26), `minSdk 26` |
+| Your build | `compileSdk 36`, Kotlin 2.x, JDK 17 |
+| Compose flavour | Android Gradle Plugin **8.13+**. Older AGP versions build fine but crash with a `VerifyError` when the chat opens. The Views flavour is not affected. |
+| Below minSdk 26 | Use `tools:overrideLibrary` naming `org.digitalgreen.farmerchat.sdk.core`, `.compose` and `.views`. |
+
+There is no minimum RAM or CPU: if the device runs the OS or browser version above, the SDK runs. Full matrix for every platform: the integration guide's "What your app needs" section.
+
 ## Modules
 
 | Artifact | Coordinates | What it is |
@@ -12,7 +23,7 @@ Embeds the complete FarmerChat journey — splash → language onboarding → na
 
 Pick **one** UI artifact — each pulls in `farmerchat-core` transitively. `FarmerChat.launch()` auto-resolves whichever UI artifact is on the classpath (Compose is preferred if both are present).
 
-Requirements: minSdk 26, compileSdk 36, Kotlin 2.x, AGP 8.x.
+Requirements: see [Requirements](#requirements) (Compose needs AGP 8.13+).
 
 ```kotlin
 // settings.gradle.kts — repositories: mavenCentral() (or your internal repo / mavenLocal())

@@ -5,6 +5,8 @@ import { copyIllustrations } from '../../tools/copyIllustrations';
 export default defineConfig({
   plugins: [copyIllustrations(resolve(__dirname, 'dist'))],
   build: {
+    // Pinned (= Vite 5's default 'modules' target) so the browser minimum in the README cannot drift on a Vite upgrade.
+    target: ['es2020', 'chrome87', 'edge88', 'firefox78', 'safari14'],
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'FarmerChatWeb',

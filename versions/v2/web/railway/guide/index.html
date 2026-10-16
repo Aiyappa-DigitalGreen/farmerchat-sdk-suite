@@ -244,7 +244,7 @@ tr:last-child td{border-bottom:0}
 :root[data-theme="dark"]{--flow-ink:#F6B04A}
 
 /* ---- for-everyone sections: what farmers get, how it works, website, FAQ ---- */
-.what,.how,.web,.faq{padding-block:clamp(64px,8vw,104px) 0}
+.what,.how,.web,.faq{padding-block:clamp(64px,8vw,104px) 0}.reqs{padding-block:clamp(64px,8vw,104px) 0}.reqs .sec-title{margin-bottom:24px}.reqs .tw+.tw{margin-top:20px}.reqs .st-d{margin-top:16px;max-width:70ch}
 .sec-sub{margin:14px 0 0;max-width:62ch;color:var(--mut);font-size:17.5px}
 .feat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:30px}
 .feat{padding:22px 20px;border-radius:18px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
@@ -357,7 +357,7 @@ tr:last-child td{border-bottom:0}
 <header class="top">
   <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c3.2-3.5 6.8-3.5 10 0-3.2 3.5-6.8 3.5-10 0zM12 12c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c-3.2 3.5-6.8 3.5-10 0 3.2-3.5 6.8-3.5 10 0z"/></svg>FarmerChat<span>SDK</span></a>
   <span class="ver">v2.2.0</span>
-  <nav class="top-links" aria-label="Page"><a href="#what">What it is</a><a href="#how">How it works</a><a href="#platforms">Add to your app</a><a href="#website">Website</a><a href="#guide">Developer guide</a><a href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Live demo</a></nav>
+  <nav class="top-links" aria-label="Page"><a href="#what">What it is</a><a href="#how">How it works</a><a href="#platforms">Add to your app</a><a href="#requirements">Requirements</a><a href="#website">Website</a><a href="#guide">Developer guide</a><a href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Live demo</a></nav>
   <button class="cmt" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Comment</button>
 </header>
 
@@ -602,6 +602,26 @@ didFinishLaunchingWithOptions:(<span class="t-n">NSDictionary</span> *)launchOpt
   </div>
 </section>
 
+<section class="reqs" id="requirements">
+  <div class="wrap">
+    <p class="st-eyebrow">Before you start</p>
+    <h2 class="sec-title">What your app needs</h2>
+    <div class="tw"><table><thead><tr><th>Platform</th><th>Minimum</th><th>Also needed</th></tr></thead><tbody>
+      <tr><td>Android</td><td>Android 8.0 (API 26)</td><td>Compose flavour: Android Gradle Plugin <strong>8.13+</strong> (older versions crash when the chat opens). <code>compileSdk 36</code>.</td></tr>
+      <tr><td>iOS</td><td>iOS 15 (Core, UIKit) &middot; iOS 16 (SwiftUI)</td><td>Swift 5.9 / Xcode 15+. Your Info.plist declares the microphone, camera, photo library and location texts.</td></tr>
+      <tr><td>React Native</td><td>React Native 0.76 &middot; Expo SDK 52</td><td>The Expo modules listed in the package's peer dependencies. <code>react-native-webview</code> and <code>react-native-view-shot</code> are optional.</td></tr>
+      <tr><td>Web</td><td>Chrome / Edge 87+ &middot; Firefox 78+ &middot; Safari 14+ (iOS 14+)</td><td>HTTPS for voice, camera and location. npm package: React 18. The script-tag widget brings its own React.</td></tr>
+    </tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Web detail</th><th>What to know</th></tr></thead><tbody>
+      <tr><td>Best appearance</td><td>Chrome / Edge 111+, Firefox 113+, Safari 16.2+. Older browsers show a few decorative tints as plain colours.</td></tr>
+      <tr><td>Voice input</td><td>Safari 14.1+ (iOS 14.5+); all current Chrome, Edge and Firefox. Where recording is unsupported, the microphone button is hidden.</td></tr>
+      <tr><td>Content-Security-Policy</td><td>If your site sets one, allow requests to the FarmerChat API domain and to <code>www.googleapis.com</code> (location lookup).</td></tr>
+      <tr><td>Storage</td><td>Uses localStorage. In private browsing it falls back to memory, so the farmer signs in again on the next visit.</td></tr>
+      <tr><td>Download size</td><td>About 208 KB for the npm package and 238 KB for the widget, gzipped. Later visits load from the browser cache.</td></tr>
+    </tbody></table></div>
+    <p class="st-d">There is no minimum RAM or processor: if the device runs the OS or browser version above, the SDK runs. Browser versions follow the SDK's build target and are being confirmed on real devices.</p>
+  </div>
+</section>
 <section class="faq" id="faq">
   <div class="wrap">
     <p class="st-eyebrow">Questions</p>

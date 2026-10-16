@@ -14,6 +14,21 @@ Every SDK config field works unchanged, including `enableAgenticChat`.
 **Live demo:** https://farmerchat-sdk-suite-production.up.railway.app, a sample host page with the widget against the
 stage backend (agentic chat on, answers stream). Version 2.2.0, the same as every v2 platform.
 
+## Requirements
+
+| | Minimum |
+|---|---|
+| Browser | Chrome / Edge 87+, Firefox 78+, Safari 14+ (iOS 14+). Pinned as the build target. |
+| React | none for the script tag: the widget bundles its own. React hosts using the ESM build need React 18. |
+| Best appearance | Chrome / Edge 111+, Firefox 113+, Safari 16.2+. Older browsers show a few decorative tints as plain colours. |
+| Voice input | Safari 14.1+ (iOS 14.5+) and current Chrome, Edge, Firefox. Where recording is unsupported, the mic button is hidden. |
+| HTTPS | Required for voice, camera and location (browsers allow `localhost` for development). |
+| Content-Security-Policy | If your site sets one, allow requests to the FarmerChat API domain and `www.googleapis.com` (location lookup). |
+| Storage | localStorage; in private browsing it falls back to memory, so the user signs in again next visit. |
+| Download size | about 238 KB gzipped for the script-tag bundle (`npm run size:check`) |
+
+There is no minimum RAM or CPU: if the device runs the OS or browser version above, the SDK runs. Full matrix for every platform: the integration guide's "What your app needs" section.
+
 ## Drop-in: one script tag (any website, no React needed)
 
 ```html

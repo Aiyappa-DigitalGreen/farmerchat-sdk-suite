@@ -8558,3 +8558,14 @@ zipped (upload-artifact rejects the colons in DocC file names). The release work
 `workflow_dispatch` dry run for 2.2.0 (run 38519516317): verify, all four platform builds, and
 every publish job skipped. No tag, release or package was created. Release packaging uses
 `bundleReleaseAar` because of the views `verifyReleaseResources` quirk above.
+
+## Minimum requirements published (2026-10-16)
+"What your app needs" section in the hosted guide (`versions/v2/web/railway/guide/index.html`,
+`#requirements`, linked from the top nav) and a `## Requirements` section in the android, ios,
+react-native, web SDK and widget READMEs. The figures come from the build files: Android minSdk 26
+/ compileSdk 36 / AGP 8.13+ for Compose; iOS 15 (Core, UIKit) and iOS 16 (SwiftUI); RN 0.76 /
+Expo 52; web from the build target. There is no RAM or CPU minimum: none was measured, so none is
+claimed. The web build target is now pinned explicitly (`['es2020','chrome87','edge88','firefox78',
+'safari14']`, Vite 5's default) in the SDK and both widget configs. Bundles are byte-identical
+before and after, so the stated minimum is exactly what has been shipping. UNVERIFIED on real
+old browsers (Chrome 87 / Safari 14): not yet run on a device lab.
