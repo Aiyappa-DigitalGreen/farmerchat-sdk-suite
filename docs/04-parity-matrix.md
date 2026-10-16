@@ -8648,3 +8648,11 @@ On the rs_qa emulator (API 36), `DEV` environment:
 - Size, Android: the SDK adds 3.4 MB download / 3.7 MB APK to an R8-minified release app
   (FarmerChatComposeDemo with vs without the SDK): assets 1.5 MB, dex 1.4 MB, images/res 0.6 MB.
   Web 208 KB gz (npm), widget 238 KB gz, RN JS 215 KB gz. iOS not measured.
+
+## Guide examples use DEMO (2026-10-16, user decision)
+All 58 code examples in the hosted guide (and its sources: `theme-studio/src/lib/guide.data.json`,
+`tools/guide-gen/plat_*.py`) now use the DEMO environment instead of PROD, so testers following the
+guide never hit production. Kotlin/Java `FarmerChatEnvironment.DEMO`, Swift `.demo`, JS/TS
+`'demo'`. Side fix: the React Native and web examples said `environment: 'PROD'`, but both types
+are lowercase (`'dev'|'stage'|'demo'|'prod'|'eks'`), so a copy-paste failed type-checking. The
+environment row now says to use DEMO while testing and that STAGE is currently unavailable (docs/05).

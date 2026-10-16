@@ -35,7 +35,7 @@ ANDROID_IDENTITY = [
  P("By default the SDK owns identity: farmers start as guests and can sign in with a phone number "
    "and OTP inside the journey. If your app already knows who the farmer is, supply the token "
    "instead and the SDK skips its own auth UI."),
- CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+ CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .authMode(FarmerChatAuthMode.HOST_TOKEN)
     .accessToken(myAuth.currentAccessToken())
     // Called at init when no accessToken was given, and again on a 401.
@@ -52,7 +52,7 @@ ANDROID_LABELS = [
  P("All farmer-facing text is served by the backend and resolved per language, so the journey "
    "localises itself once the farmer picks a language. To override a specific string, key it by "
    "the canonical label key."),
- CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+ CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .stringOverrides(
         mapOf(
             Labels.RECENT_CHATS to "Past advice",
@@ -66,7 +66,7 @@ ANDROID_ANALYTICS = [
  P("The SDK emits the same events the FarmerChat app tracks, with the same names and properties, "
    "through a listener you provide. It bundles no third-party analytics SDK &mdash; forward the "
    "events to whatever you already use."),
- CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+ CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .enableAnalytics(true) // default false
     .onEvent { name, props -> MyAnalytics.track(name, props) }
     .onScreenView { screen -> MyAnalytics.screen(screen) }
@@ -80,7 +80,7 @@ ANDROID_ANALYTICS = [
 ANDROID_THEME = [
  P("The SDK ships the FarmerChat look by default. Override the parts that must match your app "
    "&mdash; anything you leave unset keeps the FarmerChat value."),
- CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+ CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .theme(
         FarmerChatTheme(
             brandPrimary = 0xFF00C950.toInt(),
@@ -135,7 +135,7 @@ COMPOSE = {
 
         FarmerChat.initialize(
             this, // the Application IS the Context
-            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
                 .guestApiKey("<your guest API key>")
                 .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
@@ -150,7 +150,7 @@ COMPOSE = {
 
         FarmerChat.INSTANCE.initialize(
             this,
-            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
                 .guestApiKey("<your guest API key>")
                 .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
@@ -184,7 +184,7 @@ Button(onClick = { FarmerChat.launch(context) }) {
     SUB("Chat only"),
     P("The most common trim: skip onboarding and the advice feed, and land the farmer directly in "
       "chat with history and language still reachable."),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .guestApiKey("<your guest API key>")
     .mode(FarmerChatMode.CHAT_ONLY)
     .showDrawer(false)    // moves history + language into the chat app bar
@@ -194,7 +194,7 @@ Button(onClick = { FarmerChat.launch(context) }) {
     .build()""")]),
     CHAT_ONLY_NOTE,
     SUB("Turn off a question mode"),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .enableVoice(false)   // no mic on the composer or the home tiles
     .enableImages(false)  // no camera
     .build()""")])),
@@ -222,11 +222,11 @@ FarmerChat.openChat(context, conversationId = savedId)""")]),
     SUB("Streaming agentic chat"),
     P("Opt in to the streaming agentic endpoint. Left off, chat keeps the synchronous "
       "request/response contract."),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .enableAgenticChat(true)
     .build()""")]),
     SUB("Point at your own backend"),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .customBaseUrl("https://farmerchat.internal.example/")
     .build()""")])),
 ]}
@@ -264,7 +264,7 @@ VIEWS = {
 
         FarmerChat.initialize(
             this,
-            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
                 .guestApiKey("<your guest API key>")
                 .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
@@ -279,7 +279,7 @@ VIEWS = {
 
         FarmerChat.INSTANCE.initialize(
             this,
-            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
                 .guestApiKey("<your guest API key>")
                 .geoApiKey("<your Google Geolocation key>")
                 .build()
@@ -302,7 +302,7 @@ VIEWS = {
       "semantics."),
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .guestApiKey("<your guest API key>")
     .mode(FarmerChatMode.CHAT_ONLY)
     .showDrawer(false)
@@ -316,7 +316,7 @@ VIEWS = {
   S("theming","Theming",
     P("Same theme object as Compose. The Views flavour resolves it into its own drawables and "
       "styles at runtime."),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .theme(
         FarmerChatTheme(
             brandPrimary = 0xFF00C950.toInt(),
@@ -337,7 +337,7 @@ VIEWS = {
     CB([("Kotlin","kotlin",None,"""FarmerChat.openChat(context, question = "Why are my tomato leaves yellow?")
 FarmerChat.openChat(context, conversationId = savedId)""")]),
     SUB("Streaming agentic chat"),
-    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)
+    CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .enableAgenticChat(true)
     .build()""")]),
     ("note","Known gaps in this flavour",[

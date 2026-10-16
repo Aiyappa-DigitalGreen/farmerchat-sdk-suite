@@ -35,7 +35,7 @@ RN = {
     CB([("TypeScript","ts","App.tsx","""import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';
 
 FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   guestApiKey: '<your guest API key>',
   geoApiKey: '<your Google Geolocation key>',
   languageCode: 'en',
@@ -69,7 +69,7 @@ function FarmerChatScreen() {
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   guestApiKey: '<your guest API key>',
   mode: 'CHAT_ONLY',
   showDrawer: false,     // moves history + language into the chat app bar
@@ -80,7 +80,7 @@ function FarmerChatScreen() {
     CHAT_ONLY_NOTE,
     SUB("Turn off a question mode"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   enableVoice: false,   // no mic
   enableImages: false,  // no camera
 });""")])),
@@ -89,7 +89,7 @@ function FarmerChatScreen() {
     P("Guest by default, with phone/OTP sign-in inside the journey. Supply your own token to skip "
       "the SDK's auth UI."),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   authMode: 'HOST_TOKEN',
   accessToken: await myAuth.currentAccessToken(),
   // Called at init when no accessToken was given, and again on a 401.
@@ -105,7 +105,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
   S("theming","Theming",
     P("Override only what must match your app; unset values keep the FarmerChat look."),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   appearance: 'auto',           // 'day' | 'night' | 'auto'
   theme: {
     brandPrimary: '#00C950',
@@ -123,7 +123,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
     CB([("TypeScript","ts",None,"""import { Labels } from '@digitalgreenorg/farmerchat-react-native';
 
 FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   stringOverrides: {
     [Labels.RECENT_CHATS]: 'Past advice',
     [Labels.SHARE_LOCATION]: 'Share my farm',
@@ -134,7 +134,7 @@ FarmerChat.initialize({
   S("analytics","Analytics",
     P("The SDK emits the same events the FarmerChat app tracks, through a listener you provide."),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   enableAnalytics: true,   // default false
   onEvent: (name, props) => MyAnalytics.track(name, props),
   onScreenView: (screen) => MyAnalytics.screen(screen),
@@ -155,7 +155,7 @@ FarmerChat.initialize({
     CB([("TypeScript","ts",None,"""FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });
 FarmerChat.openChat({ conversationId: savedId });""")]),
     SUB("Streaming agentic chat"),
-    CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });")]),
+    CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });")]),
     SUB("Embed chat inline"),
     P("<code>FarmerChatInlineView</code> renders the chat inside your own layout rather than "
       "taking the screen."),
@@ -191,7 +191,7 @@ WEB = {
     CB([("TypeScript","ts","main.tsx","""import { FarmerChat } from '@digitalgreenorg/farmerchat-web';
 
 FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   guestApiKey: '<your guest API key>',
   geoApiKey: '<your Google Geolocation key>',
   languageCode: 'en',
@@ -214,7 +214,7 @@ export default function FarmerChatPage() {
 
 const handle = FarmerChat.mount(
   document.getElementById('farmerchat'),
-  { environment: 'PROD', guestApiKey: '<your guest API key>' }
+  { environment: 'demo', guestApiKey: '<your guest API key>' }
 );
 
 // later
@@ -228,7 +228,7 @@ handle.unmount();""")]),
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   guestApiKey: '<your guest API key>',
   mode: 'CHAT_ONLY',
   showDrawer: false,     // moves history + language into the chat app bar
@@ -240,7 +240,7 @@ handle.unmount();""")]),
 
   S("identity","Identity and authentication",
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   authMode: 'HOST_TOKEN',
   accessToken: await myAuth.currentAccessToken(),
   tokenProvider: async () => myAuth.freshAccessToken(),
@@ -259,7 +259,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
     P("The theme resolves to CSS custom properties on the SDK root, so it composes with your own "
       "stylesheet rather than fighting it."),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   appearance: 'auto',           // 'day' | 'night' | 'auto'
   theme: {
     colors: { brandPrimary: '#00C950' },
@@ -274,7 +274,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
 
   S("labels","Labels and languages",
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   stringOverrides: {
     fc_v2_app_label_recent_chats: 'Past advice',
   },
@@ -283,7 +283,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
 
   S("analytics","Analytics",
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   enableAnalytics: true,   // default false
   onEvent: (name, props) => MyAnalytics.track(name, props),
   onScreenView: (screen) => MyAnalytics.screen(screen),
@@ -307,10 +307,10 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
     CB([("TypeScript","ts",None,"""FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });
 FarmerChat.openChat({ conversationId: savedId });""")]),
     SUB("Streaming agentic chat"),
-    CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });")]),
+    CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });")]),
     SUB("Point at your own backend"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
-  environment: 'PROD',
+  environment: 'demo',
   customBaseUrl: 'https://farmerchat.internal.example/',
 });""")])),
 ]}

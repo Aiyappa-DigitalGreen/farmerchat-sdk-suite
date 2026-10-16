@@ -110,13 +110,13 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": "MyApp.kt",
-        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this, // the Application IS the Context\n            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this, // the Application IS the Context\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
        },
        {
         "label": "Java",
         "lang": "java",
         "fname": "MyApp.java",
-        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        );\n    }\n}"
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        );\n    }\n}"
        }
       ]
      },
@@ -253,7 +253,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)    // moves history + language into the chat app bar\n    .showHistory(true)    // past-advice icon\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)    // moves history + language into the chat app bar\n    .showHistory(true)    // past-advice icon\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
        }
       ]
      },
@@ -275,7 +275,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableVoice(false)   // no mic on the composer or the home tiles\n    .enableImages(false)  // no camera\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .enableVoice(false)   // no mic on the composer or the home tiles\n    .enableImages(false)  // no camera\n    .build()"
        }
       ]
      }
@@ -296,7 +296,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
        }
       ]
      },
@@ -332,7 +332,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,  // fully rounded, the current default\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .bubbleCornerRadius(18)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,  // fully rounded, the current default\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .bubbleCornerRadius(18)\n    .build()"
        }
       ]
      },
@@ -360,7 +360,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
        }
       ]
      },
@@ -388,7 +388,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
        }
       ]
      },
@@ -460,7 +460,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAgenticChat(true)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .enableAgenticChat(true)\n    .build()"
        }
       ]
      },
@@ -475,7 +475,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .customBaseUrl(\"https://farmerchat.internal.example/\")\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .customBaseUrl(\"https://farmerchat.internal.example/\")\n    .build()"
        }
       ]
      }
@@ -575,13 +575,13 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": "MyApp.kt",
-        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this,\n            FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this,\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
        },
        {
         "label": "Java",
         "lang": "java",
         "fname": "MyApp.java",
-        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .build()\n        );\n    }\n}"
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .build()\n        );\n    }\n}"
        }
       ]
      },
@@ -710,7 +710,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)\n    .showHistory(true)\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)\n    .showHistory(true)\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
        }
       ]
      },
@@ -738,7 +738,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .authMode(FarmerChatAuthMode.HOST_TOKEN)\n    .accessToken(myAuth.currentAccessToken())\n    // Called at init when no accessToken was given, and again on a 401.\n    .tokenProvider { myAuth.freshAccessToken() }\n    .build()"
        }
       ]
      },
@@ -774,7 +774,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .theme(\n        FarmerChatTheme(\n            brandPrimary = 0xFF00C950.toInt(),\n            cardCornerRadius = 24,\n            buttonCornerRadius = 999,\n            inputCornerRadius = 12\n        )\n    )\n    .messageFontSizeSp(15f)\n    .build()"
        }
       ]
      }
@@ -795,7 +795,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .stringOverrides(\n        mapOf(\n            Labels.RECENT_CHATS to \"Past advice\",\n            Labels.SHARE_LOCATION to \"Share my farm\"\n        )\n    )\n    .build()"
        }
       ]
      },
@@ -823,7 +823,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .enableAnalytics(true) // default false\n    .onEvent { name, props -> MyAnalytics.track(name, props) }\n    .onScreenView { screen -> MyAnalytics.screen(screen) }\n    .onChatOpened { /* … */ }\n    .onMessageSent { text -> /* … */ }\n    .onAnswerReceived { messageId -> /* … */ }\n    .onError { code, message -> MyLogger.warn(code, message) }\n    .build()"
        }
       ]
      },
@@ -887,7 +887,7 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.PROD)\n    .enableAgenticChat(true)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .enableAgenticChat(true)\n    .build()"
        }
       ]
      },
@@ -981,7 +981,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": "MyApp.swift",
-        "code": "import SwiftUI\nimport FarmerChatCore\n\n@main\nstruct MyApp: App {\n    init() {\n        _ = FarmerChat.initialize(\n            config: FarmerChatConfig(\n                environment: .prod,\n                guestApiKey: \"<your guest API key>\",\n                geoApiKey: \"<your Google Geolocation key>\",\n                languageCode: \"en\",\n                defaultCountryCode: \"IN\"\n            )\n        )\n    }\n\n    var body: some Scene {\n        WindowGroup { ContentView() }\n    }\n}"
+        "code": "import SwiftUI\nimport FarmerChatCore\n\n@main\nstruct MyApp: App {\n    init() {\n        _ = FarmerChat.initialize(\n            config: FarmerChatConfig(\n                environment: .demo,\n                guestApiKey: \"<your guest API key>\",\n                geoApiKey: \"<your Google Geolocation key>\",\n                languageCode: \"en\",\n                defaultCountryCode: \"IN\"\n            )\n        )\n    }\n\n    var body: some Scene {\n        WindowGroup { ContentView() }\n    }\n}"
        }
       ]
      },
@@ -1097,7 +1097,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,      // moves history + language into the chat app bar\n    showNameScreen: false\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,      // moves history + language into the chat app bar\n    showNameScreen: false\n)"
        }
       ]
      },
@@ -1119,7 +1119,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableVoice: false,   // no mic\n    enableImages: false   // no camera\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    enableVoice: false,   // no mic\n    enableImages: false   // no camera\n)"
        }
       ]
      }
@@ -1140,7 +1140,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
        }
       ]
      },
@@ -1172,7 +1172,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
        }
       ]
      },
@@ -1200,7 +1200,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
        }
       ]
      },
@@ -1228,7 +1228,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
        }
       ]
      },
@@ -1292,7 +1292,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(environment: .prod, enableAgenticChat: true)"
+        "code": "FarmerChatConfig(environment: .demo, enableAgenticChat: true)"
        }
       ]
      },
@@ -1307,7 +1307,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    customBaseURL: \"https://farmerchat.internal.example/\"\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    customBaseURL: \"https://farmerchat.internal.example/\"\n)"
        }
       ]
      }
@@ -1389,7 +1389,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": "AppDelegate.swift",
-        "code": "import FarmerChatCore\n\nfunc application(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?\n) -> Bool {\n    _ = FarmerChat.initialize(\n        config: FarmerChatConfig(\n            environment: .prod,\n            guestApiKey: \"<your guest API key>\",\n            geoApiKey: \"<your Google Geolocation key>\",\n            languageCode: \"en\",\n            defaultCountryCode: \"IN\"\n        )\n    )\n    return true\n}"
+        "code": "import FarmerChatCore\n\nfunc application(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?\n) -> Bool {\n    _ = FarmerChat.initialize(\n        config: FarmerChatConfig(\n            environment: .demo,\n            guestApiKey: \"<your guest API key>\",\n            geoApiKey: \"<your Google Geolocation key>\",\n            languageCode: \"en\",\n            defaultCountryCode: \"IN\"\n        )\n    )\n    return true\n}"
        }
       ]
      },
@@ -1501,7 +1501,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,\n    showNameScreen: false\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,\n    showNameScreen: false\n)"
        }
       ]
      },
@@ -1529,7 +1529,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    authMode: .hostToken,\n    accessToken: myAuth.currentAccessToken,\n    // Called at init when no accessToken was given, and again on a 401.\n    tokenProvider: { await myAuth.freshAccessToken() }\n)"
        }
       ]
      },
@@ -1561,7 +1561,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    appearance: .auto,               // .day, .night or .auto\n    userBubbleColor: Color(.systemGray6),\n    bubbleCornerRadius: 18,\n    messageFontSize: 15\n)"
        }
       ]
      },
@@ -1589,7 +1589,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    stringOverrides: [\n        FCLabels.recentChats: \"Past advice\",\n        FCLabels.shareLocation: \"Share my farm\"\n    ]\n)"
        }
       ]
      },
@@ -1617,7 +1617,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .prod,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    enableAnalytics: true, // default false\n    onEvent: { name, props in MyAnalytics.track(name, props) },\n    onChatOpened: { /* … */ },\n    onMessageSent: { text in /* … */ },\n    onAnswerReceived: { messageId in /* … */ },\n    onScreenView: { screen in MyAnalytics.screen(screen) },\n    onError: { code, message in MyLogger.warn(code, message) }\n)"
        }
       ]
      },
@@ -1681,7 +1681,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(environment: .prod, enableAgenticChat: true)"
+        "code": "FarmerChatConfig(environment: .demo, enableAgenticChat: true)"
        }
       ]
      }
@@ -2222,7 +2222,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": "App.tsx",
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
        }
       ]
      },
@@ -2338,7 +2338,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
        }
       ]
      },
@@ -2360,7 +2360,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableVoice: false,   // no mic\n  enableImages: false,  // no camera\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  enableVoice: false,   // no mic\n  enableImages: false,  // no camera\n});"
        }
       ]
      }
@@ -2381,7 +2381,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  // Called at init when no accessToken was given, and again on a 401.\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  // Called at init when no accessToken was given, and again on a 401.\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
        }
       ]
      },
@@ -2413,7 +2413,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    brandPrimary: '#00C950',\n    shape: {\n      cardCornerRadius: 24,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n  },\n  messageFontSize: 15,\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    brandPrimary: '#00C950',\n    shape: {\n      cardCornerRadius: 24,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n  },\n  messageFontSize: 15,\n});"
        }
       ]
      }
@@ -2434,7 +2434,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "import { Labels } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  stringOverrides: {\n    [Labels.RECENT_CHATS]: 'Past advice',\n    [Labels.SHARE_LOCATION]: 'Share my farm',\n  },\n});"
+        "code": "import { Labels } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  stringOverrides: {\n    [Labels.RECENT_CHATS]: 'Past advice',\n    [Labels.SHARE_LOCATION]: 'Share my farm',\n  },\n});"
        }
       ]
      },
@@ -2462,7 +2462,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onChatOpened: () => {},\n  onMessageSent: (text) => {},\n  onAnswerReceived: (messageId) => {},\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onChatOpened: () => {},\n  onMessageSent: (text) => {},\n  onAnswerReceived: (messageId) => {},\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
        }
       ]
      },
@@ -2532,7 +2532,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });"
+        "code": "FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });"
        }
       ]
      },
@@ -2647,7 +2647,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": "main.tsx",
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nFarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
        }
       ]
      },
@@ -2681,7 +2681,7 @@
         "label": "JavaScript",
         "lang": "ts",
         "fname": null,
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nconst handle = FarmerChat.mount(\n  document.getElementById('farmerchat'),\n  { environment: 'PROD', guestApiKey: '<your guest API key>' }\n);\n\n// later\nhandle.unmount();"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nconst handle = FarmerChat.mount(\n  document.getElementById('farmerchat'),\n  { environment: 'demo', guestApiKey: '<your guest API key>' }\n);\n\n// later\nhandle.unmount();"
        }
       ]
      },
@@ -2774,7 +2774,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
        }
       ]
      },
@@ -2798,7 +2798,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  authMode: 'HOST_TOKEN',\n  accessToken: await myAuth.currentAccessToken(),\n  tokenProvider: async () => myAuth.freshAccessToken(),\n});"
        }
       ]
      },
@@ -2837,7 +2837,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    colors: { brandPrimary: '#00C950' },\n    shape: {\n      cardCornerRadius: 16,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n    typography: { fontFamily: 'Public Sans, system-ui, sans-serif' },\n  },\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  appearance: 'auto',           // 'day' | 'night' | 'auto'\n  theme: {\n    colors: { brandPrimary: '#00C950' },\n    shape: {\n      cardCornerRadius: 16,\n      buttonCornerRadius: 999,  // fully rounded, the current default\n      inputCornerRadius: 12,\n    },\n    typography: { fontFamily: 'Public Sans, system-ui, sans-serif' },\n  },\n});"
        }
       ]
      }
@@ -2854,7 +2854,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  stringOverrides: {\n    fc_v2_app_label_recent_chats: 'Past advice',\n  },\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  stringOverrides: {\n    fc_v2_app_label_recent_chats: 'Past advice',\n  },\n});"
        }
       ]
      },
@@ -2878,7 +2878,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  enableAnalytics: true,   // default false\n  onEvent: (name, props) => MyAnalytics.track(name, props),\n  onScreenView: (screen) => MyAnalytics.screen(screen),\n  onError: (code, message) => MyLogger.warn(code, message),\n});"
        }
       ]
      },
@@ -2959,7 +2959,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({ environment: 'PROD', enableAgenticChat: true });"
+        "code": "FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });"
        }
       ]
      },
@@ -2974,7 +2974,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'PROD',\n  customBaseUrl: 'https://farmerchat.internal.example/',\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  customBaseUrl: 'https://farmerchat.internal.example/',\n});"
        }
       ]
      }

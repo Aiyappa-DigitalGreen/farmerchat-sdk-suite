@@ -6,7 +6,7 @@ SWIFT_IDENTITY = [
  P("Guest by default, with phone/OTP sign-in inside the journey. Supply your own token to skip "
    "the SDK's auth UI."),
  CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     authMode: .hostToken,
     accessToken: myAuth.currentAccessToken,
     // Called at init when no accessToken was given, and again on a 401.
@@ -25,7 +25,7 @@ let sub = FarmerChat.shared.onAuthStateChanged.sink { isAuthed in
 SWIFT_THEME = [
  P("Override only what must match your app; unset values keep the FarmerChat look."),
  CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     appearance: .auto,               // .day, .night or .auto
     userBubbleColor: Color(.systemGray6),
     bubbleCornerRadius: 18,
@@ -39,7 +39,7 @@ SWIFT_LABELS = [
  P("Labels are served per language. Override individual strings with the generated "
    "<code>FCLabels</code> constants &mdash; never a hand-typed key."),
  CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     stringOverrides: [
         FCLabels.recentChats: "Past advice",
         FCLabels.shareLocation: "Share my farm"
@@ -51,7 +51,7 @@ SWIFT_ANALYTICS = [
  P("The SDK emits the same events the FarmerChat app tracks, through a handler you provide. No "
    "third-party analytics SDK is bundled."),
  CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     enableAnalytics: true, // default false
     onEvent: { name, props in MyAnalytics.track(name, props) },
     onChatOpened: { /* … */ },
@@ -112,7 +112,7 @@ struct MyApp: App {
     init() {
         _ = FarmerChat.initialize(
             config: FarmerChatConfig(
-                environment: .prod,
+                environment: .demo,
                 guestApiKey: "<your guest API key>",
                 geoApiKey: "<your Google Geolocation key>",
                 languageCode: "en",
@@ -153,7 +153,7 @@ struct ContentView: View {
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     guestApiKey: "<your guest API key>",
     mode: .chatOnly,
     showSettings: false,
@@ -164,7 +164,7 @@ struct ContentView: View {
     CHAT_ONLY_NOTE,
     SUB("Turn off a question mode"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     enableVoice: false,   // no mic
     enableImages: false   // no camera
 )""")])),
@@ -180,10 +180,10 @@ struct ContentView: View {
 FarmerChat.shared.openChat(question: "Why are my tomato leaves yellow?")
 FarmerChat.shared.openChat(conversationId: savedId)""")]),
     SUB("Streaming agentic chat"),
-    CB([("Swift","swift",None,"FarmerChatConfig(environment: .prod, enableAgenticChat: true)")]),
+    CB([("Swift","swift",None,"FarmerChatConfig(environment: .demo, enableAgenticChat: true)")]),
     SUB("Point at your own backend"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     customBaseURL: "https://farmerchat.internal.example/"
 )""")])),
 ]}
@@ -227,7 +227,7 @@ func application(
 ) -> Bool {
     _ = FarmerChat.initialize(
         config: FarmerChatConfig(
-            environment: .prod,
+            environment: .demo,
             guestApiKey: "<your guest API key>",
             geoApiKey: "<your Google Geolocation key>",
             languageCode: "en",
@@ -259,7 +259,7 @@ NSLayoutConstraint.activate([
     TBL(["Option","What it controls"], CONFIG_ROWS),
     SUB("Chat only"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
-    environment: .prod,
+    environment: .demo,
     guestApiKey: "<your guest API key>",
     mode: .chatOnly,
     showSettings: false,
@@ -278,7 +278,7 @@ NSLayoutConstraint.activate([
     SUB("Deep-link into a question"),
     CB([("Swift","swift",None,'FarmerChat.shared.openChat(question: "Why are my tomato leaves yellow?")')]),
     SUB("Streaming agentic chat"),
-    CB([("Swift","swift",None,"FarmerChatConfig(environment: .prod, enableAgenticChat: true)")])),
+    CB([("Swift","swift",None,"FarmerChatConfig(environment: .demo, enableAgenticChat: true)")])),
 ]}
 
 OBJC = {
