@@ -101,3 +101,80 @@ subprojects {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// MAVEN CENTRAL (Central Portal, central.sonatype.com)
+//
+// Central requires signed artifacts, a sources jar, a javadoc jar and a full POM. The modules
+// declare the jars and the POM; this block adds signing and a local "CentralBundle" repository
+// in Maven layout (Gradle writes the md5/sha1 checksums Central also requires).
+//
+//   ./gradlew centralBundle   → build/central-bundle.zip, uploaded by .github/workflows/release.yml
+//
+// Signing is active ONLY when an in-memory key is supplied (SIGNING_KEY = ASCII-armored private
+// key, SIGNING_PASSWORD = its passphrase), as Gradle properties or environment variables. Without
+// one, nothing is signed, so `publishToMavenLocal` behaves exactly as before. The three SDK
+// artifacts are bundled; farmerchat-analytics-posthog is not published (docs/04).
+// -----------------------------------------------------------------------------
+val centralModules = listOf(":farmerchat-core", ":farmerchat-android-compose", ":farmerchat-android-views")
+val centralStagingDir = layout.buildDirectory.dir("central-staging")
+val signingKey = (findProperty("signingKey") as String?) ?: System.getenv("SIGNING_KEY")
+val signingPassword = (findProperty("signingPassword") as String?) ?: System.getenv("SIGNING_PASSWORD")
+
+centralModules.forEach { path ->
+    project(path) {
+        // Javadoc jar from this module's Dokka 2 output. AGP's own withJavadocJar() runs an older
+        // bundled Dokka that crashes on the Compose module under Kotlin 2.3 ("PermittedSubclasses
+        // requires ASM9"), so it is not used.
+        val dokkaJavadocJar = tasks.register<Jar>("dokkaJavadocJar") {
+            archiveClassifier.set("javadoc")
+            dependsOn("dokkaGeneratePublicationHtml")
+            from(layout.buildDirectory.dir("dokka/html"))
+        }
+        plugins.withId("maven-publish") {
+            extensions.configure<PublishingExtension>("publishing") {
+                publications.withType<MavenPublication>().configureEach { artifact(dokkaJavadocJar) }
+                repositories {
+                    maven {
+                        name = "CentralBundle"
+                        url = uri(centralStagingDir)
+                    }
+                }
+            }
+            if (!signingKey.isNullOrBlank()) {
+                apply(plugin = "signing")
+                afterEvaluate {
+                    extensions.configure<SigningExtension>("signing") {
+                        useInMemoryPgpKeys(signingKey, signingPassword ?: "")
+                        sign(extensions.getByType<PublishingExtension>().publications)
+                    }
+                }
+            }
+        }
+    }
+}
+
+val cleanCentralStaging = tasks.register<Delete>("cleanCentralStaging") {
+    delete(centralStagingDir)
+    doFirst {
+        // Fail before anything is built: Central rejects unsigned artifacts.
+        check(!signingKey.isNullOrBlank()) { "centralBundle needs SIGNING_KEY / SIGNING_PASSWORD." }
+    }
+}
+centralModules.forEach { path ->
+    project(path) {
+        tasks.matching { it.name == "publishAllPublicationsToCentralBundleRepository" }
+            .configureEach { dependsOn(cleanCentralStaging) }
+    }
+}
+
+tasks.register<Zip>("centralBundle") {
+    group = "publishing"
+    description = "Signed Maven Central upload bundle for the three SDK artifacts."
+    dependsOn(centralModules.map { "$it:publishAllPublicationsToCentralBundleRepository" })
+    from(centralStagingDir)
+    // Central computes these itself and rejects bundles that carry them.
+    exclude("**/maven-metadata*")
+    archiveFileName.set("central-bundle.zip")
+    destinationDirectory.set(layout.buildDirectory)
+}

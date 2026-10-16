@@ -24,13 +24,13 @@
 #                             versions/v2/android/build.gradle.kts. Published when the URL is set.
 #   GITHUB_TOKEN is provided automatically (draft release).
 #
-#   Maven Central is additionally gated on the repo VARIABLE `MAVEN_CENTRAL_READY == 'true'`, because
-#   the Gradle build cannot produce a Central-valid upload yet (see the publish-maven job). Adding the
-#   four secrets alone does NOT turn on a failing publish.
+#   Maven Central uploads with publishingType USER_MANAGED: Central validates the signed bundle and
+#   waits for someone to click "Publish" on central.sonatype.com, so nothing goes public by accident.
 #
 # KNOWN BLOCKERS BEFORE A REAL REGISTRY RELEASE (none of them block merging this file)
-#   - Maven Central: no `signing` plugin, no javadoc jar, no full POM metadata (name/description/url/
-#     licenses/developers/scm), no Central Portal upload (bundle API / plugin). See publish-maven.
+#   - Maven Central: the build is ready (`./gradlew centralBundle`, verified with a test key). What is
+#     left is outside the repo: a Central Portal account, the org.digitalgreen namespace verified
+#     there (DNS TXT record on digitalgreen.org), a user token and a GPG key as the four secrets.
 #   - CocoaPods: FarmerChatUIKit.podspec's source tag is "ios-v#{s.version}", not "v#{version}", and its
 #     source_files reference '../FarmerChatCore/...' relative to the podspec dir, while trunk resolves
 #     paths from the repo root. The step checks for the ios-v tag and skips if it is missing.
@@ -320,32 +320,28 @@ jobs:
   publish-maven:
     needs: [verify, build]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
     env:
       HAS_CENTRAL: ${{ secrets.MAVEN_CENTRAL_USERNAME != '' && secrets.MAVEN_CENTRAL_PASSWORD != '' && secrets.SIGNING_KEY != '' && secrets.SIGNING_PASSWORD != '' }}
-      CENTRAL_READY: ${{ vars.MAVEN_CENTRAL_READY == 'true' }}
       HAS_CUSTOM_REPO: ${{ secrets.FARMERCHAT_REPO_URL != '' }}
       DRY_RUN: ${{ needs.verify.outputs.dry_run }}
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - name: Plan
         run: |
-          echo "Maven Central: secrets=$HAS_CENTRAL ready-var=$CENTRAL_READY | custom repo: $HAS_CUSTOM_REPO | dry_run=$DRY_RUN"
+          echo "Maven Central: secrets=$HAS_CENTRAL | custom repo: $HAS_CUSTOM_REPO | dry_run=$DRY_RUN"
           if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish org.digitalgreen.farmerchat:*:$VERSION"; fi
-          if [ "$HAS_CENTRAL" = "true" ] && [ "$CENTRAL_READY" != "true" ]; then
-            echo "::warning::Central secrets are set but the Gradle build cannot publish to Central yet (see the workflow comment). Skipping."
-          fi
       - uses: actions/checkout@v4
-        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
       - uses: actions/setup-java@v4
-        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || (env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true'))
+        if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
 
       # Plain Maven repo (e.g. GitHub Packages) via the mechanism already in build.gradle.kts.
       - name: Publish to FARMERCHAT_REPO_URL
@@ -357,28 +353,41 @@ jobs:
           FARMERCHAT_REPO_TOKEN: ${{ secrets.FARMERCHAT_REPO_TOKEN }}
         run: ./gradlew publishAllPublicationsToFarmerChatRepository
 
-      # MAVEN CENTRAL (central.sonatype.com Portal, NOT legacy OSSRH) — NOT WIRED YET.
-      # The FARMERCHAT_REPO_URL mechanism does not fit: the Portal does not accept plain maven PUTs,
-      # it takes a signed bundle via its Publisher API. What versions/v2/android is missing:
-      #   1. `signing` plugin with useInMemoryPgpKeys(SIGNING_KEY, SIGNING_PASSWORD) on every publication
-      #   2. a javadoc jar (withJavadocJar() or an empty/dokka jar) next to the existing sources jar
-      #   3. full POM: name, description, url, licenses (Apache-2.0), developers, scm
-      #   4. an uploader, e.g. com.vanniktech.maven.publish (publishToMavenCentral) or
-      #      com.gradleup.nmcp, configured with the Portal user token
-      #   5. the org.digitalgreen namespace verified on central.sonatype.com
-      # Once those land in the Gradle files, replace the body below with the plugin's task and set the
-      # repository variable MAVEN_CENTRAL_READY=true. Until then this step never runs.
-      - name: Publish to Maven Central (Portal)
-        if: env.HAS_CENTRAL == 'true' && env.CENTRAL_READY == 'true' && env.DRY_RUN != 'true'
+      # MAVEN CENTRAL (central.sonatype.com Publisher API). `centralBundle` (versions/v2/android/
+      # build.gradle.kts) builds the signed bundle: AAR, POM, sources and javadoc jars, .asc
+      # signatures, checksums. USER_MANAGED: Central validates the upload, then a person clicks
+      # "Publish" on central.sonatype.com → Deployments. Nothing becomes public automatically.
+      # Needs the org.digitalgreen namespace verified on the account that owns the token.
+      - name: Build the signed Central bundle
+        if: env.HAS_CENTRAL == 'true' && env.DRY_RUN != 'true'
         working-directory: versions/v2/android
         env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew centralBundle
+      - name: Upload to Maven Central (awaits manual Publish)
+        if: env.HAS_CENTRAL == 'true' && env.DRY_RUN != 'true'
+        env:
+          CENTRAL_USER: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASS: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
         run: |
-          echo "::error::MAVEN_CENTRAL_READY is true but no Central publish task is wired in this workflow yet."
-          exit 1
+          set -euo pipefail
+          auth="Authorization: Bearer $(printf '%s:%s' "$CENTRAL_USER" "$CENTRAL_PASS" | base64 | tr -d '\n')"
+          id=$(curl -sS --fail-with-body -X POST -H "$auth" \
+            -F "bundle=@versions/v2/android/build/central-bundle.zip" \
+            "https://central.sonatype.com/api/v1/publisher/upload?name=farmerchat-${VERSION}&publishingType=USER_MANAGED")
+          echo "Deployment id: $id"
+          for i in $(seq 1 40); do
+            state=$(curl -sS --fail-with-body -X POST -H "$auth" \
+              "https://central.sonatype.com/api/v1/publisher/status?id=$id" | jq -r .deploymentState)
+            echo "state: $state"
+            case "$state" in
+              VALIDATED) echo "::notice::Validated. Open central.sonatype.com → Deployments → farmerchat-${VERSION} and click Publish."; exit 0 ;;
+              FAILED) curl -sS -X POST -H "$auth" "https://central.sonatype.com/api/v1/publisher/status?id=$id" | jq .; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Central did not finish validating in time; check Deployments on central.sonatype.com."; exit 1
 
   publish-cocoapods:
     needs: [verify, build]

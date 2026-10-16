@@ -22,6 +22,9 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   Native, iOS Core), size budgets, generated API reference (Dokka, DocC, TypeDoc), production
   `npm audit`, Dependabot, and a tag-driven release workflow that creates a draft release.
 - `versions/v2/TROUBLESHOOTING.md` (including a mock-backend test mode) and `VERSIONING.md`.
+- Android is ready for Maven Central: signed bundle task (`centralBundle`), javadoc jars from Dokka,
+  and a release-workflow upload that waits for a manual Publish. `RELEASING.md` covers account setup.
+- Minimum requirements per platform in every README and the integration guide; web build target pinned.
 
 ### Changed
 - A repeat `initialize` on iOS, React Native and Web now matches Android. It is a no-op unless

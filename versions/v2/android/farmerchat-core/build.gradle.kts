@@ -103,6 +103,7 @@ publishing {
                 developers {
                     developer {
                         id.set("digitalgreen")
+                        email.set("aiyappa@digitalgreen.org")
                         name.set("Digital Green")
                         organizationUrl.set("https://www.digitalgreen.org")
                     }

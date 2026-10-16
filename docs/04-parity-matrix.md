@@ -8569,3 +8569,24 @@ claimed. The web build target is now pinned explicitly (`['es2020','chrome87','e
 'safari14']`, Vite 5's default) in the SDK and both widget configs. Bundles are byte-identical
 before and after, so the stated minimum is exactly what has been shipping. UNVERIFIED on real
 old browsers (Chrome 87 / Safari 14): not yet run on a device lab.
+
+## Maven Central readiness, android v2 (2026-10-16)
+- `./gradlew centralBundle` builds `build/central-bundle.zip` for core, compose and views: AAR,
+  POM, Gradle module, sources jar, javadoc jar, `.asc` signatures, md5/sha1/sha256/sha512, and no
+  `maven-metadata`. Signing (`useInMemoryPgpKeys`) is applied only when `SIGNING_KEY` /
+  `SIGNING_PASSWORD` are set. Without them `centralBundle` fails fast, and `publishToMavenLocal`
+  is unchanged.
+- Javadoc jars come from Dokka 2.1 (`dokkaGeneratePublicationHtml`). AGP's `withJavadocJar()` was
+  tried and dropped: its bundled Dokka crashes on the compose module under Kotlin 2.3 ("PermittedSubclasses
+  requires ASM9").
+- POM `<developer>` now carries `aiyappa@digitalgreen.org` (user decision: a personal Central
+  account for now, Digital Green account later). That is the only POM change. The published
+  coordinates were checked by diffing the mavenLocal POMs before and after.
+- Verified locally with a throwaway test key: the bundle builds, all six AAR/POM signatures verify
+  (openpgp.js), and `testDebugUnitTest assembleDebug apiCheck` passes. The test key was deleted.
+- `release.yml` publish-maven uploads through the Central Publisher API with
+  `publishingType=USER_MANAGED` (a person clicks Publish in the Portal) and polls until VALIDATED
+  or FAILED. The `MAVEN_CENTRAL_READY` variable gate was removed: the four secrets are the gate.
+- Outside the repo (`RELEASING.md`): the Portal account, the `org.digitalgreen` namespace (DNS TXT on
+  digitalgreen.org), a user token and a GPG key on keyserver.ubuntu.com. NOT YET DONE.
+- `farmerchat-analytics-posthog` is still not published (root CLAUDE.md §6).
