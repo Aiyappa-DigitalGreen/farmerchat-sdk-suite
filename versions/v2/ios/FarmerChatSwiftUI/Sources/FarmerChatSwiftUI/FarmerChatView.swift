@@ -103,6 +103,8 @@ public struct FarmerChatView: View {
         }
         .environment(\.fcTheme, theme)
         .environment(\.fcExitAction, resolvedExitAction)
+        // Tells a presenter (FarmerChatFabButton) when the visible screen draws its own exit (X).
+        .preference(key: FCScreenHasOwnExitKey.self, value: screenHasOwnExit)
         .environmentObject(router)
         .environmentObject(locationPrompt)
         .preferredColorScheme(preferredScheme)
@@ -132,6 +134,13 @@ public struct FarmerChatView: View {
         case .night: return .dark
         case .auto: return nil
         }
+    }
+
+    /// The chat-only chat screen draws its own Close (X) that exits the SDK (ChatView); other
+    /// screens (Home, language, onboarding) do not, and iOS has no system Back to fall back on.
+    private var screenHasOwnExit: Bool {
+        if case .chat(let args) = router.current { return args.source == "chatOnly" }
+        return false
     }
 
     private var drawerRoute: String {
@@ -273,4 +282,11 @@ extension EnvironmentValues {
 /// Lets `present(from:)` hand the hosting controller to its own root view without a cycle.
 final class FCWeakViewController {
     weak var controller: UIViewController?
+}
+
+/// True while the screen on top of `FarmerChatView` shows its own exit (X), so a presenter's
+/// fallback close button can step aside instead of drawing a second X over the content.
+struct FCScreenHasOwnExitKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }

@@ -19,6 +19,7 @@ import FarmerChatCore
 public struct FarmerChatFabButton: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isPresented = false
+    @State private var screenHasOwnExit = false
 
     private let question: String?
     private let label: String?
@@ -96,18 +97,23 @@ public struct FarmerChatFabButton: View {
                 // UIKit left `isPresented` stuck at true, so the FAB could not reopen it.
                 FarmerChatView()
                     .environment(\.fcExitAction) { isPresented = false }
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.black.opacity(0.5))
-                        .clipShape(Circle())
+                    .onPreferenceChange(FCScreenHasOwnExitKey.self) { screenHasOwnExit = $0 }
+                // Fallback close for screens without their own exit (Home, language, onboarding).
+                // Hidden on the chat-only chat, whose own X exits; two X's overlapped the content.
+                if !screenHasOwnExit {
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding(.top, 44)
+                    .padding(.trailing, 16)
                 }
-                .padding(.top, 44)
-                .padding(.trailing, 16)
             }
         }
     }

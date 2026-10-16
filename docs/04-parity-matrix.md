@@ -8669,3 +8669,24 @@ environment row now says to use DEMO while testing and that STAGE is currently u
 - **Unchanged on purpose:** the `PROD` enum value and its URL. A live app has to be able to choose it
   explicitly; nothing in this repo or any default does. `fromString("prod")` maps an explicit name only.
 - Checked: a repo-wide search finds no explicit or indirect PROD selection outside docs/04/05 history.
+
+## Fresh-host test, iOS SwiftUI + iOS size (2026-10-16)
+New app `~/XcodeProjects/FarmerChatSwiftUIDemo` (xcodegen, iOS 16), SDK as local SPM packages
+(FarmerChatCore + FarmerChatSwiftUI from versions/v2/ios), DEMO environment, `FarmerChatFabButton`
+plus `openChat(question:)`. XCUITest on the iPhone 17 simulator, both tests pass: guest init 201,
+languages/labels/terms/new_conversation 200, agentic 200 (~2.9 s) with the answer rendered; the
+sample-question deep link was answered.
+- **Bug fixed (SwiftUI `FarmerChatFabButton`):** its full-screen cover drew a fallback ✕ on top of
+  every screen. Since 2026-10-09 the chat-only chat has its own exit ✕, so two appeared, the grey one
+  over the question bubble and the globe button. `FarmerChatView` now publishes
+  `FCScreenHasOwnExitKey` (true only on the chat-only chat), and the FAB hides its ✕ there. Home,
+  language and onboarding have no exit of their own (no system Back on iOS), so they keep it.
+  Verified by re-running the UI test: one ✕.
+- iOS README: added `FarmerChatFabButton` usage (ZStack/overlay). The streaming section no longer
+  says the stream was never observed.
+- **Size (Release, generic iOS device, unsigned):** the SDK adds +9.3 MB to the `.app` as built,
+  **+3.4 MB stripped** (archive/App Store strips symbols), +2.06 MB zipped. SPM links it statically
+  into the main binary; the resource bundles hold only the privacy manifests (no illustrations).
+  App Store sizes differ (thinning, encryption): not measured.
+- Not changed, noted: no accessibility identifiers on SDK controls (UI tests match visible labels);
+  `initialize_user` ran twice on the first open and runs again on every cold launch (not investigated).

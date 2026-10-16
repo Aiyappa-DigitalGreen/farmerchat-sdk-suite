@@ -464,10 +464,11 @@ shared, not reimplemented. Four-way finalize: `done` present → complete answer
 interrupted with the partial kept; clean EOF with partial text → **not**
 interrupted (some backends stream deltas with no terminal event); nothing → error.
 
-### ⚠ Wire framing is NOT verified against a live stream
+### Wire framing: now observed live (2026-10-16)
 
-The endpoint opens but has never been observed emitting an event (a guest receives
-0 bytes on all three environments — `docs/05-open-questions.md`). The reader is
+On the DEMO environment the endpoint answers 200 and the iOS reader renders full streamed answers
+(verified in a fresh SwiftUI host app; Android logged `status` + `text_delta` events on DEMO and
+DEV the same day). The text below is the original reasoning for keeping the reader permissive. The reader is
 therefore deliberately permissive, exactly like Android's: it accepts both
 `data:`-prefixed SSE (blank line ends an event, CRLF tolerated, `:` keep-alives
 ignored) and bare NDJSON, resolves the type from an `event:` line else a
@@ -579,6 +580,22 @@ Unverified (documented, not claimed):
 
 Known intentional gaps and conservative choices are recorded in
 `docs/04-parity-matrix.md` and `docs/05-open-questions.md`.
+
+## Floating launcher (SwiftUI)
+
+`FarmerChatFabButton` fills its container and pins itself to a corner, so put it in a `ZStack` (or
+`.overlay`) over your content. Tapping it presents FarmerChat full-screen.
+
+```swift
+ZStack {
+    YourContentView()
+    FarmerChatFabButton()                                   // icon only
+    // FarmerChatFabButton(question: "How do I control fall armyworm?", label: "Ask FarmerChat")
+}
+```
+
+On screens without their own exit (Home, language, onboarding) the cover shows a small close (✕)
+button. The chat-only chat has its own ✕, so the cover's button hides there.
 
 ## Lifecycle, diagnostics and privacy (2.2.x)
 

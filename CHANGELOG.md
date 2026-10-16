@@ -53,6 +53,7 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   `shell-quote` advisory.
 
 ### Fixed
+- iOS SwiftUI `FarmerChatFabButton` drew a second close button over the chat-only chat screen.
 - Web and React Native no longer send FarmerChat headers (including `Device-Info`) to Google's
   geolocation API. On web this had blocked location lookup on every website (CORS).
 - Repository links in the guide, POMs, podspec and package.json pointed at a non-existent repo.
