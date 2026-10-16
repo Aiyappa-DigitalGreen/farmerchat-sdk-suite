@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: SDK (build, API report, size, docs, audit)
@@ -42,14 +42,14 @@ jobs:
           npm run size:check
           npm audit --omit=dev --audit-level=high
       - name: Upload web SDK API docs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: farmerchat-web-api-docs
           path: versions/v2/web/packages/farmerchat-web/api-docs
           if-no-files-found: error
       - name: Upload API report diff on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: farmerchat-web-api-report-temp
           path: versions/v2/web/packages/farmerchat-web/temp
@@ -62,8 +62,8 @@ jobs:
       run:
         working-directory: versions/v2/react-native/packages/farmerchat-react-native
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: npm ci
@@ -73,14 +73,14 @@ jobs:
       - run: npm run docs
       - run: npm audit --omit=dev --audit-level=high
       - name: Upload RN SDK API docs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: farmerchat-react-native-api-docs
           path: versions/v2/react-native/packages/farmerchat-react-native/api-docs
           if-no-files-found: error
       - name: Upload API report diff on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: farmerchat-react-native-api-report-temp
           path: versions/v2/react-native/packages/farmerchat-react-native/temp
