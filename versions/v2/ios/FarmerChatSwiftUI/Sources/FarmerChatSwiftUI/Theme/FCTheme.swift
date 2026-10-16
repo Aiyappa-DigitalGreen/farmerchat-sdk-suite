@@ -69,11 +69,14 @@ public struct FCBrandColors {
     public var accentSweepBorder: AngularGradient {
         AngularGradient(
             gradient: Gradient(stops: [
-                .init(color: accentGradientGreen, location: 0.00),
-                .init(color: accentGradientCyan, location: 0.25),
-                .init(color: accentGradientGreen, location: 0.50),
-                .init(color: accentGradientYellow, location: 0.75),
-                .init(color: accentGradientGreen, location: 1.00),
+                // SwiftUI's angle 0 is 3 o'clock, turning clockwise on screen: cyan on the
+                // right, green at the bottom, yellow on the left, green at the top
+                // (ColorBrandSemantic.kt:38-45), matching the Compose Share ring.
+                .init(color: accentGradientCyan, location: 0.00),
+                .init(color: accentGradientGreen, location: 0.25),
+                .init(color: accentGradientYellow, location: 0.50),
+                .init(color: accentGradientGreen, location: 0.75),
+                .init(color: accentGradientCyan, location: 1.00),
             ]),
             center: .center
         )

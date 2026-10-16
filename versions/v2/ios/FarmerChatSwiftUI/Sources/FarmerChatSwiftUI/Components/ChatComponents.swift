@@ -609,21 +609,21 @@ public struct FCUserChatBubble: View {
             }
             if !message.text.isEmpty {
                 // Port of UserChatBubble.kt: light reading surface, dark text,
-                // asymmetric shape (3 corners XL=20, bottom-trailing sharp tail).
+                // asymmetric shape (3 corners XL=20, bottom-trailing square: bottomEnd = 0.dp).
                 Text(message.text)
                     .fcTextStyle(theme.typography.bodyMedium(atSize: FarmerChat.shared.config.messageFontSize ?? 17))
                     .foregroundColor(FarmerChat.shared.config.userBubbleTextColor ?? theme.content.foregroundPrimary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    // UserChatBubble.kt:92: padding(16) all round.
+                    .padding(16)
                     // UserChatBubble.kt: widthIn(max = 290.dp).
                     .frame(maxWidth: 290, alignment: .leading)
                     .background(FarmerChat.shared.config.userBubbleColor ?? theme.content.surfaceReadingSecondary)
                     .clipShape(UnevenRoundedRectangle(
                         topLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
                         bottomLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
-                        bottomTrailingRadius: 4,
+                        bottomTrailingRadius: 0,
                         topTrailingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
                         style: .continuous
                     ))
@@ -777,22 +777,22 @@ public struct FCAiResponseBubble: View {
     }
 
     public var body: some View {
+        // ChatThreadContent.kt:513-517: no card, no bubble, no leading mark — the answer is bare
+        // MarkdownText on the white page across the list width.
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
-                FCLogoMark(size: 26, tint: theme.brand.surfacePrimary)
-                FCAiAnswerText(
-                    text: message.text,
-                    // A streaming answer must never run the typewriter reveal — the text is
-                    // already arriving a token at a time, and animating it again double-types it.
-                    animate: animate && !message.isStreaming,
-                    color: FarmerChat.shared.config.aiBubbleTextColor,
-                    onRevealComplete: {
-                        withAnimation(.easeOut(duration: 0.35)) { revealFinished = true }
-                        onRevealComplete()
-                    }
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            FCAiAnswerText(
+                text: message.text,
+                // A streaming answer must never run the typewriter reveal — the text is
+                // already arriving a token at a time, and animating it again double-types it.
+                animate: animate && !message.isStreaming,
+                color: FarmerChat.shared.config.aiBubbleTextColor,
+                onRevealComplete: {
+                    withAnimation(.easeOut(duration: 0.35)) { revealFinished = true }
+                    onRevealComplete()
+                }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("fcAnswerText")
 
             // Tool progress, or the initial "getting your answer" state before any text arrived.
             if message.isStreaming,
@@ -843,9 +843,11 @@ public struct FCAiResponseBubble: View {
                         .modifier(FCAttentionWobble(delay: 1.8))
                     } else {
                         VStack(alignment: .leading, spacing: 12) {
+                            // ChatResponseActions.kt:101-117: icon_info 18 tinted #00C950, 6, labelSmall.
                             HStack(spacing: 6) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 15))
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 16))
+                                    .frame(width: 18, height: 18)
                                     .foregroundColor(theme.content.buttonPrimaryAccent)
                                 Text(fcLabel(
                                     FCLabels.aiMayBeWrongPleaseDoubleCheck,
@@ -873,7 +875,7 @@ public struct FCAiResponseBubble: View {
                                         playing: isAudioPlaying,
                                         hasAudio: hasAudio,
                                         onTap: onListen
-                                    ), fill: theme.content.surfaceSecondary)
+                                    ))
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -900,16 +902,12 @@ public struct FCAiResponseBubble: View {
                 .padding(.top, 2)
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.content.surfaceReadingSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: FarmerChat.shared.config.bubbleCornerRadius ?? min(theme.shapes.card, 22), style: .continuous))
     }
 
-    /// `sweepBorder` is the Share chip's accent ring — SwiftUI's equivalent of the Compose
-    /// `ActionButton(borderBrush = brand.accentSweepBorder)` (app @ bda80659). Since app dev/v2.5
-    /// every answer uses the agentic row, so Share always carries it; Listen keeps the plain 1pt
-    /// accent hairline.
+    /// ActionButton.kt:54-126 as ChatResponseActions.kt:120-130 uses it for Share: a 42pt pill on
+    /// surfaceReadingSecondary #ECECEE, a 23pt black icon, 10, a labelMedium black label, padding
+    /// 12 start / 16 end, and (Share) the 3pt cyan/green/yellow sweep ring drawn inside the bounds.
     private func actionChip(
         icon: String,
         title: String,
@@ -917,36 +915,38 @@ public struct FCAiResponseBubble: View {
         sweepBorder: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        let accent = theme.content.borderActive
+        let c = theme.content
         return Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: 10) {
                 if loading {
-                    ProgressView().scaleEffect(0.7).tint(accent)
+                    ProgressView().scaleEffect(0.8).tint(c.foregroundPrimary)
+                        .frame(width: 23, height: 23)
                 } else {
-                    Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundColor(accent)
+                    Image(systemName: icon)
+                        .font(.system(size: 19, weight: .medium))
+                        .frame(width: 23, height: 23)
+                        .foregroundColor(c.foregroundPrimary)
                 }
                 Text(title)
-                    .fcTextStyle(theme.typography.labelSmall)
-                    .foregroundColor(theme.content.foregroundSecondary)
+                    .fcTextStyle(theme.typography.labelMedium)
+                    .foregroundColor(c.foregroundPrimary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 40)
-            .background(theme.content.surfaceSecondary)
-            .overlay(
-                Group {
-                    if sweepBorder {
-                        // 3pt to match the Compose borderWidth; strokeBorder (not stroke) keeps
-                        // the ring INSIDE the bounds, as Modifier.border and Surface(border:) do.
-                        Capsule().strokeBorder(theme.brand.accentSweepBorder, lineWidth: 3)
-                    } else {
-                        Capsule().stroke(accent.opacity(0.28), lineWidth: 1)
-                    }
+            .padding(.leading, 12)
+            .padding(.trailing, 16)
+            .frame(height: 42)
+            .background(Capsule().fill(c.surfaceReadingSecondary))
+            .overlay {
+                if sweepBorder {
+                    // strokeBorder keeps the ring INSIDE the bounds, as Modifier.border does.
+                    Capsule().strokeBorder(theme.brand.accentSweepBorder, lineWidth: 3)
                 }
-            )
-            .clipShape(Capsule())
+            }
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(loading)
+        .accessibilityIdentifier(sweepBorder ? "fcShare" : "")
     }
 }
 
@@ -971,15 +971,12 @@ public struct FCListenConfig {
 }
 
 /// ListenButton.kt `light = true`: a 42pt capsule on surfaceReadingSecondary, 12pt side padding,
-/// foregroundPrimary icon (23) + 6 + labelMedium. Loading swaps in a 20pt ring + "Loading...".
-/// (The animated sound-wave of the Playing / Paused states is not ported; those states keep the
-/// Pause / Play glyph beside the label.)
+/// foregroundPrimary icon (23) + 6 + labelMedium. Loading swaps in a 20pt ring + "Loading...";
+/// Playing / Paused show Pause / Play + the 14-bar sound wave (``FCSoundWave``).
 struct FCListenButton: View {
     @Environment(\.fcTheme) private var theme
     let config: FCListenConfig
-    /// Pill fill. Nil = the app's surfaceReadingSecondary. Inside the iOS answer card (which is
-    /// itself surfaceReadingSecondary — the app's answer has no card) the caller passes the Share
-    /// pill's surfaceSecondary so the pill keeps a visible shape.
+    /// Pill fill. Nil = the app's surfaceReadingSecondary (#ECECEE).
     var fill: Color? = nil
 
     var body: some View {
@@ -995,9 +992,17 @@ struct FCListenButton: View {
                         .fcTextStyle(theme.typography.labelMedium)
                         .foregroundColor(c.foregroundPrimary)
                         .lineLimit(1)
+                } else if config.playing || config.hasAudio {
+                    // ListenButton.kt Playing / Paused: Pause (or PlayArrow) 23, 6, then the
+                    // 14-bar sound wave (54×26, 2pt bars) — animating only while playing.
+                    Image(systemName: config.playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 23, height: 23)
+                        .foregroundColor(c.foregroundPrimary)
+                    FCSoundWave(isAnimating: config.playing, color: theme.content.buttonPrimaryAccent)
+                        .frame(width: 54, height: 26)
                 } else {
-                    Image(systemName: config.playing ? "pause.fill"
-                          : (config.hasAudio ? "play.fill" : "speaker.wave.2.fill"))
+                    Image(systemName: "speaker.wave.2.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .frame(width: 23, height: 23)
                         .foregroundColor(c.foregroundPrimary)
@@ -1013,8 +1018,52 @@ struct FCListenButton: View {
             .animation(.easeInOut(duration: 0.5), value: config.loading)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("fcListen")
         .opacity(config.enabled ? 1 : 0.4)
         .allowsHitTesting(config.enabled && !config.loading)
+    }
+}
+
+/// ListenButton.kt `SoundWaveAnimation`: 14 rounded 2pt bars spread across the frame, at the
+/// Figma static heights while paused and jittering (80-150ms FastOutSlowIn steps every
+/// 100-150ms, clamped 0.15-0.85) while playing.
+struct FCSoundWave: View {
+    var isAnimating: Bool
+    var color: Color
+    private static let staticHeights: [CGFloat] = [
+        0.15, 0.23, 0.31, 0.50, 0.31, 0.54, 0.73, 0.50, 0.73, 0.38, 0.50, 0.50, 0.31, 0.15
+    ]
+    @State private var heights: [CGFloat] = FCSoundWave.staticHeights
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(alignment: .center, spacing: 0) {
+                ForEach(0..<heights.count, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(color)
+                        .frame(width: 2, height: geo.size.height * heights[i])
+                    if i < heights.count - 1 { Spacer(minLength: 0) }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .accessibilityHidden(true)
+        .task(id: isAnimating) {
+            guard isAnimating, !UIAccessibility.isReduceMotionEnabled else {
+                withAnimation(.easeInOut(duration: 0.2)) { heights = Self.staticHeights }
+                return
+            }
+            while !Task.isCancelled {
+                let next = heights.enumerated().map { i, current -> CGFloat in
+                    let bias = current * 0.5 + CGFloat.random(in: 0...0.5)
+                    return min(max(Self.staticHeights[i] * 0.5 + bias * 0.5, 0.15), 0.85)
+                }
+                withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: Double.random(in: 0.08...0.15))) {
+                    heights = next
+                }
+                try? await Task.sleep(nanoseconds: UInt64.random(in: 100_000_000...150_000_000))
+            }
+        }
     }
 }
 
@@ -1156,6 +1205,7 @@ public struct FCFollowUpChips: View {
                         onTap: { onTap(question) }
                     )
                     .accessibilityHint(fcLabel(FCLabels.ask, "Ask"))
+                    .accessibilityIdentifier("fcFollowUp_\(index)")
                 }
             }
         }

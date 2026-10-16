@@ -23,8 +23,13 @@ struct ChatView: View {
     @StateObject private var toast = FCToastState()
 
     @State private var didInitialize = false
-    @State private var showTextInput = false
     @State private var typedText = ""
+    /// The floating composer's focus (mirrored out of its FocusState) and a one-shot request to
+    /// focus it — the empty state's Type pill and an alignment surface's "Type or say it" use it.
+    @State private var composerFocused = false
+    @State private var composerFocusRequest = false
+    /// Measured height of the floating composer (sheet + bottom gap) — the thread's bottom reserve.
+    @State private var composerHeight: CGFloat = 0
     @State private var showVoiceInput = false
     @State private var showPhotoSheet = false
     @State private var showCamera = false
@@ -64,22 +69,19 @@ struct ChatView: View {
             VStack(spacing: 0) {
                 appBar
                 threadBody
-                // Hide the Photo/Speak/Type bar while the text composer is open
-                // (the composer overlays the bottom — avoids overlap).
-                if !showTextInput { inputBar }
-            }
-
-            if showTextInput {
-                FCTextInputOverlay(
-                    text: $typedText,
-                    placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
-                    onSend: { question in
-                        showTextInput = false
-                        typedText = ""
-                        viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil))
-                    },
-                    onDismiss: { showTextInput = false }
-                )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Tips.kt overlay: while an answer is pending and before streamed text shows.
+                    .overlay(alignment: .bottom) {
+                        if showTips {
+                            FCTipsCarousel(tips: fcAnswerGenerationTips())
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.3), value: showTips)
+                    // ChatInputOverlays.kt: the floating InputComposer over the thread, sliding
+                    // away while an answer is loading (ChatScreen.kt:1752).
+                    .overlay(alignment: .bottom) { composer }
+                    .onPreferenceChange(FCComposerHeightKey.self) { composerHeight = $0 }
             }
 
             if showVoiceInput {
@@ -159,86 +161,53 @@ struct ChatView: View {
 
     // MARK: - App bar (LogoAppBar: Close for Home entry / Menu for History)
 
+    /// LogoAppBar.kt + ChatScreen.kt:1454: the white mark shows only in the Thread state while
+    /// nothing is loading — hidden in the empty chat, the first-question loading state, the
+    /// full-screen error and while an answer is pending.
+    private var showHeaderLogo: Bool {
+        let state = viewModel.state
+        return !state.messages.isEmpty && !state.isLoading
+    }
+
     private var appBar: some View {
-        HStack(spacing: 8) {
+        FCChatAppBar(showLogo: showHeaderLogo) {
             if args.source == "history" && !FarmerChat.shared.config.showDrawer {
                 // Drawer off: the hamburger would be a dead button — pop back to the list.
-                Button { router.pop() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(theme.content.foregroundPrimary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("back")
+                FCAppBarTile(symbol: "chevron.left", label: "back") { router.pop() }
             } else if args.source == "history" {
-                Button(action: openDrawer) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundColor(theme.content.foregroundPrimary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
+                // LogoAppBar.kt:94-101: Material Menu in a 42 radius-12 ActionButton.
+                FCAppBarTile(symbol: "line.3.horizontal", label: "menu", action: openDrawer)
             } else if args.source == "chatOnly" {
-                // CHAT_ONLY has no SDK Home — close exits the SDK to the host.
-                Button(action: exitSdk) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(theme.content.foregroundPrimary)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
+                // SDK addition: CHAT_ONLY has no SDK Home — close exits the SDK to the host.
+                FCAppBarTile(symbol: "xmark", label: "Close", identifier: "fcChatClose", action: exitSdk)
             } else {
                 // Home entry: the app's R.drawable.leftbutton (stroked arrow on a #08361B disc);
                 // popUpTo(Home){!inclusive}.
                 Button { router.popToRoot() } label: {
-                    FCLeftButtonGlyph().frame(width: 44, height: 44)
+                    FCLeftButtonGlyph().frame(width: 42, height: 42)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("back")
             }
-
-            // LogoAppBar.kt: the logo fades in over 600ms (EaseOut) once the thread is idle and
-            // out over 300ms while loading.
-            let showLogo = !viewModel.state.isLoading
-            HStack(spacing: 8) {
-                FCLogoMark(size: 28, tint: theme.brand.surfacePrimary)
-                Text("FarmerChat")
-                    .fcTextStyle(theme.typography.titleMedium)
-                    .foregroundColor(theme.content.foregroundPrimary)
-            }
-            .opacity(showLogo ? 1 : 0)
-            .animation(.easeOut(duration: showLogo ? 0.6 : 0.3), value: showLogo)
-            Spacer()
-
-            // Drawer off (the CHAT_ONLY default): these icons are the only routes to Past Advice
-            // and Language. Gated as on Android: history on `!showDrawer && showHistory`,
-            // language on `!showDrawer`.
+        } trailing: {
+            // SDK addition. Drawer off (the CHAT_ONLY default): these tiles are the only routes to
+            // Past Advice and Language. Gated as on Android: history on `!showDrawer &&
+            // showHistory`, language on `!showDrawer`. Otherwise the app's empty 42pt spacer.
             if !FarmerChat.shared.config.showDrawer {
-                if FarmerChat.shared.config.showHistory {
-                    appBarAction(symbol: "clock.arrow.circlepath", label: "history") {
-                        router.push(.chatHistory)
+                HStack(spacing: 8) {
+                    if FarmerChat.shared.config.showHistory {
+                        FCAppBarTile(symbol: "clock.arrow.circlepath", label: "history", identifier: "fcChatHistory") {
+                            router.push(.chatHistory)
+                        }
+                    }
+                    FCAppBarTile(symbol: "globe", label: "language", identifier: "fcChatLanguage") {
+                        router.push(.settingsLanguage)
                     }
                 }
-                appBarAction(symbol: "globe", label: "language") {
-                    router.push(.settingsLanguage)
-                }
+            } else {
+                Color.clear.frame(width: 42, height: 42)
             }
         }
-        .padding(.horizontal, 8)
-        .frame(height: 56)
-    }
-
-    private func appBarAction(symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(theme.content.foregroundPrimary)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     /// CHAT_ONLY exit: tell the host (`config.onExit` — the only signal an inline-embedded SDK
@@ -288,7 +257,7 @@ struct ChatView: View {
                             onSpeak: FarmerChat.shared.config.enableVoice ? startVoice : nil,
                             // The non-composer UI: Type opens the text-input overlay, as the
                             // input bar's "Ask a follow-up question" field does.
-                            onType: { showTextInput = true }
+                            onType: { composerFocusRequest = true }
                         )
                     }
                 }
@@ -311,16 +280,16 @@ struct ChatView: View {
             && viewModel.state.messages.isEmpty
             && !viewModel.state.isLoading
             && !isHistoryEntry
-            && !showTextInput && !showVoiceInput && !showPhotoSheet && !showCamera && !showGallery
+            && !composerFocused && !showVoiceInput && !showPhotoSheet && !showCamera && !showGallery
     }
 
     private var thread: some View {
         ScrollViewReader { proxy in
             GeometryReader { viewport in
             ScrollView {
-                // ChatThreadContent.kt: padding(horizontal 20), contentPadding top 20, spacedBy 16.
-                // The bottom is 16: unlike the app's floating input, this input bar sits BELOW the
-                // thread, so no composer height needs reserving.
+                // ChatThreadContent.kt: padding(horizontal 20), contentPadding top 20, spacedBy 16,
+                // and a bottom reserve of the floating composer's height + 16 (ChatThreadContent.kt
+                // :213, :305-308) so the last line clears the sheet.
                 VStack(spacing: 16) {
                     // History pagination: load-more affordance at top.
                     if viewModel.state.historyNextPage != nil {
@@ -382,7 +351,7 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                .padding(.bottom, 16)
+                .padding(.bottom, composerHeight + 16)
                 .animation(.easeOut(duration: 0.35), value: lastAnswerRevealed)
             }
             .coordinateSpace(name: Self.threadSpace)
@@ -403,8 +372,8 @@ struct ChatView: View {
                         // To the end of the real content — never the bottom of the reserve.
                         withAnimation { proxy.scrollTo(Self.threadEndId, anchor: .bottom) }
                     }
-                    // ChatThreadContent.kt: 16 above the input area (here the thread's bottom edge).
-                    .padding(.bottom, 16)
+                    // ChatThreadContent.kt:669-672: composer reserve + 16 above the bottom.
+                    .padding(.bottom, composerHeight + 16)
                 }
             }
             .onAppear { schedulePin(proxy) }
@@ -685,7 +654,7 @@ struct ChatView: View {
                     onChipTap: { chip in
                         handleAlignmentChip(messageId: ai.id, kind: kind, chip: chip)
                     },
-                    onTypeInstead: { showTextInput = true },
+                    onTypeInstead: { composerFocusRequest = true },
                     listen: ai.messageId != nil ? listenConfig : nil
                 )
             } else {
@@ -879,58 +848,36 @@ struct ChatView: View {
         )
     }
 
-    // MARK: - Input bar (follow-up entry points)
+    // MARK: - Composer (follow-up entry points)
 
-    private var inputBar: some View {
-        HStack(spacing: 10) {
-            if FarmerChat.shared.config.enableImages {
-                inputIcon("camera.fill") { showPhotoSheet = true }
-            }
-            if FarmerChat.shared.config.enableVoice {
-                inputIcon("mic.fill", action: startVoice)
-            }
-            Button {
-                showTextInput = true
-            } label: {
-                HStack {
-                    Text(fcLabel(FCLabels.askAFollowupQuestions, "Ask a follow-up question 👇"))
-                        .fcTextStyle(theme.typography.bodyLarge)
-                        .foregroundColor(theme.content.formPlaceholder)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 46)
-                .background(theme.content.surfaceReadingSecondary)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(
-            theme.content.surfaceReadingPrimary
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(theme.content.borderDefault.opacity(0.4))
-                        .frame(height: 0.5)
-                }
-                .ignoresSafeArea(edges: .bottom)
+    /// ChatInputOverlays.kt:64-77 — the floating InputComposer. Hidden (slid 400 down) while an
+    /// answer is loading: the first-question loading state and `Thread && isLoading`.
+    private var composer: some View {
+        FCChatComposer(
+            text: $typedText,
+            placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
+            showCamera: FarmerChat.shared.config.enableImages,
+            showMic: FarmerChat.shared.config.enableVoice,
+            visible: !viewModel.state.isLoading,
+            focusRequest: $composerFocusRequest,
+            onFocusChange: { composerFocused = $0 },
+            onSend: { question in
+                viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil))
+            },
+            onCamera: { showPhotoSheet = true },
+            onMic: startVoice
         )
-        .disabled(viewModel.state.isLoading)
-        .opacity(viewModel.state.isLoading ? 0.5 : 1)
     }
 
-    private func inputIcon(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(theme.content.buttonPrimaryForeground)
-                .frame(width: 46, height: 46)
-                .background(theme.content.buttonPrimarySurface)
-                .clipShape(Circle())
+    /// Tips.kt (ChatThreadContent.kt:680-685): shown while an answer is pending and before any
+    /// streamed text has arrived; gone once text streams in.
+    private var showTips: Bool {
+        guard viewModel.state.isLoading else { return false }
+        switch viewModel.state.messages.last {
+        case .none, .loadingPlaceholder?, .user?: return true
+        case .aiResponse(let ai)?: return ai.isStreaming && ai.text.isEmpty
+        case .location?: return true
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Initialization (one path, matching the app's LaunchedEffect)

@@ -211,6 +211,11 @@ public struct FCShimmerText: View {
     var baseColor: Color?
     var highlightColor: Color?
     var duration: Double = 1.2
+    /// ShimmerText.kt `enabled`: false draws the plain base colour (the composer placeholder
+    /// stops shimmering while the field is focused).
+    var enabled: Bool = true
+    /// ShimmerText.kt `maxLines` (the composer placeholder is single-line). Nil = unlimited.
+    var lineLimit: Int? = nil
 
     @State private var progress: CGFloat = 0
 
@@ -218,12 +223,16 @@ public struct FCShimmerText: View {
                 style: FCTextStyle? = nil,
                 baseColor: Color? = nil,
                 highlightColor: Color? = nil,
-                duration: Double = 1.2) {
+                duration: Double = 1.2,
+                enabled: Bool = true,
+                lineLimit: Int? = nil) {
         self.text = text
         self.style = style
         self.baseColor = baseColor
         self.highlightColor = highlightColor
         self.duration = duration
+        self.enabled = enabled
+        self.lineLimit = lineLimit
     }
 
     public var body: some View {
@@ -234,10 +243,11 @@ public struct FCShimmerText: View {
         // Android disables the sweep on low-RAM devices. iOS has no `isLowRamDevice`; the
         // equivalent reason to drop a looping animation here is the accessibility setting
         // that asks for exactly that, so Reduce Motion takes its place.
-        let animate = !UIAccessibility.isReduceMotionEnabled
+        let animate = enabled && !UIAccessibility.isReduceMotionEnabled
 
         return Text(text)
             .fcTextStyle(resolvedStyle)
+            .lineLimit(lineLimit)
             .foregroundStyle(
                 animate
                     ? AnyShapeStyle(LinearGradient(

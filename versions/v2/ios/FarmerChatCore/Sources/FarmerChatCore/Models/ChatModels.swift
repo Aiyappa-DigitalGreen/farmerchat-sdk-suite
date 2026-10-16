@@ -207,6 +207,19 @@ public struct ClarificationNeeded: Codable, Sendable {
     }
 }
 
+/// One follow-up as the API sends it (`follow_up_question_id`, `sequence`, `question`); Android
+/// `FollowUpQuestionOption` (core/model/ChatModels.kt:121).
+public struct FollowUpQuestionOption: Codable, Sendable {
+    @LossyOptional public var followUpQuestionId: FlexibleID?
+    @LossyOptional public var sequence: Int?
+    public var question: String?
+
+    enum CodingKeys: String, CodingKey {
+        case followUpQuestionId = "follow_up_question_id"
+        case sequence, question
+    }
+}
+
 public struct TextPromptResponse: Codable, Sendable {
     public var error: Bool?
     public var message: String?
@@ -215,8 +228,11 @@ public struct TextPromptResponse: Codable, Sendable {
     public var response: String?
     public var resourceUrl: String?
     public var translatedResponse: String?
-    /// Always null in practice — real follow-ups come from endpoint #29.
-    public var followUpQuestions: [String]?
+    /// Not used for display: real follow-ups come from endpoint #29 (CLAUDE.md §3). The agentic
+    /// `metadata` event DOES send it, as objects (Android `List<FollowUpQuestionOption>`). Typed as
+    /// `[String]`, the decode threw and the whole metadata event (with its `message_id`) was dropped,
+    /// so answers had no Listen and follow-up clicks failed. Lossy, so a shape change can't drop it again.
+    @LossyOptional public var followUpQuestions: [FollowUpQuestionOption]?
     @LossyOptional public var sectionMessageId: FlexibleID?
     public var actualContentProvider: String?
     public var contentProviderLogo: String?
