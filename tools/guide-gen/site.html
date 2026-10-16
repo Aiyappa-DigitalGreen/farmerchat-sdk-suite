@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="How to add FarmerChat to an Android, iOS, React Native or web app."><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,-apple-system,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>FarmerChat SDK Integration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>{{CSS}}</style>
+
+<header class="top">
+  <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c3.2-3.5 6.8-3.5 10 0-3.2 3.5-6.8 3.5-10 0zM12 12c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c-3.2 3.5-6.8 3.5-10 0 3.2-3.5 6.8-3.5 10 0z"/></svg>FarmerChat<span>SDK</span></a>
+  <span class="ver">v{{VERSION}}</span>
+  <nav class="top-links" aria-label="Page"><a href="#what">What it is</a><a href="#how">How it works</a><a href="#platforms">Add to your app</a><a href="#requirements">Requirements</a><a href="#website">Website</a><a href="#guide">Developer guide</a><a href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Live demo</a></nav>
+  <button class="cmt" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Comment</button>
+</header>
+
+<section class="hero" id="top">
+  <canvas class="field" aria-hidden="true"></canvas>
+  <div class="hero-in">
+    <div class="hero-copy">
+      <p class="eyebrow">Digital Green &middot; FarmerChat SDK</p>
+      <h1>FarmerChat SDK Integration</h1>
+      <p class="lede">FarmerChat is an AI advisory assistant for farmers &mdash; onboarding, a daily
+      advice feed, and a chat that answers questions by voice, photo or text in the farmer's own
+      language. This SDK embeds that whole journey inside a partner application.</p>
+      <p class="lede">The same public surface ships on <strong>seven flavours across four
+      platforms</strong>. Every one is documented in full on this page, with the identical section
+      list, so an integration written against one translates directly to the others.</p>
+      <div class="cta"><a class="btn btn-sun" href="#platforms">Start integrating</a><a class="btn btn-line" href="#guide">Read the guide</a><a class="btn btn-line" href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Try the live demo</a></div>
+    </div>
+    <div class="phones">
+  <figure class="phone"><span class="phone-btns" aria-hidden="true"></span><span class="phone-cam" aria-hidden="true"></span>
+    <div class="screen">
+      <img src="{{HERO_IMG}}" alt="FarmerChat chat: an answer with Share and Listen buttons, follow-up questions, and the composer with camera, text field and microphone" width="540" height="1200">
+      <span class="hot hot--photo" aria-hidden="true"></span>
+      <span class="hot hot--type" aria-hidden="true"></span>
+      <span class="hot hot--voice" aria-hidden="true"></span>
+    </div>
+  </figure>
+  <ul class="inputs" aria-label="Three ways to ask">
+    <li class="inp inp--photo"><i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></i><span class="inp-t"><b>Photo</b><span>Snap the sick plant</span></span></li>
+    <li class="inp inp--type"><i aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/></svg></i><span class="inp-t"><b>Type</b><span>Write a question</span></span></li>
+    <li class="inp inp--voice"><i aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></i><span class="inp-t"><b>Voice</b><span>Just speak</span></span></li>
+  </ul>
+</div>
+  </div>
+</section>
+
+<section class="what" id="what">
+  <div class="wrap">
+    <p class="st-eyebrow">For everyone</p>
+    <h2 class="sec-title">What farmers get</h2>
+    <p class="sec-sub">FarmerChat is Digital Green&#x27;s AI farming advisor. The SDK puts its chat inside your app or website, so your farmers can ask a question and get practical advice without leaving your product.</p>
+    <div class="feat-grid">
+      <div class="feat"><span class="feat-ico"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><h3>Ask by voice, photo or text</h3><p>Farmers speak a question, snap a photo of a sick plant, or type. No forms, no menus.</p></div>
+      <div class="feat"><span class="feat-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c3 3 3 16 0 19M12 2.5c-3 3-3 16 0 19"/></svg></span><h3>Answers in their own language</h3><p>Every word on screen comes from FarmerChat in the language the farmer picks.</p></div>
+      <div class="feat"><span class="feat-ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg></span><h3>Follow-up questions</h3><p>Each answer suggests the next useful question, so farmers keep learning with one tap.</p></div>
+      <div class="feat"><span class="feat-ico"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><h3>Listen and share</h3><p>Answers can be read aloud for farmers who prefer listening, and shared with others.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap">
+    <p class="st-eyebrow">For everyone</p>
+    <h2 class="sec-title">How it works</h2>
+    <ol class="flow" aria-label="How a question travels">
+      <li class="flow-node"><span class="flow-k">Your app or website</span><span class="flow-d">Add one SDK package, or two lines of HTML. Show a button, or open chat from anywhere.</span></li>
+      <li class="flow-arrow" aria-hidden="true"><span>farmer asks</span></li>
+      <li class="flow-node flow-node--sdk"><span class="flow-k">FarmerChat chat screen</span><span class="flow-d">The SDK opens the same chat farmers know from the FarmerChat app, in your brand colours if you like.</span></li>
+      <li class="flow-arrow" aria-hidden="true"><span>answer comes back</span></li>
+      <li class="flow-node"><span class="flow-k">FarmerChat AI</span><span class="flow-d">Digital Green&#x27;s service finds the advice and sends it back &mdash; word by word with <code>enableAgenticChat</code> on.</span></li>
+    </ol>
+    <div class="facts">
+      <div class="fact"><b>Opens straight into chat</b><span>No sign-up or onboarding screens unless you switch them on.</span></div>
+      <div class="fact"><b>Language picked once</b><span>A first-time user chooses their language once; after that FarmerChat opens straight into chat.</span></div>
+      <div class="fact"><b>One SDK, four platforms</b><span>Android, iOS, React Native and the web all share the same features and settings.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="steps" id="platforms">
+  <div class="wrap">
+    <div class="st-head"><p class="st-eyebrow">Integration</p><h2 class="sec-title">Add FarmerChat in three steps</h2></div>
+    {{STEP_CHIPS}}
+    {{STEP_LISTS}}
+  </div>
+</section>
+
+
+<section class="web" id="website">
+  <div class="wrap web-grid">
+    <div class="web-text">
+      <p class="st-eyebrow">Any website, no build tools</p>
+      <h2 class="sec-title">On a plain HTML page</h2>
+      <p>The FarmerChat widget is one script. Paste these two tags before <code>&lt;/body&gt;</code> and a chat button appears in the corner of the page; tapping it opens FarmerChat in a panel (full screen on phones).</p>
+      <p>To open chat from your own button, call <code>FarmerChatWidget.open()</code>, or <code>FarmerChatWidget.open(&#x27;When should I harvest paddy?&#x27;)</code> to ask straight away.</p>
+      <div class="note warn"><span class="tag">Before you go live</span><p>FarmerChat&#x27;s servers do not yet accept the SDK&#x27;s requests from other websites: their browser rules (CORS) block the headers the SDK sends. Until the FarmerChat team allows them, point the widget at a small proxy, as the <a href="https://farmerchat-sdk-suite-production.up.railway.app">live demo</a> does with <code>customBaseUrl</code>.</p><p>The script URL below is the demo&#x27;s copy. For production, host <code>farmerchat-widget.iife.js</code> and its <code>illustrations/</code> folder on your own site or CDN.</p></div>
+    </div>
+    <div class="cb web-code"><div class="cb-bar"><div class="cb-tabs single">index.html</div><button class="cb-copy" type="button">Copy</button></div><div class="cb-pane" data-cb="cbweb" data-i="0"><pre><code><span class="t-c">&lt;!-- 1. Settings (all optional) --&gt;</span>
+&lt;script&gt;
+  window.farmerChatWidgetSettings = {
+    config: {
+      environment: <span class="t-s">&#x27;demo&#x27;</span>,
+      enableAgenticChat: <span class="t-k">true</span>,   <span class="t-c">// streaming answers</span>
+      <span class="t-c">// customBaseUrl: &#x27;https://your-proxy.example/&#x27;,</span>
+    },
+    launcherLabel: <span class="t-s">&#x27;Ask FarmerChat&#x27;</span>,
+  };
+&lt;/script&gt;
+
+<span class="t-c">&lt;!-- 2. The widget --&gt;</span>
+&lt;script src=<span class="t-s">&quot;https://farmerchat-sdk-suite-production.up.railway.app/dist/farmerchat-widget.iife.js&quot;</span>&gt;&lt;/script&gt;</code></pre></div></div>
+  </div>
+</section>
+
+<section class="reqs" id="requirements">
+  <div class="wrap">
+    <p class="st-eyebrow">Before you start</p>
+    <h2 class="sec-title">What your app needs</h2>
+    <div class="tw"><table><thead><tr><th>Platform</th><th>Minimum</th><th>Also needed</th></tr></thead><tbody>
+      <tr><td>Android</td><td>Android 8.0 (API 26)</td><td>Compose flavour: Android Gradle Plugin <strong>8.13+</strong> (older versions crash when the chat opens). <code>compileSdk 36</code>. Adds about 3.4 MB to a release app's download (R8 on).</td></tr>
+      <tr><td>iOS</td><td>iOS 15 (Core, UIKit) &middot; iOS 16 (SwiftUI)</td><td>Swift 5.9 / Xcode 15+. Your Info.plist declares the microphone, camera, photo library and location texts.</td></tr>
+      <tr><td>React Native</td><td>React Native 0.76 &middot; Expo SDK 52</td><td>The Expo modules listed in the package's peer dependencies. Optional: <code>react-native-webview</code> (in-app legal pages), <code>react-native-view-shot</code> + <code>expo-sharing</code> (share the answer as the app&#39;s image card; else text), and <code>expo-image-manipulator</code> (shrink photos to 1000&times;1000 before upload, as the app does).</td></tr>
+      <tr><td>Web</td><td>Chrome / Edge 87+ &middot; Firefox 78+ &middot; Safari 14+ (iOS 14+)</td><td>HTTPS for voice, camera and location. npm package: React 18. The script-tag widget brings its own React.</td></tr>
+    </tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Web detail</th><th>What to know</th></tr></thead><tbody>
+      <tr><td>Best appearance</td><td>Chrome / Edge 111+, Firefox 113+, Safari 16.2+. Older browsers show a few decorative tints as plain colours.</td></tr>
+      <tr><td>Voice input</td><td>Safari 14.1+ (iOS 14.5+); all current Chrome, Edge and Firefox. Where recording is unsupported, the microphone button is hidden.</td></tr>
+      <tr><td>Content-Security-Policy</td><td>If your site sets one, allow requests to the FarmerChat API domain and to <code>www.googleapis.com</code> (location lookup).</td></tr>
+      <tr><td>Storage</td><td>Uses localStorage. In private browsing it falls back to memory, so the farmer signs in again on the next visit.</td></tr>
+      <tr><td>Download size</td><td>About 208 KB for the npm package and 238 KB for the widget, gzipped. Later visits load from the browser cache.</td></tr>
+    </tbody></table></div>
+    <p class="st-d">There is no minimum RAM or processor: if the device runs the OS or browser version above, the SDK runs. Browser versions follow the SDK's build target and are being confirmed on real devices.</p>
+  </div>
+</section>
+<section class="faq" id="faq">
+  <div class="wrap">
+    <p class="st-eyebrow">Questions</p>
+    <h2 class="sec-title">Good to know</h2>
+    <div class="faq-list">
+      <details><summary>What will farmers see?</summary><p>By default, only the chat: they open it and ask. Language is a button in the chat bar; turn on <code>showHistory</code> to add past chats there too. If you want the full FarmerChat journey &mdash; language and name onboarding, a Home feed of daily advice, a menu &mdash; set <code>mode</code> to <code>FULL_JOURNEY</code>.</p></details>
+      <details><summary>Do answers type out as they arrive?</summary><p>Yes, with <code>enableAgenticChat</code> on: progress steps show first, then the answer streams in word by word.</p></details>
+      <details><summary>Which platforms and versions?</summary><p>Android (Jetpack Compose and XML Views), iOS (SwiftUI, UIKit and Objective-C), React Native, and the web (React or a plain HTML page). Every platform is version {{VERSION}}.</p></details>
+      <details><summary>Can we install it from Maven, CocoaPods or npm today?</summary><p>Not yet. The packages are not published to public repositories, so for now you build from source and use them locally. Each platform&#x27;s install section below shows how.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="guide" id="guide">
+  <div class="wrap layout">
+    {{RAIL}}
+    <main class="content">
+    {{BODY}}
+    <footer class="foot"><p>FarmerChat SDK &middot; Digital Green. Every platform ships <b>{{VERSION}}</b>. Every code sample on this page is taken
+      from the shipping SDK source. Where a step does not yet work end to end &mdash; chiefly
+      distribution &mdash; the page says so rather than describing an install that would fail.</p></footer>
+    </main>
+  </div>
+</section>
+
+<script>{{JS}}</script>
+</body></html>

@@ -2212,7 +2212,7 @@ private fun chatAppBarActions(
         if (showHistory) {
             ActionButton(
                 onClick = onHistory,
-                icon = ImageVector.vectorResource(R.drawable.fc_icon_timer),
+                icon = ImageVector.vectorResource(R.drawable.fc_icon_history),
                 background = brand.surfaceSecondary,
                 iconColor = brand.foregroundPrimary,
                 radius = Radius.MD

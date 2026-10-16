@@ -11,14 +11,16 @@
 import { SDK_META } from "@/lib/sdk"
 import { IntegrationGuide } from "@/components/IntegrationGuide"
 
-/** "Android publishes 2.0.0; Web, React Native and iOS publish 1.0.0" — derived
- *  from SDK_META, never hardcoded, so bumping a podspec cannot make this lie. */
+/** "Every platform ships 2.2.0", or "Android publishes X; Web … publish Y" if the
+ *  platforms ever split — derived from SDK_META, never hardcoded, so bumping a
+ *  podspec cannot make this lie. */
 function versionSummary() {
   const byVersion = new Map<string, string[]>()
   for (const m of SDK_META) {
     const v = m.versions[0]
     byVersion.set(v, [...(byVersion.get(v) ?? []), m.name])
   }
+  if (byVersion.size === 1) return `every platform ships ${[...byVersion.keys()][0]}`
   return [...byVersion.entries()]
     .sort((a, b) => b[0].localeCompare(a[0], undefined, { numeric: true }))
     .map(([v, names]) => {
@@ -37,7 +39,7 @@ export function SdkDownloads() {
         <p className="mt-1 max-w-[74ch] text-sm text-muted-foreground">
           End-to-end setup for every flavour the SDK ships — Android (Compose and XML Views),
           iOS (SwiftUI, UIKit and Objective-C), React Native and Web. Each one follows the same
-          section order, so you can compare platforms line for line. Versions differ per platform:{" "}
+          section order, so you can compare platforms line for line. Versions:{" "}
           {versionSummary()}.
         </p>
       </div>

@@ -143,7 +143,7 @@ function palette(o: string[]): Colors {
  */
 export interface Config {
   environment: "DEV" | "STAGE" | "DEMO" | "PROD" | "EKS"
-  guestApiKey: string
+  farmerChatApiKey: string
   geoApiKey: string
   languageCode: string
   defaultCountryCode: string
@@ -162,18 +162,24 @@ export interface Config {
   enableAnalytics: boolean
 }
 
-/** The SDK's own defaults, verbatim from `FarmerChatConfig.kt`. */
+/**
+ * The SDK's own defaults, verbatim from `FarmerChatConfig.kt` (2.2.0): CHAT_ONLY is the
+ * default mode, and an unset `showDrawer` / `showHistory` resolves to
+ * `mode == FULL_JOURNEY` — so under the default mode both are off. Use `configDefault`
+ * for those two, never this table, once the mode may have changed.
+ * `farmerChatApiKey` / `geoApiKey` are optional overrides of keys the SDK bundles.
+ */
 export const CONFIG_DEFAULTS: Config = {
   environment: "DEMO",
-  guestApiKey: "",
+  farmerChatApiKey: "",
   geoApiKey: "",
   languageCode: "",
   defaultCountryCode: "",
   defaultStateCode: "",
   appearance: "AUTO",
-  mode: "FULL_JOURNEY",
-  showDrawer: true,
-  showHistory: true,
+  mode: "CHAT_ONLY",
+  showDrawer: false,
+  showHistory: false,
   showSettings: true,
   showNameScreen: true,
   enableVoice: true,
@@ -182,6 +188,13 @@ export const CONFIG_DEFAULTS: Config = {
   enableSsfr: true,
   enableAgenticChat: false,
   enableAnalytics: false,
+}
+
+/** The SDK's default for one config key, given the rest of the config. `showDrawer` and
+ *  `showHistory` follow the mode when unset (FarmerChatConfig.kt `showDrawer`/`showHistory`). */
+export function configDefault(cfg: Config, key: keyof Config): Config[keyof Config] {
+  if (key === "showDrawer" || key === "showHistory") return cfg.mode === "FULL_JOURNEY"
+  return CONFIG_DEFAULTS[key]
 }
 
 export interface Preset {

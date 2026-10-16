@@ -6,6 +6,7 @@ def P(t): return ("p",t)
 def SUB(t): return ("sub",t)
 def CB(tabs): return ("code",tabs)
 def TBL(head,rows): return ("table",head,rows)
+def coord(artifact): return "%s:%s:%s" % (MAVEN_GROUP, artifact, VERSION)
 def NOTE(*a): return a if len(a)==3 else ("note",a[0],list(a[1:]))
 
 GRADLE_REPO = CB([
@@ -14,7 +15,6 @@ GRADLE_REPO = CB([
     repositories {
         google()
         mavenCentral()
-        mavenLocal() // FarmerChat, until a hosted repository is published
     }
 }"""),
  ("settings.gradle","groovy","settings.gradle","""dependencyResolutionManagement {
@@ -22,7 +22,6 @@ GRADLE_REPO = CB([
     repositories {
         google()
         mavenCentral()
-        mavenLocal() // FarmerChat, until a hosted repository is published
     }
 }""")])
 
@@ -108,18 +107,19 @@ COMPOSE = {
   S("install","Install the FarmerChat SDK",
     DISTRIBUTION,
     SUB("Add the repository to your Gradle project"),
-    P("The SDK resolves from your declared repositories. Today that means your local Maven cache; "
-      "a hosted repository slots into the same block when one exists."),
+    P("FarmerChat is published to Maven Central, which Android projects already declare, so no "
+      "extra repository is needed."),
     GRADLE_REPO,
-    P("To populate <code>mavenLocal()</code>, publish once from the SDK checkout:"),
+    P("<strong>Before the first release</strong>, or to try unreleased changes: add "
+      "<code>mavenLocal()</code> to the repositories above and publish once from the SDK checkout:"),
     CB([("shell","shell",None,"cd versions/v2/android\n./gradlew publishToMavenLocal")]),
     SUB("Add the dependency to your app"),
     CB([("Kotlin DSL","kotlin","app/build.gradle.kts","""dependencies {
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0")
-}"""),
+    implementation("%s")
+}""" % coord("farmerchat-android-compose")),
         ("Groovy","groovy","app/build.gradle","""dependencies {
-    implementation 'org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0'
-}""")]),
+    implementation '%s'
+}""" % coord("farmerchat-android-compose"))]),
     ("warn","Toolchain floor",[
      "The Compose flavour needs <strong>AGP 8.13+</strong> and <code>minSdk 26</code>. Older "
      "toolchains fail at runtime with a <code>VerifyError</code> rather than at build time, so "
@@ -136,8 +136,6 @@ COMPOSE = {
         FarmerChat.initialize(
             this, // the Application IS the Context
             FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-                .guestApiKey("<your guest API key>")
-                .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
                 .defaultCountryCode("IN")
                 .build()
@@ -151,8 +149,6 @@ COMPOSE = {
         FarmerChat.INSTANCE.initialize(
             this,
             new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-                .guestApiKey("<your guest API key>")
-                .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
                 .defaultCountryCode("IN")
                 .build()
@@ -178,14 +174,12 @@ Button(onClick = { FarmerChat.launch(context) }) {
 }""")])),
 
   S("scope","Scope the experience",
-    P("Every surface of the journey can be switched off. The defaults give the full farmer "
-      "experience; trim it to fit your app."),
+    P("The SDK opens straight into chat by default. Switch on the full journey, or trim individual "
+      "surfaces, to fit your app."),
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
-    P("The most common trim: skip onboarding and the advice feed, and land the farmer directly in "
-      "chat with history and language still reachable."),
+    SUB("Chat only (the default)"),
+    P(CHAT_ONLY_P),
     CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-    .guestApiKey("<your guest API key>")
     .mode(FarmerChatMode.CHAT_ONLY)
     .showDrawer(false)    // moves history + language into the chat app bar
     .showHistory(true)    // past-advice icon
@@ -245,11 +239,11 @@ VIEWS = {
     GRADLE_REPO,
     SUB("Add the dependency to your app"),
     CB([("Kotlin DSL","kotlin","app/build.gradle.kts","""dependencies {
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0")
-}"""),
+    implementation("%s")
+}""" % coord("farmerchat-android-views")),
         ("Groovy","groovy","app/build.gradle","""dependencies {
-    implementation 'org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0'
-}""")]),
+    implementation '%s'
+}""" % coord("farmerchat-android-views"))]),
     ("warn","Do not add both flavours",[
      "If a module ends up with <code>farmerchat-android-compose</code> on the classpath as well, "
      "the Compose implementation wins and you silently get that UI instead."])),
@@ -265,8 +259,6 @@ VIEWS = {
         FarmerChat.initialize(
             this,
             FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-                .guestApiKey("<your guest API key>")
-                .geoApiKey("<your Google Geolocation key>")
                 .languageCode("en")
                 .defaultCountryCode("IN")
                 .build()
@@ -280,8 +272,6 @@ VIEWS = {
         FarmerChat.INSTANCE.initialize(
             this,
             new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-                .guestApiKey("<your guest API key>")
-                .geoApiKey("<your Google Geolocation key>")
                 .build()
         );
     }
@@ -301,9 +291,8 @@ VIEWS = {
     P("The configuration surface is shared with the Compose flavour &mdash; same builder, same "
       "semantics."),
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
-    .guestApiKey("<your guest API key>")
     .mode(FarmerChatMode.CHAT_ONLY)
     .showDrawer(false)
     .showHistory(true)

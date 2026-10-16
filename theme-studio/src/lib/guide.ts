@@ -6,10 +6,9 @@
  * format parity across the seven flavours is structural, not hand-maintained.
  *
  * NO-HALLUCINATION: the JSON is generated from the guide source, which is itself
- * derived from the SDK trees. Versions differ PER PLATFORM and are never stated
- * globally here — android publishes 2.0.0 (root `build.gradle.kts` farmerChatVersion,
- * confirmed against the published POM); the iOS podspec, web `core/version.ts` and
- * the RN package.json still declare 1.0.0. See `sdk.ts` for the same rule.
+ * derived from the SDK trees. The version lives in tools/guide-gen/content.py
+ * (`VERSION`, 2.2.0 on every v2 platform); see `sdk.ts` for where each platform
+ * declares it.
  */
 import raw from "./guide.data.json"
 
@@ -48,7 +47,7 @@ const KW: Record<string, string> = {
   ts: "import|export|from|const|let|var|function|return|if|else|true|false|null|undefined|async|await|class|interface|type|new|default",
   groovy: "dependencies|implementation|repositories|maven|url|plugins|id|def",
   ruby: "pod",
-  shell: "npm|yarn|pnpm|cd|install|add",
+  shell: "npm|npx|yarn|pnpm|cd|install|add",
   xml: "",
 }
 
@@ -71,8 +70,9 @@ export function highlight(code: string, lang: string): string {
     store.push(`<span class="${cls}">${txt}</span>`)
     return `\0${store.length - 1}\0`
   }
-  // comments, then strings — order matters
-  s = s.replace(/(\/\/[^\n]*|#[^\n]*|&lt;!--[\s\S]*?--&gt;)/g, (m) => stash("t-c", m))
+  // comments, then strings — order matters. `(?<!&)#` keeps the escaped quote `&#x27;`
+  // from being read as a shell/Ruby comment. Keep in step with tools/guide-gen/build.py.
+  s = s.replace(/(\/\/[^\n]*|(?<!&)#[^\n]*|&lt;!--[\s\S]*?--&gt;)/g, (m) => stash("t-c", m))
   s = s.replace(
     /(&quot;(?:[^&\\\n]|\\.|&(?!quot;))*&quot;|&#x27;(?:[^&\\\n]|\\.|&(?!#x27;))*&#x27;)/g,
     (m) => stash("t-s", m),

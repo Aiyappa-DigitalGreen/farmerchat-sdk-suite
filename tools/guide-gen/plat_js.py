@@ -26,7 +26,12 @@ RN = {
   @react-navigation/native-stack \\
   @react-navigation/drawer \\
   @react-native-async-storage/async-storage \\
-  expo-av""")])),
+  expo-av""")]),
+    SUB("Optional add-ons"),
+    P("Each one turns on an app behaviour; without it the SDK falls back quietly and never crashes."),
+    CB([("Expo","shell",None,"""npx expo install react-native-view-shot expo-sharing   # share answers as the app's image card
+npx expo install expo-image-manipulator              # shrink photos before upload
+npx expo install react-native-webview                 # legal pages in-app""")])),
 
   S("launch","Launch the journey",
     SUB("Initialize the SDK"),
@@ -36,8 +41,6 @@ RN = {
 
 FarmerChat.initialize({
   environment: 'demo',
-  guestApiKey: '<your guest API key>',
-  geoApiKey: '<your Google Geolocation key>',
   languageCode: 'en',
   defaultCountryCode: 'IN',
 });""")]),
@@ -67,10 +70,9 @@ function FarmerChatScreen() {
 
   S("scope","Scope the experience",
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
   environment: 'demo',
-  guestApiKey: '<your guest API key>',
   mode: 'CHAT_ONLY',
   showDrawer: false,     // moves history + language into the chat app bar
   showHistory: true,
@@ -192,8 +194,6 @@ WEB = {
 
 FarmerChat.initialize({
   environment: 'demo',
-  guestApiKey: '<your guest API key>',
-  geoApiKey: '<your Google Geolocation key>',
   languageCode: 'en',
   defaultCountryCode: 'IN',
 });""")]),
@@ -214,7 +214,7 @@ export default function FarmerChatPage() {
 
 const handle = FarmerChat.mount(
   document.getElementById('farmerchat'),
-  { environment: 'demo', guestApiKey: '<your guest API key>' }
+  { environment: 'demo' }
 );
 
 // later
@@ -226,10 +226,9 @@ handle.unmount();""")]),
 
   S("scope","Scope the experience",
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({
   environment: 'demo',
-  guestApiKey: '<your guest API key>',
   mode: 'CHAT_ONLY',
   showDrawer: false,     // moves history + language into the chat app bar
   showHistory: true,

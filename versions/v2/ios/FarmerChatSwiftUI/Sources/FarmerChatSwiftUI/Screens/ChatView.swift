@@ -199,7 +199,7 @@ struct ChatView: View {
             if !FarmerChat.shared.config.showDrawer {
                 HStack(spacing: 8) {
                     if FarmerChat.shared.config.showHistory {
-                        FCAppBarTile(symbol: "clock.arrow.circlepath", label: "history", identifier: "fcChatHistory") {
+                        FCAppBarTile(symbol: "clock.arrow.circlepath", label: "history", identifier: "fcChatHistory", historyGlyph: true) {
                             router.push(.chatHistory)
                         }
                     }

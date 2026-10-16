@@ -20,7 +20,9 @@ import iconLanguage from '../assets/fc_icon_language.png';
 import iconHelp from '../assets/fc_icon_help.png';
 import iconCard from '../assets/fc_icon_card.png';
 import iconInfo from '../assets/fc_icon_info.png';
-import iconTimer from '../assets/fc_icon_timer.png';
+// Material "history" (24dp, Icons.Filled.History path), replacing the lightbulb that the app's
+// fc_icon_timer drawable actually draws; same pathData as the Android SDKs.
+import iconHistory from '../assets/fc_icon_history.png';
 import iconSms from '../assets/fc_icon_sms.png';
 import iconWhatsapp from '../assets/fc_icon_whatsapp.png';
 import iconModeDay from '../assets/fc_icon_mode_day.png';
@@ -69,7 +71,7 @@ export const Icons = {
   help: iconHelp,
   card: iconCard,
   info: iconInfo,
-  timer: iconTimer,
+  history: iconHistory,
   sms: iconSms,
   whatsapp: iconWhatsapp,
   modeDay: iconModeDay,

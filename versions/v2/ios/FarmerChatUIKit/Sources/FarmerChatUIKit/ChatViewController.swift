@@ -221,7 +221,7 @@ final class FCUIChatViewController: UIViewController {
         var right: [UIView] = []
         if !config.showDrawer {
             if config.showHistory {
-                let history = FCUIHeaderTile(systemImage: "clock.arrow.circlepath", accessibilityLabel: "history", identifier: "fcChatHistory")
+                let history = FCUIHeaderTile(image: fcHistoryGlyphImage(size: 23), accessibilityLabel: "history", identifier: "fcChatHistory")
                 history.addAction(UIAction { [weak self] _ in
                     self?.navigationController?.pushViewController(FCUIChatHistoryViewController(), animated: true)
                 }, for: .touchUpInside)

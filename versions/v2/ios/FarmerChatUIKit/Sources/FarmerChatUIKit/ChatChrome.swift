@@ -11,15 +11,21 @@ import FarmerChatCore
 /// A 42×42 smooth square, radius 12, `#08361B`, white 23pt icon (ActionButton.kt:60-63). The SDK's
 /// CHAT_ONLY ✕ and globe use it; the app's History-entry menu button is the same component.
 final class FCUIHeaderTile: UIControl {
-    init(systemImage: String, accessibilityLabel label: String, identifier: String) {
+    convenience init(systemImage: String, accessibilityLabel label: String, identifier: String) {
+        self.init(image: UIImage(
+            systemName: systemImage,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+        ), accessibilityLabel: label, identifier: identifier)
+    }
+
+    /// A tile with a given template image (e.g. [fcHistoryGlyphImage]), tinted white like the
+    /// SF Symbol tiles.
+    init(image: UIImage?, accessibilityLabel label: String, identifier: String) {
         super.init(frame: CGRect(x: 0, y: 0, width: 42, height: 42))
         backgroundColor = FCUITheme.green800
         layer.cornerRadius = 12
         layer.cornerCurve = .continuous
-        let icon = UIImageView(image: UIImage(
-            systemName: systemImage,
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
-        ))
+        let icon = UIImageView(image: image)
         icon.tintColor = .white
         icon.contentMode = .center
         icon.isUserInteractionEnabled = false

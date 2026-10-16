@@ -3,7 +3,7 @@
  * SDK's shipped, overridable surface (see src/lib/theme.ts). */
 import { Ban } from "lucide-react"
 import {
-  CHAT_COLORS, COLORS, CONFIG_DEFAULTS, FAB_COLORS, NIGHT_COLORS, PRESETS, SHAPE,
+  CHAT_COLORS, COLORS, CONFIG_DEFAULTS, configDefault, FAB_COLORS, NIGHT_COLORS, PRESETS, SHAPE,
   type Chat, type Colors, type Config, type Fab, type NightColors, type NumOrEmpty, type Shape, type ThemeState, type Typography,
 } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
@@ -33,8 +33,17 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
   /* --- runtime config rows. `cfg` falls back to the SDK defaults so a theme
         saved before this section existed still renders. ------------------- */
   const cfg: Config = state.config ?? CONFIG_DEFAULTS
-  const setCfg = (k: keyof Config, v: string | boolean) =>
-    onChange({ ...state, config: { ...cfg, [k]: v } })
+  const setCfg = (k: keyof Config, v: string | boolean) => {
+    const next = { ...cfg, [k]: v } as Config
+    // showDrawer / showHistory follow the mode in the SDK; a switch still at the old mode's
+    // default moves with it, an explicit choice stays.
+    if (k === "mode") {
+      for (const f of ["showDrawer", "showHistory"] as const) {
+        if (cfg[f] === configDefault(cfg, f)) next[f] = configDefault(next, f) as boolean
+      }
+    }
+    onChange({ ...state, config: next })
+  }
 
   const SelectRow = (key: keyof Config, label: string, opts: string[]) => (
     <div className="flex items-center justify-between gap-3 py-1.5" key={String(key)}>
@@ -68,7 +77,7 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
 
   const SwitchRow = (key: keyof Config, label: string, hint?: string) => {
     const on = Boolean(cfg[key])
-    const isDefault = cfg[key] === CONFIG_DEFAULTS[key]
+    const isDefault = cfg[key] === configDefault(cfg, key)
     return (
       <div className="flex items-center justify-between gap-3 py-1.5" key={String(key)}>
         <div className="min-w-0">
@@ -254,15 +263,15 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
         <CardContent className="pt-0">
           {SelectRow("environment", "Environment", ["DEV", "STAGE", "DEMO", "PROD", "EKS"])}
           <Separator className="my-2" />
-          {ConfigTextRow("guestApiKey", "Guest API key", "required for anonymous sessions")}
-          {ConfigTextRow("geoApiKey", "Google geo key", "advice feed stays empty without it")}
+          {ConfigTextRow("farmerChatApiKey", "FarmerChat API key", "optional; the SDK bundles one")}
+          {ConfigTextRow("geoApiKey", "Google geo key", "optional; the SDK bundles one")}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Journey &amp; locale</CardTitle></CardHeader>
         <CardContent className="pt-0">
-          {SelectRow("mode", "Mode", ["FULL_JOURNEY", "CHAT_ONLY"])}
+          {SelectRow("mode", "Mode", ["CHAT_ONLY", "FULL_JOURNEY"])}
           {SelectRow("appearance", "Appearance", ["DAY", "NIGHT", "AUTO"])}
           <Separator className="my-2" />
           {ConfigTextRow("languageCode", "Language code", 'e.g. "en", "hi"')}
@@ -284,7 +293,7 @@ export function Controls({ state, activePreset, onPreset, onChange }: Props) {
           {SwitchRow("enableWeather", "Weather")}
           {SwitchRow("enableSsfr", "SSFR advisory")}
           <Separator className="my-2" />
-          {SwitchRow("enableAgenticChat", "Agentic streaming chat", "2.0.0 opt-in")}
+          {SwitchRow("enableAgenticChat", "Agentic streaming chat", "opt-in, off by default")}
           {SwitchRow("enableAnalytics", "Analytics events", "off by default; hooks fire regardless")}
         </CardContent>
       </Card>

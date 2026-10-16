@@ -51,12 +51,21 @@ struct FCAppBarTile: View {
     let symbol: String
     let label: String
     var identifier: String? = nil
+    /// Draw [FCHistoryGlyph] (the Material "history" vector, 23pt like Android's 42dp tile with
+    /// 9.5dp padding) instead of the SF Symbol. Used by the chat-header history button only.
+    var historyGlyph: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 19, weight: .semibold))
+            Group {
+                if historyGlyph {
+                    FCHistoryGlyph().fill(theme.brand.foregroundPrimary)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: 19, weight: .semibold))
+                }
+            }
                 .frame(width: 23, height: 23)
                 .foregroundColor(theme.brand.foregroundPrimary)
                 .frame(width: 42, height: 42)

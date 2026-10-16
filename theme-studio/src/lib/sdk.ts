@@ -1,13 +1,17 @@
 /* FarmerChat Theme Studio — SDK download/setup metadata.
  *
  * NO-HALLUCINATION: every fact here is grounded in the repo, not invented.
- *   - versions: only real, shipped versions, and they differ PER PLATFORM.
- *     android `build.gradle.kts` declares 2.0.0 (versions/v2); the iOS podspec,
- *     web `core/version.ts` and the RN package.json under versions/v2 were never
- *     bumped and still declare 1.0.0. A single global version would therefore
- *     print `npm install ...@2.0.0`, which does not exist — hence `SdkMeta.versions`.
- *   - package ids, install methods, peer deps, requirements, Info.plist keys:
- *     verbatim from INTEGRATION.md (which is derived from the SDK sources).
+ *   - versions: only real, shipped versions. Every v2 package is 2.2.0:
+ *     android `build.gradle.kts` farmerChatVersion, iOS `DeviceInfoProvider.swift` +
+ *     `FarmerChatUIKit.podspec`, the RN `package.json`, web `core/version.ts`.
+ *     `SdkMeta.versions` stays per platform so a future split cannot print a version a
+ *     platform does not ship.
+ *   - distribution (same wording as the integration guide, tools/guide-gen/content.py):
+ *     Android resolves from Maven Central as io.github.aiyappa-digitalgreen (first release
+ *     being set up; `mavenLocal()` until then). iOS, RN and web are not on CocoaPods / SPM /
+ *     npm yet and there are no git tags, so their installs are local-path installs.
+ *   - package ids, peer deps, requirements, Info.plist keys: from the v2 SDK sources
+ *     and READMEs.
  *   - repo URL: from ios/FarmerChatUIKit/FarmerChatUIKit.podspec `:git`.
  * The themed initialize() code is delegated to the byte-verified export.ts
  * generators, so setup code never drifts from the Export panel.
@@ -18,7 +22,7 @@ import type { PlatformId, ThemeState } from "./theme"
 export const SDK_REPO = "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite"
 
 /** Union of every platform's shipped versions (newest first) — the selector's options. */
-export const SDK_VERSIONS = ["2.0.0", "1.0.0"] as const
+export const SDK_VERSIONS = ["2.2.0"] as const
 export type SdkVersion = (typeof SDK_VERSIONS)[number]
 
 export interface SdkMeta {
@@ -47,11 +51,17 @@ export const SDK_META: SdkMeta[] = [
     id: "web",
     name: "Web",
     packageId: "@digitalgreenorg/farmerchat-web",
-    versions: ["1.0.0"],
+    versions: ["2.2.0"],
     reqs: ["React 18"],
     installLang: "bash",
     codeLang: "tsx",
-    install: (v) => `npm install @digitalgreenorg/farmerchat-web@${v}`,
+    // Not on npm yet (`npm view` 404s): install the package from a checkout of the repo.
+    install: (v) =>
+      [
+        `# @digitalgreenorg/farmerchat-web ${v} is not on npm yet — install from a checkout:`,
+        "npm install ../farmerchat-sdk-suite/versions/v2/web/packages/farmerchat-web",
+        "npm install react@^18 react-dom@^18",
+      ].join("\n"),
     usage: [
       "// After initialize() above, render anywhere — no config prop needed,",
       "// it reuses the shared config (including your theme):",
@@ -68,17 +78,22 @@ export const SDK_META: SdkMeta[] = [
       "FarmerChatSDK is an alias of FarmerChat for the programmatic API.",
       "Styles are scoped (.fcsdk-*) and embed in any container; mic / camera / geolocation are capability-detected.",
     ],
-    source: `${SDK_REPO}/tree/main/web`,
+    source: `${SDK_REPO}/tree/main/versions/v2/web`,
   },
   {
     id: "rn",
     name: "React Native",
     packageId: "@digitalgreenorg/farmerchat-react-native",
-    versions: ["1.0.0"],
+    versions: ["2.2.0"],
     reqs: ["Expo 52+", "RN 0.76+"],
     installLang: "bash",
     codeLang: "tsx",
-    install: (v) => `npm install @digitalgreenorg/farmerchat-react-native@${v}`,
+    // Not on npm yet (`npm view` 404s): install the package from a checkout of the repo.
+    install: (v) =>
+      [
+        `# @digitalgreenorg/farmerchat-react-native ${v} is not on npm yet — install from a checkout:`,
+        "npm install ../farmerchat-sdk-suite/versions/v2/react-native/packages/farmerchat-react-native",
+      ].join("\n"),
     usage: [
       "import { FarmerChat, FarmerChatProvider, FarmerChatView } from '@digitalgreenorg/farmerchat-react-native';",
       "",
@@ -89,32 +104,32 @@ export const SDK_META: SdkMeta[] = [
       ");",
     ].join("\n"),
     notes: [
-      "Peer deps: react-navigation (native-stack), expo-av, expo-image-picker, expo-location, async-storage.",
-      "Optional: react-native-webview, react-native-view-shot (features degrade gracefully without them).",
+      "Peer deps: react-navigation (native, native-stack, drawer), async-storage, expo-av, expo-image-picker, expo-location (see the package's peerDependencies).",
+      "Optional: react-native-view-shot + expo-sharing (share answers as the app's image card), expo-image-manipulator (shrink photos before upload), react-native-webview (legal pages in-app). Without them the SDK falls back quietly.",
     ],
-    source: `${SDK_REPO}/tree/main/react-native`,
+    source: `${SDK_REPO}/tree/main/versions/v2/react-native`,
   },
   {
     id: "android",
     name: "Android",
-    // groupId is org.digitalgreen.FARMERCHAT — see versions/v2/android/build.gradle.kts
-    // (`farmerChatGroup`). It was previously written as plain `org.digitalgreen`, which is not a
-    // coordinate that resolves anywhere.
-    packageId: "org.digitalgreen.farmerchat:farmerchat-android-compose",
-    versions: ["2.0.0", "1.0.0"],
+    // groupId is versions/v2/android/build.gradle.kts `farmerChatGroup`. The Kotlin package
+    // and manifest namespaces stay org.digitalgreen.farmerchat.sdk.* (see the minSdk note below).
+    packageId: "io.github.aiyappa-digitalgreen:farmerchat-android-compose",
+    versions: ["2.2.0"],
     reqs: ["Compose or Views", "AGP 8.13+ (Compose flavour)"],
     installLang: "kotlin",
     codeLang: "kotlin",
     install: (v) =>
       [
-        "// build.gradle.kts (app)",
+        "// build.gradle.kts (app). Resolves from Maven Central; until the first release is",
+        "// published, add mavenLocal() and run ./gradlew publishToMavenLocal in versions/v2/android.",
         "dependencies {",
-        `    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:${v}")`,
+        `    implementation("io.github.aiyappa-digitalgreen:farmerchat-android-compose:${v}")`,
         "",
         "    // XML/Fragment hosts: the Views artifact additionally provides a real",
         "    // FarmerChatFab View (the Compose one is a @Composable). Adding BOTH is",
         "    // supported — FarmerChat.launch() prefers the Compose Activity when present.",
-        `    // implementation("org.digitalgreen.farmerchat:farmerchat-android-views:${v}")`,
+        `    // implementation("io.github.aiyappa-digitalgreen:farmerchat-android-views:${v}")`,
         "}",
         "",
         "// farmerchat-core arrives transitively via the POM — do not add it explicitly.",
@@ -132,7 +147,7 @@ export const SDK_META: SdkMeta[] = [
       "launch() resolves whichever UI artifact is present; Compose wins if both.",
       "Compose flavour needs AGP 8.13+ in the HOST. Older toolchains (8.9.x) mis-dex the SDK's InputComposer and the app dies on the chat screen with java.lang.VerifyError. The Views flavour is unaffected.",
       "minSdk below 26: add tools:overrideLibrary=\"org.digitalgreen.farmerchat.sdk.views, org.digitalgreen.farmerchat.sdk.compose, org.digitalgreen.farmerchat.sdk.core\" to your <uses-sdk> — the compose entry is required whenever the Compose artifact is present.",
-      "Analytics are OFF by default in 2.0.0 (enableAnalytics). The generated initialize() sets it explicitly so it is never a silent surprise.",
+      "Analytics are OFF by default (enableAnalytics). The generated initialize() sets it explicitly so it is never a silent surprise.",
       "SIM number pre-fill on the Auth screen is host-opt-in: declare READ_PHONE_STATE + READ_PHONE_NUMBERS to enable it; the SDK declares neither and stays silent without them.",
     ],
     source: `${SDK_REPO}/tree/main/versions/v2/android`,
@@ -141,7 +156,7 @@ export const SDK_META: SdkMeta[] = [
     id: "ios",
     name: "iOS",
     packageId: "FarmerChatCore · FarmerChatSwiftUI · FarmerChatUIKit",
-    versions: ["1.0.0"],
+    versions: ["2.2.0"],
     reqs: ["SwiftUI iOS 16+", "UIKit iOS 15+"],
     installLang: "swift",
     codeLang: "swift",
@@ -149,11 +164,11 @@ export const SDK_META: SdkMeta[] = [
       [
         "// Swift Package Manager — add the local packages",
         "//   Xcode ▸ File ▸ Add Packages… ▸ Add Local…",
-        "//   ios/FarmerChatCore  +  ios/FarmerChatSwiftUI",
-        `// (repo git tag for this release: ios-v${v})`,
+        "//   versions/v2/ios/FarmerChatCore  +  versions/v2/ios/FarmerChatSwiftUI",
+        `// (no git tag yet — the remote form resolves once ios-v${v} is pushed)`,
         "",
-        "// or CocoaPods (UIKit):",
-        `pod 'FarmerChatUIKit', '~> ${v.split(".").slice(0, 2).join(".")}'`,
+        "// or CocoaPods (UIKit), as a local pod until a release is tagged:",
+        "pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'",
       ].join("\n"),
     usage: [
       "// SwiftUI — embed the full journey:",
@@ -167,9 +182,9 @@ export const SDK_META: SdkMeta[] = [
     ].join("\n"),
     notes: [
       "iOS 16+ hosts should prefer the SwiftUI package (higher fidelity).",
-      "UIKit hosts: add Info.plist keys — NSMicrophoneUsageDescription, NSCameraUsageDescription, NSPhotoLibraryUsageDescription, NSPhotoLibraryAddUsageDescription, NSLocationWhenInUseUsageDescription.",
+      "Info.plist keys: NSMicrophoneUsageDescription, NSCameraUsageDescription, NSPhotoLibraryUsageDescription, NSLocationWhenInUseUsageDescription; SwiftUI also needs NSPhotoLibraryAddUsageDescription (saving an answer card to Photos).",
     ],
-    source: `${SDK_REPO}/tree/main/ios`,
+    source: `${SDK_REPO}/tree/main/versions/v2/ios`,
     sourceTag: (v) => `ios-v${v}`,
   },
 ]
@@ -178,7 +193,7 @@ export const SDK_META: SdkMeta[] = [
  * The version a card should actually show.
  *
  * The selector lists the union across platforms, but a platform must never advertise a version it
- * does not publish — printing `npm install ...@2.0.0` for web would be exactly the fabrication
+ * does not publish — printing a version a platform does not ship would be exactly the fabrication
  * this file's header forbids. Falls back to the platform's newest.
  */
 export function resolveVersion(meta: SdkMeta, selected: string): string {

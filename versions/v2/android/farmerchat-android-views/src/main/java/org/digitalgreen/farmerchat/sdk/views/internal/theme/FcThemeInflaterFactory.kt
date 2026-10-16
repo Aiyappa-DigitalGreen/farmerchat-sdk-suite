@@ -202,6 +202,7 @@ internal class FcThemeInflaterFactory(
             R.drawable.fc_icon_camera,
             R.drawable.fc_icon_card,
             R.drawable.fc_icon_help,
+            R.drawable.fc_icon_history,
             R.drawable.fc_icon_home,
             R.drawable.fc_icon_keyboard,
             R.drawable.fc_icon_language,

@@ -8915,3 +8915,30 @@ Checks (all re-run together after round 3): android core/compose/views unit test
 `publishToMavenLocal` OK; iOS `swift build` + `swift test` 178/0, SwiftUI and UIKit `xcodebuild`
 OK, Core API diff no breaking change; RN `tsc`, `npm test`, build, `api:check` OK (size 244.5/250 KB);
 web `tsc`, `npm test`, build, `api:check`, size OK; widget `tsc`, build, size OK.
+
+## Round 4: site, Theme Studio, history icon, RN size (2026-10-16)
+- **Hosted site on DEMO.** The Railway site's same-origin proxy (`web/widget/vercel/api/stage.js`)
+  forwarded to `farmerchat.farmstack.co/mobile-app-stage/`, so the live widget and `/app/` ran on
+  STAGE against the user rule "use demo in all platforms". Upstream is now `mobile-app-demo/` (also the
+  local `stage-proxy.mjs` default); the pages pass `environment: 'demo'`. The `/stage/` route keeps its
+  name. Live check (headless Chrome on the deployed widget): "weather" → a real 3-day forecast; the
+  first weather question → `gps-prompt` surface. **Open (backend):** after "Give permission"
+  (`update_user_location` 200) the re-send (original query, `align_chip_sel`, `parent_message_id`,
+  the same body as the app, `ChatViewModel.kt:1061-1110`) returns 200 with the answer text "Sorry, I
+  had a problem just now. Please ask your question again." (DEMO's own text; not in any SDK).
+- **Integration guide is generated again.** `tools/guide-gen` had fallen behind the hand-edited hosted
+  guide; it now produces `web/railway/guide/index.html` and Theme Studio's `guide.data.json`. Fixed on
+  the way: ObjC examples used `FCEnvironmentProd` (3), "past chats show in chat-only" (9, wrong since
+  `showHistory` follows the mode), SwiftUI lacked `NSPhotoLibraryAddUsageDescription`. Edit
+  `tools/guide-gen`, never the HTML; the build fails if `guestApiKey` reappears.
+- **Theme Studio "Get SDK".** Used `guestApiKey`, versions 2.0.0/1.0.0, the old Maven group, a `PROD`
+  fallback and a `FULL_JOURNEY` default (SDK: `CHAT_ONLY`). Fixed; `tsc`, build, Playwright 16/16.
+  Not deployed (Theme Studio is deployed by the user).
+- **History button icon (SDK decision, user 2026-10-16: "fix all").** The chat-header history button
+  showed the app's lightbulb (`icon_timer`, the app's Auth tip icon; the app has no history button
+  in its chat header). Now the Material "history" icon on compose, views, SwiftUI, UIKit, RN, web and
+  widget; `fc_icon_timer` stays for the Auth tip badge.
+- **React Native on iOS** (simulator, DEMO): language, typed answer, Share (PNG card in the iOS
+  sheet), Listen, alignment chip, follow-up #30, photo (shrunk 1416×800 → 1000×564), GPS decline,
+  ✕ → onExit, deep link: all pass. **RN package size** 244.5 → 162.8 KB gzip: `npm run build` now
+  emits comment-free JS (type files keep their docs; Metro hosts compile from `src`).

@@ -890,7 +890,7 @@ export function PhonePreview({ theme, appearance, setAppearance, screen, setScre
           </button>
         </div>
         <p className="mt-6 text-center text-sm font-semibold text-muted-foreground">
-          FarmerChat v.2.0.0<br />&copy; Digital Green
+          FarmerChat v.2.2.0<br />&copy; Digital Green
         </p>
       </div>
     </div>

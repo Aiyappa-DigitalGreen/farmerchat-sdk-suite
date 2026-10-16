@@ -65,6 +65,11 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Hosted demo site: the web app and widget ran on the stage backend; they now use DEMO.
+- Integration guide and Theme Studio "Get SDK": `guestApiKey` (renamed in 2.2.0), wrong versions and
+  Maven group, Objective-C examples on PROD, and "past chats in chat-only mode" corrected.
+- The chat header's history button shows a history icon (was the lightbulb tip icon).
+- React Native package: 244.5 KB → 162.8 KB gzip (compiled JS without comments).
 - All platforms, matched to the app and checked on DEMO: photos go on the agentic request
   (`image`, `image_name`, `triggered_input_type:"image"`) instead of `image_analysis`, shrunk to
   1000×1000 JPEG 80 with GPS EXIF as the app writes it; a photo-chip cancel or denial sends the app's

@@ -66,6 +66,7 @@ IOS_PERMS = [
  P("Usage descriptions are a host responsibility &mdash; iOS terminates the app if one is missing "
    "when the SDK asks. Declare only what you enable."),
  CB([("Info.plist","xml","Info.plist",PERMS_IOS)])]
+SWIFTUI_PERMS = [IOS_PERMS[0], CB([("Info.plist","xml","Info.plist",PERMS_IOS_SWIFTUI)])]
 
 SWIFTUI = {
  "id":"ios-swiftui","name":"iOS","flavour":"SwiftUI","badge":"Swift · iOS 16+",
@@ -89,17 +90,17 @@ targets: [
         ("Remote (once tagged)","swift","Package.swift","""dependencies: [
     .package(
         url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
-        from: "1.0.0"
+        from: "%s"
     )
 ],
 targets: [
     .target(name: "MyApp", dependencies: ["FarmerChatSwiftUI"])
-]""")]),
+]""" % VERSION)]),
     P("In Xcode: <strong>File &rarr; Add Package Dependencies &rarr; Add Local&hellip;</strong> "
       "and pick the <code>FarmerChatSwiftUI</code> folder."),
     ("warn","No release tag yet",[
      "The repository currently has <strong>no git tags</strong>, so the remote form above cannot "
-     "resolve. Use the local path until <code>ios-v1.0.0</code> is pushed."])),
+     "resolve. Use the local path until <code>ios-v%s</code> is pushed." % VERSION])),
 
   S("launch","Launch the journey",
     SUB("Initialize the SDK"),
@@ -113,8 +114,6 @@ struct MyApp: App {
         _ = FarmerChat.initialize(
             config: FarmerChatConfig(
                 environment: .demo,
-                guestApiKey: "<your guest API key>",
-                geoApiKey: "<your Google Geolocation key>",
                 languageCode: "en",
                 defaultCountryCode: "IN"
             )
@@ -151,10 +150,9 @@ struct ContentView: View {
   S("scope","Scope the experience",
     P("The configuration mirrors every other platform, field for field."),
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
     environment: .demo,
-    guestApiKey: "<your guest API key>",
     mode: .chatOnly,
     showSettings: false,
     showHistory: true,
@@ -173,7 +171,7 @@ struct ContentView: View {
   S("theming","Theming", *SWIFT_THEME),
   S("labels","Labels and languages", *SWIFT_LABELS),
   S("analytics","Analytics", *SWIFT_ANALYTICS),
-  S("permissions","Permissions", *IOS_PERMS),
+  S("permissions","Permissions", *SWIFTUI_PERMS),
   S("advanced","Advanced",
     SUB("Deep-link into a question"),
     CB([("Swift","swift",None,"""// Set the target, then present FarmerChatView
@@ -209,7 +207,7 @@ targets: [
 pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'
 
 # Once a release is tagged:
-# pod 'FarmerChatUIKit', '~> 1.0'""")]),
+# pod 'FarmerChatUIKit', '~> %s'""" % VERSION_MINOR)]),
     ("warn","CocoaPods needs a tag",[
      "The podspec's <code>source</code> points at a git tag. The repository has <strong>no "
      "tags</strong> today, so only the <code>:path =&gt;</code> form resolves."]),
@@ -228,8 +226,6 @@ func application(
     _ = FarmerChat.initialize(
         config: FarmerChatConfig(
             environment: .demo,
-            guestApiKey: "<your guest API key>",
-            geoApiKey: "<your Google Geolocation key>",
             languageCode: "en",
             defaultCountryCode: "IN"
         )
@@ -257,10 +253,9 @@ NSLayoutConstraint.activate([
 
   S("scope","Scope the experience",
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
     environment: .demo,
-    guestApiKey: "<your guest API key>",
     mode: .chatOnly,
     showSettings: false,
     showHistory: true,
@@ -311,8 +306,6 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
     FCFarmerChatConfiguration *cfg =
         [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
-    cfg.guestApiKey        = @"<your guest API key>";
-    cfg.geoApiKey          = @"<your Google Geolocation key>";
     cfg.languageCode       = @"en";
     cfg.defaultCountryCode = @"IN";
 
@@ -342,10 +335,9 @@ UIButton *custom =
 
   S("scope","Scope the experience",
     TBL(["Option","What it controls"], CONFIG_ROWS),
-    SUB("Chat only"),
+    SUB("Chat only (the default)"),
     CB([("Objective-C","objc",None,"""FCFarmerChatConfiguration *cfg =
     [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];
-cfg.guestApiKey    = @"<your guest API key>";
 cfg.mode           = FCModeChatOnly;
 cfg.showDrawer     = NO;   // moves history + language into the chat app bar
 cfg.showHistory    = YES;

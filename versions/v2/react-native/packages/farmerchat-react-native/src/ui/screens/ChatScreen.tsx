@@ -999,7 +999,7 @@ export function ChatScreen(props: {
                   testID="fc-chat-history"
                   accessibilityLabel={label(Labels.RECENT_CHATS, 'Recent Chats')}
                   onPress={props.onOpenHistory}
-                  icon="timer"
+                  icon="history"
                   background={theme.brand.surfaceSecondary}
                   iconColor={theme.brand.foregroundPrimary}
                   style={{ borderRadius: radius.md }}

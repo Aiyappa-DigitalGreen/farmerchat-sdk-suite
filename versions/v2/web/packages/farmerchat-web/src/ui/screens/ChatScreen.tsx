@@ -512,7 +512,7 @@ export function ChatScreen(props: {
           !drawerOn ? (
             <span style={{ display: 'flex', gap: 8 }}>
               {services.config.showHistory ? (
-                <ActionButton icon="icon_timer" radius="md" ariaLabel="history" onClick={() => navigator.push({ name: 'chatHistory' })} />
+                <ActionButton icon="icon_history" radius="md" ariaLabel="history" onClick={() => navigator.push({ name: 'chatHistory' })} />
               ) : null}
               <ActionButton icon="icon_language" radius="md" ariaLabel="language" onClick={() => navigator.push({ name: 'settingsLanguage' })} />
             </span>

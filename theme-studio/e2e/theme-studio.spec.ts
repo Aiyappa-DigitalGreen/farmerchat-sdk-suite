@@ -148,9 +148,8 @@ test.describe("Theme Studio E2E", () => {
     // the Studio and the shareable artifact cannot drift.
     await expect(page.getByRole("heading", { name: "Integration guide" })).toBeVisible()
     await expect(page.getByRole("button", { name: /Quick-start/ })).toHaveCount(0)
-    // Versions are per-platform and derived from SDK_META, never restated in prose.
-    await expect(page.getByText("2.0.0", { exact: false }).first()).toBeVisible()
-    await expect(page.getByText("1.0.0", { exact: false }).first()).toBeVisible()
+    // The version sentence is derived from SDK_META, never restated in prose. Every v2 platform is 2.2.0.
+    await expect(page.getByText("every platform ships 2.2.0", { exact: false }).first()).toBeVisible()
   })
 
   test("dark palette: empty by default, and each platform emits its own shape", async ({ page }) => {
@@ -178,11 +177,13 @@ test.describe("Theme Studio E2E", () => {
 
   test("Get SDK: the guide's android install line uses the real Maven group", async ({ page }) => {
     await page.goto("/?view=sdk")
-    // groupId is org.digitalgreen.FARMERCHAT. Plain `org.digitalgreen:...` resolves nowhere, so a
-    // host copying the install line would get an unresolvable dependency. The install lines now
-    // live in the guide's code blocks rather than on a card, so assert inside the guide body.
+    // groupId is `farmerChatGroup` in versions/v2/android/build.gradle.kts: io.github.aiyappa-digitalgreen.
+    // The old org.digitalgreen.farmerchat group resolves nowhere, so a host copying that install line
+    // would get an unresolvable dependency. The install lines live in the guide's code blocks rather
+    // than on a card, so assert inside the guide body.
     const guide = page.locator(".fcg-body")
-    await expect(guide.getByText("org.digitalgreen.farmerchat", { exact: false }).first()).toBeVisible()
+    await expect(guide.getByText("io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0", { exact: false }).first()).toBeVisible()
+    await expect(guide.getByText("org.digitalgreen.farmerchat:", { exact: false })).toHaveCount(0)
   })
 
   test("deep-link params open the requested view", async ({ page }) => {

@@ -15,10 +15,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -27,7 +27,7 @@
      },
      {
       "k": "p",
-      "html": "The SDK resolves from your declared repositories. Today that means your local Maven cache; a hosted repository slots into the same block when one exists."
+      "html": "FarmerChat is published to Maven Central, which Android projects already declare, so no extra repository is needed."
      },
      {
       "k": "code",
@@ -36,19 +36,19 @@
         "label": "settings.gradle.kts",
         "lang": "kotlin",
         "fname": "settings.gradle.kts",
-        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}"
        },
        {
         "label": "settings.gradle",
         "lang": "groovy",
         "fname": "settings.gradle",
-        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}"
        }
       ]
      },
      {
       "k": "p",
-      "html": "To populate <code>mavenLocal()</code>, publish once from the SDK checkout:"
+      "html": "<strong>Before the first release</strong>, or to try unreleased changes: add <code>mavenLocal()</code> to the repositories above and publish once from the SDK checkout:"
      },
      {
       "k": "code",
@@ -72,13 +72,13 @@
         "label": "Kotlin DSL",
         "lang": "kotlin",
         "fname": "app/build.gradle.kts",
-        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0\")\n}"
+        "code": "dependencies {\n    implementation(\"io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0\")\n}"
        },
        {
         "label": "Groovy",
         "lang": "groovy",
         "fname": "app/build.gradle",
-        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-compose:2.0.0'\n}"
+        "code": "dependencies {\n    implementation 'io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0'\n}"
        }
       ]
      },
@@ -110,13 +110,13 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": "MyApp.kt",
-        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this, // the Application IS the Context\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this, // the Application IS the Context\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
        },
        {
         "label": "Java",
         "lang": "java",
         "fname": "MyApp.java",
-        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        );\n    }\n}"
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        );\n    }\n}"
        }
       ]
      },
@@ -179,7 +179,7 @@
     "blocks": [
      {
       "k": "p",
-      "html": "Every surface of the journey can be switched off. The defaults give the full farmer experience; trim it to fit your app."
+      "html": "The SDK opens straight into chat by default. Switch on the full journey, or trim individual surfaces, to fit your app."
      },
      {
       "k": "table",
@@ -190,15 +190,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -210,11 +206,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -240,11 +236,11 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "p",
-      "html": "The most common trim: skip onboarding and the advice feed, and land the farmer directly in chat with history and language still reachable."
+      "html": "Out of the box the farmer lands directly in chat, with the language button in the chat bar. The settings below spell that default out and add the past-chats button with <code>showHistory</code>; pass <code>FULL_JOURNEY</code> as the mode for onboarding, Home and the drawer too."
      },
      {
       "k": "code",
@@ -253,15 +249,15 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)    // moves history + language into the chat app bar\n    .showHistory(true)    // past-advice icon\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)    // moves history + language into the chat app bar\n    .showHistory(true)    // past-advice icon\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      },
      {
@@ -499,10 +495,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -516,13 +512,13 @@
         "label": "settings.gradle.kts",
         "lang": "kotlin",
         "fname": "settings.gradle.kts",
-        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}"
        },
        {
         "label": "settings.gradle",
         "lang": "groovy",
         "fname": "settings.gradle",
-        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n        mavenLocal() // FarmerChat, until a hosted repository is published\n    }\n}"
+        "code": "dependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}"
        }
       ]
      },
@@ -537,13 +533,13 @@
         "label": "Kotlin DSL",
         "lang": "kotlin",
         "fname": "app/build.gradle.kts",
-        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0\")\n}"
+        "code": "dependencies {\n    implementation(\"io.github.aiyappa-digitalgreen:farmerchat-android-views:2.2.0\")\n}"
        },
        {
         "label": "Groovy",
         "lang": "groovy",
         "fname": "app/build.gradle",
-        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-views:2.0.0'\n}"
+        "code": "dependencies {\n    implementation 'io.github.aiyappa-digitalgreen:farmerchat-android-views:2.2.0'\n}"
        }
       ]
      },
@@ -575,13 +571,13 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": "MyApp.kt",
-        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this,\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
+        "code": "class MyApp : Application() {\n    override fun onCreate() {\n        super.onCreate()\n\n        FarmerChat.initialize(\n            this,\n            FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .languageCode(\"en\")\n                .defaultCountryCode(\"IN\")\n                .build()\n        )\n    }\n}"
        },
        {
         "label": "Java",
         "lang": "java",
         "fname": "MyApp.java",
-        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .guestApiKey(\"<your guest API key>\")\n                .geoApiKey(\"<your Google Geolocation key>\")\n                .build()\n        );\n    }\n}"
+        "code": "public class MyApp extends Application {\n    @Override public void onCreate() {\n        super.onCreate();\n\n        FarmerChat.INSTANCE.initialize(\n            this,\n            new FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n                .build()\n        );\n    }\n}"
        }
       ]
      },
@@ -651,15 +647,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -671,11 +663,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -701,7 +693,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -710,15 +702,15 @@
         "label": "Kotlin",
         "lang": "kotlin",
         "fname": null,
-        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .guestApiKey(\"<your guest API key>\")\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)\n    .showHistory(true)\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
+        "code": "FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)\n    .mode(FarmerChatMode.CHAT_ONLY)\n    .showDrawer(false)\n    .showHistory(true)\n    .showSettings(false)\n    .showNameScreen(false)\n    .build()"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      }
     ]
@@ -918,10 +910,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -945,7 +937,7 @@
         "label": "Remote (once tagged)",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"1.0.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
        }
       ]
      },
@@ -957,7 +949,7 @@
       "k": "warn",
       "tag": "No release tag yet",
       "paras": [
-       "The repository currently has <strong>no git tags</strong>, so the remote form above cannot resolve. Use the local path until <code>ios-v1.0.0</code> is pushed."
+       "The repository currently has <strong>no git tags</strong>, so the remote form above cannot resolve. Use the local path until <code>ios-v2.2.0</code> is pushed."
       ]
      }
     ]
@@ -981,7 +973,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": "MyApp.swift",
-        "code": "import SwiftUI\nimport FarmerChatCore\n\n@main\nstruct MyApp: App {\n    init() {\n        _ = FarmerChat.initialize(\n            config: FarmerChatConfig(\n                environment: .demo,\n                guestApiKey: \"<your guest API key>\",\n                geoApiKey: \"<your Google Geolocation key>\",\n                languageCode: \"en\",\n                defaultCountryCode: \"IN\"\n            )\n        )\n    }\n\n    var body: some Scene {\n        WindowGroup { ContentView() }\n    }\n}"
+        "code": "import SwiftUI\nimport FarmerChatCore\n\n@main\nstruct MyApp: App {\n    init() {\n        _ = FarmerChat.initialize(\n            config: FarmerChatConfig(\n                environment: .demo,\n                languageCode: \"en\",\n                defaultCountryCode: \"IN\"\n            )\n        )\n    }\n\n    var body: some Scene {\n        WindowGroup { ContentView() }\n    }\n}"
        }
       ]
      },
@@ -1038,15 +1030,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -1058,11 +1046,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -1088,7 +1076,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -1097,15 +1085,15 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .demo,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,      // moves history + language into the chat app bar\n    showNameScreen: false\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,      // moves history + language into the chat app bar\n    showNameScreen: false\n)"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      },
      {
@@ -1256,7 +1244,7 @@
         "label": "Info.plist",
         "lang": "xml",
         "fname": "Info.plist",
-        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>"
+        "code": "<key>NSMicrophoneUsageDescription</key>\n<string>Ask FarmerChat a question by speaking.</string>\n\n<key>NSCameraUsageDescription</key>\n<string>Take a photo of your crop so FarmerChat can diagnose it.</string>\n\n<key>NSPhotoLibraryUsageDescription</key>\n<string>Attach a photo of your crop to your question.</string>\n\n<key>NSLocationWhenInUseUsageDescription</key>\n<string>Show weather and advice for your farm's location.</string>\n\n<key>NSPhotoLibraryAddUsageDescription</key>\n<string>Save an answer card to your photos.</string>"
        }
       ]
      }
@@ -1331,10 +1319,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -1354,7 +1342,7 @@
         "label": "CocoaPods",
         "lang": "ruby",
         "fname": "Podfile",
-        "code": "# Local development pod (no trunk release yet)\npod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'\n\n# Once a release is tagged:\n# pod 'FarmerChatUIKit', '~> 1.0'"
+        "code": "# Local development pod (no trunk release yet)\npod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'\n\n# Once a release is tagged:\n# pod 'FarmerChatUIKit', '~> 2.2'"
        }
       ]
      },
@@ -1389,7 +1377,7 @@
         "label": "Swift",
         "lang": "swift",
         "fname": "AppDelegate.swift",
-        "code": "import FarmerChatCore\n\nfunc application(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?\n) -> Bool {\n    _ = FarmerChat.initialize(\n        config: FarmerChatConfig(\n            environment: .demo,\n            guestApiKey: \"<your guest API key>\",\n            geoApiKey: \"<your Google Geolocation key>\",\n            languageCode: \"en\",\n            defaultCountryCode: \"IN\"\n        )\n    )\n    return true\n}"
+        "code": "import FarmerChatCore\n\nfunc application(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?\n) -> Bool {\n    _ = FarmerChat.initialize(\n        config: FarmerChatConfig(\n            environment: .demo,\n            languageCode: \"en\",\n            defaultCountryCode: \"IN\"\n        )\n    )\n    return true\n}"
        }
       ]
      },
@@ -1442,15 +1430,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -1462,11 +1446,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -1492,7 +1476,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -1501,15 +1485,15 @@
         "label": "Swift",
         "lang": "swift",
         "fname": null,
-        "code": "FarmerChatConfig(\n    environment: .demo,\n    guestApiKey: \"<your guest API key>\",\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,\n    showNameScreen: false\n)"
+        "code": "FarmerChatConfig(\n    environment: .demo,\n    mode: .chatOnly,\n    showSettings: false,\n    showHistory: true,\n    showDrawer: false,\n    showNameScreen: false\n)"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      }
     ]
@@ -1705,10 +1689,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -1768,7 +1752,7 @@
         "label": "Objective-C",
         "lang": "objc",
         "fname": "AppDelegate.m",
-        "code": "@import FarmerChatUIKit;\n\n- (BOOL)application:(UIApplication *)application\ndidFinishLaunchingWithOptions:(NSDictionary *)launchOptions {\n\n    FCFarmerChatConfiguration *cfg =\n        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\n    cfg.guestApiKey        = @\"<your guest API key>\";\n    cfg.geoApiKey          = @\"<your Google Geolocation key>\";\n    cfg.languageCode       = @\"en\";\n    cfg.defaultCountryCode = @\"IN\";\n\n    [FCFarmerChat initializeWithConfiguration:cfg];\n    return YES;\n}"
+        "code": "@import FarmerChatUIKit;\n\n- (BOOL)application:(UIApplication *)application\ndidFinishLaunchingWithOptions:(NSDictionary *)launchOptions {\n\n    FCFarmerChatConfiguration *cfg =\n        [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\n    cfg.languageCode       = @\"en\";\n    cfg.defaultCountryCode = @\"IN\";\n\n    [FCFarmerChat initializeWithConfiguration:cfg];\n    return YES;\n}"
        }
       ]
      },
@@ -1821,15 +1805,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -1841,11 +1821,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -1871,7 +1851,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -1880,15 +1860,15 @@
         "label": "Objective-C",
         "lang": "objc",
         "fname": null,
-        "code": "FCFarmerChatConfiguration *cfg =\n    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\ncfg.guestApiKey    = @\"<your guest API key>\";\ncfg.mode           = FCModeChatOnly;\ncfg.showDrawer     = NO;   // moves history + language into the chat app bar\ncfg.showHistory    = YES;\ncfg.showSettings   = NO;\ncfg.showNameScreen = NO;"
+        "code": "FCFarmerChatConfiguration *cfg =\n    [[FCFarmerChatConfiguration alloc] initWithEnvironment:FCEnvironmentDemo];\ncfg.mode           = FCModeChatOnly;\ncfg.showDrawer     = NO;   // moves history + language into the chat app bar\ncfg.showHistory    = YES;\ncfg.showSettings   = NO;\ncfg.showNameScreen = NO;"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      },
      {
@@ -2148,10 +2128,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -2200,6 +2180,25 @@
         "code": "npm install \\\n  @react-navigation/native \\\n  @react-navigation/native-stack \\\n  @react-navigation/drawer \\\n  @react-native-async-storage/async-storage \\\n  expo-av"
        }
       ]
+     },
+     {
+      "k": "sub",
+      "html": "Optional add-ons"
+     },
+     {
+      "k": "p",
+      "html": "Each one turns on an app behaviour; without it the SDK falls back quietly and never crashes."
+     },
+     {
+      "k": "code",
+      "tabs": [
+       {
+        "label": "Expo",
+        "lang": "shell",
+        "fname": null,
+        "code": "npx expo install react-native-view-shot expo-sharing   # share answers as the app's image card\nnpx expo install expo-image-manipulator              # shrink photos before upload\nnpx expo install react-native-webview                 # legal pages in-app"
+       }
+      ]
      }
     ]
    },
@@ -2222,7 +2221,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": "App.tsx",
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-react-native';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
        }
       ]
      },
@@ -2279,15 +2278,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -2299,11 +2294,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -2329,7 +2324,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -2338,15 +2333,15 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      },
      {
@@ -2575,10 +2570,10 @@
     "blocks": [
      {
       "k": "warn",
-      "tag": "Before you start &mdash; read this",
+      "tag": "Release status",
       "paras": [
-       "The SDK artifacts are <strong>not published to a public repository yet</strong>. There is no Maven Central / GitHub Packages release, no CocoaPods trunk entry, and no npm package (<code>npm view</code> returns 404 for both JavaScript packages). The install steps below are the shape your integration will take, and they work today against a local build.",
-       "Until a release exists, build the SDK from source and consume it locally &mdash; each platform's install section shows the local path alongside the eventual remote one."
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -2647,7 +2642,7 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": "main.tsx",
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  geoApiKey: '<your Google Geolocation key>',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nFarmerChat.initialize({\n  environment: 'demo',\n  languageCode: 'en',\n  defaultCountryCode: 'IN',\n});"
        }
       ]
      },
@@ -2681,7 +2676,7 @@
         "label": "JavaScript",
         "lang": "ts",
         "fname": null,
-        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nconst handle = FarmerChat.mount(\n  document.getElementById('farmerchat'),\n  { environment: 'demo', guestApiKey: '<your guest API key>' }\n);\n\n// later\nhandle.unmount();"
+        "code": "import { FarmerChat } from '@digitalgreenorg/farmerchat-web';\n\nconst handle = FarmerChat.mount(\n  document.getElementById('farmerchat'),\n  { environment: 'demo' }\n);\n\n// later\nhandle.unmount();"
        }
       ]
      },
@@ -2715,15 +2710,11 @@
       "rows": [
        [
         "<code>environment</code>",
-        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>."
+        "Backend to talk to: <code>DEV</code>, <code>STAGE</code>, <code>DEMO</code>, <code>PROD</code>, <code>EKS</code>. Use <code>DEMO</code> while you test. <code>STAGE</code>'s backend is currently unavailable."
        ],
        [
-        "<code>guestApiKey</code>",
-        "Key for anonymous (guest) sessions. Required unless you supply your own token."
-       ],
-       [
-        "<code>geoApiKey</code>",
-        "Google Geolocation key. Effectively required &mdash; the advice feed stays empty until a country resolves."
+        "<code>farmerChatApiKey</code> / <code>geoApiKey</code>",
+        "Optional. The SDK bundles a FarmerChat API key and a Google Geolocation key; set these only to use your own."
        ],
        [
         "<code>languageCode</code>",
@@ -2735,11 +2726,11 @@
        ],
        [
         "<code>mode</code>",
-        "<code>FULL_JOURNEY</code> (onboarding + home + chat) or <code>CHAT_ONLY</code> (straight into chat)."
+        "<code>CHAT_ONLY</code> (<strong>default</strong>: opens straight into chat) or <code>FULL_JOURNEY</code> (onboarding + home + chat)."
        ],
        [
         "<code>showDrawer</code> / <code>showHistory</code> / <code>showSettings</code> / <code>showNameScreen</code>",
-        "Trim the journey surface by surface."
+        "Trim the journey surface by surface. <code>showDrawer</code> and <code>showHistory</code> follow the mode unless you set them: off in chat-only, on in the full journey."
        ],
        [
         "<code>enableVoice</code> / <code>enableImages</code> / <code>enableWeather</code> / <code>enableSsfr</code>",
@@ -2765,7 +2756,7 @@
      },
      {
       "k": "sub",
-      "html": "Chat only"
+      "html": "Chat only (the default)"
      },
      {
       "k": "code",
@@ -2774,15 +2765,15 @@
         "label": "TypeScript",
         "lang": "ts",
         "fname": null,
-        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  guestApiKey: '<your guest API key>',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
+        "code": "FarmerChat.initialize({\n  environment: 'demo',\n  mode: 'CHAT_ONLY',\n  showDrawer: false,     // moves history + language into the chat app bar\n  showHistory: true,\n  showSettings: false,\n  showNameScreen: false,\n});"
        }
       ]
      },
      {
       "k": "note",
-      "tag": "Why the icons appear",
+      "tag": "Where history and language live",
       "paras": [
-       "In <code>CHAT_ONLY</code>, <code>showDrawer(false)</code> is what moves history and language <em>into</em> the chat app bar &mdash; the drawer normally owns them. Setting <code>showHistory(true)</code> alone does nothing while the drawer is on."
+       "In chat-only mode the drawer and history are off by default (<code>showDrawer</code> and <code>showHistory</code> follow the mode), so the chat app bar carries only the language button. Turn <code>showHistory</code> on to add the past-chats button there; set <code>showDrawer</code> yourself to bring the drawer back."
       ]
      }
     ]

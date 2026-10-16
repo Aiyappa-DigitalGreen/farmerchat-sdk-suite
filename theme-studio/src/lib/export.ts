@@ -4,7 +4,7 @@
  * theme-studio generators; output is byte-for-byte identical (see the golden
  * fixtures / verify harness). Do not "clean up" the empty-string ("") vs unset
  * conditionals — they encode the SDK's "knob omitted = inherit" precedence. */
-import { COLORS, CONFIG_DEFAULTS, NIGHT_COLORS, SHAPE, type Config, type PlatformId, type ThemeState } from "./theme"
+import { COLORS, CONFIG_DEFAULTS, NIGHT_COLORS, SHAPE, configDefault, type Config, type PlatformId, type ThemeState } from "./theme"
 
 function hex6(v: string): string {
   return (v || "").replace("#", "").toUpperCase().padStart(6, "0").slice(0, 6)
@@ -28,7 +28,7 @@ function setKnobsColor(obj: Record<string, unknown>): Record<string, unknown> {
  * events arrive.
  */
 const CONFIG_ORDER: (keyof Config)[] = [
-  "guestApiKey", "geoApiKey", "languageCode", "defaultCountryCode", "defaultStateCode",
+  "farmerChatApiKey", "geoApiKey", "languageCode", "defaultCountryCode", "defaultStateCode",
   "appearance", "mode",
   "showDrawer", "showHistory", "showSettings", "showNameScreen",
   "enableVoice", "enableImages", "enableWeather", "enableSsfr", "enableAgenticChat",
@@ -37,8 +37,9 @@ function changedConfig(state: ThemeState): [keyof Config, string | boolean][] {
   const cfg = state.config ?? CONFIG_DEFAULTS
   const out: [keyof Config, string | boolean][] = []
   for (const k of CONFIG_ORDER) {
-    const v = cfg[k] as string | boolean
-    if (v === CONFIG_DEFAULTS[k]) continue
+    const v = cfg[k] as string | boolean | undefined
+    if (v == null) continue
+    if (v === configDefault(cfg, k)) continue
     if (typeof v === "string" && v.trim() === "") continue
     out.push([k, v])
   }
@@ -100,7 +101,7 @@ function genJS(state: ThemeState, importLine: string, platform: "web" | "rn"): s
   L.push(importLine)
   L.push("")
   L.push("FarmerChat.initialize({")
-  L.push("  environment: '" + (state.config?.environment ?? "PROD").toLowerCase() + "',")
+  L.push("  environment: '" + (state.config?.environment ?? CONFIG_DEFAULTS.environment).toLowerCase() + "',")
   L.push("  theme: {")
   L.push("    colors: {")
   COLORS.forEach(([k]) => L.push("      " + k + ": '" + c[k] + "',"))
@@ -146,7 +147,7 @@ function genAndroid(state: ThemeState): string {
   const col = (v: string) => "0xFF" + hex6(v) + ".toInt()"
   const L: string[] = []
   L.push("FarmerChat.initialize(this,")
-  L.push("  FarmerChatConfig.builder(FarmerChatEnvironment." + (state.config?.environment ?? "PROD") + ")")
+  L.push("  FarmerChatConfig.builder(FarmerChatEnvironment." + (state.config?.environment ?? CONFIG_DEFAULTS.environment) + ")")
   L.push("    .theme(FarmerChatTheme.builder()")
   COLORS.forEach(([k]) => L.push("      ." + k + "(" + col(c[k]) + ")"))
   L.push("      .cardCornerRadius(" + n(sh.cardCornerRadius) + ")")
@@ -168,12 +169,12 @@ function genAndroid(state: ThemeState): string {
   // Emitted UNCONDITIONALLY and explicitly, unlike the theme knobs above.
   //
   // Those encode "omitted = inherit", so leaving them out is meaningful. This one is the
-  // opposite: `enableAnalytics` defaults to FALSE in 2.0.0, so omitting it means a host wires
+  // opposite: `enableAnalytics` defaults to FALSE, so omitting it means a host wires
   // everything up, sees no events reach onEvent, and has nothing in their own code to explain
   // why. Printing the flag with its default makes the switch discoverable at the one moment the
   // host is looking at their config. Android-only — the iOS/web/RN trees do not have this flag.
   configAndroid(state).forEach((l) => L.push(l))
-  L.push("    // Telemetry is OFF by default in 2.0.0. Flip to true when you are ready to")
+  L.push("    // Telemetry is OFF by default. Flip to true when you are ready to")
   L.push("    // receive events on your analytics listener. Semantic hooks (onChatOpened,")
   L.push("    // onMessageSent, ...) are NOT gated by this and fire either way.")
   L.push("    .enableAnalytics(" + (state.config?.enableAnalytics ?? false) + ")")
@@ -209,7 +210,7 @@ const IOS_THEME_ORDER: Record<string, number> = {
 }
 
 const IOS_ARG_ORDER: Record<string, number> = {
-  environment: 0, customBaseURL: 1, geoApiKey: 2, guestApiKey: 3, appearance: 4, theme: 5,
+  environment: 0, customBaseURL: 1, geoApiKey: 2, farmerChatApiKey: 3, appearance: 4, theme: 5,
   languageCode: 6, defaultCountryCode: 7, defaultStateCode: 8,
   enableVoice: 11, enableImages: 12, enableWeather: 13, enableAgenticChat: 14,
   fabLabel: 15, fabBackgroundColor: 16, fabContentColor: 17,
@@ -225,7 +226,7 @@ function genIOS(state: ThemeState): string {
   const args: { i: number; text: string }[] = []
   const put = (key: string, text: string) => args.push({ i: IOS_ARG_ORDER[key] ?? 999, text })
 
-  put("environment", "  environment: ." + (state.config?.environment ?? "PROD").toLowerCase())
+  put("environment", "  environment: ." + (state.config?.environment ?? CONFIG_DEFAULTS.environment).toLowerCase())
 
   // theme is one multi-line argument
   const tp: { i: number; text: string }[] = []
@@ -271,7 +272,7 @@ function genIOS(state: ThemeState): string {
 
 export function themeJSON(state: ThemeState): string {
   const c = state.colors, sh = state.shape, t = state.typography
-  const obj: Record<string, unknown> = { environment: (state.config?.environment ?? "PROD").toLowerCase(), theme: { colors: {}, shape: {}, typography: {} } }
+  const obj: Record<string, unknown> = { environment: (state.config?.environment ?? CONFIG_DEFAULTS.environment).toLowerCase(), theme: { colors: {}, shape: {}, typography: {} } }
   const theme = obj.theme as { colors: Record<string, unknown>; shape: Record<string, unknown>; typography: Record<string, unknown> }
   COLORS.forEach(([k]) => (theme.colors[k] = c[k]))
   SHAPE.forEach(([k]) => (theme.shape[k] = n(sh[k])))
