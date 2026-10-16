@@ -44,12 +44,14 @@ dokka {
 
 // -----------------------------------------------------------------------------
 // SINGLE SOURCE OF TRUTH for the published SDK coordinate.
-// groupId  = org.digitalgreen.farmerchat
+// groupId  = io.github.aiyappa-digitalgreen
 // version  = FarmerChatVersion (below)
 // Every publishable module reads project.group / project.version — no other
 // module hard-codes the group or version.
 // -----------------------------------------------------------------------------
-val farmerChatGroup = "org.digitalgreen.farmerchat"
+// Maven Central namespace io.github.aiyappa-digitalgreen (verified through GitHub, 2026-10-16). This is
+// the Maven group only; Kotlin packages stay org.digitalgreen.farmerchat.sdk.*.
+val farmerChatGroup = "io.github.aiyappa-digitalgreen"
 val farmerChatVersion = "2.2.0" // == FarmerChatVersion (agentic streaming; see versions/v2/README.md)
 
 // Expose to all modules (referenced by publish blocks and, optionally, runtime).

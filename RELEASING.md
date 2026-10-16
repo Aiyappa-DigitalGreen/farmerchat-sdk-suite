@@ -16,15 +16,13 @@ later (see the end of this section).
 1. **Create the Central Portal account.** Go to <https://central.sonatype.com>, choose *Sign in* →
    *Sign up*, and register with `aiyappa@digitalgreen.org`. Confirm the email.
 
-2. **Claim the namespace `org.digitalgreen`.** Every SDK artifact is published as
-   `org.digitalgreen.farmerchat:*`, so this exact namespace is needed.
-   - In the Portal: *Namespaces* → *Add Namespace* → `org.digitalgreen`.
-   - The Portal shows a verification key. Ask whoever manages DNS for `digitalgreen.org` to add it
-     as a **TXT record** on `digitalgreen.org`.
-   - Back in the Portal, click *Verify Namespace*. It turns *Verified* once the record is visible.
-
-   Don't register a GitHub-based namespace (`io.github.…`) as a shortcut. It would change every
-   artifact's coordinates, which breaks existing apps and would have to change again later.
+2. **Verify the namespace `io.github.aiyappa-digitalgreen`.** The SDK is published as
+   `io.github.aiyappa-digitalgreen:*`, verified through the GitHub account
+   `Aiyappa-DigitalGreen`; no domain or DNS change is needed.
+   - If you signed up with *Continue with GitHub*, the Portal has already created and verified it.
+   - Otherwise: *Namespaces* → *Add Namespace* → `io.github.aiyappa-digitalgreen`. The Portal
+     shows a verification key. Create a **public** GitHub repository under `Aiyappa-DigitalGreen`
+     whose name is exactly that key, click *Verify Namespace*, then delete the repository.
 
 3. **Create a user token.** Portal → your account → *Generate User Token*. It has a username and
    a password. These are not your login password.
@@ -55,17 +53,20 @@ later (see the end of this section).
 
 ### Moving to the Digital Green account later
 
-1. Create the Digital Green Portal account, ideally on a shared address rather than a person's.
-2. Ask Central support (central-support@sonatype.com) to transfer the `org.digitalgreen` namespace
-   to it, or to add that account to the namespace. They confirm ownership through the same DNS
-   record.
-3. Generate a user token on the new account and replace `MAVEN_CENTRAL_USERNAME` /
-   `MAVEN_CENTRAL_PASSWORD`. Optionally create a new signing key on a team address and replace
-   `SIGNING_KEY` / `SIGNING_PASSWORD`; keep the old public key on the keyserver, since past releases
-   were signed with it.
-4. Update the `<developer>` email in the three Android `build.gradle.kts` POM blocks.
+The group `io.github.aiyappa-digitalgreen` is tied to the `Aiyappa-DigitalGreen` GitHub account.
+Two paths:
 
-The coordinates (`org.digitalgreen.farmerchat:*`) never change, so host apps notice nothing.
+- **Keep the group, change the owner.** Ask Central support (central-support@sonatype.com) to give a
+  Digital Green Portal account access to the namespace, then replace the
+  `MAVEN_CENTRAL_USERNAME`/`PASSWORD` secrets. Host apps notice nothing. The group still reads
+  `aiyappa-digitalgreen`.
+- **Move to a Digital Green group** (`org.digitalgreen.farmerchat` through the digitalgreen.org DNS
+  record, or `io.github.digitalgreenorg`). This is a **breaking** change for every host app: publish
+  the next MAJOR version under the new group, keep the old group's last version as is, and list
+  it under Breaking in CHANGELOG.md and MIGRATION.md (VERSIONING.md).
+
+Either way, update the `<developer>` email in the three Android `build.gradle.kts` POM blocks if
+the contact changes.
 
 ## Other registries
 

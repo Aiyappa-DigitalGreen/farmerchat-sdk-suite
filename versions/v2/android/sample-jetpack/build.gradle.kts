@@ -35,7 +35,7 @@ android {
 dependencies {
     // ── The only FarmerChat dependency you need ──────────────────────────────
     // In-repo it's a project dependency; published, it's the Maven coordinate:
-    //   implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:1.0.0")
+    //   implementation("io.github.aiyappa-digitalgreen:farmerchat-android-compose:1.0.0")
     implementation(project(":farmerchat-android-compose"))
 
     implementation(libs.androidx.core.ktx)

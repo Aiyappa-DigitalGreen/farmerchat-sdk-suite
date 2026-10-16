@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
                         Text("Coordinate-consumer host", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "FarmerChat SDK ${FarmerChatVersion.VERSION} imported by Maven coordinate " +
-                                "(org.digitalgreen.farmerchat:farmerchat-android-compose).",
+                                "(io.github.aiyappa-digitalgreen:farmerchat-android-compose).",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text("Authenticated: $authenticated", style = MaterialTheme.typography.bodyMedium)

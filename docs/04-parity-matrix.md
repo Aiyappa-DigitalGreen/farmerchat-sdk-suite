@@ -8603,3 +8603,17 @@ Maven Central as the install path, with `publishToMavenLocal` + `mavenLocal()` a
 fallback. Not changed: v1 `android/` (1.1.0 is not going to Central); iOS/RN/web are not Maven
 (npm and SPM/CocoaPods are not published). The deployed demo-app keeps its local `file:`
 dependency, because pointing it at npm before a release would break the live site's next deploy.
+
+## Android Maven group → io.github.aiyappa-digitalgreen (2026-10-16, user decision)
+The user chose the GitHub-verified namespace of their account `Aiyappa-DigitalGreen` instead of
+`org.digitalgreen` (which needs a DNS TXT record on digitalgreen.org). Single source:
+`farmerChatGroup` in `versions/v2/android/build.gradle.kts` (and the `GROUP` mirror). Only the
+**Maven group** changed: artifact ids and Kotlin packages (`org.digitalgreen.farmerchat.sdk.*`)
+are unchanged, so the `.api` baselines, imports and app code are untouched. Before publishing, the
+user was told: the group is permanent once published; a later move to a Digital Green group is a
+breaking MAJOR change (RELEASING.md). Updated: the android README + INTEGRATION.md, MIGRATION.md
+(new Breaking row), SECURITY.md, RELEASING.md, release.yml, the guide (13 coordinates),
+sample-consumer. Verified: `publishToMavenLocal` writes `~/.m2/.../io/github/aiyappa-digitalgreen/`
+with the new group in the POMs; `testDebugUnitTest assembleDebug apiCheck` pass. v1 `android/`
+stays `org.digitalgreen.farmerchat` (not going to Central). External host RationSmart still points
+at the old group in mavenLocal; it must change its dependency lines to pick up new builds.

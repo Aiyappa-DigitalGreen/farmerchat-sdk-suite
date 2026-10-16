@@ -7,7 +7,7 @@ Please **do not** open a public issue for a security problem.
 Report it privately through GitHub: open this repository's **Security** tab and choose
 **Report a vulnerability** (GitHub private vulnerability reporting). Include:
 
-- the affected package and version (for example `org.digitalgreen.farmerchat:farmerchat-core:2.2.0`,
+- the affected package and version (for example `io.github.aiyappa-digitalgreen:farmerchat-core:2.2.0`,
   `FarmerChatCore 2.2.0`, `@digitalgreenorg/farmerchat-web@2.2.0`)
 - the platform and OS / browser version
 - steps to reproduce, and what an attacker could achieve

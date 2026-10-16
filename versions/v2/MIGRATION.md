@@ -8,7 +8,7 @@ Read the **Behaviour changes** section even if your code compiles: three default
 
 | Platform | 1.x | 2.x |
 |---|---|---|
-| Android | `org.digitalgreen.farmerchat:farmerchat-android-{compose,views}:1.1.0` | `...:2.2.0` (same group; optional `farmerchat-analytics-posthog`) |
+| Android | `org.digitalgreen.farmerchat:farmerchat-android-{compose,views}:1.1.0` | `io.github.aiyappa-digitalgreen:farmerchat-android-{compose,views}:2.2.0` (**new group**, from Maven Central; optional `farmerchat-analytics-posthog`) |
 | iOS | `FarmerChatCore` / `FarmerChatSwiftUI` / `FarmerChatUIKit` 1.x | same packages, 2.2.0 (tag `ios-v2.2.0`) |
 | React Native | `@digitalgreenorg/farmerchat-react-native@1.x` | `@2.2.0` |
 | Web | `@digitalgreenorg/farmerchat-web@1.x` | `@2.2.0`; new script-tag widget `@digitalgreenorg/farmerchat-widget` |
@@ -17,6 +17,7 @@ Read the **Behaviour changes** section even if your code compiles: three default
 
 | 1.x | 2.x | What to do |
 |---|---|---|
+| Maven group `org.digitalgreen.farmerchat` | `io.github.aiyappa-digitalgreen` (Android) | Change the group in your dependency lines. Artifact names and Kotlin package names (`org.digitalgreen.farmerchat.sdk…`) are unchanged, so imports stay the same. |
 | `guestApiKey` | `farmerChatApiKey` | Rename. The old name was removed with no alias. Both keys are now built in, so most hosts can delete the line entirely. |
 
 ## 3. Behaviour changes (same code, different result)

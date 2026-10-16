@@ -3,7 +3,7 @@
 Everything a host app needs, in the order you need it. Values here were read out of this
 module's sources, not from memory; where a claim is only verified on one host app, it says so.
 
-- **Artifacts:** `org.digitalgreen.farmerchat:*:2.0.0` (`build.gradle.kts:18-19`)
+- **Artifacts:** `io.github.aiyappa-digitalgreen:*:2.0.0` (`build.gradle.kts:18-19`)
 - **SDK floor:** `minSdk 26`, `compileSdk 36`, JVM target **17**, Kotlin 2.3.21, AGP **8.13.0**
 - **Nothing to declare in your manifest.** The SDK ships its own entry `Activity`, `FileProvider`
   and permissions, and they merge in.
@@ -38,7 +38,7 @@ have a choice, choose Compose.
 
 ```bash
 cd versions/v2/android
-./gradlew publishToMavenLocal      # -> ~/.m2/repository/org/digitalgreen/farmerchat/
+./gradlew publishToMavenLocal      # -> ~/.m2/repository/io/github/aiyappa-digitalgreen/
 ```
 
 Then in your host app's `settings.gradle.kts`:
@@ -98,9 +98,9 @@ android {
 }
 
 dependencies {
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.1.0")
+    implementation("io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.1.0")
     // OR, for XML/Fragment hosts — never both:
-    // implementation("org.digitalgreen.farmerchat:farmerchat-android-views:2.1.0")
+    // implementation("io.github.aiyappa-digitalgreen:farmerchat-android-views:2.1.0")
 }
 ```
 

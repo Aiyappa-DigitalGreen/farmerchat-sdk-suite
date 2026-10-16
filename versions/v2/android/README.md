@@ -17,9 +17,9 @@ There is no minimum RAM or CPU: if the device runs the OS or browser version abo
 
 | Artifact | Coordinates | What it is |
 |---|---|---|
-| `farmerchat-core` | `org.digitalgreen.farmerchat:farmerchat-core` | Headless core: Retrofit client for all 34 endpoints + token APIs + Google geolocate, interceptor chain (X-Request-ID → X-Timeout → per-request timeout clone → auth headers → logging) with `TokenAuthenticator` (refresh → guest-token fallback, single-flight), `ApiResult`/`UiState`/retry table, all domain models, repositories, use cases, `SdkPreferences` (`fc_sdk_` namespaced), `LabelManager`, `SessionManager`, analytics dispatcher, and every screen's state machine (plain Kotlin over `StateFlow`). No UI dependencies. |
-| `farmerchat-android-compose` | `org.digitalgreen.farmerchat:farmerchat-android-compose` | Full Jetpack Compose UI: `FarmerChatActivity` + embeddable `FarmerChatRoot()` / `FarmerChatInline(modifier)` composables + `FarmerChatFab`, Navigation-Compose graph matching the app 1:1. |
-| `farmerchat-android-views` | `org.digitalgreen.farmerchat:farmerchat-android-views` | The same flow in XML + Fragments + Navigation Component + ViewBinding: `FarmerChatActivity` (views variant) + embeddable `FarmerChatFragment` + `FarmerChatFab`. |
+| `farmerchat-core` | `io.github.aiyappa-digitalgreen:farmerchat-core` | Headless core: Retrofit client for all 34 endpoints + token APIs + Google geolocate, interceptor chain (X-Request-ID → X-Timeout → per-request timeout clone → auth headers → logging) with `TokenAuthenticator` (refresh → guest-token fallback, single-flight), `ApiResult`/`UiState`/retry table, all domain models, repositories, use cases, `SdkPreferences` (`fc_sdk_` namespaced), `LabelManager`, `SessionManager`, analytics dispatcher, and every screen's state machine (plain Kotlin over `StateFlow`). No UI dependencies. |
+| `farmerchat-android-compose` | `io.github.aiyappa-digitalgreen:farmerchat-android-compose` | Full Jetpack Compose UI: `FarmerChatActivity` + embeddable `FarmerChatRoot()` / `FarmerChatInline(modifier)` composables + `FarmerChatFab`, Navigation-Compose graph matching the app 1:1. |
+| `farmerchat-android-views` | `io.github.aiyappa-digitalgreen:farmerchat-android-views` | The same flow in XML + Fragments + Navigation Component + ViewBinding: `FarmerChatActivity` (views variant) + embeddable `FarmerChatFragment` + `FarmerChatFab`. |
 
 Pick **one** UI artifact — each pulls in `farmerchat-core` transitively. `FarmerChat.launch()` auto-resolves whichever UI artifact is on the classpath (Compose is preferred if both are present).
 
@@ -33,9 +33,9 @@ Until the first Central release is published (`RELEASING.md`), Gradle reports
 // settings.gradle.kts — repositories { google(); mavenCentral() }
 
 dependencies {
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0")
+    implementation("io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0")
     // OR
-    implementation("org.digitalgreen.farmerchat:farmerchat-android-views:2.2.0")
+    implementation("io.github.aiyappa-digitalgreen:farmerchat-android-views:2.2.0")
 }
 ```
 
@@ -47,7 +47,7 @@ dependencies {
 
 Then add `mavenLocal()` to your app's repositories.
 
-`:sample-consumer` depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0` (not
+`:sample-consumer` depends on `io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0` (not
 `project(...)`) and resolves it from **Maven Central only**, exactly as a host app does. It builds
 once 2.2.0 is published there; until then CI and the release workflow exclude it. Version comes from ONE source: `farmerChatVersion` in the root `build.gradle.kts` (group `org.digitalgreen.farmerchat` on all subprojects), mirrored at runtime by `FarmerChatVersion.VERSION`.
 
@@ -243,7 +243,7 @@ cd android
 ./gradlew :farmerchat-android-views:compileDebugKotlin
 ./gradlew :sample-compose:assembleDebug :sample-views:assembleDebug
 ./gradlew :sample-jetpack:assembleDebug
-./gradlew publishToMavenLocal      # org.digitalgreen.farmerchat:* 2.2.0 (all v2 platforms are 2.2.0)
+./gradlew publishToMavenLocal      # io.github.aiyappa-digitalgreen:* 2.2.0 (all v2 platforms are 2.2.0)
 ```
 
 `sample-compose` / `sample-views` are minimal hosts: initialize + analytics-listener logging + launch/openChat/logout buttons.
