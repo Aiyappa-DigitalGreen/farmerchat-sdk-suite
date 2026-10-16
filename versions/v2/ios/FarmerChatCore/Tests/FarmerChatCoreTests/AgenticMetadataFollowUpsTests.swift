@@ -29,4 +29,13 @@ final class AgenticMetadataFollowUpsTests: XCTestCase {
         XCTAssertNotNil(response.messageId)
         XCTAssertNil(response.followUpQuestions)
     }
+
+    /// #29 returns objects too (Android `List<Question>`); typed `[String]` the chips never showed.
+    func testFollowUpQuestionsResponseDecodesObjectsWithIds() throws {
+        let json = #"{"message_id":"m-1","section_message_id":"s-1","clarification_required":false,"questions":[{"follow_up_question_id":"q-2","question":"Second?","sequence":2},{"follow_up_question_id":"q-1","question":"First?","sequence":1}]}"#
+        let r = try JSONDecoder().decode(FollowUpQuestionsResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.questions?.count, 2)
+        XCTAssertEqual(r.questions?.first?.followUpQuestionId?.stringValue, "q-2")
+        XCTAssertEqual(r.questions?.sorted { ($0.sequence ?? 0) < ($1.sequence ?? 0) }.first?.question, "First?")
+    }
 }

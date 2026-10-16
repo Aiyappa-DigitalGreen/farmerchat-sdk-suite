@@ -335,7 +335,9 @@ public struct PlantixResponse: Codable, Sendable {
 // MARK: - Follow-ups (#29, #30)
 
 public struct FollowUpQuestionsResponse: Codable, Sendable {
-    public var questions: [String]?
+    /// Objects `{follow_up_question_id, question, sequence}` (Android `List<Question>`,
+    /// ChatModels.kt:157-168). Typed `[String]` the decode failed silently and chips never showed.
+    @LossyOptional public var questions: [FollowUpQuestionOption]?
     public var clarificationRequired: Bool?
 
     enum CodingKeys: String, CodingKey {

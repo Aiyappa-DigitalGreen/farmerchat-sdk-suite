@@ -306,6 +306,12 @@ enum NetworkLog {
         }
     }
 
+    /// A non-HTTP diagnostic line (debugLogging only), e.g. what a response decoded to.
+    static func note(_ text: String) {
+        guard enabled else { return }
+        logger.debug("[FarmerChat] \(text, privacy: .public)")
+    }
+
     static func line(_ request: URLRequest, outcome: String, ms: Int) -> String {
         let method = request.httpMethod ?? "GET"
         // percentEncodedPath keeps the trailing slash every endpoint path ends with (`url.path`

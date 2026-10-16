@@ -342,8 +342,11 @@ public final class ChatViewModel: ObservableObject {
             // before the send starts, so the chip locks immediately on tap.
             recordAlignmentPick(question)
             Task {
-                if followUpQuestionId != nil || self.state.suggestedQuestions?.contains(question) == true {
-                    _ = await self.env.api.followUpQuestionClick(FollowUpClickRequest(followUpQuestion: question))
+                // App rule (ChatViewModel.kt:952-963): #30 only for a tapped suggested follow-up, and
+                // it carries that follow-up's server id, never the question text. A typed question
+                // (followUpQuestionId == nil) sends nothing.
+                if followUpQuestionId != nil, let id = self.serverFollowUpId(for: question, passed: followUpQuestionId) {
+                    _ = await self.env.api.followUpQuestionClick(FollowUpClickRequest(followUpQuestion: id))
                     self.env.analytics.track(AnalyticsEvents.followUpQuestionClicked, props: ["question": question])
                 }
                 await self.sendQuestion(
@@ -1039,13 +1042,27 @@ public final class ChatViewModel: ObservableObject {
     }
 
     // MARK: - Follow-ups (#29)
+    /// The server `follow_up_question_id` of a tapped suggestion. Callers pass either the id or (UI
+    /// chips that only know the text) the question itself, so resolve the text to its id.
+    func serverFollowUpId(for question: String, passed: String?) -> String? {
+        if let passed, passed != question, !passed.isEmpty { return passed }
+        guard let index = state.suggestedQuestions?.firstIndex(of: question),
+              let ids = state.suggestedQuestionIds, index < ids.count, !ids[index].isEmpty else { return nil }
+        return ids[index]
+    }
+
 
     private func fetchFollowUps(messageId: String, aiMessageLocalId: String) async {
         let result = await env.api.followUpQuestions(messageId: messageId)
         guard case .success(let response) = result else { return }
-        let questions = response.questions ?? []
+        // Server order, with the server's ids: #30 must report the tapped follow_up_question_id.
+        let options = (response.questions ?? [])
+            .filter { !($0.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { ($0.sequence ?? Int.max) < ($1.sequence ?? Int.max) }
+        let questions = options.compactMap(\.question)
+        NetworkLog.note("follow_up_questions decoded \(questions.count) question(s), clarification_required=\(response.clarificationRequired ?? false)")
         state.suggestedQuestions = questions.isEmpty ? nil : questions
-        state.suggestedQuestionIds = questions.isEmpty ? nil : questions.map { _ in UUID().uuidString }
+        state.suggestedQuestionIds = questions.isEmpty ? nil : options.map { $0.followUpQuestionId?.stringValue ?? "" }
         state.clarificationRequired = response.clarificationRequired ?? false
         state.messages = state.messages.map { entry in
             if case .aiResponse(var ai) = entry, ai.id == aiMessageLocalId {

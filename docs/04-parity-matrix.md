@@ -8773,3 +8773,13 @@ Checks: Core `swift build` + `swift test` (145, 0 failures); SwiftUI `xcodebuild
 UNVERIFIED: voice, camera, the shared card's content. Not fixed: a follow-up question isn't pinned to
 the top while its answer loads (it pins once answered). Tips use only the 3 built-in tips (server tip
 keys need a Core API).
+- **Second Core bug, found by the UIKit pass after the first fix:** `FollowUpQuestionsResponse.questions`
+  (#29) was `[String]?`, but the API sends `{follow_up_question_id, question, sequence}` (Android
+  `List<Question>`). The decode failed silently, so iOS had no follow-up chips once the metadata fix
+  stopped the `done` strings from masking it. Also, `suggestedQuestionIds` were random UUIDs, and the
+  #30 click sent the question TEXT on any suggested-question send. Now: objects decoded and sorted by
+  `sequence`, the real ids kept, and #30 sent only for a tapped suggestion with its server id (app
+  `ChatViewModel.kt:952-963`; Android SDK `ChatViewModel.kt:590`). A debug-only `NetworkLog.note` line
+  reports what #29 decoded. Verified on DEMO: "follow_up_questions decoded 3 question(s)". When the
+  server sends a profile nudge ("Help us tailor your advice", Female/Male/Other), the follow-up list is
+  suppressed, exactly as in the app (`ChatThreadContent.kt:589-612`). Core tests 146/0.
