@@ -8617,3 +8617,19 @@ sample-consumer. Verified: `publishToMavenLocal` writes `~/.m2/.../io/github/aiy
 with the new group in the POMs; `testDebugUnitTest assembleDebug apiCheck` pass. v1 `android/`
 stays `org.digitalgreen.farmerchat` (not going to Central). External host RationSmart still points
 at the old group in mavenLocal; it must change its dependency lines to pick up new builds.
+
+## Fresh-host integration test, Android Compose (2026-10-16)
+New app `~/AndroidStudioProjects/FarmerChatComposeDemo` (outside this repo): AGP 8.13.2, Kotlin
+2.2, compileSdk 36. It depends on `io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0`
+from mavenLocal (Maven Central not released yet), and uses `FarmerChatFab` plus `openChat(question)`.
+On the rs_qa emulator (API 36), `DEV` environment:
+- builds on the first try; app and FAB render.
+- guest init 201, labels, terms, language, new conversation all 200. The first-time language
+  screen shows (Kannada preselected from location), then the chat opens in English.
+- typed question → agentic endpoint 200, streamed (1 status + 9 text_delta events), formatted
+  answer, Share/Listen, follow-ups.
+- the X closes the SDK back to the host activity; the host's `openChat(question)` deep link sends
+  the question. A backend 500 on that answer showed the error card, and Try again recovered it.
+  0 crashes.
+- FAIL with `STAGE`: its backend returns 404 for every path (docs/05, 2026-10-16). Not an
+  integration bug; the demo app uses `DEV`.

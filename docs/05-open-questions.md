@@ -809,3 +809,25 @@ v2 SDK (npm bundle, widget script, iOS binary, Android AAR), so hosts no longer 
 can extract them from a shipped bundle. The Google key currently accepts requests from any origin.
 **Ask:** restrict it in Google Cloud to the Geolocation API (and, if feasible, to the app IDs and web
 referrers in use). Rotate it if abuse shows up.
+
+## The v2 `STAGE` environment's backend no longer serves the API (2026-10-16)
+
+Found while testing a fresh Compose host app (`~/AndroidStudioProjects/FarmerChatComposeDemo`).
+`FarmerChatEnvironment.STAGE` was pointed at `https://demo.agent.farmer.chat/` on 2026-09-08
+(docs/02). That host now returns **404 for every API path** (`api/user/privacy_policy/`,
+`api/user/initialize_user/`, the agentic endpoint). Any host that picks `STAGE` sees "FarmerChat
+couldn't load". Checked from a Mac and an emulator the same day:
+
+| Base URL | API | Agentic |
+|---|---|---|
+| `demo.agent.farmer.chat` (v2 `STAGE`) | 404 | 404 |
+| `farmerchat.farmstack.co/mobile-app-stage/` (v1 `STAGE`, kept commented in v2) | 200 | 401 (present, auth required) |
+| `…/mobile-app-dev/` (`DEV`), `…/mobile-app-demo/` (`DEMO`) | 200 | 401 |
+
+Not affected: the hosted demo (`/app/`) and the LastCheck hosts. They override `customBaseUrl` to
+the farmstack stage host.
+
+**Open question:** has `demo.agent.farmer.chat` moved, or should v2 `STAGE` go back to the
+farmstack stage host (the commented one-line revert in each platform's config)? Base URLs are
+frozen by docs/02 (CLAUDE.md §2), so this is not changed until the backend team or the user
+decides.
