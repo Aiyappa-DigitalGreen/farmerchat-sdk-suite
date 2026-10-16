@@ -81,7 +81,7 @@ publishing {
                         "session/token store, label manager, use cases and per-screen UDF " +
                         "state machines) for the FarmerChat Android SDK. No UI dependencies."
                 )
-                url.set("https://github.com/digitalgreenorg/farmerchat-sdk-suite")
+                url.set("https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite")
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -96,8 +96,8 @@ publishing {
                     }
                 }
                 scm {
-                    url.set("https://github.com/digitalgreenorg/farmerchat-sdk-suite")
-                    connection.set("scm:git:https://github.com/digitalgreenorg/farmerchat-sdk-suite.git")
+                    url.set("https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite")
+                    connection.set("scm:git:https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git")
                 }
             }
         }

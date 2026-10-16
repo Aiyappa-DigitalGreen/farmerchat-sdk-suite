@@ -9,10 +9,10 @@ Pod::Spec.new do |s|
     bundled FarmerChatCore sources. No third-party analytics SDKs — events
     are emitted through a host-pluggable listener.
   DESC
-  s.homepage         = 'https://github.com/digitalgreenorg/farmerchat-sdk-suite'
+  s.homepage         = 'https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite'
   s.license          = { :type => 'Apache-2.0' }
   s.author           = { 'Digital Green' => 'support@digitalgreen.org' }
-  s.source           = { :git => 'https://github.com/digitalgreenorg/farmerchat-sdk-suite.git', :tag => "ios-v#{s.version}" }
+  s.source           = { :git => 'https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git', :tag => "ios-v#{s.version}" }
 
   s.swift_version    = '5.9'
   s.ios.deployment_target = '15.0'

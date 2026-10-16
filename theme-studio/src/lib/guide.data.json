@@ -945,7 +945,7 @@
         "label": "Remote (once tagged)",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/digitalgreenorg/farmerchat-sdk-suite.git\",\n        from: \"1.0.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"1.0.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
        }
       ]
      },

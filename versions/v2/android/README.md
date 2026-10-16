@@ -9,6 +9,7 @@ Embeds the complete FarmerChat journey — splash → language onboarding → na
 | Device | Android 8.0 (API 26), `minSdk 26` |
 | Your build | `compileSdk 36`, Kotlin 2.x, JDK 17 |
 | Compose flavour | Android Gradle Plugin **8.13+**. Older AGP versions build fine but crash with a `VerifyError` when the chat opens. The Views flavour is not affected. |
+| App size | Adds about **3.4 MB** to the download of a release app with R8 shrinking (measured 2026-10-16: 4.21 MB vs 0.68 MB): 1.5 MB illustrations, 1.4 MB code, 0.6 MB images/resources. Unused illustration packs can be stripped (see below). |
 | Below minSdk 26 | Use `tools:overrideLibrary` naming `org.digitalgreen.farmerchat.sdk.core`, `.compose` and `.views`. |
 
 There is no minimum RAM or CPU: if the device runs the OS or browser version above, the SDK runs. Full matrix for every platform: the integration guide's "What your app needs" section.

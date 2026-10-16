@@ -8633,3 +8633,18 @@ On the rs_qa emulator (API 36), `DEV` environment:
   0 crashes.
 - FAIL with `STAGE`: its backend returns 404 for every path (docs/05, 2026-10-16). Not an
   integration bug; the demo app uses `DEV`.
+
+## "Can anyone test from anywhere?" check (2026-10-16)
+- Fixed (web + RN): external calls (Google geolocate) no longer carry FarmerChat headers. Web sent
+  `X-Request-ID`/`X-Timeout`, which failed Google's CORS, so location lookup broke on every
+  website. RN also sent `Device-Info` to Google. Android was already clean (separate OkHttp
+  client); iOS uses its own geolocate session. Verified: on a third-party page, geolocate went from
+  blocked to 200. Web/RN typecheck + tests + builds and the widget build pass.
+- Fixed: every repo link (guide, POMs, podspec source, package.json `repository`, guide generator)
+  pointed at `github.com/digitalgreenorg/farmerchat-sdk-suite`, which is a 404. They now point at
+  the real public repo `github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite`.
+- Open (docs/05): backend CORS rejects the SDK's headers, so the web SDK only works behind a
+  same-origin proxy.
+- Size, Android: the SDK adds 3.4 MB download / 3.7 MB APK to an R8-minified release app
+  (FarmerChatComposeDemo with vs without the SDK): assets 1.5 MB, dex 1.4 MB, images/res 0.6 MB.
+  Web 208 KB gz (npm), widget 238 KB gz, RN JS 215 KB gz. iOS not measured.

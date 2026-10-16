@@ -49,6 +49,9 @@ The 2.x line lives in `versions/v2/` (Android, iOS, React Native, Web, widget); 
   `shell-quote` advisory.
 
 ### Fixed
+- Web and React Native no longer send FarmerChat headers (including `Device-Info`) to Google's
+  geolocation API. On web this had blocked location lookup on every website (CORS).
+- Repository links in the guide, POMs, podspec and package.json pointed at a non-existent repo.
 - Android v1 `sample-consumer` pinned 1.0.0 while the SDK publishes 1.1.0.
 - Web `typecheck:test` failed (missing Node types). RN example apps were committed pointing at
   the local mock server and used an invalid `appearance` value.

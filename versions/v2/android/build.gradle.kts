@@ -76,7 +76,7 @@ subprojects {
 // environment variables so NO credentials are committed. It is inert until the
 // URL is provided, so local `publishToMavenLocal` keeps working untouched.
 //
-//   Publish:  ./gradlew publishAllPublicationsToFarmerChatRepository //               -PfarmerchatRepoUrl=https://maven.pkg.github.com/digitalgreenorg/farmerchat-sdk-suite //               -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
+//   Publish:  ./gradlew publishAllPublicationsToFarmerChatRepository //               -PfarmerchatRepoUrl=https://maven.pkg.github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite //               -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
 //   Or set FARMERCHAT_REPO_URL / FARMERCHAT_REPO_USER / FARMERCHAT_REPO_TOKEN.
 //
 // Consumers then add that same URL to their settings.gradle.kts dependencyResolutionManagement.

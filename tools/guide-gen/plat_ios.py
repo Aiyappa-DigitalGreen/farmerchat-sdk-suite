@@ -88,7 +88,7 @@ targets: [
 ]"""),
         ("Remote (once tagged)","swift","Package.swift","""dependencies: [
     .package(
-        url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
+        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
         from: "1.0.0"
     )
 ],

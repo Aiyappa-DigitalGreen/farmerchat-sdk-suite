@@ -27,7 +27,7 @@ working exactly as before.
 
 ```bash
 ./gradlew publishAllPublicationsToFarmerChatRepository \
-  -PfarmerchatRepoUrl=https://maven.pkg.github.com/digitalgreenorg/farmerchat-sdk-suite \
+  -PfarmerchatRepoUrl=https://maven.pkg.github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite \
   -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
 ```
 

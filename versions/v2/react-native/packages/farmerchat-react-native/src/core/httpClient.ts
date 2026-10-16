@@ -190,13 +190,19 @@ export class HttpClient {
     }, priority.timeoutMs);
 
     try {
-      const headers: Record<string, string> = {
-        'X-Request-ID': requestId,
-        'X-Timeout': String(Math.round(priority.timeoutMs / 1000)),
-        'Build-Version': BUILD_VERSION_HEADER_VALUE,
-        'Device-Info': getDeviceInfoHeader(),
-        ...(spec.headers ?? {}),
-      };
+      // A call to another host (Google geolocate passes its full URL as the path) carries none
+      // of FarmerChat's headers, as on Android (separate client): Device-Info must not reach a
+      // third party.
+      const external = /^https?:\/\//i.test(spec.path);
+      const headers: Record<string, string> = external
+        ? { ...(spec.headers ?? {}) }
+        : {
+            'X-Request-ID': requestId,
+            'X-Timeout': String(Math.round(priority.timeoutMs / 1000)),
+            'Build-Version': BUILD_VERSION_HEADER_VALUE,
+            'Device-Info': getDeviceInfoHeader(),
+            ...(spec.headers ?? {}),
+          };
       if (spec.body !== undefined) headers['Content-Type'] = 'application/json';
       if (spec.auth !== false) {
         const token = this.store.accessToken;

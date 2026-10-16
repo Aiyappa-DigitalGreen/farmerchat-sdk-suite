@@ -468,11 +468,17 @@ export class HttpClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const headers: Record<string, string> = {
-        'X-Request-ID': generateUuid(),
-        'X-Timeout': String(Math.round(timeoutMs / 1000)),
-      };
-      if (!opts.skipAuthHeader) {
+      // A call to another host (Google geolocate) carries none of FarmerChat's headers, as on
+      // Android (separate client): they would hand Device-Info to a third party, and their custom
+      // names fail Google's CORS preflight, which broke location lookup on every website.
+      const external = opts.absoluteUrl !== undefined;
+      const headers: Record<string, string> = external
+        ? {}
+        : {
+            'X-Request-ID': generateUuid(),
+            'X-Timeout': String(Math.round(timeoutMs / 1000)),
+          };
+      if (!opts.skipAuthHeader && !external) {
         headers['Build-Version'] = 'v2';
         headers['Device-Info'] = deviceInfoHeaderValue();
         const token = this.accessToken;

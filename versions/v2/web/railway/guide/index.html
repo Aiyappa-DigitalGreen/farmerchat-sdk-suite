@@ -607,7 +607,7 @@ didFinishLaunchingWithOptions:(<span class="t-n">NSDictionary</span> *)launchOpt
     <p class="st-eyebrow">Before you start</p>
     <h2 class="sec-title">What your app needs</h2>
     <div class="tw"><table><thead><tr><th>Platform</th><th>Minimum</th><th>Also needed</th></tr></thead><tbody>
-      <tr><td>Android</td><td>Android 8.0 (API 26)</td><td>Compose flavour: Android Gradle Plugin <strong>8.13+</strong> (older versions crash when the chat opens). <code>compileSdk 36</code>.</td></tr>
+      <tr><td>Android</td><td>Android 8.0 (API 26)</td><td>Compose flavour: Android Gradle Plugin <strong>8.13+</strong> (older versions crash when the chat opens). <code>compileSdk 36</code>. Adds about 3.4 MB to a release app's download (R8 on).</td></tr>
       <tr><td>iOS</td><td>iOS 15 (Core, UIKit) &middot; iOS 16 (SwiftUI)</td><td>Swift 5.9 / Xcode 15+. Your Info.plist declares the microphone, camera, photo library and location texts.</td></tr>
       <tr><td>React Native</td><td>React Native 0.76 &middot; Expo SDK 52</td><td>The Expo modules listed in the package's peer dependencies. <code>react-native-webview</code> and <code>react-native-view-shot</code> are optional.</td></tr>
       <tr><td>Web</td><td>Chrome / Edge 87+ &middot; Firefox 78+ &middot; Safari 14+ (iOS 14+)</td><td>HTTPS for voice, camera and location. npm package: React 18. The script-tag widget brings its own React.</td></tr>
@@ -852,7 +852,7 @@ didFinishLaunchingWithOptions:(<span class="t-n">NSDictionary</span> *)launchOpt
     .target(name: <span class="t-s">&quot;MyApp&quot;</span>, <span class="t-k">dependencies</span>: [<span class="t-s">&quot;FarmerChatSwiftUI&quot;</span>])
 ]</code></pre></div><div class="cb-pane" data-cb="cb32" data-i="1" hidden><div class="fname">Package.swift</div><pre><code><span class="t-k">dependencies</span>: [
     .package(
-        url: &quot;https:<span class="t-c">//github.com/digitalgreenorg/farmerchat-sdk-suite.git&quot;,</span>
+        url: &quot;https:<span class="t-c">//github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git&quot;,</span>
         from: <span class="t-s">&quot;2.2.0&quot;</span>
     )
 ],

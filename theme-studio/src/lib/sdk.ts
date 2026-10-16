@@ -15,7 +15,7 @@
 import { currentCode, themeJSON } from "./export"
 import type { PlatformId, ThemeState } from "./theme"
 
-export const SDK_REPO = "https://github.com/digitalgreenorg/farmerchat-sdk-suite"
+export const SDK_REPO = "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite"
 
 /** Union of every platform's shipped versions (newest first) — the selector's options. */
 export const SDK_VERSIONS = ["2.0.0", "1.0.0"] as const

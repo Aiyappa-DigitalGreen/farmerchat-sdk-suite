@@ -831,3 +831,18 @@ the farmstack stage host.
 farmstack stage host (the commented one-line revert in each platform's config)? Base URLs are
 frozen by docs/02 (CLAUDE.md §2), so this is not changed until the backend team or the user
 decides.
+
+## Backend CORS blocks the web SDK on other websites (2026-10-16)
+
+Tested with the hosted widget on a third-party origin (`http://localhost:8765`), environment
+`demo` (user rule: never point tests at prod). The FarmerChat backend's CORS preflight answers
+`access-control-allow-headers: accept, authorization, content-type, user-agent, x-csrftoken,
+x-requested-with`. The SDK's required headers (`Build-Version`, `Device-Info`, `X-Request-ID`,
+`X-Timeout`, `API-Key`; root CLAUDE.md §3) are not allowed, so every API call fails in the browser
+(`net::ERR_FAILED`). The same allow-list was seen on the prod and demo hosts. Our hosted pages only
+work because `/app/` and `/demo/` go through the same-origin `/stage/` proxy.
+
+**Needed from the backend team:** add `build-version, device-info, x-request-id, x-timeout,
+api-key` to `Access-Control-Allow-Headers` (and `Access-Control-Expose-Headers` if the SDK reads
+response headers). Until then the web SDK and the widget work only behind a proxy on the host's
+own domain. Native SDKs (Android, iOS, React Native) are unaffected: CORS is browser-only.

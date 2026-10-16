@@ -41,7 +41,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
+    "url": "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
     "directory": "react-native/packages/farmerchat-react-native"
   },
   "peerDependencies": {
