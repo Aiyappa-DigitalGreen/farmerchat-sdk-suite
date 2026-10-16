@@ -71,7 +71,7 @@ jobs:
       dry_run: ${{ steps.version.outputs.dry_run }}
       notes: ${{ steps.notes.outputs.notes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve version
         id: version
@@ -142,7 +142,7 @@ jobs:
           { echo "notes<<$delim"; cat release-notes.md; echo "$delim"; } >> "$GITHUB_OUTPUT"
           echo "----- release notes for $VERSION -----"; cat release-notes.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -158,12 +158,12 @@ jobs:
       run:
         working-directory: versions/v2/android
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       # sample-consumer resolves the SDK from Maven Central and is excluded below until the
       # first release is published there; publishToMavenLocal still proves the artifacts publish.
       - run: ./gradlew publishToMavenLocal
@@ -181,7 +181,7 @@ jobs:
           cp farmerchat-*/build/outputs/aar/*-release.aar "$GITHUB_WORKSPACE/out/aar/"
           tar -C "$HOME/.m2/repository" -czf "$GITHUB_WORKSPACE/out/farmerchat-android-maven-local.tgz" io/github/aiyappa-digitalgreen
           ls -l "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/out/aar"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: out/
@@ -194,7 +194,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Core (swift test)
         working-directory: versions/v2/ios/FarmerChatCore
         run: swift build && swift test
@@ -212,8 +212,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: SDK
@@ -233,7 +233,7 @@ jobs:
         run: |
           npm ci && npm run typecheck && npm run build
           npm pack --pack-destination "$GITHUB_WORKSPACE/out"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: npm-web
           path: out/*.tgz
@@ -249,8 +249,8 @@ jobs:
       run:
         working-directory: versions/v2/react-native/packages/farmerchat-react-native
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: npm ci
@@ -260,7 +260,7 @@ jobs:
       - run: |
           mkdir -p "$GITHUB_WORKSPACE/out"
           npm pack --pack-destination "$GITHUB_WORKSPACE/out"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: npm-react-native
           path: out/*.tgz
@@ -292,14 +292,14 @@ jobs:
         run: |
           if [ "$HAS_NPM_TOKEN" != "true" ]; then echo "::notice::NPM_TOKEN not set: skipping npm publish"; fi
           if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish @digitalgreenorg/farmerchat-web, -widget, -react-native @ $VERSION"; fi
-      - uses: actions/checkout@v4   # provenance links the tarball to this repo's package.json repository
+      - uses: actions/checkout@v7   # provenance links the tarball to this repo's package.json repository
         if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: env.HAS_NPM_TOKEN == 'true' && env.DRY_RUN != 'true'
         with:
           pattern: npm-*
@@ -334,14 +334,14 @@ jobs:
         run: |
           echo "Maven Central: secrets=$HAS_CENTRAL | custom repo: $HAS_CUSTOM_REPO | dry_run=$DRY_RUN"
           if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish io.github.aiyappa-digitalgreen:*:$VERSION"; fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
 
       # Plain Maven repo (e.g. GitHub Packages) via the mechanism already in build.gradle.kts.
@@ -405,7 +405,7 @@ jobs:
         run: |
           if [ "$HAS_COCOAPODS_TOKEN" != "true" ]; then echo "::notice::COCOAPODS_TRUNK_TOKEN not set: skipping pod trunk push"; fi
           if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would pod trunk push FarmerChatUIKit $VERSION"; fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_COCOAPODS_TOKEN == 'true' && env.DRY_RUN != 'true'
       # The podspec's source is tag "ios-v<version>", which trunk clones; this workflow is triggered by
       # "v<version>". Skip (not fail) until that tag exists, or until the podspec is aligned.
@@ -452,7 +452,7 @@ jobs:
       DRY_RUN: ${{ needs.verify.outputs.dry_run }}
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
       - name: Collect assets
