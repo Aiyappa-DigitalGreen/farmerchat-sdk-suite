@@ -714,7 +714,11 @@ export interface PlantixResponse {
 // ---------------------------------------------------------------------------
 
 export interface FollowUpQuestionsResponse {
-  questions?: Array<string | { question?: string | null; id?: string | number | null }> | null;
+  /** The API sends `{ follow_up_question_id, question, sequence }` (Android `List<Question>`). */
+  questions?: Array<
+    | string
+    | { follow_up_question_id?: string | number | null; sequence?: number | null; question?: string | null; id?: string | number | null }
+  > | null;
   clarification_required?: boolean | null;
   [key: string]: unknown;
 }

@@ -8783,3 +8783,9 @@ keys need a Core API).
   reports what #29 decoded. Verified on DEMO: "follow_up_questions decoded 3 question(s)". When the
   server sends a profile nudge ("Help us tailor your advice", Female/Male/Other), the follow-up list is
   suppressed, exactly as in the app (`ChatThreadContent.kt:589-612`). Core tests 146/0.
+- **Web #30 fixed the same way (2026-10-16):** web read `q.id`, but the server sends
+  `follow_up_question_id`, so web never had an id. It sent `follow_up_question_click` with the
+  question TEXT on EVERY send, typed questions included (DEMO 500 ×3). Now the ids are read and kept
+  index-aligned in `sequence` order, and #30 goes only for a tapped follow-up chip, with its id
+  (`useChat.ts`, `ChatScreen.tsx`, `types.ts`). Verified on DEMO through the local proxy: typed
+  question → no #30; chip tap → #30 200 (once); deep link → no #30. All web checks pass.

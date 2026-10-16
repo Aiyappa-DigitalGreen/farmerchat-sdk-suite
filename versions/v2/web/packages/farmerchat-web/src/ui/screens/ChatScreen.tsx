@@ -434,7 +434,11 @@ export function ChatScreen(props: {
         questions={followUps}
         useChips
         clarificationRequired={chat.clarificationRequired}
-        onClick={(_, q) => void actions.sendFollowUpQuestion(q)}
+        onClick={(_, q) => {
+          const i = chat.suggestedQuestions?.indexOf(q) ?? -1;
+          const id = i >= 0 ? chat.suggestedQuestionIds?.[i] : undefined;
+          void actions.sendFollowUpQuestion(q, { followUpQuestionId: id ?? null });
+        }}
       />
     </div>
   );

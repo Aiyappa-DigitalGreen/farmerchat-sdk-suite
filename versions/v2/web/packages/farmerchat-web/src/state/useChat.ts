@@ -361,15 +361,19 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
     async (messageId: string, aiMessageLocalId: string) => {
       const res = await api.getFollowUpQuestions(messageId);
       if (!res.ok) return;
-      const raw = res.data.questions ?? [];
+      // Server order, ids kept index-aligned with the questions: #30 reports the tapped
+      // follow_up_question_id (the field is follow_up_question_id; `id` was never sent).
+      const raw = [...(res.data.questions ?? [])].sort((a, b) =>
+        (typeof a === 'object' && a ? a.sequence ?? 0 : 0) - (typeof b === 'object' && b ? b.sequence ?? 0 : 0),
+      );
       const questions: string[] = [];
       const ids: Array<string | number> = [];
       for (const q of raw) {
         if (typeof q === 'string') {
-          questions.push(q);
-        } else if (q && typeof q === 'object') {
-          if (q.question) questions.push(q.question);
-          if (q.id !== null && q.id !== undefined) ids.push(q.id);
+          if (q) { questions.push(q); ids.push(''); }
+        } else if (q && typeof q === 'object' && q.question) {
+          questions.push(q.question);
+          ids.push(q.follow_up_question_id ?? q.id ?? '');
         }
       }
       const clarification = res.data.clarification_required ?? false;
@@ -911,8 +915,11 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
 
   const sendFollowUpQuestion = useCallback<ChatActions['sendFollowUpQuestion']>(
     async (question, opts = {}) => {
-      // Follow-up clicks are tracked server-side via endpoint #30.
-      void api.trackFollowUpClick(question);
+      // #30 only for a tapped suggested follow-up, with its server id (app ChatViewModel.kt:952-963).
+      // Typed questions and alignment chips send nothing; the question text is never sent.
+      if (opts.followUpQuestionId !== null && opts.followUpQuestionId !== undefined && opts.followUpQuestionId !== '') {
+        void api.trackFollowUpClick(String(opts.followUpQuestionId));
+      }
       await runTextQuery(question, {
         transcriptionId: opts.transcriptionId ?? null,
         audioUri: opts.audioUri ?? null,
