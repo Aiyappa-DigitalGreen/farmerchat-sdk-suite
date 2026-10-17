@@ -405,7 +405,10 @@
         config: {
           environment: 'demo',
           customBaseUrl: base || undefined,
-          enableAgenticChat: stage || q.get('agentic') === '1',
+          // As the real app on DEMO (remote config v2_agent_5_in_hi=false): synchronous answers with
+          // the same chat screen. ?agentic=1 (or ?replay=1) opts into the streaming endpoint.
+          enableAgenticChat: q.get('agentic') === '1' || replay,
+          enableComposerUi: true,
           geoApiKey: q.get('geoKey') || undefined,
           mode: q.get('mode') || undefined,
           appearance: q.get('appearance') || 'day',
