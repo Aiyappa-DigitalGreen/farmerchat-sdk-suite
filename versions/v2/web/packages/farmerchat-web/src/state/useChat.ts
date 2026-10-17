@@ -34,6 +34,7 @@ import { Events, Screens } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
 import { agenticMetadataIsError, sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
+import { firesMessageSent, imageSendMessages, latestAiMessageId, synthesisStillWanted } from '../core/chatGuards';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
 import {
   ALIGN_CHIP_SEL,
@@ -905,7 +906,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         };
       });
 
-      analytics.messageSent(question);
+      // Host onMessageSent: the question text, once per send — not again on a retry (Android
+      // fires it beside Send_Query_Initiated, which a retry does not fire).
+      if (firesMessageSent(opts)) analytics.messageSent(question);
 
       const conversationId = await ensureConversationId();
       // omitNullFields: unset statement_id / ssfr_crop / transcription_id are left OFF the body,
@@ -1262,7 +1265,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
   );
 
   const sendQuestionWithImage = useCallback<ChatActions['sendQuestionWithImage']>(
-    async (question, imageBlob, imageObjectUrl, fromChip) => {
+    async (question, imageBlob, imageObjectUrl, fromChip, retryOfUserMessageId?: string) => {
+      // `retryOfUserMessageId` is internal: only the retry closure below passes it (the bubble of
+      // the failed send, reused as in the app's retryLastRequest; not part of ChatActions).
+      const retry = retryOfUserMessageId !== undefined;
       // App ChatViewModel.sendQuestionWithImage (:1121-1149) → fetchPlantixResponse (:1820-1915).
       // The bubble shows only what the farmer typed (blank → image-only); the API always gets a
       // prompt, the default question when the caption is blank.
@@ -1273,7 +1279,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       // sendAlignmentPhotoDirect's props — a chip pick (`selected`, `upload-photo`, the chip's
       // value/label, click_type align_chip_sel; ChatScreen.kt:431-455).
       const sizeKb = Math.max(0, Math.floor(imageBlob.size / 1024));
-      startSendQuery(
+      // A retry fires neither Send_Query_Initiated nor Send_Query (the app's retryLastRequest sets
+      // no props), exactly as runTextQuery's retry.
+      if (retry) pendingSendQueryRef.current = null;
+      else startSendQuery(
         fromChip
           ? {
               screenName: Screens.CHAT,
@@ -1311,12 +1320,12 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         });
         return;
       }
-      const userMsgId = nextLocalId('user');
+      const userMsgId = retryOfUserMessageId ?? nextLocalId('user');
       const placeholderId = nextLocalId('loading');
       setState((s) => ({
         ...s,
-        messages: [
-          ...s.messages,
+        messages: imageSendMessages<ChatMessage>(
+          s.messages,
           {
             kind: 'user',
             id: userMsgId,
@@ -1326,7 +1335,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
             isFailed: false,
           } as UserMessage,
           { kind: 'loading', id: placeholderId } as LoadingPlaceholder,
-        ],
+          retryOfUserMessageId,
+        ),
         isLoading: true,
         errorMessage: null,
         failedMessageId: null,
@@ -1334,7 +1344,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         chatResponseState: loading(),
       }));
 
-      analytics.messageSent(question);
+      // Host onMessageSent: the farmer's caption ("" for a bare photo, Android Analytics.kt), once
+      // per send — not again on a retry.
+      if (firesMessageSent({ retry })) analytics.messageSent(question);
       const conversationId = await ensureConversationId();
       const prepared = await prepareImageForUpload(imageBlob);
       if (!prepared) {
@@ -1356,7 +1368,10 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       const lat = prepared.gps ? kotlinDoubleString(prepared.gps.latitude) : null;
       const lng = prepared.gps ? kotlinDoubleString(prepared.gps.longitude) : null;
 
-      lastRequestRef.current = () => sendQuestionWithImage(question, imageBlob, imageObjectUrl);
+      lastRequestRef.current = () =>
+        (sendQuestionWithImage as (q: string, b: Blob, u: string, c: undefined, retryOf: string) => Promise<void>)(
+          question, imageBlob, imageObjectUrl, undefined, userMsgId,
+        );
 
       const res = await api.imageAnalysis({
         conversation_id: conversationId,
@@ -1369,7 +1384,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         latitude: lat ?? null,
         longitude: lng ?? null,
         image_name: prepared.imageName,
-        retry: false,
+        // App fetchPlantixResponse(retry = true) from retryLastRequest (ChatViewModel.kt:2203).
+        retry,
       });
 
       if (!res.ok || res.data.error || !res.data.response) {
@@ -1548,7 +1564,14 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         return;
       }
       patch({ isLoadingSynthesiseAudio: true });
+      const latestAtRequest = latestAiMessageId(s);
       const res = await api.synthesiseAudio({ message_id: messageId, text, user_id: session.userId ?? '' });
+      // A slow #31 reply that lands after the farmer moved on (a new question, a follow-up chip)
+      // must not play the OLD answer over the new turn (Android SynthesisGuard, commit a689450).
+      if (!synthesisStillWanted(latestAtRequest, stateRef.current)) {
+        patch({ isLoadingSynthesiseAudio: false });
+        return;
+      }
       if (!res.ok || !res.data.audio) {
         patch({
           isLoadingSynthesiseAudio: false,

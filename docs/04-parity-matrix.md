@@ -9010,3 +9010,9 @@ retry/the same step on Compose passed). UNVERIFIED: C7 (DEMO sent no gender nudg
 silent; D5 rejection passes), F3 (one emulator size), F4 RTL (no RTL language on DEMO). N/A: A10
 (answer links are not tappable on Android, already recorded). Note: commit 4af5e9d swept part of this
 work in early (its API check failed at that commit; the full set passes `apiCheck`).
+Web follow-up (same day, from the Android pass): host callbacks fire once per send (not on retry);
+tapping a language row no longer switches labels before Save (labels stored as the app does, even if
+`set_preferred_language` fails); a late `synthesise_audio` reply is dropped (web keeps Listen working
+on older answers: newest answer at tap time vs reply time); `PATCH api/images/v2/viewed/` only for
+`type == "image"` cards with a string `statement_id` (app HomeScreen.kt:2092) — DEMO's 404s were ours;
+a photo retry reuses the failed bubble and sends `retry: true` (app retryLastRequest :2160-2207).

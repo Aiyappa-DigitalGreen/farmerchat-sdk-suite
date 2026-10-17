@@ -71,6 +71,9 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Web: image-viewed tracking was sent for text cards too (404 on DEMO); tapping a language row switched
+  the language before Save; a photo retry added a second bubble and fired the host callbacks again;
+  a late Listen reply could play an old answer.
 - Android: `onMessageSent` / `onAnswerReceived` carried empty values (and fired on failures); tapping a
   language row changed the language before Save; a late Listen reply played the previous answer; the
   Compose composer ignored the host theme; Views composer buttons had no accessibility labels.

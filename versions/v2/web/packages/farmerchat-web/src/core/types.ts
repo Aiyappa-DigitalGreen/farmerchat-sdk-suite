@@ -586,7 +586,8 @@ export interface HelpSupportResponse {
 // ---------------------------------------------------------------------------
 
 export interface ImageViewedRequest {
-  statement_id: number;
+  /** A string on the wire, as the app sends it (`ImageViewedRequest.statement_id: String`). */
+  statement_id: string;
   user_id: string;
   status: 'viewed';
 }

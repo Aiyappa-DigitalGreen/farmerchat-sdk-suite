@@ -26,6 +26,7 @@ import { PrefKeys } from '../../core/storage';
 import type { SectionDto, SectionOption } from '../../core/types';
 import type { ChatRouteParams } from '../router';
 import { renderableSections } from '../../core/types';
+import { marksImageViewed } from '../../core/homeViewed';
 
 /**
  * How long an open request waits for the terms URL to land before giving up and toasting.
@@ -583,7 +584,8 @@ export function HomeScreen(props: {
                         onTap={() => void onContentCardTap(section)}
                         onVisible={() => {
                           services.analytics.track(Events.CARD_VIEWED, { statement_id: section.statement_id ?? '' });
-                          if (section.statement_id != null && !section.is_viewed) void homeActions.markImageViewed(section.statement_id);
+                          // App HomeScreen.kt:2092: image cards only (a text card's statement 404s on DEMO).
+                          if (marksImageViewed(section)) void homeActions.markImageViewed(section.statement_id!);
                         }}
                       />
                     )}

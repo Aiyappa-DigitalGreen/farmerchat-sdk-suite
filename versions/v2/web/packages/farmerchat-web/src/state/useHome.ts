@@ -4,6 +4,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
+import { imageViewedRequest } from '../core/homeViewed';
 import { PrefKeys } from '../core/storage';
 import type {
   CropResponse,
@@ -53,7 +54,7 @@ export interface HomeActions {
   newConversation: (contentProviderId?: number | string | null) => Promise<string | null>;
   updateCultivatedCrops: (cropIds: Array<number | string>) => Promise<void>;
   transcribeAudio: (base64Audio: string, audioFormat: string, triggeredType: string) => Promise<GetVoiceResponse | null>;
-  markImageViewed: (statementId: number) => Promise<void>;
+  markImageViewed: (statementId: number | string) => Promise<void>;
   fetchImageStatement: (statementId: number, triggeredInputType: string) => Promise<ImageStatementResponse | null>;
   dismissCard: (sectionId: string) => void;
   /**
@@ -172,8 +173,8 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
   );
 
   const markImageViewed = useCallback(
-    async (statementId: number) => {
-      const res = await api.markImageViewed({ statement_id: statementId, user_id: session.userId ?? '', status: 'viewed' });
+    async (statementId: number | string) => {
+      const res = await api.markImageViewed(imageViewedRequest(statementId, session.userId ?? ''));
       patch({ imageViewedState: toUiState(res) });
     },
     [api, patch, session],

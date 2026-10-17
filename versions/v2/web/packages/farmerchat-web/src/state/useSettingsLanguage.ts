@@ -11,6 +11,7 @@ import { UiState, idle, loading } from './uiState';
 import { toUiState } from './helpers';
 import { resolveCountryCode } from '../core/fallbackLocation';
 import { Events } from '../core/analytics';
+import { saveLanguageSelection } from '../core/languageSave';
 
 export interface LanguageSettingsState {
   languageState: UiState<SupportedLanguageGroup[]>;
@@ -79,25 +80,20 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
     patch({ languageState: toUiState(res) });
   }, [api, config.defaultCountryCode, config.defaultStateCode, patch, store]);
 
+  // App SettingsViewModel.selectLanguage (:149-156): a tap only moves the radio. "Labels API and
+  // prefs are only updated on Save (submitLanguage)" — tap → Back leaves the old language on screen.
   const selectLanguage = useCallback(
     async (language: SupportedLanguage) => {
-      if (stateRef.current.fetchingLabelsForId !== null) return;
-      patch({ fetchingLabelsForId: language.id, labelsFetchFailed: false });
-      const res = await api.getLabels(language.id);
-      if (res.ok) {
-        labels.setLabels(res.data);
-        patch({
-          selectedLanguageId: language.id,
-          selectedLanguageCode: language.code ?? null,
-          selectedLanguageDisplayName: language.display_name ?? null,
-          selectedStreamingRequired: language.streaming_required ?? true,
-          fetchingLabelsForId: null,
-        });
-      } else {
-        patch({ fetchingLabelsForId: null, labelsFetchFailed: true });
-      }
+      if (stateRef.current.isSubmitting) return;
+      patch({
+        selectedLanguageId: language.id,
+        selectedLanguageCode: language.code ?? null,
+        selectedLanguageDisplayName: language.display_name ?? null,
+        selectedStreamingRequired: language.streaming_required ?? true,
+        labelsFetchFailed: false,
+      });
     },
-    [api, labels, patch],
+    [patch],
   );
 
   const toggleExpanded = useCallback(() => {
@@ -108,19 +104,22 @@ export function useSettingsLanguage(services: SdkServices): [LanguageSettingsSta
     const s = stateRef.current;
     if (s.selectedLanguageId === null || s.isSubmitting) return;
     patch({ isSubmitting: true, submitErrorMessage: null });
-    const res = await api.setPreferredLanguage({
-      user_id: session.userId ?? '',
-      language_id: s.selectedLanguageId,
-    });
+    const res = await saveLanguageSelection(
+      {
+        userId: session.userId ?? '',
+        getLabels: (id) => api.getLabels(id),
+        setPreferredLanguage: (body) => api.setPreferredLanguage(body),
+        labels,
+        store,
+      },
+      {
+        languageId: s.selectedLanguageId,
+        languageCode: s.selectedLanguageCode,
+        displayName: s.selectedLanguageDisplayName,
+        streamingRequired: s.selectedStreamingRequired,
+      },
+    );
     if (res.ok) {
-      store.setInt(PrefKeys.SELECTED_LANGUAGE_ID, s.selectedLanguageId);
-      store.setBool(PrefKeys.STREAMING_REQUIRED, s.selectedStreamingRequired);
-      if (s.selectedLanguageCode) labels.setLanguageCode(s.selectedLanguageCode);
-      // App parity: persist the display name so the drawer's "Language: X" line
-      // updates (previously only id/code were saved → stale drawer).
-      if (s.selectedLanguageDisplayName) {
-        store.setString(PrefKeys.SELECTED_LANGUAGE_DISPLAY_NAME, s.selectedLanguageDisplayName);
-      }
       analytics.track(Events.SAVE_LANGUAGE_CLICK, {
         language_code: s.selectedLanguageCode ?? '',
       });
