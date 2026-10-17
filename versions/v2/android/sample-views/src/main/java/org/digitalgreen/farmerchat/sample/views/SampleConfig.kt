@@ -107,7 +107,7 @@ object SampleConfig {
             // Agentic ON: the app's source hardcodes `getAgenticChatEnabled()` and
             // `getComposerUiEnabled()` to true (OnboardingRemoteConfig.kt), so a build from
             // source always shows the composer Home and streams agentic answers.
-            "appstage" -> b.customBaseUrl(APP_STAGE_URL).enableAgenticChat(true)
+            "appstage" -> b.customBaseUrl(APP_STAGE_URL).enableAgenticChat(false).enableComposerUi(true)
             // Econet-shaped host: CHAT_ONLY, light, navy brand with a navy accent, and the agentic
             // chat UI over the synchronous #27 endpoint (its backend has no #27a).
             "econet" -> b.customBaseUrl(MOCK_URL)

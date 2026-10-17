@@ -19,3 +19,11 @@ data class LanguageSettingsState(
     val languageSubmitSuccess: Boolean = false,
     val submitErrorMessage: String? = null
 )
+
+/**
+ * A row tap: records the choice only (app SettingsViewModel `selectLanguage`, "Labels API and
+ * prefs are only updated on Save"). No label fetch starts, so the UI keeps the saved language
+ * until the farmer saves.
+ */
+internal fun LanguageSettingsState.selectingLanguage(languageId: Int, languageCode: String) =
+    copy(selectedLanguageId = languageId, languageCode = languageCode)

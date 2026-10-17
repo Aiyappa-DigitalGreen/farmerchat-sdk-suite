@@ -50,6 +50,25 @@ class FarmerChatAnalytics(
     }
 
     /**
+     * C4 `onMessageSent(text)`, fired by the chat at the moment it sends, with the farmer's
+     * question. It used to be derived from Send_Query_Initiated, whose payload carries no text
+     * (`text_query` is a Boolean), so every host received "". Not telemetry: fires whether or not
+     * analytics is enabled. An image sent without a caption reports "".
+     */
+    fun messageSent(text: String) {
+        runCatching { hooks?.onMessageSent?.invoke(text) }
+    }
+
+    /**
+     * C4 `onAnswerReceived(messageId)`, fired once a real answer has landed, with its server
+     * `message_id`. It used to be derived from Send_Query, which carries no message id and also
+     * fires for FAILED answers, so hosts got "" on every answer and on every error.
+     */
+    fun answerReceived(messageId: String) {
+        runCatching { hooks?.onAnswerReceived?.invoke(messageId) }
+    }
+
+    /**
      * Identity, not an event: the app's `AnalyticsUserIdentityManager.identifyUser()` moment.
      * Blank ids are dropped (the app returns early on an empty id too), and a throwing host
      * callback is swallowed — identity reporting must never break the session it describes.
@@ -87,15 +106,6 @@ class FarmerChatAnalytics(
                 val screen = event.properties[AnalyticsProps.SCREEN_NAME] as? String
                 screen?.let { h.onScreenView?.invoke(it) }
                 if (screen == AnalyticsScreens.CHAT) h.onChatOpened?.invoke()
-            }
-            AnalyticsEvents.SEND_QUERY_INITIATED -> {
-                val text = (event.properties[AnalyticsProps.TEXT]
-                    ?: event.properties[AnalyticsProps.TEXT_QUERY]) as? String
-                h.onMessageSent?.invoke(text ?: "")
-            }
-            AnalyticsEvents.SEND_QUERY -> {
-                val id = (event.properties["message_id"] ?: event.properties["messageId"]) as? String
-                h.onAnswerReceived?.invoke(id ?: "")
             }
             AnalyticsEvents.API_CALL_FAILED, AnalyticsEvents.API_CALL_TIMEOUT -> {
                 val code = (event.properties["code"] as? Int)

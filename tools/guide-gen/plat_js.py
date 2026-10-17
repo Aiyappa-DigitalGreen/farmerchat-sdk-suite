@@ -157,6 +157,7 @@ FarmerChat.initialize({
     CB([("TypeScript","ts",None,"""FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });
 FarmerChat.openChat({ conversationId: savedId });""")]),
     SUB("Streaming agentic chat"),
+    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });")]),
     SUB("Embed chat inline"),
     P("<code>FarmerChatInlineView</code> renders the chat inside your own layout rather than "
@@ -306,6 +307,7 @@ const unsubscribe = FarmerChat.addAuthStateListener((isAuthed) => {
     CB([("TypeScript","ts",None,"""FarmerChat.openChat({ question: 'Why are my tomato leaves yellow?' });
 FarmerChat.openChat({ conversationId: savedId });""")]),
     SUB("Streaming agentic chat"),
+    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     CB([("TypeScript","ts",None,"FarmerChat.initialize({ environment: 'demo', enableAgenticChat: true });")]),
     SUB("Point at your own backend"),
     CB([("TypeScript","ts",None,"""FarmerChat.initialize({

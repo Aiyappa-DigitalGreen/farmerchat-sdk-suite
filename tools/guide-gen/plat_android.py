@@ -214,6 +214,7 @@ FarmerChat.openChat(context, question = "Why are my tomato leaves yellow?")
 // Or reopen a past conversation
 FarmerChat.openChat(context, conversationId = savedId)""")]),
     SUB("Streaming agentic chat"),
+    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     P("Opt in to the streaming agentic endpoint. Left off, chat keeps the synchronous "
       "request/response contract."),
     CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
@@ -326,6 +327,7 @@ VIEWS = {
     CB([("Kotlin","kotlin",None,"""FarmerChat.openChat(context, question = "Why are my tomato leaves yellow?")
 FarmerChat.openChat(context, conversationId = savedId)""")]),
     SUB("Streaming agentic chat"),
+    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     CB([("Kotlin","kotlin",None,"""FarmerChatConfig.Builder(FarmerChatEnvironment.DEMO)
     .enableAgenticChat(true)
     .build()""")]),

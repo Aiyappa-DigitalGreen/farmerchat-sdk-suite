@@ -91,16 +91,21 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * The farmer tapped a language row. App parity (SettingsViewModel.kt selectLanguage): this
+     * only records the choice. Labels and prefs change on Save ([submitLanguage]), never on a tap.
+     * Before 2026-10-17 the SDK fetched and SAVED the tapped language's labels here, so tapping a
+     * row and then leaving with Back left the UI in that language while the backend and prefs
+     * kept the old one (scenario pass B7: Hindi saved, English labels shown).
+     */
     fun selectLanguage(languageId: Int, languageCode: String) {
-        if (_state.value.isFetchingLabels && _state.value.fetchingLabelsForId == languageId) return
-        _state.update {
-            it.copy(
-                selectedLanguageId = languageId,
-                languageCode = languageCode,
-                isFetchingLabels = true,
-                fetchingLabelsForId = languageId
-            )
-        }
+        _state.update { it.selectingLanguage(languageId, languageCode) }
+    }
+
+    /** Fetches and saves the labels for [languageId] (app `fetchLanguageLabelsForId`). */
+    private fun fetchLanguageLabelsForId(languageId: Int) {
+        if (_state.value.isFetchingLabels) return
+        _state.update { it.copy(isFetchingLabels = true, fetchingLabelsForId = languageId) }
         scope.launch {
             getLanguageLabelsUseCase.getLanguageLabels(languageId).collect { result ->
                 when (result) {
@@ -115,14 +120,8 @@ class SettingsViewModel(
                         }
                     }
                     is ApiResult.Error -> {
-                        // Labels fetch failure → caller routes via onFetchLabelsFailure.
-                        _state.update {
-                            it.copy(
-                                isFetchingLabels = false,
-                                fetchingLabelsForId = null,
-                                languageState = result.toUiError()
-                            )
-                        }
+                        // As in the app: a labels failure leaves the current labels in place.
+                        _state.update { it.copy(isFetchingLabels = false, fetchingLabelsForId = null) }
                     }
                 }
             }
@@ -133,6 +132,9 @@ class SettingsViewModel(
         val languageId = _state.value.selectedLanguageId ?: return
         if (_state.value.isSubmittingLanguage) return
         val userId = prefs.getString(SdkPreferences.Keys.PREF_USER_ID, "")
+        // App SettingsViewModel.kt submitLanguage: the labels for the chosen language are fetched
+        // on Save, not on the row tap.
+        fetchLanguageLabelsForId(languageId)
         _state.update { it.copy(isSubmittingLanguage = true, submitErrorMessage = null) }
         scope.launch {
             // App SettingsViewModel.kt:215 — attributed to the Language Settings screen.

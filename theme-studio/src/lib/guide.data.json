@@ -446,6 +446,13 @@
       "html": "Streaming agentic chat"
      },
      {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
+     },
+     {
       "k": "p",
       "html": "Opt in to the streaming agentic endpoint. Left off, chat keeps the synchronous request/response contract."
      },
@@ -873,6 +880,13 @@
       "html": "Streaming agentic chat"
      },
      {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
+     },
+     {
       "k": "code",
       "tabs": [
        {
@@ -1274,6 +1288,13 @@
       "html": "Streaming agentic chat"
      },
      {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
+     },
+     {
       "k": "code",
       "tabs": [
        {
@@ -1657,6 +1678,13 @@
      {
       "k": "sub",
       "html": "Streaming agentic chat"
+     },
+     {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
      },
      {
       "k": "code",
@@ -2521,6 +2549,13 @@
       "html": "Streaming agentic chat"
      },
      {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
+     },
+     {
       "k": "code",
       "tabs": [
        {
@@ -2942,6 +2977,13 @@
      {
       "k": "sub",
       "html": "Streaming agentic chat"
+     },
+     {
+      "k": "warn",
+      "tag": "Leave streaming off",
+      "paras": [
+       "Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."
+      ]
      },
      {
       "k": "code",

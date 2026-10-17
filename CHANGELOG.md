@@ -65,6 +65,9 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Streaming (agentic) chat is off in every demo, sample profile and check app, as the real app runs on
+  DEMO; DEMO's agentic endpoint failed often ("Sorry, I had a problem just now"). The SDK default was
+  already off; READMEs and the guide now advise leaving it off.
 - iOS, React Native, web: `update_user_location` sent `lat`/`long` as numbers; the app and the
   Android SDK send strings. On DEMO, the weather question re-sent after sharing GPS was answered
   "Sorry, I had a problem just now".

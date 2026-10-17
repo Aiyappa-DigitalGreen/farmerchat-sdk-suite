@@ -8965,3 +8965,16 @@ safe (Android/RN/web: `environment` required, no default; iOS `FarmerChatConfig`
 - **Left as is (offline, never reaches a network):** RN/web/iOS/Android unit tests that pass
   `dev`/`stage` only to exercise env→URL mapping or the re-initialize shape rule (storage-only
   hydration; fetch stubbed where called).
+
+## Streaming (agentic) off everywhere, as the real app on DEMO (2026-10-17, user: "streaming forced on - stop in all platforms")
+The real app's demo flavour runs with remote config `v2_agent_5_in_hi=false` on DEMO and answers on the
+synchronous #27; forced onto the agentic endpoint it fails like our demos did ("Sorry, I had a
+problem" 3/5 with `done.error:true tokens_out:0`, plus `service_unavailable`; trace ids in the session
+app-oracle evidence). SDK defaults were already off on all four platforms. Switched off where it was
+forced, with the composer UI kept (`enableComposerUi(true)`) so the chat screen still matches the app:
+hosted demo app + widget page (`?agentic=1` opts in), LastCheckSDKCompose/XML, FarmerChatRNDemo, the
+v2 samples' `appstage` profile. The samples' explicit `agentic` profile stays as a named opt-in. Docs:
+iOS README setup snippet (true → false), Android INTEGRATION.md setup + checklist, and a "leave
+streaming off" warning in the Android/iOS/RN/web READMEs and every guide "Streaming agentic chat"
+section (generated guide + Theme Studio data). Live check (user's Chrome, synchronous path): weather
+→ 3-day forecast; "My name is Ravi and I grow corn on 50 acres" → a real answer; all HTTP 200.

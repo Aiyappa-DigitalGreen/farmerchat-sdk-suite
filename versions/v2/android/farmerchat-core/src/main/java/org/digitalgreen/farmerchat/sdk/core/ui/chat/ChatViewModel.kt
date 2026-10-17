@@ -200,7 +200,7 @@ class ChatViewModel(
                     isVoiceQuery = action.audioUri != null,
                     lengthOfTextQuery = action.question.length
                 ).withManualChipContext(manualSendChipContext(_state.value.messages))
-                pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
+                pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()); analytics.messageSent(action.question) }
                 sendFollowUpQuestion(action.question, action.transcriptionId, action.audioUri, action.followUpQuestionId)
             }
             is ChatAction.SendAlignmentChip -> sendAlignmentChip(action)
@@ -217,7 +217,7 @@ class ChatViewModel(
                     isVoiceQuery = false,
                     lengthOfTextQuery = action.question.length
                 ).withManualChipContext(manualSendChipContext(_state.value.messages))
-                pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
+                pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()); analytics.messageSent(action.question) }
                 sendQuestionWithImage(action.question, action.imageUri)
             }
             is ChatAction.SendFollowUpVoiceQuestion -> initializeVoice(action.audioUri, replaceMessages = false)
@@ -431,6 +431,7 @@ class ChatViewModel(
         )
         pendingSendQueryProperties = props
         analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, props.toAnalyticsProperties())
+        analytics.messageSent(action.question)
 
         val triggeredInputTypeOverride = resolveTriggeredInputType(action)
 
@@ -547,7 +548,7 @@ class ChatViewModel(
                 lengthOfTextQuery = question.length,
                 isReadFullAdvice = true
             )
-            pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
+            pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()); analytics.messageSent(question) }
             val statementIdToSend = homeStatementIdForReadFullAdvice
             rememberForRetry(question, InputType.TEXT, null, null, triggerInputType, false, null, statementIdToSend)
             fetchTextPromptResponse(
@@ -744,7 +745,7 @@ class ChatViewModel(
                             audioFormat = format,
                             lengthOfTextQuery = 0
                         ).withManualChipContext(manualSendChipContext(_state.value.messages))
-                        pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()) }
+                        pendingSendQueryProperties?.let { analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties()); analytics.messageSent(text) }
                         rememberForRetry(text, InputType.AUDIO, data.transcription_id, null, "voice", false, null, null)
                         fetchTextPromptResponse(
                             text, InputType.AUDIO, placeholderId, data.transcription_id,
@@ -1246,6 +1247,7 @@ class ChatViewModel(
         )
         pendingSendQueryProperties?.let {
             analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties())
+            analytics.messageSent(action.query)
         }
         fetchTextPromptResponse(
             action.query,
@@ -1328,6 +1330,7 @@ class ChatViewModel(
         )
         pendingSendQueryProperties?.let {
             analytics.track(AnalyticsEvents.SEND_QUERY_INITIATED, it.toAnalyticsProperties())
+            analytics.messageSent(query)
         }
         fetchTextPromptResponse(
             query,
@@ -1674,6 +1677,8 @@ class ChatViewModel(
                         ).toAnalyticsProperties()
                     )
                 }
+                // onAnswerReceived(messageId): only for a real answer, with the server message_id.
+                analytics.answerReceived(data.message_id.orEmpty())
                 pendingSendQueryProperties = null
                 // Real follow-ups always come from endpoint #29, but only after a normal or
                 // additive answer. An EXCLUSIVE surface (clarify / confirm / escalate / gps-prompt /
@@ -1796,6 +1801,7 @@ class ChatViewModel(
                                     .toAnalyticsProperties()
                             )
                         }
+                        analytics.answerReceived(data.message_id.orEmpty())
                         pendingSendQueryProperties = null
                         applyFollowUpQuestionsFromApi(data.message_id)
                     }
