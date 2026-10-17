@@ -12,7 +12,7 @@
  *     node --import ./test/ts-extension-hook.mjs test/alignmentPick.test.ts
  */
 
-import { ALIGN_CHIP_SEL, alignmentChipSend, alignmentRequestFields, recordAlignmentPick } from '../src/core/alignment.ts';
+import { ALIGN_CHIP_SEL, alignmentChipSend, alignmentRequestFields, fetchesFollowUps, omitNullFields, recordAlignmentPick } from '../src/core/alignment.ts';
 
 let passed = 0;
 const failures: string[] = [];
@@ -163,6 +163,24 @@ check(
   'spread into a request leaves no null keys',
   JSON.stringify({ query: 'Rice', triggered_input_type: ALIGN_CHIP_SEL, ...alignmentRequestFields('CLARIFY', null) }),
   '{"query":"Rice","triggered_input_type":"align_chip_sel"}',
+);
+
+// --- fetchesFollowUps: ChatViewModel.kt:2020-2025 (no #29 after an exclusive surface) ---------
+check('plain answer fetches #29', fetchesFollowUps(null, 'm1', false), true);
+check('unknown type renders as an answer → fetches', fetchesFollowUps('something-new', 'm1', false), true);
+for (const t of ['gps-prompt', 'upload-photo', 'alignment-clarify', 'alignment-confirm', 'alignment-escalate']) {
+  check(`no #29 after ${t}`, fetchesFollowUps(t, 'm1', false), false);
+}
+check('additive gender-select still fetches', fetchesFollowUps('gender-select', 'm1', false), true);
+check('additive commodity-confirm still fetches', fetchesFollowUps('commodity-confirm', 'm1', false), true);
+check('no server message id → no call', fetchesFollowUps(null, null, false), false);
+check('hide_follow_up_question → no call', fetchesFollowUps(null, 'm1', true), false);
+
+// --- omitNullFields: Gson never writes nulls ---------------------------------------------------
+check(
+  'request body has no null members, keeps false / "" / 0',
+  JSON.stringify(omitNullFields({ query: 'q', message_id: '', statement_id: null, weather_cta_triggered: false, ssfr_crop: null, transcription_id: undefined, retry: false, n: 0 })),
+  '{"query":"q","message_id":"","weather_cta_triggered":false,"retry":false,"n":0}',
 );
 
 // ---------------------------------------------------------------------------

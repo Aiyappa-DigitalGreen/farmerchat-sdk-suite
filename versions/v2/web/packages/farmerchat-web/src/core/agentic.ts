@@ -378,3 +378,29 @@ export function sanitizeAgenticFinalText(raw: string): string {
   if (fenceStart >= 0) text = text.slice(0, fenceStart);
   return text.replace(/\s+$/, '');
 }
+
+/**
+ * A terminal agentic `metadata` that reports `error: true` (app ChatViewModel.kt:1631-1636). Only
+ * the literal boolean counts, as Gson maps it; `error: false` with a "Sorry, I had a problem…"
+ * response is a normal answer in the app and renders as one.
+ */
+export function agenticMetadataIsError(metadata: { error?: unknown } | null | undefined): boolean {
+  return metadata?.error === true;
+}
+
+/**
+ * StreamErrorCard copy + icon (app `ui/chat/component/StreamErrorCard.kt:55-81`): a preserved
+ * partial answer wins; otherwise only a NETWORK failure (the request never got an HTTP response,
+ * or the body read broke — okhttp IOException / a thrown fetch) reads "No internet connection"
+ * with the wifi-off icon. Every HTTP status (SERVER: 5xx incl. 503, 4xx, empty body, metadata
+ * `error: true`), TOOL and UNKNOWN reads "Something went wrong" with the warning icon.
+ */
+export function streamErrorCopy(
+  kind: StreamErrorKind,
+  hasPartial: boolean,
+): { key: string; fallback: string; icon: 'm_wifi_off' | 'm_warning' } {
+  const icon = kind === 'NETWORK' ? 'm_wifi_off' : 'm_warning';
+  if (hasPartial) return { key: 'fc_v2_app_label_connection_stopped_partial_saved', fallback: 'Connection stopped. Your partial answer is saved.', icon };
+  if (kind === 'NETWORK') return { key: 'fc_v2_app_label_no_internet_connection', fallback: 'No internet connection', icon };
+  return { key: 'fc_v2_app_label_something_went_wrong', fallback: 'Something went wrong', icon };
+}

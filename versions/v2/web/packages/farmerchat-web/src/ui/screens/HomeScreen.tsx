@@ -139,7 +139,7 @@ export function HomeScreen(props: {
       // HomeViewModel.backfillApproxLocationName: fill the pill's place name from the profile's
       // geography (district > state > country) when nothing wrote it yet. Never overwrites.
       void profileActions.fetchProfile('home').then((profile) => {
-        const u = (profile?.userProfile ?? null) as
+        const u = (profile?.user_profile ?? null) as
           | { geography_level3?: string | null; geography_level2_name?: string | null; country_name?: string | null }
           | null;
         const place = [u?.geography_level3, u?.geography_level2_name, u?.country_name].find((v) => (v ?? '').trim().length > 0);

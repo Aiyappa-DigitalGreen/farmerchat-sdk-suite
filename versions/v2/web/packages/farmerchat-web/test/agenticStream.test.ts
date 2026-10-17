@@ -16,6 +16,7 @@
 
 import { readAgenticStream } from '../src/core/agenticStream.ts';
 import type { AgenticEvent } from '../src/core/agentic.ts';
+import { agenticMetadataIsError, streamErrorCopy } from '../src/core/agentic.ts';
 
 let passed = 0;
 const failures: string[] = [];
@@ -124,6 +125,31 @@ async function main(): Promise<void> {
     await collect(new Response('', { status: 406 })),
     [{ type: 'failure', message: 'HTTP 406', kind: 'SERVER' }],
   );
+  // A 503 whose body is a readable SSE "Sorry" answer: the app never reads a non-2xx body
+  // (AgenticChatDataSource.kt:71-76) — one SERVER failure, the body never becomes an answer.
+  check(
+    'a 503 with an SSE "Sorry" body is ONE SERVER failure, body ignored',
+    await collect(
+      new Response(
+        'event: metadata\ndata: {"error": false, "response": "Sorry, I had a problem just now. Please ask your question again."}\n\n',
+        { status: 503, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    ),
+    [{ type: 'failure', message: 'HTTP 503', kind: 'SERVER' }],
+  );
+  // StreamErrorCard copy (StreamErrorCard.kt:55-81): only NETWORK reads "No internet".
+  check('SERVER (any HTTP status, e.g. 503) → Something went wrong + warning', streamErrorCopy('SERVER', false), {
+    key: 'fc_v2_app_label_something_went_wrong', fallback: 'Something went wrong', icon: 'm_warning',
+  });
+  check('NETWORK → No internet connection + wifi-off', streamErrorCopy('NETWORK', false), {
+    key: 'fc_v2_app_label_no_internet_connection', fallback: 'No internet connection', icon: 'm_wifi_off',
+  });
+  check('UNKNOWN / TOOL → Something went wrong', [streamErrorCopy('UNKNOWN', false).fallback, streamErrorCopy('TOOL', false).fallback], ['Something went wrong', 'Something went wrong']);
+  check('partial wins over the kind', streamErrorCopy('SERVER', true).key, 'fc_v2_app_label_connection_stopped_partial_saved');
+  // metadata.error (ChatViewModel.kt:1631-1636): only the literal true is a failure.
+  check('metadata error:true is a server failure', agenticMetadataIsError({ error: true }), true);
+  check('metadata error:false "Sorry" is an answer', agenticMetadataIsError({ error: false }), false);
+  check('missing error flag is an answer', [agenticMetadataIsError({}), agenticMetadataIsError(null)], [false, false]);
   check('a missing body is a SERVER failure', await collect(new Response(null, { status: 200 })), [
     { type: 'failure', message: 'Empty agentic response body', kind: 'SERVER' },
   ]);

@@ -198,6 +198,7 @@ function FabOverlayRoot(props: {
   config?: FarmerChatConfig;
   onExit: () => void;
   onOwnExitChange: (hasOwnExit: boolean) => void;
+  onFallbackCloseSlotChange: (slot: 'right' | 'left' | 'hidden') => void;
 }): React.ReactElement {
   const services = useMemo(() => getOrCreateServices(props.config), [props.config]);
   useEffect(
@@ -212,6 +213,7 @@ function FabOverlayRoot(props: {
     inline: true,
     onExit: props.onExit,
     onOwnExitChange: props.onOwnExitChange,
+    onFallbackCloseSlotChange: props.onFallbackCloseSlotChange,
   });
 }
 
@@ -226,6 +228,7 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   // True while the screen on top draws its own exit (the CHAT_ONLY chat's Close): the fallback
   // close below steps aside so two X's never overlap the app bar (iOS FarmerChatFabButton parity).
   const [screenHasOwnExit, setScreenHasOwnExit] = useState(false);
+  const [closeSlot, setCloseSlot] = useState<'right' | 'left' | 'hidden'>('right');
   const { bg, fg } = fabBrandColors(props);
   const label = fabLabel(props);
   const side = props.position === 'bottom-left' ? { left: '20px' } : { right: '20px' };
@@ -243,10 +246,10 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
       { style: { position: 'fixed', inset: 0, zIndex: 2147483000, background: 'var(--fc-bg, #ffffff)' } },
       // Full-screen overlay: the root fills it flush (inline), as the compose FAB's full-screen host.
       // The SDK's own exit (CHAT_ONLY chat Close) collapses the overlay after the host's onExit.
-      createElement(FabOverlayRoot, { config: props.config, onExit: close, onOwnExitChange: setScreenHasOwnExit }),
+      createElement(FabOverlayRoot, { config: props.config, onExit: close, onOwnExitChange: setScreenHasOwnExit, onFallbackCloseSlotChange: setCloseSlot }),
       // Fallback close for screens without their own exit (language, onboarding, Home): the web
       // has no system Back to fall back on.
-      screenHasOwnExit
+      screenHasOwnExit || closeSlot === 'hidden'
         ? null
         : createElement(
             'button',
@@ -254,7 +257,9 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
               'aria-label': 'Close FarmerChat',
               onClick: close,
               style: {
-                position: 'fixed', top: '14px', right: '14px', zIndex: 2147483001,
+                position: 'fixed', top: '14px', zIndex: 2147483001,
+                // Home's top-right is the weather pill: sit in the gap after the 42px menu button.
+                ...(closeSlot === 'left' ? { left: '70px' } : { right: '14px' }),
                 width: '40px', height: '40px', borderRadius: '999px', border: 'none', cursor: 'pointer',
                 background: 'rgba(0,0,0,0.5)', color: '#ffffff', fontSize: '18px', lineHeight: '40px',
               },

@@ -8978,3 +8978,19 @@ iOS README setup snippet (true → false), Android INTEGRATION.md setup + checkl
 streaming off" warning in the Android/iOS/RN/web READMEs and every guide "Streaming agentic chat"
 section (generated guide + Theme Studio data). Live check (user's Chrome, synchronous path): weather
 → 3-day forecast; "My name is Ravi and I grow corn on 50 acres" → a real answer; all HTTP 200.
+
+## Full scenario pass: web SDK + widget (2026-10-17)
+Every scenario in the session's SCENARIOS.md (lifecycle, chat-only, inputs, full journey, theming)
+passes in the shipped mode (streaming off). Fixed on the way: (1) language Save never left the
+chooser (its 500 ms timer was cancelled by its own effect) — now returns to the same chat, thread kept;
+(2) location after "Give permission" read top-level fields, DEMO nests them under `user_profile` like
+the app → wrong place in the bubble/Home/Settings; (3) profile read `userProfile`, the server sends
+`user_profile` → every fetch wiped the onboarding name; (4) FAB overlay ✕ covered the Home weather
+pill; (5) Listen resume raised an unhandled `play() interrupted` on the host page; (6) an agentic
+`metadata.error:true` now shows the server error card (app :1631-1636); plus null fields omitted and
+#29 skipped after exclusive surfaces. Error copy matches the app: any HTTP status (503 included) →
+"Something went wrong"; "No internet connection" only when no HTTP response arrives. The streaming
+call is not retried (the app's streaming client has no retry). SERVER (DEMO): `PATCH
+api/images/v2/viewed/` → 404 (path/method as the app); streaming replies after gender / save-crop /
+profile statements end `done.error:true tokens_out:0`. UNVERIFIED: camera (headless), RTL (no RTL
+language on DEMO), audible TTS, real OS share sheet. RN has bugs 1–3 too (being fixed).

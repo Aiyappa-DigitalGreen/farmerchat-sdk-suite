@@ -3,6 +3,7 @@
  * USER_NAME to prefs; used by Settings, EnterName and Home profile cards.
  */
 
+import { profileDisplayName } from '../core/profile';
 import { useCallback, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
@@ -66,10 +67,11 @@ export function useUserProfile(services: SdkServices): [UserProfileState, UserPr
       if (gen !== session.guestGeneration) return null; // superseded by a guest replacement (docs/02 Step 3)
       setState({ profileState: toUiState(res) });
       if (res.ok) {
-        const serverName = sanitizeName(res.data.userProfile?.first_name);
+        // App UserProfileViewModel.kt:53-64: displayName() (first + last).
+        const serverName = sanitizeName(profileDisplayName(res.data.user_profile));
         if (serverName) store.setString(PrefKeys.USER_NAME, serverName);
         else store.remove(PrefKeys.USER_NAME);
-        backfillGeographyKeys(res.data.userProfile);
+        backfillGeographyKeys(res.data.user_profile);
         return res.data;
       }
       return null;

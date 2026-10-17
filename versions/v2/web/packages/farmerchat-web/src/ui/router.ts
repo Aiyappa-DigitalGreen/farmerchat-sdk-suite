@@ -149,6 +149,10 @@ export function useNavigator(
   hostLanguageSet: boolean = false,
 ): Navigator {
   const [stack, setStack] = useState<Route[]>([{ name: 'splash' }]);
+  // The committed stack, readable synchronously: `pop()` must answer "was there anything to pop?"
+  // now, and a `setStack` updater is not guaranteed to have run when setStack returns.
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
   const pendingRef = useRef<PendingTarget | null>(null);
 
   const push = useCallback((route: Route) => {
@@ -177,13 +181,9 @@ export function useNavigator(
   }, []);
 
   const pop = useCallback((): boolean => {
-    let popped = false;
-    setStack((s) => {
-      if (s.length <= 1) return s;
-      popped = true;
-      return s.slice(0, -1);
-    });
-    return popped;
+    if (stackRef.current.length <= 1) return false;
+    setStack((s) => (s.length <= 1 ? s : s.slice(0, -1)));
+    return true;
   }, []);
 
   const setPendingTarget = useCallback((target: PendingTarget | null) => {

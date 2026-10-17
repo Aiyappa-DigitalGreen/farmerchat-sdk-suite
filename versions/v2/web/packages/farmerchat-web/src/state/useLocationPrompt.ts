@@ -34,6 +34,7 @@
  *    Campaign branches are not ported.
  */
 
+import { locationPrefsFromResponse } from '../core/locationProfile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
@@ -611,13 +612,16 @@ export function useLocationPrompt(services: SdkServices): [LocationPromptState, 
       void (async () => {
         const res = await api.updateUserLocation({ lat: fix.lat, long: fix.lng, user_id: userId });
         if (res.ok) {
-          // Saved only on API success, as the app does. Web models these three response fields.
-          if (res.data.country) store.setString(PrefKeys.USER_COUNTRY_NAME, res.data.country);
-          if (res.data.state) store.setString(PrefKeys.USER_STATE, res.data.state);
-          if (res.data.district) store.setString(PrefKeys.USER_DISTRICT, res.data.district);
-          // LocationPromptManager.kt: best readable place name for the pill — district > state > country.
-          const place = [res.data.district, res.data.state, res.data.country].find((v) => (v ?? '').trim().length > 0);
-          if (place) store.setString(PrefKeys.APPROX_LOCATION_NAME, place);
+          // Saved only on API success, from `user_profile`, as the app does (LocationPromptHost.kt:524-543).
+          const loc = locationPrefsFromResponse(res.data);
+          if (loc) {
+            if (loc.countryCode) store.setString(PrefKeys.USER_COUNTRY_CODE, loc.countryCode);
+            if (loc.countryName) store.setString(PrefKeys.USER_COUNTRY_NAME, loc.countryName);
+            if (loc.state) store.setString(PrefKeys.USER_STATE, loc.state);
+            if (loc.district) store.setString(PrefKeys.USER_DISTRICT, loc.district);
+            // Best readable place name for the pill / location bubble — district > state > country.
+            if (loc.place) store.setString(PrefKeys.APPROX_LOCATION_NAME, loc.place);
+          }
           saveLocation(fix);
           if (source !== 'weather') finishWithLocation(source);
         } else if (source !== 'weather') {

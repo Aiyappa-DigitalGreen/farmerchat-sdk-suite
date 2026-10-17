@@ -22,6 +22,7 @@ import type { AlignmentChip } from '../../core/types';
 import type { AlignmentKind } from '../../core/alignment';
 import { isAdditiveAlignment } from '../../core/alignment';
 import type { StreamErrorKind } from '../../core/agentic';
+import { streamErrorCopy } from '../../core/agentic';
 
 /**
  * How long a streamed answer may stall, with no tool status, before the UI shows a transient
@@ -90,11 +91,8 @@ export function StreamErrorCard(props: {
   onRetry: () => void;
 }) {
   const label = useLabel();
-  const title = props.hasPartial
-    ? label('fc_v2_app_label_connection_stopped_partial_saved', 'Connection stopped. Your partial answer is saved.')
-    : props.errorKind === 'NETWORK'
-      ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
-      : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
+  const copy = streamErrorCopy(props.errorKind, props.hasPartial);
+  const title = label(copy.key, copy.fallback);
 
   // StreamErrorCard.kt: 16dp above, a 12-radius red-tinted card (8% fill, 16% border, padding 16):
   // [24dp icon, 12dp, bold bodyMedium title], 16dp, then a full-width radius-12 button (14dp
@@ -102,7 +100,7 @@ export function StreamErrorCard(props: {
   return (
     <div className="fcsdk-c-streamerror" role="alert">
       <div className="fcsdk-c-streamerror-head">
-        <FcIcon name={props.errorKind === 'NETWORK' ? 'm_wifi_off' : 'm_warning'} size={24} tint="#E5533D" />
+        <FcIcon name={copy.icon} size={24} tint="#E5533D" />
         <span className="fc-t-bodyMedium" style={{ fontWeight: 700 }}>{title}</span>
       </div>
       <button type="button" className="fcsdk-c-streamerror-retry" onClick={props.onRetry}>

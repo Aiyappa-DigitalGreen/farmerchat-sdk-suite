@@ -3,6 +3,7 @@
  * splash/udf OnboardingAction/OnboardingState (docs/01 §3.1/§3.2).
  */
 
+import { locationPrefsFromResponse } from '../core/locationProfile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
@@ -181,8 +182,9 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
         if (seeded.ok) {
           // Same persistence the GPS path uses (useLocationPrompt): the response carries display
           // names, not codes, so USER_COUNTRY_CODE is deliberately not written here.
-          if (seeded.data.country) store.setString(PrefKeys.USER_COUNTRY_NAME, seeded.data.country);
-          if (seeded.data.state) store.setString(PrefKeys.USER_STATE, seeded.data.state);
+          const loc = locationPrefsFromResponse(seeded.data);
+          if (loc?.countryName) store.setString(PrefKeys.USER_COUNTRY_NAME, loc.countryName);
+          if (loc?.state) store.setString(PrefKeys.USER_STATE, loc.state);
         }
       }
     }

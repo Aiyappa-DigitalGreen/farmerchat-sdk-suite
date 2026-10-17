@@ -5,6 +5,7 @@
  * Success; skip sets KEY_NAME_DONE and routes.
  */
 
+import { profileDisplayName } from '../../core/profile';
 import { useEffect, useState } from 'react';
 import { useLabel, useSdk } from '../context';
 import { PrimaryButton, SecondaryButton, TextInput, Toast } from '../components/common';
@@ -30,7 +31,7 @@ export function EnterNameScreen(props: { onDone: () => void }) {
     // Prefer the server name when logged in (EnterNameRoute behavior).
     if (services.session.isAuthenticated()) {
       void profileActions.fetchProfile('enter_name').then((profile) => {
-        const serverName = sanitizeName(profile?.userProfile?.first_name);
+        const serverName = sanitizeName(profileDisplayName(profile?.user_profile));
         if (serverName) setName(serverName);
       });
     }

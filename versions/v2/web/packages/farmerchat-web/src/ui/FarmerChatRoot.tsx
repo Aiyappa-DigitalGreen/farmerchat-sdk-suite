@@ -13,7 +13,7 @@ import { PrefKeys } from '../core/storage';
 import type { AppearanceMode } from '../core/config';
 import { ensureStylesInjected, resolveTheme, resolveThemeVars, scriptForLanguage } from './theme';
 import { SdkProvider, useToastState } from './context';
-import { useNavigator, ChatRouteParams, PendingTarget } from './router';
+import { useNavigator, ChatRouteParams, PendingTarget, type Route } from './router';
 import { useChatHistory } from '../state/useChatHistory';
 import { useLocationPrompt } from '../state/useLocationPrompt';
 import { Drawer, DrawerRoute } from './components/Drawer';
@@ -73,6 +73,12 @@ export function FarmerChatRoot(props: {
    * chat's Close), so a presenter's fallback close steps aside instead of drawing a second X.
    */
   onOwnExitChange?: (hasOwnExit: boolean) => void;
+  /**
+   * Internal (FarmerChatFab): where the overlay's fallback ✕ may sit without covering the screen's
+   * own top-right control. Home's top-right is the weather pill, so its ✕ moves to the free gap
+   * between the menu button and the logo.
+   */
+  onFallbackCloseSlotChange?: (slot: 'right' | 'left' | 'hidden') => void;
 }) {
   const { services } = props;
   const navigator = useNavigator(
@@ -318,11 +324,22 @@ export function FarmerChatRoot(props: {
   );
 
   const current = navigator.current;
+  /** The chat to render: the current screen, else the nearest chat lower in the back stack. */
+  const chatRoute: Extract<Route, { name: 'chat' }> | undefined =
+    current.name === 'chat'
+      ? current
+      : ([...navigator.stack].reverse().find((r) => r.name === 'chat') as Extract<Route, { name: 'chat' }> | undefined);
   const hasOwnExit = current.name === 'chat' && services.config.mode === 'CHAT_ONLY';
   const onOwnExitChange = props.onOwnExitChange;
   useEffect(() => {
     onOwnExitChange?.(hasOwnExit);
   }, [hasOwnExit, onOwnExitChange]);
+  // Hidden while the drawer is open: the drawer's own header owns that corner.
+  const fallbackCloseSlot: 'right' | 'left' | 'hidden' = drawerOpen ? 'hidden' : current.name === 'home' ? 'left' : 'right';
+  const onFallbackCloseSlotChange = props.onFallbackCloseSlotChange;
+  useEffect(() => {
+    onFallbackCloseSlotChange?.(fallbackCloseSlot);
+  }, [fallbackCloseSlot, onFallbackCloseSlotChange]);
   const drawerVisible = services.config.showDrawer && DRAWER_ROUTES.has(current.name);
   const currentLanguage = services.store.getString(PrefKeys.SELECTED_LANGUAGE_DISPLAY_NAME) ?? services.labels.languageCode;
   const userName = services.store.getString(PrefKeys.USER_NAME);
@@ -358,7 +375,15 @@ export function FarmerChatRoot(props: {
         data-fc-script={scriptForLanguage(services.labels.languageCode)}
         style={{ ...themeVars, ...chatVars } as CSSProperties}
       >
-        {renderScreen()}
+        {/* The chat keeps its state under a secondary screen (language globe, history, settings…),
+            as Compose keeps the chat's NavBackStackEntry: it stays mounted, hidden, in ONE stable
+            slot, so popping back shows the same thread instead of a fresh, empty chat. */}
+        {chatRoute ? (
+          <div key="fcsdk-chat-slot" style={{ display: current.name === 'chat' ? 'contents' : 'none' }}>
+            {renderScreen(chatRoute)}
+          </div>
+        ) : null}
+        {current.name !== 'chat' ? renderScreen() : null}
 
         {drawerVisible ? (
           <Drawer
@@ -391,8 +416,14 @@ export function FarmerChatRoot(props: {
     </SdkProvider>
   );
 
-  function renderScreen() {
-    switch (current.name) {
+  function leaveSecondaryScreen(): void {
+    if (navigator.pop()) return;
+    if (services.config.mode === 'CHAT_ONLY') navigator.replaceAll({ name: 'chat', params: { source: 'home' } });
+    else navigator.replaceAll({ name: 'home' });
+  }
+
+  function renderScreen(route: Route = current) {
+    switch (route.name) {
       case 'splash':
         return (
           <SplashScreen
@@ -428,8 +459,8 @@ export function FarmerChatRoot(props: {
             // state): a deep link pushed over an open chat (openChat(question) while the chat is
             // on top, e.g. a widget reopened from the host page) must start that question, not be
             // swallowed by the mounted screen's run-once initialisation.
-            key={routeKey(current)}
-            params={current.params}
+            key={routeKey(route)}
+            params={route.params}
             onOpenDrawer={() => setDrawerOpen(true)}
             // 2.0.0: the GPS_PROMPT capability chip runs the ONE shared location flow (Compose
             // reads the same single `graph.locationPromptManager`), so its overlay and state
@@ -485,8 +516,11 @@ export function FarmerChatRoot(props: {
         return (
           <LanguageChooserScreen
             onOpenDrawer={() => setDrawerOpen(true)}
-            onLanguageSaved={() => navigator.replaceAll({ name: 'home' })}
-            onFetchLabelsFailure={() => navigator.popUpToAndPush('home', true, { name: 'home' })}
+            // Compose leaveSecondaryScreen (FarmerChatRoot.kt:371-379, :697-703): back to the
+            // screen it was opened over (the chat's globe → that chat, state intact; the drawer →
+            // Home); with nothing below, Home — or, in CHAT_ONLY (no Home), the chat.
+            onLanguageSaved={leaveSecondaryScreen}
+            onFetchLabelsFailure={leaveSecondaryScreen}
           />
         );
       case 'help':
@@ -531,9 +565,9 @@ export function FarmerChatRoot(props: {
       case 'error':
         return (
           <ErrorScreen
-            isNetworkError={current.params.isNetworkError}
-            fromScreen={current.params.fromScreen}
-            onTryAgain={() => onErrorTryAgain(current.params.fromScreen)}
+            isNetworkError={route.params.isNetworkError}
+            fromScreen={route.params.fromScreen}
+            onTryAgain={() => onErrorTryAgain(route.params.fromScreen)}
           />
         );
       default:

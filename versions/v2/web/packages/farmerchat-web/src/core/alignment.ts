@@ -278,3 +278,29 @@ export function alignmentRequestFields(
   if (!shareLocation && kind === 'UPLOAD_PHOTO') fields.photo_declined = true;
   return fields;
 }
+
+/**
+ * Whether an answer fetches follow-up questions from #29. Port of ChatViewModel.kt:2020-2025: an
+ * EXCLUSIVE alignment surface (clarify / confirm / escalate / gps-prompt / upload-photo) owns the
+ * chip area, so no #29 call is made after it; a normal or additive (gender-select /
+ * commodity-confirm) answer still fetches. Also needs a server message id, and honours the
+ * server's `hide_follow_up_question` flag.
+ */
+export function fetchesFollowUps(
+  alignmentType: string | null | undefined,
+  messageId: string | null | undefined,
+  hideFollowUpQuestion: boolean | null | undefined,
+): boolean {
+  if (!messageId || hideFollowUpQuestion) return false;
+  const kind = alignmentKindFromType(alignmentType);
+  return kind === null || isAdditiveAlignment(kind);
+}
+
+/**
+ * Drops null / undefined members, as the app's Gson does when it serialises `TextPromptRequest`
+ * (no `serializeNulls()`; AgenticChatDataSource.kt:58 `gson.toJson(request)`): an unset
+ * `statement_id`, `ssfr_crop` or `transcription_id` is ABSENT from the app's body, not `null`.
+ */
+export function omitNullFields<T extends object>(body: T): T {
+  return Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null && v !== undefined)) as T;
+}

@@ -32,7 +32,7 @@ import { dedupeById, mapHistoryItems } from './historyMapping';
 import { followUpTriggeredType, initialQueryTriggeredType } from '../core/triggeredInputType';
 import { Events, Screens } from '../core/analytics';
 import type { VoiceRecording } from './useVoiceRecorder';
-import { sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
+import { agenticMetadataIsError, sanitizeAgenticFinalText, sanitizeAgenticStreamText } from '../core/agentic';
 import { isAbortError } from '../core/agenticStream';
 import type { AgenticDoneEvent, StreamErrorKind } from '../core/agentic';
 import {
@@ -40,6 +40,8 @@ import {
   alignmentAnalyticsType,
   alignmentChipSend,
   alignmentKindFromType,
+  fetchesFollowUps,
+  omitNullFields,
   alignmentRequestFields,
   CapabilityChip,
   isAdditiveAlignment,
@@ -591,7 +593,8 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       analytics.answerReceived(data.message_id ?? '');
 
       // Real follow-ups always come from endpoint #29.
-      if (data.message_id && !(data.hide_follow_up_question ?? false)) {
+      // No #29 after an exclusive alignment surface (ChatViewModel.kt:2020-2025).
+      if (data.message_id && fetchesFollowUps(data.alignments?.type, data.message_id, data.hide_follow_up_question)) {
         void fetchFollowUps(data.message_id, aiId);
       }
     },
@@ -777,6 +780,14 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
             updateStreamingResponse(streamId, sanitizeAgenticStreamText(accumulated), null);
           } else if (event.type === 'metadata') {
             finalized = true;
+            // App finalizeAgenticResponse (ChatViewModel.kt:1631-1636): a terminal metadata that
+            // reports `error: true` is a server failure → the stream error card (SERVER, "Something
+            // went wrong" + Try again), never an answer bubble and never the inline error row.
+            if (agenticMetadataIsError(event.response)) {
+              finishSendQuery(false, { question: ctx.question });
+              interruptAgentic(streamId, '', 'SERVER');
+              return;
+            }
             // `metadata` carries a TextPromptResponse — the same shape #27 returns — so finalize
             // through the shared path and inherit its analytics, TTS gating and follow-ups.
             applyTextPromptResponse(event.response, { ...ctx, aiMessageLocalId: streamId, isAgentic: true });
@@ -897,7 +908,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       analytics.messageSent(question);
 
       const conversationId = await ensureConversationId();
-      const request: TextPromptRequest = {
+      // omitNullFields: unset statement_id / ssfr_crop / transcription_id are left OFF the body,
+      // exactly as the app's Gson serialises TextPromptRequest (it never writes nulls).
+      const request: TextPromptRequest = omitNullFields({
         query: question,
         conversation_id: conversationId,
         // App parity: TextPromptRequest.message_id is sent empty ("") — the
@@ -916,7 +929,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
         // Spread, never null-filled: absent keys stay off the wire, as Gson omits nulls.
         ...(opts.alignment ?? {}),
         ...(opts.image ? { image: opts.image.base64, image_name: opts.image.imageName } : {}),
-      };
+      });
 
       lastRequestRef.current = () =>
         runTextQuery(question, { ...opts, retry: true, reuseUserMessageId: userMsgId, alignment: undefined });
@@ -1529,7 +1542,9 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
       if (s.audioPlaybackUrl && audioRef.current) {
         // App SetAudioPlaying(true): the pill flips to Playing on the tap, not on the media event.
         patch({ isAudioPlaying: true });
-        void audioRef.current.play();
+        // A pause() before the resume settles rejects play() with AbortError; that is a pause,
+        // not an error, and must not surface as an unhandled rejection on the host page.
+        audioRef.current.play().catch(() => undefined);
         return;
       }
       patch({ isLoadingSynthesiseAudio: true });
@@ -1596,7 +1611,7 @@ export function useChat(services: SdkServices): [ChatState, ChatActions] {
     (isPlaying: boolean) => {
       const audio = audioRef.current;
       if (!audio) return;
-      if (isPlaying) void audio.play();
+      if (isPlaying) audio.play().catch(() => undefined);
       else audio.pause();
     },
     [],

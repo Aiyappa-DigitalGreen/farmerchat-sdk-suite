@@ -199,3 +199,23 @@ test('no fix and no resolvable fallback: initialize_user carries no coordinates'
   await t.http.request({ method: 'GET', path: 'api/images/v2/daily/' });
   assert.ok(!('lat' in initBody) && !('long' in initBody));
 });
+
+// The agentic stream is outside the ApiPriority retry table: like the app's streaming OkHttp client
+// (NetworkModule.kt:106-123 — no retry interceptor), a 503 goes back to the caller after ONE call
+// (it becomes the SERVER error card); only a 401 is replayed after a token refresh.
+test('openStream does not retry a 503', async () => {
+  const t = setup({ 'api/chat/get_answer_for_text_query_agentic/': () => ({ status: 503, json: { detail: 'unavailable' } }) }, (s) => {
+    s.setString(PrefKeys.ACCESS_TOKEN, 'tok');
+  });
+  const res = await t.http.openStream({ path: 'api/chat/get_answer_for_text_query_agentic/', body: { query: 'q' } }, new AbortController().signal);
+  assert.equal(res.status, 503);
+  assert.deepEqual(t.calls, ['api/chat/get_answer_for_text_query_agentic/']);
+});
+
+test('openStream lets a transport failure throw (the caller maps it to NETWORK)', async () => {
+  const t = setup({ 'api/chat/get_answer_for_text_query_agentic/': () => 'network' }, (s) => {
+    s.setString(PrefKeys.ACCESS_TOKEN, 'tok');
+  });
+  await assert.rejects(t.http.openStream({ path: 'api/chat/get_answer_for_text_query_agentic/', body: {} }, new AbortController().signal), TypeError);
+  assert.deepEqual(t.calls, ['api/chat/get_answer_for_text_query_agentic/']);
+});
