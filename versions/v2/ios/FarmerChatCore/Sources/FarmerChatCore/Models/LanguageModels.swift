@@ -86,14 +86,36 @@ public struct SetPreferredLanguageResponse: Codable, Sendable {
 
 // MARK: - Legal links (#4)
 
+/// Endpoint #4 (`api/user/privacy_policy/`), exactly as the app's
+/// `domain/model/privacypolicy/PrivacyPolicyResponse.kt`: `url` is the privacy policy and
+/// `farmerchat_terms_of_use` the terms (GetSupportedLanguagesUseCase.kt:76-77).
+///
+/// The SDK decoded `privacy_policy` / `terms_of_use` — fields #4 does not send — so both links
+/// were always nil: the language screen's legal links were empty and Sign up opened a guessed URL.
 public struct PrivacyPolicyResponse: Codable, Sendable {
-    public var privacyPolicy: String?
-    public var termsOfUse: String?
+    public var url: String?
+    public var leaderboardPrivacyPolicyUrl: String?
+    public var farmerchatTermsOfUse: String?
+    public var leaderboardTermsOfUse: String?
     public var message: String?
 
+    /// The privacy-policy link (`url`). Kept for source compatibility.
+    public var privacyPolicy: String? {
+        get { url }
+        set { url = newValue }
+    }
+
+    /// The terms-of-use link (`farmerchat_terms_of_use`). Kept for source compatibility.
+    public var termsOfUse: String? {
+        get { farmerchatTermsOfUse }
+        set { farmerchatTermsOfUse = newValue }
+    }
+
     enum CodingKeys: String, CodingKey {
-        case privacyPolicy = "privacy_policy"
-        case termsOfUse = "terms_of_use"
+        case url
+        case leaderboardPrivacyPolicyUrl = "leaderboard_privacy_policy_url"
+        case farmerchatTermsOfUse = "farmerchat_terms_of_use"
+        case leaderboardTermsOfUse = "leaderboard_terms_of_use"
         case message
     }
 }

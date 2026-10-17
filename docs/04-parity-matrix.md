@@ -9092,3 +9092,9 @@ question sends `Chat_History_Click {screen_name:'Side Menu', conversation_id, qu
 shows `--°` before load (app HomeScreen.kt:345). Already correct: chip text verbatim, `cardCornerRadius`
 on feed cards, GFM tables as cards. Web still sends `X-Request-ID` on the agentic call (app's streaming
 client doesn't; kept per CLAUDE.md header rule).
+iOS, RN-found checks (same day): #4 decoded `privacy_policy`/`terms_of_use`, which the API never sends
+(legal links always empty; the sign-up consent link opened a hard-coded guessed URL) — now the app's
+fields, with `privacyPolicy`/`termsOfUse` kept as computed properties; host card corner radius on
+UIKit feed cards and SwiftUI question/SSFR cards (`FCUITheme.cardRadius`); agentic stream idle-read
+limit was 7 days (request timeout overrode the session's) — now the app's 60 s. Weather chip and tables
+already correct. docs/02 corrected: #4 field list, agentic 60 s read timeout (said "no read timeout").

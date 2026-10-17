@@ -22,6 +22,9 @@ public enum FCUITheme {
         FarmerChat.isInitialized ? FarmerChat.shared.config.theme : nil
     }
 
+    /// Feed-card corner radius: the host's `cardCornerRadius`, else the app's Radius.XXL (24).
+    public static var cardRadius: CGFloat { hostTheme?.cardCornerRadius ?? 24 }
+
     /// Resolves a host override to a dynamic UIColor (light/dark), or nil if the
     /// host didn't theme this slot (so the built-in green default stays).
     private static func hostColor(_ light: KeyPath<FarmerChatTheme, Color?>,

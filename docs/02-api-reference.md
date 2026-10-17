@@ -188,9 +188,11 @@ POST api/chat/get_answer_for_text_query_agentic/
   Transfer-Encoding: chunked
 ```
 
-- **No read timeout.** Agentic answers stream for a long time, so this call must not use the
-  ApiPriority timeout client — it needs a dedicated client that still carries the auth
-  interceptors so 401 refresh applies.
+- **60 s read timeout, no total limit.** Agentic answers can stream for a long time, so this call
+  must not use the ApiPriority timeout client — it needs a dedicated client that still carries the
+  auth interceptors so 401 refresh applies. That client's read (idle) timeout is 60 s
+  (`AGENTIC_STREAM_READ_TIMEOUT_SECONDS`, app `core/di/NetworkModule.kt:32/119`): a stream that sends
+  nothing for 60 s fails as a network error; a long answer that keeps sending is never cut.
 - **Event contract** (`AgenticEvent`): `ToolCall`, `ToolResult`, `TextDelta`, `Metadata`, `Done`,
   `Failure`. The answer accretes from `TextDelta`; `Metadata` carries the ids needed for TTS (#31)
   and follow-ups (#29); `Failure` is a mid-stream error.
@@ -225,6 +227,7 @@ in the JSON. Tracked in docs/05.
 - **UpdateLocationRequest**: `lat?, long?, user_id, country?, level_2..6?, display_address?, osm_response?(OSM/Nominatim shape)`.
 - **CountryItem**: `code, display_name, flag, id, name, phone_country_code, phone_length, phone_number_pattern?`.
 - **UserNameRequest**: `age, farmer_reach_count, gender, land_holding, live_stock_details, name, profile_picture, receive_com_via_whatsapp, role, specialization, user_id`.
+- **PrivacyPolicyResponse** (#4): `url: String?` (privacy policy), `leaderboard_privacy_policy_url: String?`, `farmerchat_terms_of_use: String?` (terms of use), `leaderboard_terms_of_use: String?` — app `domain/model/.../PrivacyPolicyResponse.kt`; privacy link = `url`, terms link = `farmerchat_terms_of_use` (GetSupportedLanguagesUseCase.kt:75-78). Names such as `privacy_policy` / `privacy_policy_url` / `terms_of_use` do not exist on this response (iOS, RN and web used them until 2026-10-17).
 - **PolicyAcceptanceStatusResponse** (#7a, 2.0.0): `requires_acceptance: Boolean, terms_accepted: Boolean, terms_accepted_at: String?, latest_policy_version: LatestPolicyVersion?`; `LatestPolicyVersion(id: Int, policy_type: String, version_label: String, published_at: String, terms_of_service_url: String, privacy_policy_url: String)`. Field names verified against the live stage response 2026-09-03 and against the app's `domain/model/policy/PolicyAcceptanceStatusResponse.kt` — identical. `requires_acceptance == true` is the only signal that raises the gate; `terms_accepted` / `terms_accepted_at` are informational and unread by the app's UI.
 
 ## Networking behavior (must be reproduced by every SDK core)

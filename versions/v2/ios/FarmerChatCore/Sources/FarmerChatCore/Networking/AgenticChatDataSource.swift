@@ -164,7 +164,10 @@ struct AgenticStreamDecoder {
 /// - The request must send `Accept: application/json`. The backend **406s**
 ///   `Accept: text/event-stream`.
 /// - The response is `Content-Type: text/event-stream`, `Transfer-Encoding: chunked`.
-/// - There must be **no read/resource timeout**: agentic answers stream for minutes. This type
+/// - No overall (resource) limit — agentic answers stream for minutes — but a bounded IDLE read
+///   timeout of ``streamIdleTimeout`` (60 s, the app's `AGENTIC_STREAM_READ_TIMEOUT_SECONDS`,
+///   NetworkModule.kt:32/119): a stream that goes silent ends as a network failure (error card +
+///   retry) instead of spinning forever. This type
 ///   owns a dedicated `URLSession` and never goes through ``APIClient/execute(_:as:)`` or
 ///   ``ApiPriority``, whose whole job is to impose the P1/P2/P3 deadlines that would cut a stream
 ///   short. Note a `URLRequest.timeoutInterval` **overrides** the session configuration, so the
@@ -179,10 +182,23 @@ struct AgenticStreamDecoder {
 /// stale error card.
 final class AgenticChatDataSource: @unchecked Sendable {
 
-    /// Effectively "no timeout" (7 days) for both the idle-read and whole-resource limits.
-    /// `URLSession` has no infinite sentinel — 0 means "use the default", and `.infinity` is not a
-    /// supported value — so a large finite interval is the documented way to express this.
+    /// Effectively "no timeout" (7 days) for the whole-resource limit. `URLSession` has no
+    /// infinite sentinel — 0 means "use the default", and `.infinity` is not a supported value.
     static let noTimeoutInterval: TimeInterval = 7 * 24 * 60 * 60
+
+    /// The gap allowed between successive reads (app NetworkModule.kt `readTimeout(60 s)`; OkHttp's
+    /// readTimeout and URLSession's `timeoutIntervalForRequest` are both idle-read timers). The SDK
+    /// used 7 days here, so a silent stream hung the chat indefinitely.
+    static let streamIdleTimeout: TimeInterval = 60
+
+    /// The dedicated stream session's configuration.
+    static func sessionConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = streamIdleTimeout
+        configuration.timeoutIntervalForResource = noTimeoutInterval
+        configuration.waitsForConnectivity = false
+        return configuration
+    }
 
     static let path = "api/chat/get_answer_for_text_query_agentic/"
     static let apiName = "get_answer_for_text_query_agentic"
@@ -197,11 +213,7 @@ final class AgenticChatDataSource: @unchecked Sendable {
         if let session {
             self.session = session
         } else {
-            let configuration = URLSessionConfiguration.default
-            configuration.timeoutIntervalForRequest = AgenticChatDataSource.noTimeoutInterval
-            configuration.timeoutIntervalForResource = AgenticChatDataSource.noTimeoutInterval
-            configuration.waitsForConnectivity = false
-            self.session = URLSession(configuration: configuration)
+            self.session = URLSession(configuration: AgenticChatDataSource.sessionConfiguration())
         }
     }
 

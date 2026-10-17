@@ -114,7 +114,7 @@ final class FCUISsfrCell: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         contentView.backgroundColor = FCUITheme.surfaceSecondary
-        contentView.layer.cornerRadius = 24
+        contentView.layer.cornerRadius = FCUITheme.cardRadius
         contentView.layer.cornerCurve = .continuous
         contentView.layer.masksToBounds = true
 
@@ -192,7 +192,7 @@ final class FCUIFeedCardCell: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         contentView.backgroundColor = FCUITheme.surfaceSecondary
-        contentView.layer.cornerRadius = 20
+        contentView.layer.cornerRadius = FCUITheme.cardRadius
         contentView.layer.cornerCurve = .continuous
         contentView.layer.masksToBounds = true
 
@@ -315,7 +315,8 @@ final class FCUIFeedCardCell: UICollectionViewCell {
         layer.shadowOpacity = isContent ? 0.08 : 0
         layer.shadowRadius = 14
         layer.shadowOffset = CGSize(width: 0, height: 6)
-        contentView.layer.cornerRadius = isContent ? 24 : 20
+        // Host `cardCornerRadius` (docs/07 B), else Radius.XXL — content and question cards alike.
+        contentView.layer.cornerRadius = FCUITheme.cardRadius
         if isContent {
             let headline = (section.questionText?.isEmpty == false ? section.questionText : section.title) ?? ""
             headlineLabel.fcSetText(headline, style: FCUITypography.current.bodyLarge)

@@ -371,7 +371,7 @@ private struct FCSelectCardShell<Options: View>: View {
         .frame(maxWidth: .infinity)
         .background(theme.content.surfaceSecondary)
         // Radius.XXL, matching Containers.elevated on android.
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: theme.shapes.card, style: .continuous))
         .transition(.opacity)
     }
 
@@ -641,7 +641,7 @@ public struct FCSsfrCard: View {
         }
         .padding(16)
         .background(theme.content.surfaceSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: theme.shapes.card, style: .continuous))
     }
 
     /// App parity (Cards.kt:848-889). The SDK drew a pale `surfaceActive` chip with an SF

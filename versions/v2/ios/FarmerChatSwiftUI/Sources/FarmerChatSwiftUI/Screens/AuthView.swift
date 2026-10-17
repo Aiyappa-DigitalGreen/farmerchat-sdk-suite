@@ -11,6 +11,8 @@ struct AuthView: View {
     @StateObject private var toast = FCToastState()
     @State private var showCountryPicker = false
     @State private var didAppear = false
+    /// #4 `url` (AuthViewModel.fetchLegalLinks); the consent link opens only once it is known.
+    @State private var privacyPolicyURL: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,9 @@ struct AuthView: View {
             env.analytics.screenViewed(ScreenNames.auth)
             viewModel.trackVerificationStarted()
             viewModel.fetchCountries()
+            if case .success(let legal) = await env.api.privacyPolicy() {
+                privacyPolicyURL = legal.privacyPolicy
+            }
         }
         .onChange(of: viewModel.state.toast) { authToast in
             guard let authToast else { return }
@@ -242,10 +247,9 @@ struct AuthView: View {
     /// AuthConsentText: centred 15pt secondary, prefix + underlined "Privacy Policy" + suffix.
     private var consentText: some View {
         Button {
-            router.openLegal(
-                url: "https://digitalgreen.org/privacy-policy/",
-                title: fcLabel(FCLabels.privacyPolicy, "Privacy policy")
-            )
+            // AuthScreen.kt:480-492 — the #4 privacy URL; nothing opens while it is unknown.
+            guard let url = privacyPolicyURL, !url.isEmpty else { return }
+            router.openLegal(url: url, title: fcLabel(FCLabels.privacyPolicy, "Privacy Policy"))
         } label: {
             (Text(fcLabel(FCLabels.authConsentPrefix, "By continuing, you agree to these communications.\nSee our "))
              + Text(fcLabel(FCLabels.privacyPolicy, "Privacy Policy")).underline()

@@ -7,6 +7,8 @@ import FarmerChatCore
 /// and OTP entry (.oneTimeCode text field, 180 s countdown, resend/start-over).
 final class FCUIAuthViewController: UIViewController {
     private var appBar: FCUIAppBar!
+    /// #4 `url` (AuthViewModel.fetchLegalLinks).
+    private var privacyPolicyURL: String?
     private let viewModel = AuthViewModel()
     private var cancellables = Set<AnyCancellable>()
     private let onSuccess: () -> Void
@@ -58,6 +60,12 @@ final class FCUIAuthViewController: UIViewController {
 
         viewModel.trackVerificationStarted()
         viewModel.fetchCountries()
+        Task { @MainActor [weak self] in
+            if case .success(let legal) = await FarmerChat.shared.api.privacyPolicy(),
+               let url = legal.privacyPolicy, !url.isEmpty {
+                self?.privacyPolicyURL = url
+            }
+        }
         FarmerChat.shared.analytics.screenViewed(ScreenNames.auth)
     }
 
@@ -140,7 +148,8 @@ final class FCUIAuthViewController: UIViewController {
         consent.setAttributedTitle(text, for: .normal)
         consent.titleLabel?.numberOfLines = 0
         consent.addAction(UIAction { [weak self] _ in
-            guard let url = URL(string: "https://digitalgreen.org/privacy-policy/") else { return }
+            // AuthScreen.kt:480-492 — the #4 privacy URL; nothing opens while it is unknown.
+            guard let string = self?.privacyPolicyURL, let url = URL(string: string) else { return }
             let page = FCUIWebPageViewController(title: link, url: url)
             page.modalPresentationStyle = .fullScreen
             self?.present(page, animated: true)

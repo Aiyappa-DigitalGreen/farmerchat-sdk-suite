@@ -439,20 +439,19 @@ final class AgenticStreamTests: XCTestCase {
         XCTAssertEqual(request?.value(forHTTPHeaderField: "Accept"), "application/json")
         XCTAssertNotEqual(request?.timeoutInterval, ApiPriority.p3.timeoutSeconds)
         XCTAssertNotEqual(request?.timeoutInterval, ApiPriority.p2.timeoutSeconds)
-        XCTAssertGreaterThanOrEqual(request?.timeoutInterval ?? 0, 3600)
+        // App NetworkModule.kt:119: a bounded 60 s idle read timeout, not infinite.
+        XCTAssertEqual(request?.timeoutInterval, 60)
         // No ApiPriority headers on the streaming path.
         XCTAssertNil(request?.value(forHTTPHeaderField: "X-Timeout"))
         XCTAssertNotNil(request?.value(forHTTPHeaderField: "Build-Version"))
         XCTAssertNotNil(request?.value(forHTTPHeaderField: "Device-Info"))
     }
 
-    func testStreamingSessionHasNoReadOrResourceTimeout() {
-        let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = AgenticChatDataSource.noTimeoutInterval
-        configuration.timeoutIntervalForResource = AgenticChatDataSource.noTimeoutInterval
-        // Read back: URLSession silently ignores unsupported values (0 means "default", not
-        // "never"), so assert the value actually stuck.
-        XCTAssertEqual(configuration.timeoutIntervalForRequest, AgenticChatDataSource.noTimeoutInterval)
+    /// The app's streaming client: a 60 s IDLE read timeout (a silent stream must not hang the
+    /// chat forever) and no overall limit (answers stream for minutes).
+    func testStreamingSessionHasBoundedIdleTimeoutAndNoResourceLimit() {
+        let configuration = AgenticChatDataSource.sessionConfiguration()
+        XCTAssertEqual(configuration.timeoutIntervalForRequest, 60)
         XCTAssertEqual(configuration.timeoutIntervalForResource, AgenticChatDataSource.noTimeoutInterval)
         XCTAssertGreaterThanOrEqual(AgenticChatDataSource.noTimeoutInterval, 3600)
     }

@@ -128,4 +128,14 @@ final class ScenarioPassTests: XCTestCase {
         config.enableComposerUi = true
         XCTAssertTrue(config.resolvedComposerUi)
     }
+
+    /// #4 privacy_policy reply, as the app's PrivacyPolicyResponse.kt: `url` = privacy policy,
+    /// `farmerchat_terms_of_use` = terms. The SDK read `privacy_policy` / `terms_of_use` (absent).
+    func testPrivacyPolicyResponseUsesAppFields() throws {
+        let json = #"{"url":"https://example.org/privacy","leaderboard_privacy_policy_url":"https://example.org/lb-privacy","farmerchat_terms_of_use":"https://example.org/terms","leaderboard_terms_of_use":"https://example.org/lb-terms"}"#
+        let r = try JSONDecoder().decode(PrivacyPolicyResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.privacyPolicy, "https://example.org/privacy")
+        XCTAssertEqual(r.termsOfUse, "https://example.org/terms")
+        XCTAssertEqual(r.leaderboardTermsOfUse, "https://example.org/lb-terms")
+    }
 }

@@ -256,8 +256,10 @@ final class APIClient: @unchecked Sendable {
         guard let url = URL(string: path, relativeTo: baseURL) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = HTTPMethod.post.rawValue
-        // Effectively no timeout — see AgenticChatDataSource.noTimeoutInterval.
-        request.timeoutInterval = AgenticChatDataSource.noTimeoutInterval
+        // A request's `timeoutInterval` IS the idle-read timer and overrides the session's: the
+        // app's 60 s stream read timeout (AgenticChatDataSource.streamIdleTimeout) — a silent
+        // stream fails instead of hanging. The total duration stays unbounded (session resource).
+        request.timeoutInterval = AgenticChatDataSource.streamIdleTimeout
         // MUST NOT be text/event-stream: the backend 406s that (verified live 2026-09-02). The
         // streaming view sets its own response Content-Type regardless.
         request.setValue("application/json", forHTTPHeaderField: "Accept")
