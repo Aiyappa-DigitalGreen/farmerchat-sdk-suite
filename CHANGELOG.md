@@ -50,8 +50,14 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `FollowUpQuestionsResponse.questions` changed from `[String]?` to `[FollowUpQuestionOption]?`.
   The server sends objects (`follow_up_question_id`, `question`, `sequence`), so the old `[String]`
   type never decoded the real payload; no host could have received a question through it. Code
-  that names the old type must read `.question` on each item. CI's API check flagged this; under
-  `VERSIONING.md` a public type change is MAJOR, so the next version number needs a decision.
+  that names the old type must read `.question` on each item. 2.2.0 was never published, so this
+  ships in 2.2.0 (user decision, 2026-10-16).
+
+- **React Native, source-breaking:** `SendQueryProperties` is now the app's typed shape (it accepted
+  arbitrary keys); the invented `is_valid_query` key is gone and `Valid_Query` is sent as the app does.
+  `FarmerProfile` and `GetLocationResponse` now use the server's wire names (`user_profile`,
+  `role_assigned`; location fields nested under `user_profile`, as the app's models); the old camelCase /
+  top-level fields never matched what the server sends.
 
 ### Security
 - Chat-answer links open only for `http(s)` on React Native and iOS SwiftUI (v1 and v2). Previously
@@ -65,6 +71,8 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- React Native: changing the language never left the language screen; the profile name was wiped on
+  every profile fetch (and removed from storage by Enter Name); sharing GPS showed the previous place.
 - Web: changing the language never left the language screen; sharing GPS showed the wrong place; the
   profile name was wiped on every profile fetch; the Home ✕ covered the weather pill; resuming Listen
   raised an error on the host page; a streamed server error now shows the error card.
