@@ -124,6 +124,7 @@ public final class FarmerChatFabButton: UIButton {
         }
         close.addAction(UIAction { [weak journey] _ in journey?.dismiss(animated: true) }, for: .touchUpInside)
         journey.view.addSubview(close)
+        journey.hasFallbackClose = true
         NSLayoutConstraint.activate([
             close.topAnchor.constraint(equalTo: journey.view.safeAreaLayoutGuide.topAnchor, constant: 11),
             close.trailingAnchor.constraint(equalTo: journey.view.trailingAnchor, constant: -16),

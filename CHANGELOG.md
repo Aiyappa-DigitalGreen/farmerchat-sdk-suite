@@ -71,6 +71,10 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- iOS: every full-journey screen uses the app's headers (UIKit Home had the system navigation bar);
+  Home is the app's composer Home; sign-up/account/error screens show the country farmer photos;
+  host callbacks, language tap vs Save, late Listen replies, image-viewed 404s, stale location bubble,
+  auth flag shown as a URL.
 - Sign-up / account / no-internet screens match the app on web (cropped images, wrong width, missing
   offline image, ✕ over Skip) and Compose (subtitle size; back no longer reports "Skip").
 - Web: image-viewed tracking was sent for text cards too (404 on DEMO); tapping a language row switched

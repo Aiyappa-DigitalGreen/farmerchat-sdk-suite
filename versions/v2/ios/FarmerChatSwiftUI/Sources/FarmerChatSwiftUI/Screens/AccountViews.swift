@@ -8,15 +8,22 @@ struct AccountBenefitsView: View {
     @State private var didAppear = false
 
     var body: some View {
+        // AppNavGraph.kt:760-830: bar "Sign up" with a round ArrowBack and a round "Skip"; the
+        // farmer looking at the camera; "Save your questions and answers" / "We'll save your
+        // chats…" (bodyLarge); a chevron "Sign up with phone number".
         FCFullScreenMessage(
-            title: fcLabel(FCLabels.signUp, "Sign up"),
-            subtitle: fcLabel(FCLabels.saveYourQuestionsAnswers, "Save your past questions"),
+            title: fcLabel(FCLabels.saveYourQuestionsAnswers, "Save your questions\nand answers"),
+            subtitle: fcLabel(FCLabels.wellSaveYourChatsYouContinue, "We'll save your chats so you can continue later."),
             illustration: .lookingAtCamera,
             primaryTitle: fcLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number"),
             onPrimary: { router.push(.auth) },
-            secondaryTitle: fcLabel(FCLabels.skip, "Skip"),
-            onSecondary: { router.pop() },
-            onClose: { router.pop() }
+            barTitle: fcLabel(FCLabels.signUp, "Sign up"),
+            onBack: { router.pop() },
+            rightLabel: fcLabel(FCLabels.skip, "Skip"),
+            onRight: { router.pop() },
+            primaryChevron: true,
+            subtitleLarge: true,
+            roundedBarActions: true
         )
         .onAppear {
             guard !didAppear else { return }
@@ -36,15 +43,18 @@ struct AccountSuccessView: View {
     @State private var didAppear = false
 
     var body: some View {
+        // AccountSuccessScreen.kt:56-85.
         FCFullScreenMessage(
             title: fcLabel(FCLabels.youreAllSet, "You're all set!"),
-            subtitle: fcLabel("account_success_subtitle", "Your questions and answers are now saved to your account"),
+            subtitle: fcLabel(FCLabels.previousQuestionsMenu, "Find your previous questions in the menu and continue anytime."),
             illustration: .lookingAtSky,
             primaryTitle: fcLabel(FCLabels.continue, "Continue"),
             onPrimary: {
                 FarmerChat.shared.analytics.track(AnalyticsEvents.signupContinueClicked)
                 router.onAccountSuccessContinue()
-            }
+            },
+            barTitle: fcLabel(FCLabels.signUp, "Sign up"),
+            subtitleLarge: true
         )
         .onAppear {
             guard !didAppear else { return }
@@ -65,17 +75,21 @@ struct ErrorScreenView: View {
     let fromScreen: String
 
     var body: some View {
+        // NoInternetScreen.kt ErrorScreen: bar title + main message + subtitle per error type.
         FCFullScreenMessage(
             title: isNetworkError
-                ? fcLabel(FCLabels.noInternetConnection, "No internet connection")
-                : fcLabel(FCLabels.somethingWentWrong, "Something went wrong"),
+                ? fcLabel(FCLabels.farmerchatNeedsTheInternet, "FarmerChat needs \nthe internet")
+                : fcLabel(FCLabels.farmerchatCouldntLoad, "FarmerChat couldn't load"),
             subtitle: isNetworkError
-                ? fcLabel("no_internet_message", "You appear to be offline. Check your connection and try again.")
-                : fcLabel("api_error_message", "We're having trouble right now. Please try again."),
+                ? fcLabel(FCLabels.checkMobileDataWifiSignal, "Check mobile data or Wi-Fi signal")
+                : fcLabel(FCLabels.pleaseTryAgain, "Please try again"),
             illustration: .lookingAtSky,
             primaryTitle: fcLabel(FCLabels.tryAgain, "Try again"),
             enablePrimaryDebounce: true,
-            onPrimary: { router.onErrorTryAgain(fromScreen: fromScreen) }
+            onPrimary: { router.onErrorTryAgain(fromScreen: fromScreen) },
+            barTitle: isNetworkError
+                ? fcLabel(FCLabels.noInternetConnection, "No internet connection")
+                : fcLabel(FCLabels.somethingWentWrong, "Something went wrong")
         )
         .onAppear {
             FarmerChat.shared.analytics.screenViewed(ScreenNames.error, extra: ["from_screen": fromScreen])

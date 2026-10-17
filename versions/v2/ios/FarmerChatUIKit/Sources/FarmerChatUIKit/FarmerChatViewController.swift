@@ -15,6 +15,9 @@ public final class FarmerChatViewController: UINavigationController, UINavigatio
     /// Fired whenever a screen finishes appearing at the top of the journey (presenters such as
     /// FarmerChatFabButton use it to hide their fallback close while the screen has its own).
     var onTopScreenChanged: ((UIViewController) -> Void)?
+    /// True when a presenter (FarmerChatFabButton) draws its fallback close (✕) at the top-trailing
+    /// corner, so Home keeps its bar's trailing slot free for it.
+    var hasFallbackClose = false
 
     // Shared, nav-controller-scoped view models & managers (app parity: the
     // drawer's recent-8 list + language label, and the global location prompt).
@@ -23,6 +26,7 @@ public final class FarmerChatViewController: UINavigationController, UINavigatio
     let locationPrompt = LocationPromptManager()
     /// Centralized error route (per-fromScreen retry) — replaces ad-hoc error VCs.
     let errorNavigation = ErrorNavigationManager()
+    private lazy var popGestureDelegate = FCUIPopGestureDelegate(navigation: self)
     private var locationHost: FCUILocationPromptHost?
 
     public convenience init() {
@@ -30,7 +34,10 @@ public final class FarmerChatViewController: UINavigationController, UINavigatio
         self.init(rootViewController: FCUISplashViewController())
         delegate = self
         modalPresentationStyle = .fullScreen
+        // Every SDK screen draws its own app bar (FCUIAppBars.swift); the system bar never shows.
         setNavigationBarHidden(true, animated: false)
+        // A hidden bar disables the edge-swipe back unless the recognizer has a delegate.
+        interactivePopGestureRecognizer?.delegate = popGestureDelegate
         overrideUserInterfaceStyle = FCUITheme.interfaceStyle(for: FarmerChat.shared.appearance)
 
         // FarmerChat.openChat while running.
@@ -286,6 +293,8 @@ public final class FarmerChatViewController: UINavigationController, UINavigatio
                 self.pushViewController(FCUIChatViewController(args: FCUIChatArgs(
                     question: "How do I protect my maize from armyworm?"
                 )), animated: true)
+            } else if args.contains("-fcUIBenefits") {
+                self.pushViewController(FCUIAccountBenefitsViewController(onSignUp: {}), animated: true)
             } else if args.contains("-fcUIError") {
                 self.errorNavigation.setActiveScreen("home")
                 self.errorNavigation.navigateToError(isNetworkError: false, fromScreen: "home", retry: {})
@@ -400,16 +409,24 @@ final class FCUIErrorViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // NoInternetScreen.kt ErrorScreen: bar title + main message + subtitle per error type.
         let message = FCUIFullScreenMessageView(
-            title: isNetworkError
+            barTitle: isNetworkError
                 ? fcuiLabel(FCLabels.noInternetConnection, "No internet connection")
                 : fcuiLabel(FCLabels.somethingWentWrong, "Something went wrong"),
+            mainMessage: isNetworkError
+                ? fcuiLabel(FCLabels.farmerchatNeedsTheInternet, "FarmerChat needs \nthe internet")
+                : fcuiLabel(FCLabels.farmerchatCouldntLoad, "FarmerChat couldn't load"),
             subtitle: isNetworkError
-                ? fcuiLabel("no_internet_message", "You appear to be offline. Check your connection and try again.")
-                : fcuiLabel("api_error_message", "We're having trouble right now. Please try again."),
-            symbolName: "sun.max",
+                ? fcuiLabel(FCLabels.checkMobileDataWifiSignal, "Check mobile data or Wi-Fi signal")
+                : fcuiLabel(FCLabels.pleaseTryAgain, "Please try again"),
+            subtitleLarge: false,
+            illustration: .lookingAtSky,
+            fallbackSymbol: "sun.max",
             primaryTitle: fcuiLabel(FCLabels.tryAgain, "Try again"),
-            secondaryTitle: nil
+            primaryChevron: false,
+            leading: nil, onLeading: nil, rightLabel: nil, onRight: nil,
+            roundedBarActions: false
         )
         message.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(message)
@@ -423,6 +440,20 @@ final class FCUIErrorViewController: UIViewController {
             self?.dismiss(animated: true) { self?.onRetry() }
         }, for: .touchUpInside)
         FarmerChat.shared.analytics.screenViewed(ScreenNames.error)
+    }
+}
+
+/// Keeps the edge-swipe back working with the system bar hidden: allowed whenever there is a
+/// screen to go back to.
+final class FCUIPopGestureDelegate: NSObject, UIGestureRecognizerDelegate {
+    private weak var navigation: UINavigationController?
+
+    init(navigation: UINavigationController) {
+        self.navigation = navigation
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        (navigation?.viewControllers.count ?? 0) > 1
     }
 }
 #endif

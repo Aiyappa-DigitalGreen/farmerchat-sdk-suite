@@ -6,6 +6,7 @@ import FarmerChatCore
 /// Native UIKit Auth: phone entry (country picker + WhatsApp/SMS buttons)
 /// and OTP entry (.oneTimeCode text field, 180 s countdown, resend/start-over).
 final class FCUIAuthViewController: UIViewController {
+    private var appBar: FCUIAppBar!
     private let viewModel = AuthViewModel()
     private var cancellables = Set<AnyCancellable>()
     private let onSuccess: () -> Void
@@ -39,12 +40,10 @@ final class FCUIAuthViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfacePrimary
-        navigationController?.setNavigationBarHidden(false, animated: false)
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "xmark"),
-            primaryAction: UIAction { [weak self] _ in self?.navigationController?.popViewController(animated: true) }
-        )
-        title = fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number")
+        // AuthScreen.kt:426 — DefaultAppBar "Sign up" with a round close tile, both steps.
+        appBar = fcuiInstallAppBar(title: fcuiLabel(FCLabels.signUp, "Sign up"), leading: .close) { [weak self] in
+            self?.fcuiGoBack()
+        }
 
         whatsappButton.setTitle(fcuiLabel("send_code_whatsapp", "Get code on WhatsApp"), for: .normal)
         smsButton.setTitle(fcuiLabel("send_code_sms", "Get code by SMS"), for: .normal)
@@ -94,7 +93,7 @@ final class FCUIAuthViewController: UIViewController {
         phoneStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(phoneStack)
         NSLayoutConstraint.activate([
-            phoneStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
+            phoneStack.topAnchor.constraint(equalTo: appBar.bottomAnchor, constant: 24),
             phoneStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             phoneStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
         ])
@@ -147,7 +146,7 @@ final class FCUIAuthViewController: UIViewController {
         otpStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(otpStack)
         NSLayoutConstraint.activate([
-            otpStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
+            otpStack.topAnchor.constraint(equalTo: appBar.bottomAnchor, constant: 24),
             otpStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             otpStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
         ])
@@ -167,12 +166,9 @@ final class FCUIAuthViewController: UIViewController {
         // Step switching.
         phoneStack.isHidden = state.step != .phoneEntry
         otpStack.isHidden = state.step != .otpEntry
-        title = state.step == .phoneEntry
-            ? fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number")
-            : fcuiLabel("otp_title", "Enter the 4-digit code")
 
         // Phone step widgets.
-        let flag = state.selectedCountry?.flag ?? ""
+        let flag = state.selectedCountry?.flagText ?? ""
         countryButton.setTitle("\(flag) \(state.countryCode)".trimmingCharacters(in: .whitespaces), for: .normal)
         whatsappButton.isHidden = !state.availableChannels.whatsappEnabled
         smsButton.isHidden = !state.availableChannels.smsEnabled
@@ -240,7 +236,7 @@ final class FCUIAuthViewController: UIViewController {
 
 // MARK: - Country picker (search + list)
 
-final class FCUICountryPickerViewController: UITableViewController, UISearchResultsUpdating {
+final class FCUICountryPickerViewController: FCUITableScreen, UISearchBarDelegate {
     private let countries: [CountryItem]
     private var filtered: [CountryItem]
     private let selected: CountryItem?
@@ -256,22 +252,25 @@ final class FCUICountryPickerViewController: UITableViewController, UISearchResu
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    override func appBarLeading() -> (FCUIAppBarLeading, () -> Void)? {
+        (.close, { [weak self] in self?.dismiss(animated: true) })
+    }
+
     override func viewDidLoad() {
+        // AuthScreen.kt:710 — DefaultAppBar "Select country code", round close tile; the search
+        // field sits in the content, not in a system navigation bar.
+        title = fcuiLabel(FCLabels.selectCountryCode, "Select country code")
         super.viewDidLoad()
-        title = fcuiLabel("select_country", "Select country")
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            systemItem: .close,
-            primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) }
-        )
-        let search = UISearchController(searchResultsController: nil)
-        search.searchResultsUpdater = self
-        search.obscuresBackgroundDuringPresentation = false
-        navigationItem.searchController = search
+        let search = UISearchBar()
+        search.searchBarStyle = .minimal
+        search.delegate = self
+        search.sizeToFit()
+        tableView.tableHeaderView = search
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
     }
 
-    func updateSearchResults(for searchController: UISearchController) {
-        let query = (searchController.searchBar.text ?? "").lowercased()
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        let query = searchText.lowercased()
         filtered = query.isEmpty ? countries : countries.filter { country in
             (country.displayName ?? "").lowercased().contains(query)
                 || (country.name ?? "").lowercased().contains(query)
@@ -288,7 +287,7 @@ final class FCUICountryPickerViewController: UITableViewController, UISearchResu
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         let country = filtered[indexPath.row]
         let code = country.phoneCountryCode.map { $0.hasPrefix("+") ? $0 : "+\($0)" } ?? ""
-        cell.textLabel?.text = "\(country.flag ?? "") \(country.displayName ?? country.name ?? "")  \(code)"
+        cell.textLabel?.text = "\(country.flagText ?? "") \(country.displayName ?? country.name ?? "")  \(code)"
         cell.accessoryType = selected == country ? .checkmark : .none
         cell.tintColor = FCUITheme.green500
         return cell
@@ -314,20 +313,27 @@ final class FCUIAccountBenefitsViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // AppNavGraph.kt:760-830: bar "Sign up" with a round ArrowBack and a round "Skip"; the
+        // farmer looking at the camera; a chevron "Sign up with phone number".
         let message = FCUIFullScreenMessageView(
-            title: fcuiLabel(FCLabels.signUp, "Sign up"),
-            subtitle: fcuiLabel(FCLabels.saveYourQuestionsAnswers, "Save your past questions"),
-            symbolName: "person.crop.square.badge.camera",
+            barTitle: fcuiLabel(FCLabels.signUp, "Sign up"),
+            mainMessage: fcuiLabel(FCLabels.saveYourQuestionsAnswers, "Save your questions\nand answers"),
+            subtitle: fcuiLabel(FCLabels.wellSaveYourChatsYouContinue, "We'll save your chats so you can continue later."),
+            subtitleLarge: true,
+            illustration: .lookingAtCamera,
+            fallbackSymbol: "person.crop.square.badge.camera",
             primaryTitle: fcuiLabel(FCLabels.signUpPhoneNumber, "Sign up with phone number"),
-            secondaryTitle: fcuiLabel(FCLabels.skip, "Skip")
+            primaryChevron: true,
+            leading: .back,
+            onLeading: { [weak self] in self?.navigationController?.popViewController(animated: true) },
+            rightLabel: fcuiLabel(FCLabels.skip, "Skip"),
+            onRight: { [weak self] in self?.navigationController?.popViewController(animated: true) },
+            roundedBarActions: true
         )
         message.frame = view.bounds
         message.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(message)
         message.primaryButton.addAction(UIAction { [weak self] _ in self?.onSignUp() }, for: .touchUpInside)
-        message.secondaryButton.addAction(UIAction { [weak self] _ in
-            self?.navigationController?.popViewController(animated: true)
-        }, for: .touchUpInside)
         FarmerChat.shared.analytics.screenViewed(ScreenNames.accountBenefits)
     }
 }
@@ -335,12 +341,18 @@ final class FCUIAccountBenefitsViewController: UIViewController {
 final class FCUIAccountSuccessViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
+        // AccountSuccessScreen.kt:56-85.
         let message = FCUIFullScreenMessageView(
-            title: fcuiLabel(FCLabels.youreAllSet, "You're all set!"),
-            subtitle: fcuiLabel("account_success_subtitle", "Your questions and answers are now saved to your account"),
-            symbolName: "sun.max",
+            barTitle: fcuiLabel(FCLabels.signUp, "Sign up"),
+            mainMessage: fcuiLabel(FCLabels.youreAllSet, "You're all set!"),
+            subtitle: fcuiLabel(FCLabels.previousQuestionsMenu, "Find your previous questions in the menu and continue anytime."),
+            subtitleLarge: true,
+            illustration: .lookingAtSky,
+            fallbackSymbol: "sun.max",
             primaryTitle: fcuiLabel(FCLabels.continue, "Continue"),
-            secondaryTitle: nil
+            primaryChevron: false,
+            leading: nil, onLeading: nil, rightLabel: nil, onRight: nil,
+            roundedBarActions: false
         )
         message.frame = view.bounds
         message.autoresizingMask = [.flexibleWidth, .flexibleHeight]

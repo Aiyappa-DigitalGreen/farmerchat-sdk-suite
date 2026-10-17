@@ -11,19 +11,21 @@ import FarmerChatCore
 /// A 42×42 smooth square, radius 12, `#08361B`, white 23pt icon (ActionButton.kt:60-63). The SDK's
 /// CHAT_ONLY ✕ and globe use it; the app's History-entry menu button is the same component.
 final class FCUIHeaderTile: UIControl {
-    convenience init(systemImage: String, accessibilityLabel label: String, identifier: String) {
+    convenience init(systemImage: String, accessibilityLabel label: String, identifier: String, radius: CGFloat = 12) {
         self.init(image: UIImage(
             systemName: systemImage,
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
-        ), accessibilityLabel: label, identifier: identifier)
+        ), accessibilityLabel: label, identifier: identifier, radius: radius)
     }
 
     /// A tile with a given template image (e.g. [fcHistoryGlyphImage]), tinted white like the
     /// SF Symbol tiles.
-    init(image: UIImage?, accessibilityLabel label: String, identifier: String) {
+    /// `radius`: ActionButton's Radius.MD (12) square, or 21 for the round Radius.Rounded tile
+    /// (DefaultAppBar menu/close, HomeAppBar menu).
+    init(image: UIImage?, accessibilityLabel label: String, identifier: String, radius: CGFloat = 12) {
         super.init(frame: CGRect(x: 0, y: 0, width: 42, height: 42))
-        backgroundColor = FCUITheme.green800
-        layer.cornerRadius = 12
+        backgroundColor = FCUITheme.brandSurfaceSecondary
+        layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         let icon = UIImageView(image: image)
         icon.tintColor = .white
@@ -255,6 +257,23 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
     var onMic: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onTextChange: (() -> Void)?
+    /// InputComposer.kt `photoUris` (one image): a picked photo waits here as a 64pt thumbnail
+    /// (PhotoThumbnail.kt) so the farmer can add a caption; Send sends both.
+    var attachment: UIImage? {
+        didSet {
+            thumb.image = attachment
+            thumbWrap.isHidden = attachment == nil
+            textTopToField.isActive = attachment == nil
+            textTopToThumb.isActive = attachment != nil
+            refresh(animated: true)
+        }
+    }
+    var onRemoveAttachment: (() -> Void)?
+    private let thumbWrap = UIView()
+    private let thumb = UIImageView()
+    private let thumbRemove = UIButton(type: .custom)
+    private var textTopToField: NSLayoutConstraint!
+    private var textTopToThumb: NSLayoutConstraint!
 
     let sheet = UIView()
     private let row = UIStackView()
@@ -288,6 +307,15 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
     }()
 
     private var bodyStyle: FCUITextStyle { FCUITypography.current.bodyMedium }
+
+    /// Re-resolves the placeholder and control labels after a language change.
+    func relabel() {
+        let ask = fcuiLabel(FCLabels.askAboutYourFarm, "Ask about your farm...")
+        placeholder.text = ask
+        textView.accessibilityLabel = ask
+        cameraButton.accessibilityLabel = fcuiLabel(FCLabels.photo, "Photo")
+        refresh(animated: false)
+    }
 
     init(showCamera: Bool, showMic: Bool) {
         self.showCamera = showCamera
@@ -344,6 +372,29 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
         field.addSubview(placeholder)
         field.addSubview(textView)
 
+        // PhotoThumbnail.kt: 64pt, radius SM (8), crop; a 20pt surfaceSecondary circle with a 14pt
+        // close glyph 3pt in from the top-right corner.
+        thumb.contentMode = .scaleAspectFill
+        thumb.clipsToBounds = true
+        thumb.layer.cornerRadius = 8
+        thumb.layer.cornerCurve = .continuous
+        thumb.translatesAutoresizingMaskIntoConstraints = false
+        thumb.accessibilityIdentifier = "fcComposerPhoto"
+        thumb.isAccessibilityElement = true
+        thumbRemove.backgroundColor = FCUITheme.surfaceSecondary
+        thumbRemove.layer.cornerRadius = 10
+        thumbRemove.tintColor = FCUITheme.foregroundPrimary
+        thumbRemove.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)), for: .normal)
+        thumbRemove.accessibilityLabel = "Remove photo"
+        thumbRemove.accessibilityIdentifier = "fcComposerRemovePhoto"
+        thumbRemove.translatesAutoresizingMaskIntoConstraints = false
+        thumbRemove.addAction(UIAction { [weak self] _ in self?.onRemoveAttachment?() }, for: .touchUpInside)
+        thumbWrap.translatesAutoresizingMaskIntoConstraints = false
+        thumbWrap.isHidden = true
+        thumbWrap.addSubview(thumb)
+        thumbWrap.addSubview(thumbRemove)
+        field.addSubview(thumbWrap)
+
         row.axis = .horizontal
         row.spacing = 6
         row.alignment = .bottom
@@ -354,6 +405,9 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
         sheet.addSubview(row)
 
         textHeight = textView.heightAnchor.constraint(equalToConstant: bodyStyle.lineHeight)
+        textTopToField = textView.topAnchor.constraint(equalTo: field.topAnchor, constant: 12)
+        textTopToThumb = textView.topAnchor.constraint(equalTo: thumbWrap.bottomAnchor, constant: 10)
+        textTopToField.isActive = true
         sheetTop = sheet.topAnchor.constraint(equalTo: topAnchor)
         rowTop = row.topAnchor.constraint(equalTo: sheet.topAnchor, constant: 12)
         sheetBottomPad = sheet.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: 12)
@@ -367,14 +421,27 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
             row.leadingAnchor.constraint(equalTo: sheet.leadingAnchor, constant: 10),
             row.trailingAnchor.constraint(equalTo: sheet.trailingAnchor, constant: -10),
             field.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
-            textView.topAnchor.constraint(equalTo: field.topAnchor, constant: 12),
             textView.bottomAnchor.constraint(equalTo: field.bottomAnchor, constant: -12),
+            thumbWrap.topAnchor.constraint(equalTo: field.topAnchor, constant: 10),
+            thumbWrap.leadingAnchor.constraint(equalTo: field.leadingAnchor, constant: 14),
+            thumbWrap.widthAnchor.constraint(equalToConstant: 64),
+            thumbWrap.heightAnchor.constraint(equalToConstant: 64),
+            thumb.topAnchor.constraint(equalTo: thumbWrap.topAnchor),
+            thumb.bottomAnchor.constraint(equalTo: thumbWrap.bottomAnchor),
+            thumb.leadingAnchor.constraint(equalTo: thumbWrap.leadingAnchor),
+            thumb.trailingAnchor.constraint(equalTo: thumbWrap.trailingAnchor),
+            thumbRemove.widthAnchor.constraint(equalToConstant: 20),
+            thumbRemove.heightAnchor.constraint(equalToConstant: 20),
+            thumbRemove.topAnchor.constraint(equalTo: thumbWrap.topAnchor, constant: 3),
+            thumbRemove.trailingAnchor.constraint(equalTo: thumbWrap.trailingAnchor, constant: -3),
             textView.leadingAnchor.constraint(equalTo: field.leadingAnchor, constant: 14),
             textView.trailingAnchor.constraint(equalTo: field.trailingAnchor, constant: -14),
             textHeight,
             placeholder.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
             placeholder.trailingAnchor.constraint(lessThanOrEqualTo: textView.trailingAnchor),
-            placeholder.centerYAnchor.constraint(equalTo: field.centerYAnchor),
+            // On the text line, not the field's centre: with a photo attached the field grows
+            // and a centred placeholder sat on the thumbnail.
+            placeholder.centerYAnchor.constraint(equalTo: textView.centerYAnchor),
             aura.topAnchor.constraint(equalTo: field.topAnchor),
             aura.bottomAnchor.constraint(equalTo: field.bottomAnchor),
             aura.leadingAnchor.constraint(equalTo: field.leadingAnchor),
@@ -405,7 +472,7 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
 
     private func actionTapped() {
         let text = trimmedText
-        if text.isEmpty {
+        if text.isEmpty && attachment == nil {
             onMic?()
         } else {
             onSend?(text)
@@ -427,13 +494,15 @@ final class FCUIComposerView: UIView, UITextViewDelegate {
     private func refresh(animated: Bool) {
         let focused = textView.isFirstResponder
         let hasText = !textView.text.isEmpty
+        // InputComposer.kt:284 `hasContent = text.isNotBlank() || photoUris.isNotEmpty()`.
+        let hasContent = hasText || attachment != nil
         placeholder.isHidden = hasText
         placeholder.baseColor = focused ? FCUITheme.formPlaceholder : .black
         placeholder.isAnimating = !focused
-        aura.isHidden = focused || hasText
-        // Camera hides once text is typed; mic → send glyph swap, same circle.
-        if showCamera { cameraButton.isHidden = hasText }
-        let sending = hasText || !showMic
+        aura.isHidden = focused || hasContent
+        // Camera hides once there is content; mic → send glyph swap, same circle.
+        if showCamera { cameraButton.isHidden = hasContent }
+        let sending = hasContent || !showMic
         actionButton.isHidden = !sending && !showMic
         actionButton.setImage(sending ? Self.sendGlyph : Self.micGlyph, for: .normal)
         actionButton.accessibilityLabel = sending ? fcuiLabel(FCLabels.send, "Send") : fcuiLabel(FCLabels.speak, "Speak")

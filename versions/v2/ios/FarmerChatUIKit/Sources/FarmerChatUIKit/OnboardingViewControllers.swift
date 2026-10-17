@@ -52,13 +52,6 @@ final class FCUILanguageViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfacePrimary
-        if mode == .settings {
-            title = fcuiLabel(FCLabels.chooseYourLanguage, "Choose your language")
-            navigationItem.leftBarButtonItem = UIBarButtonItem(
-                image: UIImage(systemName: "chevron.left"),
-                primaryAction: UIAction { [weak self] _ in self?.navigationController?.popViewController(animated: true) }
-            )
-        }
         buildPage()
         buildPanel()
         bind()
@@ -66,11 +59,6 @@ final class FCUILanguageViewController: UIViewController {
         FarmerChat.shared.analytics.screenViewed(
             mode == .onboarding ? ScreenNames.language : ScreenNames.languageChooser
         )
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        navigationController?.setNavigationBarHidden(mode == .onboarding, animated: animated)
     }
 
     override func viewDidLayoutSubviews() {
@@ -154,8 +142,20 @@ final class FCUILanguageViewController: UIViewController {
         content.setCustomSpacing(14, after: markRow)
         markRow.isHidden = mode == .settings
 
+        // LanguageChooserScreen.kt:160 — DefaultAppBar "Choose your language"; menu (drawer) or,
+        // with the drawer off (pushed from the chat globe), back.
+        var scrollTop = view.safeAreaLayoutGuide.topAnchor
+        if mode == .settings {
+            let (leading, action) = fcuiDrawerScreenLeading(route: "settings/language")
+            scrollTop = fcuiInstallAppBar(
+                title: fcuiLabel(FCLabels.chooseYourLanguage, "Choose your language"),
+                leading: leading,
+                action: action
+            ).bottomAnchor
+        }
+
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.topAnchor.constraint(equalTo: scrollTop),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -550,38 +550,104 @@ final class FCUINameViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = FCUITheme.surfacePrimary
-        navigationController?.setNavigationBarHidden(mode == .onboarding, animated: false)
         saveButton.setTitle(fcuiLabel(FCLabels.saveName, "Save name"), for: .normal)
 
-        titleLabel.text = mode == .onboarding
-            ? fcuiLabel(FCLabels.whatShouldWeCallYou, "What should we call you?")
-            : fcuiLabel(FCLabels.name, "Name")
+        // EnterNameScreen.kt (onboarding): a 32pt green logo, the centred titleLarge question
+        // and bodyMedium subtitle, the 56pt field, and Save name / Skip for now pinned to the
+        // bottom. SettingsNameScreen.kt:121 (settings): a DefaultAppBar "Name" + Back, then the
+        // field and Save name directly under it (20pt sides, 32pt top, 16pt apart).
+        // The 1.0 screen had a left-aligned title, a rounded-rect system field and the buttons
+        // stacked under the field in both modes.
+        titleLabel.text = fcuiLabel(FCLabels.whatShouldWeCallYou, "What should we call you?")
         titleLabel.font = FCUITypography.current.titleLarge.font
         titleLabel.textColor = FCUITheme.foregroundPrimary
+        titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
+        let subtitle = UILabel()
+        subtitle.text = fcuiLabel(FCLabels.weGreetYouName, "We'll greet you by your name")
+        subtitle.font = FCUITypography.current.bodyMedium.font
+        subtitle.textColor = FCUITheme.foregroundSecondary
+        subtitle.textAlignment = .center
+        subtitle.numberOfLines = 0
 
-        textField.placeholder = fcuiLabel(FCLabels.yourName, "Your name")
-        textField.borderStyle = .roundedRect
+        textField.placeholder = fcuiLabel(FCLabels.yourNameOrNickname, "Your name or nickname")
+        textField.borderStyle = .none
         textField.backgroundColor = FCUITheme.surfaceSecondary
         textField.font = FCUITypography.current.bodyMedium.font
+        textField.textColor = FCUITheme.foregroundPrimary
+        textField.layer.cornerRadius = 12
+        textField.layer.cornerCurve = .continuous
+        textField.layer.borderWidth = 2
+        textField.layer.borderColor = FCUITheme.green500.cgColor
+        textField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 16, height: 1))
+        textField.leftViewMode = .always
+        textField.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 16, height: 1))
+        textField.rightViewMode = .always
+        textField.accessibilityIdentifier = "fcNameField"
         textField.text = NameInputNormalizer.sanitizeStored(FarmerChat.shared.prefs.string(.userName))
         textField.addAction(UIAction { [weak self] _ in self?.textChanged() }, for: .editingChanged)
+        saveButton.accessibilityIdentifier = "fcNameSave"
 
-        skipButton.setTitle(fcuiLabel(FCLabels.skipForNow, "Skip for now"), for: .normal)
-        skipButton.setTitleColor(FCUITheme.foregroundSecondary, for: .normal)
+        var skipConfig = UIButton.Configuration.filled()
+        skipConfig.baseBackgroundColor = FCUITheme.surfaceSecondary
+        skipConfig.baseForegroundColor = FCUITheme.foregroundPrimary
+        skipConfig.cornerStyle = .capsule
+        skipConfig.attributedTitle = AttributedString(
+            fcuiLabel(FCLabels.skipForNow, "Skip for now"),
+            attributes: AttributeContainer([.font: FCUITypography.current.titleMedium.font])
+        )
+        skipButton.configuration = skipConfig
+        skipButton.heightAnchor.constraint(equalToConstant: 56).isActive = true
         skipButton.isHidden = mode == .settings
 
-        let stack = UIStackView(arrangedSubviews: [titleLabel, textField, saveButton, skipButton])
-        stack.axis = .vertical
-        stack.spacing = 16
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 32),
-            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            textField.heightAnchor.constraint(equalToConstant: 54)
-        ])
+        if mode == .settings {
+            let bar = fcuiInstallAppBar(title: fcuiLabel(FCLabels.name, "Name"), leading: .back) { [weak self] in
+                self?.fcuiGoBack()
+            }
+            let stack = UIStackView(arrangedSubviews: [textField, saveButton])
+            stack.axis = .vertical
+            stack.spacing = 16
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(stack)
+            NSLayoutConstraint.activate([
+                stack.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 32),
+                stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+                textField.heightAnchor.constraint(equalToConstant: 56)
+            ])
+        } else {
+            let logo = UIView()
+            let mark = CAShapeLayer()
+            mark.path = FCUILogoMark.path(size: 32)
+            mark.fillColor = FCUITheme.green500.cgColor
+            logo.layer.addSublayer(mark)
+            logo.translatesAutoresizingMaskIntoConstraints = false
+            let top = UIStackView(arrangedSubviews: [logo, titleLabel, subtitle, textField])
+            top.axis = .vertical
+            top.alignment = .center
+            top.spacing = 6
+            top.setCustomSpacing(20, after: logo)
+            top.setCustomSpacing(28, after: subtitle)
+            top.translatesAutoresizingMaskIntoConstraints = false
+            let bottom = UIStackView(arrangedSubviews: [saveButton, skipButton])
+            bottom.axis = .vertical
+            bottom.spacing = 12
+            bottom.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(top)
+            view.addSubview(bottom)
+            NSLayoutConstraint.activate([
+                logo.widthAnchor.constraint(equalToConstant: 32),
+                logo.heightAnchor.constraint(equalToConstant: 32),
+                top.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
+                top.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                top.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+                textField.widthAnchor.constraint(equalTo: top.widthAnchor),
+                textField.heightAnchor.constraint(equalToConstant: 56),
+                bottom.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+                bottom.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+                bottom.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -16)
+            ])
+        }
 
         saveButton.addAction(UIAction { [weak self] _ in self?.save() }, for: .touchUpInside)
         skipButton.addAction(UIAction { [weak self] _ in self?.skip() }, for: .touchUpInside)
@@ -602,6 +668,12 @@ final class FCUINameViewController: UIViewController {
         let normalized = NameInputNormalizer.normalize(textField.text ?? "")
         if normalized != textField.text { textField.text = normalized }
         saveButton.isEnabled = !normalized.trimmingCharacters(in: .whitespaces).isEmpty
+        // EnterNameScreen.kt: PrimaryButtonState.Chevron once a name is typed (onboarding).
+        let chevron = mode == .onboarding && saveButton.isEnabled
+        saveButton.setImage(chevron ? UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))?
+            .withTintColor(FCUITheme.green500, renderingMode: .alwaysOriginal) : nil, for: .normal)
+        saveButton.semanticContentAttribute = .forceRightToLeft
+        saveButton.imageEdgeInsets = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: -8)
         skipButton.isHidden = mode == .settings || !normalized.isEmpty
     }
 

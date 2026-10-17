@@ -67,6 +67,8 @@ struct ChatView: View {
     @State private var alignmentPhotoSourceId: String?
     /// The UPLOAD_PHOTO chip that opened the camera / gallery (its value + label go on Send_Query).
     @State private var alignmentPhotoChip: AlignmentChip?
+    /// A composer photo waiting for its caption (InputComposer `photoUris`, one image).
+    @State private var composerPhoto: FCPickedImage?
 
     var body: some View {
         ZStack {
@@ -283,7 +285,7 @@ struct ChatView: View {
             && viewModel.state.messages.isEmpty
             && !viewModel.state.isLoading
             && !isHistoryEntry
-            && !composerFocused && !showVoiceInput && !showPhotoSheet && !showCamera && !showGallery
+            && !composerFocused && composerPhoto == nil && !showVoiceInput && !showPhotoSheet && !showCamera && !showGallery
     }
 
     private var thread: some View {
@@ -728,7 +730,9 @@ struct ChatView: View {
                 )
             }
         case .loadingPlaceholder:
+            // ChatThreadContent.kt:615-633: no spinner while a voice clip is being transcribed.
             FCChatLoadingBubble()
+                .opacity(viewModel.state.isTranscribing ? 0 : 1)
         }
     }
 
@@ -792,8 +796,11 @@ struct ChatView: View {
             alignmentPhotoChip = nil
             viewModel.sendAlignmentPhoto(chip: chip, imageData: picked.sourceData, imageURL: picked.fileURL)
         } else {
+            // InputComposer flow (ChatScreen.kt:497-503 `photoUris = listOf(uri)`): the photo
+            // waits in the composer for an optional caption; Send sends both.
             alignmentPhotoSourceId = nil
-            viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.sourceData, imageURL: picked.fileURL))
+            composerPhoto = picked
+            composerFocusRequest = true
         }
     }
 
@@ -903,10 +910,19 @@ struct ChatView: View {
             showCamera: FarmerChat.shared.config.enableImages,
             showMic: FarmerChat.shared.config.enableVoice,
             visible: !viewModel.state.isLoading,
+            attachment: composerPhoto?.image,
+            onRemoveAttachment: { composerPhoto = nil },
             focusRequest: $composerFocusRequest,
             onFocusChange: { composerFocused = $0 },
             onSend: { question in
-                viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil))
+                if let photo = composerPhoto {
+                    // ChatScreen.kt:1795-1803: the attached photo goes with the typed caption
+                    // (blank → image-only bubble; Core supplies the default prompt).
+                    composerPhoto = nil
+                    viewModel.onAction(.sendQuestionWithImage(question: question, imageData: photo.sourceData, imageURL: photo.fileURL))
+                } else {
+                    viewModel.onAction(.sendFollowUpQuestion(question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil))
+                }
             },
             onCamera: { showPhotoSheet = true },
             onMic: startVoice

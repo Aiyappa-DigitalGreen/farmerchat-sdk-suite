@@ -1,11 +1,17 @@
 import SwiftUI
 import FarmerChatCore
 
-/// Port of HomeScreen: app bar (hamburger + weather), greeting, sticky
-/// Photo/Speak/Type header, SSFR card, feed sections
-/// (content/single-select/multi-select), overlays (type/voice/photo),
-/// permission dialogs, transcription routing into Chat.
+/// Port of the app's composer Home (HomeScreen.kt with `getComposerUiEnabled()` — hard-wired true
+/// in the app): the green band behind a transparent feed, HomeAppBar (menu + weather), the fixed
+/// header (logo, "For your farm today", location pill) over the feed, SSFR card, feed sections
+/// (content/single-select/multi-select), the floating InputComposer (camera / text / mic; a picked
+/// photo is attached and sent with the typed caption), voice/photo overlays, permission dialogs,
+/// transcription routing into Chat.
+///
+/// The SDK used to draw the 1.0 Home: a plain white bar, a black greeting and the big sticky
+/// Photo/Speak/Type buttons — which the app's composer Home replaces.
 struct HomeView: View {
+    @Environment(\.fcFallbackCloseShown) private var fallbackCloseShown
     @Environment(\.fcTheme) private var theme
     @EnvironmentObject var router: FCRouter
     @EnvironmentObject var locationPrompt: LocationPromptManager
@@ -17,7 +23,6 @@ struct HomeView: View {
     let openDrawer: () -> Void
 
     @State private var didLoad = false
-    @State private var showTextInput = false
     @State private var typedText = ""
     @State private var showVoiceInput = false
     @State private var showPhotoSheet = false
@@ -27,27 +32,27 @@ struct HomeView: View {
     @State private var showCameraSettingsDialog = false
     @State private var submittingSectionId: String?
     @State private var pendingCardSection: SectionDto?
+    @State private var composerPhoto: FCPickedImage?
+    @State private var composerFocusRequest = false
+    @State private var composerHeight: CGFloat = 0
+    @State private var headerHeight: CGFloat = 0
+    @State private var pillSuccess = false
+    @State private var pillFlowWasActive = false
+    @State private var pillTick = 0
 
     var body: some View {
         ZStack {
             theme.content.surfacePrimary.ignoresSafeArea()
+            FCHomeBand()
 
             VStack(spacing: 0) {
                 appBar
                 content
             }
 
-            if showTextInput {
-                FCTextInputOverlay(
-                    text: $typedText,
-                    placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
-                    onSend: { question in
-                        showTextInput = false
-                        typedText = ""
-                        openChat(FCDestination.ChatArgs(question: question))
-                    },
-                    onDismiss: { showTextInput = false }
-                )
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                composer
             }
 
             if showVoiceInput {
@@ -87,10 +92,15 @@ struct HomeView: View {
         }
         .fcToastHost(toast)
         .task { await initialLoad() }
+        // Permission changes in Settings: re-read the pill on every foreground.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            pillTick += 1
+        }
         // App HomeScreen.kt:256-266: a location Error while Home is the visible screen goes to the
         // shared Error screen and the flow is closed silently. Gated on Home being on top — Home
         // stays alive under Chat, and the chat chip's errors belong to the global host there.
         .onReceive(locationPrompt.$state) { state in
+            pillStateChanged(state)
             guard case .error(let type) = state, router.current == .home else { return }
             router.push(.error(isNetworkError: type == .noNetwork, fromScreen: "home"))
             locationPrompt.dismiss(emitContinue: false)
@@ -112,18 +122,16 @@ struct HomeView: View {
         .sheet(isPresented: $showCamera) {
             FCCameraPicker { picked in
                 showCamera = false
-                if let picked {
-                    openChat(FCDestination.ChatArgs(question: "", imagePath: picked.fileURL.path))
-                }
+                // Composer Home: the photo is ATTACHED so it can go with a typed caption
+                // (HomeScreen.kt:350/386); a new pick replaces the old.
+                if let picked { attach(picked) }
             }
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showGallery) {
             FCPhotoLibraryPicker { picked in
                 showGallery = false
-                if let picked {
-                    openChat(FCDestination.ChatArgs(question: "", imagePath: picked.fileURL.path))
-                }
+                if let picked { attach(picked) }
             }
         }
         .overlay {
@@ -147,30 +155,49 @@ struct HomeView: View {
     // MARK: - App bar
 
     private var appBar: some View {
-        HStack {
-            Button {
+        // SDK addition: a presenter's fallback close (X) sits at the bar's trailing end; keep the
+        // weather pill clear of it.
+        FCHomeAppBar(
+            showMenu: FarmerChat.shared.config.showDrawer,
+            // HomeScreen.kt: the pill shows once weather is loading or loaded.
+            showWeather: FarmerChat.shared.config.enableWeather
+                && (viewModel.state.weatherState.value != nil || viewModel.state.weatherState.isLoading),
+            weather: viewModel.state.weatherState.value,
+            weatherLoading: viewModel.state.weatherState.isLoading,
+            trailingInset: fallbackCloseShown ? 48 : 0,
+            onMenu: {
                 FarmerChat.shared.analytics.track(AnalyticsEvents.hamburgerMenuClicked)
                 openDrawer()
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(theme.content.foregroundPrimary)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
+            },
+            onWeather: weatherTapped
+        )
+    }
 
-            Spacer()
+    // MARK: - Composer (InputComposer, floating)
 
-            if FarmerChat.shared.config.enableWeather {
-                FCWeatherButton(
-                    weather: viewModel.state.weatherState.value,
-                    isLoading: viewModel.state.weatherState.isLoading,
-                    action: weatherTapped
-                )
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 56)
+    private var composer: some View {
+        FCChatComposer(
+            text: $typedText,
+            placeholder: fcLabel(FCLabels.askAboutYourFarm, "Ask about your farm..."),
+            showCamera: FarmerChat.shared.config.enableImages,
+            showMic: FarmerChat.shared.config.enableVoice,
+            backdrop: .clear,
+            attachment: composerPhoto?.image,
+            onRemoveAttachment: { composerPhoto = nil },
+            focusRequest: $composerFocusRequest,
+            onSend: { question in
+                let photo = composerPhoto
+                composerPhoto = nil
+                typedText = ""
+                // HomeScreen.kt sendMessage(query, photoUris.firstOrNull()): text and/or photo
+                // open Chat, which sends them together.
+                openChat(FCDestination.ChatArgs(question: question, imagePath: photo?.fileURL.path))
+            },
+            // Camera is offered only while nothing is attached (one image).
+            onCamera: { if composerPhoto == nil { showPhotoSheet = true } },
+            onMic: startVoice
+        )
+        .onPreferenceChange(FCComposerHeightKey.self) { composerHeight = $0 }
     }
 
     // MARK: - Content
@@ -202,16 +229,13 @@ struct HomeView: View {
     }
 
     private func feedList(_ feed: HomeUdfResponse) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
-                // Greeting
-                Text(greeting(feed))
-                    .fcTextStyle(theme.typography.titleMedium)
-                    .foregroundColor(theme.content.foregroundPrimary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
+        ZStack(alignment: .top) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // Item 0 reserves exactly the fixed header's height, so the first card rests
+                    // right below it (HomeScreen.kt 70adc5fd).
+                    Color.clear.frame(height: max(headerHeight, 1))
 
-                Section {
                     if feed.ssfrEnable == true && FarmerChat.shared.config.enableSsfr { // C3
                         FCSsfrCard { crop in
                             openChat(FCDestination.ChatArgs(
@@ -221,35 +245,105 @@ struct HomeView: View {
                             ))
                         }
                         .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                     }
 
-                    FCFeedHeader()
-                        .padding(.horizontal, 16)
-                        .padding(.top, 6)
-
+                    // The composer Home shows "For your farm today" in the fixed header, so the
+                    // in-feed FeedHeader is skipped (HomeScreen.kt:1308).
                     ForEach(viewModel.state.visibleSections()) { section in
                         sectionView(section)
                             .padding(.horizontal, 16)
+                            // HomeScreen.kt:1507 — a trailing 16pt gap after every card.
+                            .padding(.bottom, 16)
                             .onAppear { markViewedIfNeeded(section) }
                     }
 
                     FCFeedFooter()
-                } header: {
-                    FCPrimaryInputButtons(
-                        showPhoto: FarmerChat.shared.config.enableImages,
-                        showVoice: FarmerChat.shared.config.enableVoice,
-                        onPhoto: { showPhotoSheet = true },
-                        onSpeak: startVoice,
-                        onType: { showTextInput = true }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(theme.content.surfacePrimary)
                 }
+                // Reserve the floating composer so the last card is not hidden behind it.
+                .padding(.bottom, composerHeight + 8)
             }
-            .padding(.bottom, 24)
+            .refreshable { loadHome(skipLoadingCheck: true) }
+            // Cards dissolve into the band as they scroll up behind the fixed header: the mask is
+            // transparent through the header body and ramps to opaque over its last fifth.
+            .mask(
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .clear, location: 0.8),
+                            .init(color: .black, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: max(headerHeight, 1))
+                    Color.black
+                }
+            )
+
+            fixedHeader
         }
-        .refreshable { loadHome(skipLoadingCheck: true) }
+    }
+
+    /// The fixed header content (HomeScreen.kt 70adc5fd): 42pt logo, the leaf-flanked
+    /// "For your farm today", and the Location 2.0 pill — 12pt apart, 16pt below; transparent so
+    /// the band shows through.
+    private var fixedHeader: some View {
+        VStack(spacing: 12) {
+            FCLogoMark(size: 42, tint: theme.brand.foregroundPrimary)
+                .accessibilityHidden(true)
+            FCSectionHeader(
+                title: fcLabel(FCLabels.forYourFarmToday, "For your farm today"),
+                titleColor: theme.brand.foregroundPrimary,
+                verticalPadding: 0
+            )
+            FCLocationButton(state: pillState, placeName: locationPrompt.approxPlaceName, onTap: pillTapped)
+        }
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.onAppear { headerHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { headerHeight = $0 }
+            }
+        )
+    }
+
+    // MARK: - Location pill (HomeScreen.kt `HomeLocationPill`)
+
+    private var pillState: FCLocationPillState {
+        _ = pillTick // re-read permission on foreground / profile updates
+        _ = viewModel.state.userProfileState.isLoading
+        return FCLocationPillState.resolve(
+            isBlocked: locationPrompt.isBlockedByPermission,
+            isSearching: FCLocationPillState.isSearching(state: locationPrompt.state, source: locationPrompt.source),
+            showSuccess: pillSuccess,
+            hasStoredFix: locationPrompt.isLocationKnown,
+            hasPermission: locationPrompt.hasCurrentLocationPermission,
+            placeName: locationPrompt.approxPlaceName
+        )
+    }
+
+    private func pillTapped() {
+        // Re-run the flow rather than jumping to Settings: denied twice → the manager lands on
+        // Recovery, which shows the "We need your location" sheet with its own Settings button.
+        guard locationPrompt.state == .idle else { return }
+        locationPrompt.triggerFromLocalContext()
+    }
+
+    private func pillStateChanged(_ state: LocationPromptState) {
+        let active = FCLocationPillState.isFlowActive(state: state, source: locationPrompt.source)
+        if pillFlowWasActive, state == .idle, locationPrompt.isLocationKnown {
+            // The pill's own flow just succeeded — hold the checkmark briefly.
+            pillSuccess = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                pillSuccess = false
+            }
+        }
+        pillFlowWasActive = active
+        pillTick += 1
     }
 
     @ViewBuilder
@@ -277,8 +371,8 @@ struct HomeView: View {
         } else {
             FCContentCard(
                 section: section,
-                onTap: { contentCardTapped(section) },
-                onDismiss: { viewModel.dismissCard(sectionId: section.id) }
+                isLoading: pendingCardSection?.id == section.id && viewModel.state.imageStatementState.isLoading,
+                onTap: { contentCardTapped(section) }
             )
         }
     }
@@ -317,14 +411,6 @@ struct HomeView: View {
         ))
     }
 
-    private func greeting(_ feed: HomeUdfResponse) -> String {
-        if let greeting = feed.greeting, !greeting.isEmpty {
-            let name = FarmerChat.shared.prefs.string(.userName) ?? ""
-            return LabelManager.applyTemplate(greeting, params: ["name": name])
-        }
-        return fcLabel(FCLabels.hello, "Hello!")
-    }
-
     // MARK: - Weather (routes through LocationPromptManager)
 
     private func weatherTapped() {
@@ -351,7 +437,8 @@ struct HomeView: View {
     // MARK: - Cards
 
     private func markViewedIfNeeded(_ section: SectionDto) {
-        guard section.isViewed != true,
+        // Image cards only (HomeScreen.kt:2092) — statement cards are never marked viewed.
+        guard HomeViewModel.shouldMarkViewed(section),
               let statementId = section.statementId,
               let userId = FarmerChat.shared.session.userId else { return }
         viewModel.onAction(.markImageViewed(statementId: statementId, userId: userId))
@@ -401,11 +488,11 @@ struct HomeView: View {
             .updateUserName(body: UserNameRequest(userId: userId, gender: option.text)),
             screenName: ScreenNames.home
         )
+        // The card runs Saving → "Thank you" → gone itself (Cards.kt) and removes itself from
+        // the feed through `onDismiss`; no toast (the app shows none).
         Task {
             try? await Task.sleep(nanoseconds: 900_000_000)
             submittingSectionId = nil
-            viewModel.dismissCard(sectionId: section.id)
-            toast.show(.success, fcLabel("profile_saved", "Saved!"))
         }
     }
 
@@ -422,11 +509,11 @@ struct HomeView: View {
             let cropIds = options.compactMap { $0.rawId?.intValue }
             viewModel.onAction(.updateCultivatedCrops(userId: userId, cropIds: cropIds))
         }
+        // The card runs Saving → "Thank you" → gone itself (Cards.kt) and removes itself from
+        // the feed through `onDismiss`; no toast (the app shows none).
         Task {
             try? await Task.sleep(nanoseconds: 900_000_000)
             submittingSectionId = nil
-            viewModel.dismissCard(sectionId: section.id)
-            toast.show(.success, fcLabel("profile_saved", "Saved!"))
         }
     }
 
@@ -492,6 +579,11 @@ struct HomeView: View {
             audioPath: lastClip?.fileURL.path
         ))
         lastClip = nil
+    }
+
+    private func attach(_ picked: FCPickedImage) {
+        composerPhoto = picked
+        composerFocusRequest = true
     }
 
     // MARK: - Navigation

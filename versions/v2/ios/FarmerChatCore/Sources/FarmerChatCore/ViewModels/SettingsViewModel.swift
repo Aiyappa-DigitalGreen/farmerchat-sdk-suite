@@ -129,7 +129,10 @@ public final class SettingsViewModel: ObservableObject {
             state.selectedStreamingRequired = language.streamingRequired ?? true
         }
         env.analytics.track(AnalyticsEvents.languageSelected, props: ["language_id": String(id), "screen": ScreenNames.languageChooser])
-        Task { await fetchLabels(languageId: id, code: code) }
+        // App parity (SettingsViewModel.kt selectLanguage): a row tap records the choice ONLY.
+        // Labels and prefs change on Save (`submitLanguage`), never on a tap. The SDK used to
+        // fetch AND persist the tapped language's labels here, so tap → Back left the UI in a
+        // language the farmer never saved (scenario pass B7, Android 4af5e9d).
     }
 
     private func fetchLabels(languageId: Int, code: String?) async {
@@ -158,6 +161,9 @@ public final class SettingsViewModel: ObservableObject {
             let result = await env.api.setPreferredLanguage(SetPreferredLanguageRequest(userId: userId, languageId: languageId))
             switch result {
             case .success:
+                // App `fetchLanguageLabelsForId` on Save: the chosen language's labels. A labels
+                // failure leaves the current labels in place.
+                await fetchLabels(languageId: languageId, code: state.selectedLanguageCode)
                 env.prefs.setInt(languageId, .selectedLanguageId)
                 if let code = state.selectedLanguageCode {
                     env.prefs.setString(code, .selectedLanguageCode)

@@ -494,66 +494,26 @@ final class FCUILocationPromptHost: UIViewController {
         skipTitle: String?,
         onSkip: (() -> Void)?
     ) -> UIView {
+        // LocationPromptHost.kt:735-760: FullScreenMessage with ArrowBack (MD) and "Skip" (MD).
         let message = FCUIFullScreenMessageView(
-            title: main, subtitle: subtitle, symbolName: symbolName,
-            primaryTitle: primaryTitle, secondaryTitle: nil
+            barTitle: barTitle,
+            mainMessage: main,
+            subtitle: subtitle,
+            subtitleLarge: false,
+            illustration: symbolName == "sun.max" ? .lookingAtSky : .lookingAtPhone,
+            fallbackSymbol: symbolName,
+            primaryTitle: primaryTitle,
+            primaryChevron: chevron && !loading,
+            leading: onBack != nil ? .back : nil,
+            onLeading: onBack,
+            rightLabel: skipTitle,
+            onRight: onSkip,
+            roundedBarActions: false
         )
         let primary = message.primaryButton
         primary.isEnabled = primaryEnabled && !loading
         primary.addAction(UIAction { _ in onPrimary() }, for: .touchUpInside)
-        if chevron && !loading {
-            primary.setImage(UIImage(systemName: "chevron.right"), for: .normal)
-            primary.tintColor = FCUITheme.green800
-            primary.semanticContentAttribute = .forceRightToLeft
-            primary.imageEdgeInsets = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: -8)
-        }
-        if loading {
-            let spinner = UIActivityIndicatorView(style: .medium)
-            spinner.color = FCUITheme.green800
-            spinner.startAnimating()
-            spinner.translatesAutoresizingMaskIntoConstraints = false
-            primary.addSubview(spinner)
-            NSLayoutConstraint.activate([
-                spinner.centerYAnchor.constraint(equalTo: primary.centerYAnchor),
-                spinner.leadingAnchor.constraint(equalTo: primary.leadingAnchor, constant: 20)
-            ])
-        }
-
-        let bar = UIStackView()
-        bar.axis = .horizontal
-        bar.spacing = 8
-        bar.alignment = .center
-        bar.translatesAutoresizingMaskIntoConstraints = false
-        if let onBack {
-            let back = UIButton(type: .system)
-            back.setImage(UIImage(systemName: "arrow.left"), for: .normal)
-            back.tintColor = .white
-            back.widthAnchor.constraint(equalToConstant: 44).isActive = true
-            back.heightAnchor.constraint(equalToConstant: 44).isActive = true
-            back.addAction(UIAction { _ in onBack() }, for: .touchUpInside)
-            bar.addArrangedSubview(back)
-        }
-        let title = UILabel()
-        title.text = barTitle
-        title.font = FCUITypography.current.titleMedium.font
-        title.textColor = .white
-        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        bar.addArrangedSubview(title)
-        if let skipTitle, let onSkip {
-            let skip = UIButton(type: .system)
-            skip.setTitle(skipTitle, for: .normal)
-            skip.titleLabel?.font = FCUITypography.current.labelLarge.font
-            skip.setTitleColor(.white, for: .normal)
-            skip.heightAnchor.constraint(equalToConstant: 44).isActive = true
-            skip.addAction(UIAction { _ in onSkip() }, for: .touchUpInside)
-            bar.addArrangedSubview(skip)
-        }
-        message.addSubview(bar)
-        NSLayoutConstraint.activate([
-            bar.topAnchor.constraint(equalTo: message.safeAreaLayoutGuide.topAnchor, constant: 10),
-            bar.leadingAnchor.constraint(equalTo: message.leadingAnchor, constant: onBack == nil ? 20 : 8),
-            bar.trailingAnchor.constraint(equalTo: message.trailingAnchor, constant: -12)
-        ])
+        message.setPrimaryLoading(loading)
         return message
     }
 

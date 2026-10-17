@@ -77,6 +77,8 @@ final class FCUIChatViewController: UIViewController {
     /// `ChatEmptyState`). A sibling of the list pinned to its frame, so it sits above the input bar
     /// and never scrolls away.
     private var emptyState: FCUIChatEmptyStateView!
+    /// The language the chrome's labels were resolved for (see `viewWillAppear`).
+    private var builtLanguage: String?
     /// The answer id the indicator's timeline last started for (`remember(triggerKey)`).
     private var scrollIndicatorKey: String?
     private var didInitialize = false
@@ -126,6 +128,8 @@ final class FCUIChatViewController: UIViewController {
     private var alignmentPhotoSourceId: String?
     /// The UPLOAD_PHOTO chip that opened the camera / gallery (its value + label go on Send_Query).
     private var alignmentPhotoChip: AlignmentChip?
+    /// A composer photo waiting for its caption (InputComposer `photoUris`, one image).
+    private var composerPhoto: (data: Data, url: URL)?
     /// True once the location-outcome subscription is installed. Guards the share-location chip
     /// from starting a flow nothing is listening to (see `observeLocationOutcomes`).
     private var isObservingLocationOutcomes = false
@@ -160,6 +164,16 @@ final class FCUIChatViewController: UIViewController {
             .sink { [weak self] state in self?.render(state) }
             .store(in: &cancellables)
 
+        // ChatScreen.kt:1315-1329 `setOnCompletionListener`: when the answer audio ends, the clip is
+        // dropped (`ClearAudioPlaybackUrl`) and the pill returns to "Listen". Without this the
+        // UIKit pill stayed on Pause + animating bars forever after playback finished.
+        ttsPlayback.didFinish
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.viewModel.onAction(.setAudioPlaying(false))
+                self?.viewModel.onAction(.clearAudioPlaybackUrl)
+            }
+            .store(in: &cancellables)
         observeLocationOutcomes()
         initialize()
         FarmerChat.shared.analytics.screenViewed(ScreenNames.chat, extra: ["source": args.source])
@@ -167,9 +181,18 @@ final class FCUIChatViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // LogoAppBar replaces the system bar; screens pushed from here (language, history) show
-        // their own again.
+        // LogoAppBar replaces the system bar; every SDK screen draws its own bar
+        // (FCUIAppBars.swift), so the system bar stays hidden throughout.
         navigationController?.setNavigationBarHidden(true, animated: animated)
+        // A language Save in the chooser pushed over this chat changes the served labels; UIKit
+        // views captured theirs at build time (SwiftUI re-renders on its own).
+        let language = FarmerChat.shared.prefs.string(.selectedLanguageCode)
+        if let builtLanguage, builtLanguage != language {
+            emptyState.relabel()
+            composer.relabel()
+            render(viewModel.state)
+        }
+        builtLanguage = language
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -186,9 +209,6 @@ final class FCUIChatViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        if !isMovingFromParent, navigationController?.topViewController !== self {
-            navigationController?.setNavigationBarHidden(false, animated: animated)
-        }
         if isMovingFromParent {
             playback.stop()
             ttsPlayback.stop()
@@ -344,6 +364,7 @@ final class FCUIChatViewController: UIViewController {
                 message: message,
                 isTtsEnabled: self.viewModel.state.isTtsEnabled,
                 listenState: self.listenState,
+                isTranscribing: self.viewModel.state.isTranscribing,
                 playback: self.playback,
                 // ChatThreadContent.kt `isLastResponse`: once a follow-up is in flight (its
                 // placeholder / stream is the last row) the previous answer drops its actions.
@@ -456,9 +477,22 @@ final class FCUIChatViewController: UIViewController {
         let config = FarmerChat.shared.config
         composer = FCUIComposerView(showCamera: config.enableImages, showMic: config.enableVoice)
         composer.onSend = { [weak self] question in
-            self?.viewModel.onAction(.sendFollowUpQuestion(
-                question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil
-            ))
+            guard let self else { return }
+            if let photo = self.composerPhoto {
+                // ChatScreen.kt:1795-1803: the attached photo goes with the typed caption
+                // (blank → image-only bubble; Core supplies the default prompt).
+                self.composerPhoto = nil
+                self.composer.attachment = nil
+                self.viewModel.onAction(.sendQuestionWithImage(question: question, imageData: photo.data, imageURL: photo.url))
+            } else {
+                self.viewModel.onAction(.sendFollowUpQuestion(
+                    question: question, followUpQuestionId: nil, transcriptionId: nil, audioURL: nil
+                ))
+            }
+        }
+        composer.onRemoveAttachment = { [weak self] in
+            self?.composerPhoto = nil
+            self?.composer.attachment = nil
         }
         composer.onCamera = { [weak self] in self?.photoTapped() }
         composer.onMic = { [weak self] in self?.speakTapped() }
@@ -580,7 +614,7 @@ final class FCUIChatViewController: UIViewController {
         // of exactly those rows. `isLatest`/`isBusy` are render inputs too, so a change in either
         // reconfigures every surviving message row.
         // The Listen pill's Loading / Playing state lives on the thread state, not the message.
-        let listenKey = "\(state.isLoadingSynthesiseAudio)-\(state.isAudioPlaying)-\(state.audioPlaybackUrl != nil)"
+        let listenKey = "\(state.isLoadingSynthesiseAudio)-\(state.isAudioPlaying)-\(state.audioPlaybackUrl != nil)-\(state.isTranscribing)"
         let flagsChanged = state.isLoading != prevIsLoading || lastAiRowId != prevLastAiRowId
             || listenKey != prevListenKey
         prevListenKey = listenKey
@@ -651,7 +685,7 @@ final class FCUIChatViewController: UIViewController {
         // `errorMessage == nil`: parity with SwiftUI, whose chat-error screen takes precedence.
         // …and no input open: while the composer is focused or holds a draft the placeholder
         // steps aside (compose 03-typed shows a blank thread above the keyboard).
-        let composerActive = composer.isEditing || composer.hasText
+        let composerActive = composer.isEditing || composer.hasText || composerPhoto != nil
         let showEmpty = state.messages.isEmpty && !state.isLoading && state.errorMessage == nil
             && (args.conversationId ?? "").isEmpty && !hasEntryPayload && !composerActive
         if showEmpty && emptyState.isHidden {
@@ -688,6 +722,9 @@ final class FCUIChatViewController: UIViewController {
 
         // Auto-play a freshly synthesised clip once. Keyed on the URL: re-playing whenever the
         // state says "not playing" made Pause restart the audio immediately.
+        // Clip dropped (playback finished / new answer): a later Listen may synthesise the SAME
+        // URL again, which must auto-play again.
+        if state.audioPlaybackUrl == nil { autoPlayedAudioUrl = nil }
         if let urlString = state.audioPlaybackUrl, urlString != autoPlayedAudioUrl,
            let url = URL(string: urlString), !state.isAudioPlaying {
             autoPlayedAudioUrl = urlString
@@ -1134,9 +1171,27 @@ final class FCUIChatViewController: UIViewController {
         }
     }
 
+    /// The composer's camera: the app's photo input offers Camera and Gallery
+    /// (`fc_v2_app_label_camera` / `fc_v2_app_label_gallery`); the photo then waits in the
+    /// composer for a caption.
     private func photoTapped() {
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            sheet.addAction(UIAlertAction(title: fcuiLabel(FCLabels.camera, "Camera"), style: .default) { [weak self] _ in
+                self?.presentComposerPicker(.camera)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: fcuiLabel(FCLabels.gallery, "Gallery"), style: .default) { [weak self] _ in
+            self?.presentComposerPicker(.photoLibrary)
+        })
+        sheet.addAction(UIAlertAction(title: fcuiLabel(FCLabels.cancel, "Cancel"), style: .cancel))
+        sheet.popoverPresentationController?.sourceView = composer
+        present(sheet, animated: true)
+    }
+
+    private func presentComposerPicker(_ source: UIImagePickerController.SourceType) {
         let picker = UIImagePickerController()
-        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.sourceType = source
         picker.delegate = self
         present(picker, animated: true)
     }
@@ -1163,7 +1218,11 @@ extension FCUIChatViewController: UIImagePickerControllerDelegate, UINavigationC
             // An UPLOAD_PHOTO chip's photo is reported as that chip's pick (ChatScreen.kt:425-460).
             viewModel.sendAlignmentPhoto(chip: photoChip, imageData: original ?? data, imageURL: url)
         } else {
-            viewModel.onAction(.sendQuestionWithImage(question: "", imageData: original ?? data, imageURL: url))
+            // InputComposer flow (ChatScreen.kt:497-503 `photoUris = listOf(uri)`): the photo
+            // waits in the composer for an optional caption.
+            composerPhoto = (original ?? data, url)
+            composer.attachment = image
+            composer.focus()
         }
     }
 
@@ -1225,6 +1284,8 @@ final class FCUIChatEmptyStateView: UIView {
     private let stack = UIStackView()
     private let pillRow = UIStackView()
     private var pills: [FCUIEmptyStatePill] = []
+    private let title = UILabel()
+    private let subtitle = UILabel()
 
     init(onPhoto: (() -> Void)?, onSpeak: (() -> Void)?, onType: @escaping () -> Void) {
         super.init(frame: .zero)
@@ -1233,14 +1294,12 @@ final class FCUIChatEmptyStateView: UIView {
 
         let mark = Self.makeMark()
 
-        let title = UILabel()
         title.numberOfLines = 0
         title.textColor = FCUITheme.foregroundPrimary
         title.textAlignment = .center
         Self.setText(title, fcuiLabel(FCLabels.farmerchatTagline, "FarmerChat: Practical advice for your crops & livestock"),
                      size: 18, lineHeight: 24, weight: .semibold)
 
-        let subtitle = UILabel()
         subtitle.numberOfLines = 0
         subtitle.textColor = FCUITheme.foregroundSecondary
         subtitle.textAlignment = .center
@@ -1249,12 +1308,12 @@ final class FCUIChatEmptyStateView: UIView {
                      size: 14, lineHeight: 20, weight: .regular)
 
         if let onPhoto {
-            pills.append(FCUIEmptyStatePill(icon: "camera.fill", title: fcuiLabel(FCLabels.photo, "Photo"), action: onPhoto))
+            pills.append(FCUIEmptyStatePill(icon: "camera.fill", labelKey: FCLabels.photo, fallback: "Photo", action: onPhoto))
         }
         if let onSpeak {
-            pills.append(FCUIEmptyStatePill(icon: "mic.fill", title: fcuiLabel(FCLabels.speak, "Speak"), action: onSpeak))
+            pills.append(FCUIEmptyStatePill(icon: "mic.fill", labelKey: FCLabels.speak, fallback: "Speak", action: onSpeak))
         }
-        pills.append(FCUIEmptyStatePill(icon: "keyboard", title: fcuiLabel(FCLabels.type, "Type"), action: onType))
+        pills.append(FCUIEmptyStatePill(icon: "keyboard", labelKey: FCLabels.type, fallback: "Type", action: onType))
         pills.forEach { pillRow.addArrangedSubview($0) }
         pillRow.axis = .horizontal
         pillRow.spacing = 8
@@ -1283,6 +1342,17 @@ final class FCUIChatEmptyStateView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Re-resolves every label (a language Save while this chat sat under the chooser).
+    func relabel() {
+        Self.setText(title, fcuiLabel(FCLabels.farmerchatTagline, "FarmerChat: Practical advice for your crops & livestock"),
+                     size: 18, lineHeight: 24, weight: .semibold)
+        Self.setText(subtitle, fcuiLabel(FCLabels.getStartedByClickingOnPhotoSpeakOrTypeToAskYourQuestion,
+                                         "Tap a button to ask a question"),
+                     size: 14, lineHeight: 20, weight: .regular)
+        pills.forEach { $0.relabel() }
+        setNeedsLayout()
+    }
 
     /// Taps on the empty area fall through to the list below; only the content is interactive.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -1397,9 +1467,15 @@ final class FCUIChatEmptyStateView: UIView {
 /// circle at ~12% brand holding a 20pt brand-green icon.
 final class FCUIEmptyStatePill: UIControl {
     private let action: () -> Void
+    private let labelKey: String
+    private let fallback: String
+    private let label = UILabel()
 
-    init(icon: String, title: String, action: @escaping () -> Void) {
+    init(icon: String, labelKey: String, fallback: String, action: @escaping () -> Void) {
         self.action = action
+        self.labelKey = labelKey
+        self.fallback = fallback
+        let title = fcuiLabel(labelKey, fallback)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = FCUITheme.surfacePrimary
@@ -1424,7 +1500,6 @@ final class FCUIEmptyStatePill: UIControl {
         image.translatesAutoresizingMaskIntoConstraints = false
         iconCircle.addSubview(image)
 
-        let label = UILabel()
         label.text = title
         label.font = FCUIChatEmptyStateView.font(size: 14, weight: .semibold)
         label.textColor = FCUITheme.foregroundPrimary
@@ -1448,6 +1523,11 @@ final class FCUIEmptyStatePill: UIControl {
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         addAction(UIAction { [weak self] _ in self?.action() }, for: .touchUpInside)
+    }
+
+    func relabel() {
+        label.text = fcuiLabel(labelKey, fallback)
+        accessibilityLabel = label.text
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }

@@ -97,6 +97,7 @@ public struct FarmerChatFabButton: View {
                 // UIKit left `isPresented` stuck at true, so the FAB could not reopen it.
                 FarmerChatView()
                     .environment(\.fcExitAction) { isPresented = false }
+                    .environment(\.fcFallbackCloseShown, !screenHasOwnExit)
                     .onPreferenceChange(FCScreenHasOwnExitKey.self) { screenHasOwnExit = $0 }
                 // Fallback close for screens without their own exit (Home, language, onboarding).
                 // Hidden on the chat-only chat, whose own X exits; two X's overlapped the content.
@@ -111,7 +112,9 @@ public struct FarmerChatFabButton: View {
                             .background(Color.black.opacity(0.5))
                             .clipShape(Circle())
                     }
-                    .padding(.top, 44)
+                    // In the screens' own app-bar row (bars are 44pt+ tall below the safe area),
+                    // where Home keeps the slot free — not over the content below it.
+                    .padding(.top, 2)
                     .padding(.trailing, 16)
                 }
             }

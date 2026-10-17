@@ -94,6 +94,7 @@ public enum FCLabels {
     public static let farmerchatAdjustsYourPhoneSettings = "fc_v2_app_label_farmerchat_adjusts_your_phone_settings"
     public static let farmerchatAlwaysDarkMode = "fc_v2_app_label_farmerchat_always_dark_mode"
     public static let farmerchatAlwaysLightMode = "fc_v2_app_label_farmerchat_always_light_mode"
+    public static let checkMobileDataWifiSignal = "fc_v2_app_label_check_mobile_data_wi-fi_signal"
     public static let farmerchatCouldntLoad = "fc_v2_app_label_farmerchat_couldnt_load"
     public static let farmerchatNeedsTheInternet = "fc_v2_app_label_farmerchat_needs_the_internet"
     public static let farmerchatStarting = "fc_v2_app_label_farmerchat_starting"

@@ -209,6 +209,22 @@ public final class FarmerChat: @unchecked Sendable {
     }
     private let listenerBox = ListenerBox()
 
+    /// Test seam: a URLSession (e.g. one with a stub URLProtocol) the next ``initialize(config:)``
+    /// hands to its APIClient. Internal — never part of the public surface.
+    static var testURLSession: URLSession? {
+        get { testSessionBox.session }
+        set { testSessionBox.session = newValue }
+    }
+    private static let testSessionBox = TestSessionBox()
+    private final class TestSessionBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _session: URLSession?
+        var session: URLSession? {
+            get { lock.lock(); defer { lock.unlock() }; return _session }
+            set { lock.lock(); defer { lock.unlock() }; _session = newValue }
+        }
+    }
+
     private init(config: FarmerChatConfig) {
         self.config = config
         let tokenStore = KeychainTokenStore()
@@ -265,7 +281,8 @@ public final class FarmerChat: @unchecked Sendable {
             baseURL: config.resolvedBaseURL,
             tokenStore: tokenStore,
             refresher: refresher,
-            deviceInfo: deviceInfo
+            deviceInfo: deviceInfo,
+            session: Self.testURLSession
         )
         self.api = FarmerChatAPI(client: client, farmerChatApiKey: config.resolvedFarmerChatApiKey, geoApiKey: config.resolvedGeoApiKey)
         self.session = SessionManager(tokenStore: tokenStore, prefs: prefs, api: api, analytics: analytics, guestReplaced: guestReplaced)

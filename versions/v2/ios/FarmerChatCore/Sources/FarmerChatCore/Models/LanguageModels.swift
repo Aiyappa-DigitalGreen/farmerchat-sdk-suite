@@ -110,6 +110,19 @@ public struct CountryItem: Codable, Sendable, Identifiable, Hashable {
     @LossyOptional public var phoneLength: Int?
     public var phoneNumberPattern: String?
 
+    /// `flag` is an IMAGE URL on the live API (the app renders it with `flagUrl`, AuthScreen.kt:448);
+    /// it was printed as text ("https://s3-ap-south-1…  +91"). The URL when it is one, else nil.
+    public var flagImageURL: URL? {
+        guard let flag, flag.hasPrefix("http") else { return nil }
+        return URL(string: flag)
+    }
+
+    /// `flag` when it is a literal (emoji) flag, else nil — safe to print as text.
+    public var flagText: String? {
+        guard let flag, !flag.isEmpty, !flag.hasPrefix("http") else { return nil }
+        return flag
+    }
+
     enum CodingKeys: String, CodingKey {
         case rawId = "id"
         case code

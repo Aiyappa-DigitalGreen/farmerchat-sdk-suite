@@ -17,6 +17,8 @@ public struct FCPrimaryButton: View {
     let action: () -> Void
 
     var height: CGFloat = 48
+    /// PrimaryButton `radius`; nil = the theme's button shape. ContentCard passes Radius.Rounded.
+    var radius: CGFloat? = nil
 
     public var body: some View {
         // Port of PrimaryButton.kt: the fill (buttonPrimarySurface = Green800)
@@ -44,7 +46,7 @@ public struct FCPrimaryButton: View {
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .background(theme.content.buttonPrimarySurface)
-            .clipShape(RoundedRectangle(cornerRadius: theme.shapes.button, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: radius ?? theme.shapes.button, style: .continuous))
         }
         // NOTE: intentionally NOT using .disabled() — SwiftUI dims the whole
         // button (fill included) when disabled, which would turn the dark
@@ -669,6 +671,16 @@ public struct FCOtpInput: View {
 
 // MARK: - App bars
 
+/// Port of components/appbars/DefaultAppBar.kt — the bar every non-chat screen uses (Settings,
+/// Name, Choose your language, Help, Recent chats, Sign up, country picker, legal pages): solid
+/// `brand.surfacePrimary` green `64 + status inset` tall (the green bleeds behind the status bar),
+/// a 16pt-padded row of [42pt ActionButton | centred white titleMedium | 42pt spacer or action].
+///
+/// The SDK used to draw a transparent 56pt bar with a black, left-aligned title and a bare
+/// glyph — the 1.0 chrome the app no longer has. Every call site in the app passes
+/// `showGlow = false` except the No-Internet screen (``FCFullScreenMessage`` owns that one).
+/// The menu and close tiles are round (`Radius.Rounded`); Back keeps the 12pt square
+/// (SettingsNameScreen.kt:121 leaves `leftRadius` at its MD default).
 public struct FCAppBar: View {
     public enum LeadingIcon {
         case menu, back, close, none
@@ -679,37 +691,62 @@ public struct FCAppBar: View {
     var leading: LeadingIcon = .none
     var onLeadingTap: (() -> Void)?
     var trailing: AnyView?
+    var showGlow: Bool = false
+    /// DefaultAppBar `leftRadius`; nil = the per-icon default (round menu/close, 12pt back).
+    var leadingRadius: CGFloat? = nil
 
     public var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
             if leading != .none {
-                Button(action: { onLeadingTap?() }) {
-                    Image(systemName: leadingSymbol)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(theme.content.foregroundPrimary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                FCAppBarTile(
+                    symbol: leadingSymbol,
+                    label: leadingLabel,
+                    identifier: "fcAppBarLeading",
+                    radius: leadingRadius ?? (leading == .back ? 12 : 21)
+                ) { onLeadingTap?() }
+            } else {
+                Color.clear.frame(width: 42, height: 42)
             }
             Text(title)
                 .fcTextStyle(theme.typography.titleMedium)
-                .foregroundColor(theme.content.foregroundPrimary)
+                .foregroundColor(theme.brand.foregroundPrimary)
+                .multilineTextAlignment(.center)
                 .lineLimit(1)
-            Spacer()
+                .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
             if let trailing {
                 trailing
+            } else {
+                Color.clear.frame(width: 42, height: 42)
             }
         }
-        .padding(.horizontal, 8)
-        .frame(height: 56)
+        .padding(.horizontal, 16)
+        .frame(height: 64)
+        .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                theme.brand.surfacePrimary
+                if showGlow { FCChatGlow(height: 80) }
+            }
+            .ignoresSafeArea(edges: .top)
+        }
     }
 
     private var leadingSymbol: String {
         switch leading {
         case .menu: return "line.3.horizontal"
-        case .back: return "chevron.left"
+        // Icons.AutoMirrored.Filled.ArrowBack.
+        case .back: return "arrow.left"
         case .close: return "xmark"
+        case .none: return ""
+        }
+    }
+
+    private var leadingLabel: String {
+        switch leading {
+        case .menu: return "menu"
+        case .back: return "Back"
+        case .close: return fcLabel(FCLabels.close, "Close")
         case .none: return ""
         }
     }

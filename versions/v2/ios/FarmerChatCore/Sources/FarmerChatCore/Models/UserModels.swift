@@ -386,12 +386,87 @@ public struct UpdateLocationRequest: Codable, Sendable {
     }
 }
 
+/// #11 `update_user_location` reply. The app's model (`domain/model/location/GetLocationResponse.kt`)
+/// is `{ error_message, user_profile { country_name, geography_level2_name, geography_level3, … } }`;
+/// the flat `country` / `state` / `district` fields below were never sent, so a shared location
+/// was not stored and the chat's location bubble kept showing the PREVIOUS place. Kept for
+/// source compatibility; read ``userProfile``.
 public struct GetLocationResponse: Codable, Sendable {
     public var message: String?
     public var country: String?
     public var state: String?
     public var district: String?
     public var error: Bool?
+    public var errorMessage: String? = nil
+    public var userProfile: LocationUserProfile? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case message, country, state, district, error
+        case errorMessage = "error_message"
+        case userProfile = "user_profile"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        message = try? c.decodeIfPresent(String.self, forKey: .message)
+        country = try? c.decodeIfPresent(String.self, forKey: .country)
+        state = try? c.decodeIfPresent(String.self, forKey: .state)
+        district = try? c.decodeIfPresent(String.self, forKey: .district)
+        error = try? c.decodeIfPresent(Bool.self, forKey: .error)
+        errorMessage = try? c.decodeIfPresent(String.self, forKey: .errorMessage)
+        userProfile = try? c.decodeIfPresent(LocationUserProfile.self, forKey: .userProfile)
+    }
+
+    init(message: String?, country: String?, state: String?, district: String?, error: Bool?,
+         errorMessage: String? = nil, userProfile: LocationUserProfile? = nil) {
+        self.message = message
+        self.country = country
+        self.state = state
+        self.district = district
+        self.error = error
+        self.errorMessage = errorMessage
+        self.userProfile = userProfile
+    }
+
+    /// The resolved place: `user_profile` first (the real wire), else the legacy flat fields.
+    public var resolvedCountryName: String? { userProfile?.countryName?.nonBlank ?? country?.nonBlank }
+    public var resolvedState: String? { userProfile?.geographyLevel2Name?.nonBlank ?? state?.nonBlank }
+    public var resolvedDistrict: String? { userProfile?.geographyLevel3?.nonBlank ?? district?.nonBlank }
+}
+
+/// `user_profile` of the #11 reply (app `UserProfile` in GetLocationResponse.kt).
+public struct LocationUserProfile: Codable, Sendable, Equatable {
+    public var userId: String?
+    public var countryName: String?
+    public var countryCode: String?
+    public var geographyLevel2Name: String?
+    public var geographyLevel3: String?
+    public var displayAddress: String?
+    @LossyOptional public var latitude: Double?
+    @LossyOptional public var longitude: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case countryName = "country_name"
+        case countryCode = "country_code"
+        case geographyLevel2Name = "geography_level2_name"
+        case geographyLevel3 = "geography_level3"
+        case displayAddress = "display_address"
+        case latitude, longitude
+    }
+
+    public init(userId: String? = nil, countryName: String? = nil, countryCode: String? = nil,
+                geographyLevel2Name: String? = nil, geographyLevel3: String? = nil,
+                displayAddress: String? = nil, latitude: Double? = nil, longitude: Double? = nil) {
+        self.userId = userId
+        self.countryName = countryName
+        self.countryCode = countryCode
+        self.geographyLevel2Name = geographyLevel2Name
+        self.geographyLevel3 = geographyLevel3
+        self.displayAddress = displayAddress
+        self.latitude = latitude
+        self.longitude = longitude
+    }
 }
 
 // MARK: - Question count (#34)

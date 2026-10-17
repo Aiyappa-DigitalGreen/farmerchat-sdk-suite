@@ -61,6 +61,15 @@ public struct FarmerChatView: View {
                             .navigationBarHidden(true)
                     }
             }
+            #if DEBUG
+            // Verification hook (DEBUG builds only, like UIKit's `-fcUI*`): the Sign-up
+            // interstitial is only reachable when DEMO says `bypass_interstitial = false`.
+            .task {
+                guard ProcessInfo.processInfo.arguments.contains("-fcAutoBenefits") else { return }
+                try? await Task.sleep(nanoseconds: 9_000_000_000)
+                router.push(.accountBenefits)
+            }
+            #endif
 
             // Drawer overlay (side overlay, not a nav destination).
             // C3: suppressed entirely when the host disables `showDrawer`.
@@ -140,7 +149,9 @@ public struct FarmerChatView: View {
     /// screens (Home, language, onboarding) do not, and iOS has no system Back to fall back on.
     private var screenHasOwnExit: Bool {
         if case .chat(let args) = router.current { return args.source == "chatOnly" }
-        return false
+        // A pushed screen exits through its own app-bar Back/Close (UIKit FAB parity): the
+        // fallback ✕ sat on top of right-hand bar actions such as Sign up's "Skip".
+        return !router.path.isEmpty
     }
 
     private var drawerRoute: String {
@@ -276,6 +287,19 @@ extension EnvironmentValues {
     var fcExitAction: (@MainActor () -> Void)? {
         get { self[FCExitActionKey.self] }
         set { self[FCExitActionKey.self] = newValue }
+    }
+}
+
+/// True when a presenter draws its fallback close (X) at the top-trailing corner, so a screen
+/// whose top-trailing content would sit under it (Home's greeting) can inset that content.
+struct FCFallbackCloseShownKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var fcFallbackCloseShown: Bool {
+        get { self[FCFallbackCloseShownKey.self] }
+        set { self[FCFallbackCloseShownKey.self] = newValue }
     }
 }
 

@@ -43,6 +43,11 @@ public struct FCPrimaryInputButtons: View {
 
 // MARK: - Weather button (HomeAppBar)
 
+/// Port of components/buttons/WeatherButton.kt: a 44pt fully-rounded pill on
+/// `brand.surfaceSecondary` — 14pt leading / 8pt trailing padding, the 24pt server icon, 8pt,
+/// `current_temp` (verbatim — the server sends the unit, "21 °C") in white labelMedium, 2pt, and a
+/// 22pt chevron in `brand.foregroundSecondary`. Loading: a 20pt spinner + "Loading...", 16pt
+/// trailing padding.
 public struct FCWeatherButton: View {
     @Environment(\.fcTheme) private var theme
     let weather: WeatherResponse?
@@ -51,33 +56,49 @@ public struct FCWeatherButton: View {
 
     public var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 if isLoading {
-                    ProgressView().tint(theme.content.foregroundSecondary)
-                } else if let weather {
-                    if let icon = weather.weatherIcon, !icon.isEmpty, icon.hasPrefix("http") {
-                        FCRemoteImage(urlString: icon, contentMode: .fit)
-                            .frame(width: 22, height: 22)
-                    } else {
-                        Image(systemName: "cloud.sun.fill")
-                            .foregroundColor(FCPrimitive.sky400)
-                    }
-                    if let temp = weather.currentTemp, !temp.isEmpty {
-                        Text("\(temp)°")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(theme.content.foregroundPrimary)
-                    }
+                    ProgressView()
+                        .tint(theme.brand.foregroundPrimary)
+                        .frame(width: 20, height: 20)
+                    Text(fcLabel(FCLabels.loading, "Loading..."))
+                        .fcTextStyle(theme.typography.labelMedium)
+                        .foregroundColor(theme.brand.foregroundPrimary)
+                        .padding(.leading, 8)
                 } else {
-                    Image(systemName: "cloud.sun")
-                        .foregroundColor(theme.content.foregroundSecondary)
+                    Group {
+                        // UIImage cannot decode the SVG icons the server sends (the app uses an
+                        // SvgImage there); those fall back to the condition glyph instead of a
+                        // blank square.
+                        if let icon = weather?.weatherIcon, icon.hasPrefix("http"), !icon.lowercased().hasSuffix(".svg") {
+                            FCRemoteImage(urlString: icon, contentMode: .fit)
+                        } else {
+                            Image(systemName: "cloud.sun.fill")
+                                .symbolRenderingMode(.multicolor)
+                                .font(.system(size: 18))
+                        }
+                    }
+                    .frame(width: 24, height: 24)
+                    Text(weather?.currentTemp ?? "")
+                        .fcTextStyle(theme.typography.labelMedium)
+                        .foregroundColor(theme.brand.foregroundPrimary)
+                        .lineLimit(1)
+                        .padding(.leading, 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(theme.brand.foregroundSecondary)
+                        .frame(width: 22, height: 22)
+                        .padding(.leading, 2)
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(theme.content.surfaceSecondary)
-            .clipShape(Capsule())
+            .padding(.leading, 14)
+            .padding(.trailing, isLoading ? 16 : 8)
+            .frame(height: 44)
+            .background(Capsule().fill(theme.brand.surfaceSecondary))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("fcHomeWeather")
     }
 }
 
@@ -145,57 +166,81 @@ public struct FCHomeFeedError: View {
 
 // MARK: - ContentCard (image/statement feed card)
 
+/// Port of components/cards/ContentCard.kt (via the Android SDK's Cards.kt:109-245): an elevated
+/// `surfaceSecondary` card (theme card radius); image cards inset the 16:9 picture 8pt with a
+/// 16pt radius (+ the view-count badge when `badge.show`); then the headline (`question_text`,
+/// else `title`) in bodyLarge, max 3 lines, and a full-width 42pt rounded "Start chat" primary
+/// button with a chevron (spinner while the pre-generated answer loads). 24pt side padding.
+///
+/// The SDK card was the 1.0 design: a 180pt edge-to-edge picture, a titleMedium title with a ✕,
+/// the statement underneath and a text-link CTA. The app's content card has no ✕ (only the
+/// question cards do) and never shows the statement.
 public struct FCContentCard: View {
     @Environment(\.fcTheme) private var theme
     let section: SectionDto
+    var isLoading: Bool = false
     let onTap: () -> Void
-    let onDismiss: () -> Void
+
+    private var headline: String {
+        if let q = section.questionText, !q.isEmpty { return q }
+        return section.title ?? ""
+    }
 
     public var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 0) {
-                if let imageUrl = section.imageUrl, !imageUrl.isEmpty {
-                    FCRemoteImage(urlString: imageUrl)
-                        .frame(height: 180)
-                        .clipped()
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top) {
-                        Text(section.title ?? section.statement ?? section.questionText ?? "")
-                            .fcTextStyle(theme.typography.titleMedium)
-                            .foregroundColor(theme.content.foregroundPrimary)
-                            .multilineTextAlignment(.leading)
-                        Spacer()
-                        Button(action: onDismiss) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(theme.content.foregroundTertiary)
-                                .frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if section.title != nil, let statement = section.statement, !statement.isEmpty {
-                        Text(statement)
-                            .fcTextStyle(theme.typography.bodyMedium)
-                            .foregroundColor(theme.content.foregroundSecondary)
-                            .multilineTextAlignment(.leading)
-                    }
-                    if let cta = section.cta?.text, !cta.isEmpty {
+        VStack(alignment: .leading, spacing: 0) {
+            if let imageUrl = section.imageUrl, !imageUrl.isEmpty {
+                ZStack(alignment: .topTrailing) {
+                    Color.clear
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .overlay(FCRemoteImage(urlString: imageUrl))
+                        .background(theme.content.surfacePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    if section.type?.lowercased() == "image", section.badge?.show == true, let count = section.badge?.count {
                         HStack(spacing: 4) {
-                            Text(cta)
-                            Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "eye.fill").font(.system(size: 11, weight: .semibold))
+                            Text("\(count)").font(.system(size: 12, weight: .semibold))
                         }
-                        .fcTextStyle(theme.typography.labelMedium)
-                        .foregroundColor(theme.brand.surfacePrimary)
-                        .padding(.top, 2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .frame(height: 28)
+                        .background(Color.black.opacity(0.45))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .padding(12)
                     }
                 }
-                .padding(16)
+                .padding([.top, .horizontal], 8)
+                Spacer().frame(height: 8)
+            } else {
+                Spacer().frame(height: 18)
             }
-            .background(theme.content.surfaceSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            VStack(alignment: .leading, spacing: 16) {
+                Text(headline)
+                    .fcTextStyle(theme.typography.bodyLarge)
+                    .foregroundColor(theme.content.foregroundPrimary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                FCPrimaryButton(
+                    title: fcLabel(FCLabels.startChat, "Start chat"),
+                    state: isLoading ? .loading : .chevron,
+                    action: onTap,
+                    height: 42,
+                    radius: 21
+                )
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 4)
+            .padding(.bottom, 20)
         }
-        .buttonStyle(.plain)
+        .background(theme.content.surfaceSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: theme.shapes.card, style: .continuous))
+        .shadow(color: Color.black.opacity(0.07), radius: 18, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("fcHomeContentCard")
     }
 }
 
@@ -260,7 +305,6 @@ private struct FCSelectCardShell<Options: View>: View {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !Task.isCancelled else { return }
             state = .feedback
-            onDismissed()
         }
         // Feedback -> Dismissed after 3000ms.
         .task(id: state) {
@@ -268,6 +312,9 @@ private struct FCSelectCardShell<Options: View>: View {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             state = .dismissed
+            // The section leaves the feed only now: removing it at Feedback (as Android notifies
+            // its parent) would tear the "Thank you" panel down with the ForEach row.
+            onDismissed()
         }
         // The checkmark lands first, the text follows 150ms later.
         .task(id: state) {
@@ -447,7 +494,7 @@ public struct FCSingleSelectCard: View {
                 }
             },
             onDismissTapped: onDismiss,
-            onDismissed: {}
+            onDismissed: onDismiss
         ) { enabled in
             ForEach(options) { option in
                 FCRadioRow(
@@ -517,7 +564,7 @@ public struct FCMultiSelectCard: View {
             isSubmitting: isSubmitting,
             onConfirm: { onSubmit(options.filter { selectedIds.contains($0.id) }) },
             onDismissTapped: onDismiss,
-            onDismissed: {}
+            onDismissed: onDismiss
         ) { enabled in
             ForEach(options) { option in
                 FCCheckboxRow(
@@ -695,6 +742,8 @@ public struct FCVoiceInputOverlay: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(fcLabel(FCLabels.cancel, "Cancel"))
+                    .accessibilityIdentifier("fcVoiceCancel")
 
                     Button(action: finish) {
                         Image(systemName: "checkmark")
@@ -705,6 +754,8 @@ public struct FCVoiceInputOverlay: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(fcLabel(FCLabels.send, "Send"))
+                    .accessibilityIdentifier("fcVoiceSend")
                 }
             }
             .padding(24)

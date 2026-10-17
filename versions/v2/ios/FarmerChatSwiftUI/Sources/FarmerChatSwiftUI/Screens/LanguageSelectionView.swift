@@ -154,6 +154,7 @@ struct LanguageSelectionView: View {
                 },
                 height: 56
             )
+            .accessibilityIdentifier("fcLanguageStart")
 
             legalText
         }

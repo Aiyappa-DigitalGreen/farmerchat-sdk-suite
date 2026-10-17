@@ -206,6 +206,7 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
         message: ChatMessage,
         isTtsEnabled: Bool,
         listenState: FCUIListenState = .idle,
+        isTranscribing: Bool = false,
         playback: AudioPlaybackService,
         isLatest: Bool = false,
         isBusy: Bool = false,
@@ -384,7 +385,8 @@ final class FCUIChatBubbleCell: UICollectionViewCell {
             hideAgenticViews()
             // After hideAgenticViews(), which hides the status view.
             streamStatusView.configure(text: fcuiLabel(FCLabels.gettingYourAnswer, "Getting your answer…"))
-            streamStatusView.isHidden = false
+            // ChatThreadContent.kt:615-633: no spinner while a voice clip is being transcribed.
+            streamStatusView.isHidden = isTranscribing
         }
     }
 

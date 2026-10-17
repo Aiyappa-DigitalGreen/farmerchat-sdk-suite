@@ -164,76 +164,184 @@ public final class FCUIPrimaryButton: UIButton {
     }
 }
 
-/// Full-screen green message layout (FullScreenMessage port).
+/// Port of the app's `FullScreenMessage` (ui/error/NoInternetScreen.kt): the green full-screen
+/// layout behind Sign up, You're all set, No internet / Something went wrong and the location
+/// interstitial.
+///
+/// `brand.surfacePrimary` ground; a DefaultAppBar with its 80pt yellow glow (centred white
+/// title, optional 42pt left tile and right label tile); the country farmer illustration (Fit,
+/// max 322pt) in the flexible space; the displaySmall main message and the subtitle, white,
+/// 10pt apart, 28pt sides, 28pt above the CTA; a forced-light 64pt PrimaryButton (Green800,
+/// white titleMedium, Green500 chevron), 20pt sides.
+///
+/// The SDK drew a Green800 ground, an SF symbol, a white CTA with green text and a bottom Skip
+/// link instead of the app's bar actions.
 public final class FCUIFullScreenMessageView: UIView {
     public let titleLabel = UILabel()
     public let subtitleLabel = UILabel()
     public let iconView = UIImageView()
     public let primaryButton = UIButton(type: .system)
     public let secondaryButton = UIButton(type: .system)
+    private let primarySpinner = UIActivityIndicatorView(style: .medium)
+    private let primaryChevron: Bool
 
-    public init(
+    /// Kept for source compatibility: no app bar actions, the given SF symbol as the fallback.
+    public convenience init(
         title: String,
         subtitle: String,
         symbolName: String,
         primaryTitle: String,
         secondaryTitle: String?
     ) {
+        self.init(
+            barTitle: nil, mainMessage: title, subtitle: subtitle, subtitleLarge: false,
+            illustration: .lookingAtSky, fallbackSymbol: symbolName,
+            primaryTitle: primaryTitle, primaryChevron: false,
+            leading: nil, onLeading: nil, rightLabel: nil, onRight: nil,
+            roundedBarActions: false, secondaryTitle: secondaryTitle
+        )
+    }
+
+    init(
+        barTitle: String?,
+        mainMessage: String,
+        subtitle: String,
+        subtitleLarge: Bool,
+        illustration: FCFarmerIllustration,
+        fallbackSymbol: String,
+        primaryTitle: String,
+        primaryChevron: Bool,
+        leading: FCUIAppBarLeading?,
+        onLeading: (() -> Void)?,
+        rightLabel: String?,
+        onRight: (() -> Void)?,
+        roundedBarActions: Bool,
+        secondaryTitle: String? = nil
+    ) {
+        self.primaryChevron = primaryChevron
         super.init(frame: .zero)
-        backgroundColor = FCUITheme.green800
+        backgroundColor = FCUITheme.brandSurfacePrimary
 
-        iconView.image = UIImage(systemName: symbolName)
-        iconView.tintColor = FCUITheme.green500
-        iconView.contentMode = .scaleAspectFit
-        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 84, weight: .light)
+        // App bar.
+        var left: UIView?
+        if let leading, let onLeading {
+            let tile = FCUIHeaderTile(systemImage: leading.symbol, accessibilityLabel: leading.accessibilityLabel,
+                                      identifier: "fcAppBarLeading", radius: roundedBarActions ? 21 : 12)
+            tile.addAction(UIAction { _ in onLeading() }, for: .touchUpInside)
+            left = tile
+        }
+        var right: UIView?
+        if let rightLabel, let onRight {
+            var config = UIButton.Configuration.filled()
+            config.baseBackgroundColor = FCUITheme.brandSurfaceSecondary
+            config.baseForegroundColor = .white
+            config.background.cornerRadius = roundedBarActions ? 21 : 12
+            config.cornerStyle = .fixed
+            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+            config.attributedTitle = AttributedString(rightLabel, attributes: AttributeContainer([.font: FCUITypography.current.labelLarge.font]))
+            let button = UIButton(configuration: config)
+            button.accessibilityIdentifier = "fcAppBarTrailing"
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.heightAnchor.constraint(equalToConstant: 42).isActive = true
+            button.addAction(UIAction { _ in onRight() }, for: .touchUpInside)
+            right = button
+        }
+        let bar = FCUIAppBar(title: barTitle, left: left, right: right, glow: true)
+        addSubview(bar)
 
-        // Colour and alignment first: `fcSetText` goes through `attributedText` to apply the
-        // line height, and attributed runs ignore a later `textColor` assignment.
+        // Illustration: the app's country farmer, else the fallback symbol.
+        if let url = illustration.url(prefs: FarmerChat.shared.prefs), let image = UIImage(contentsOfFile: url.path) {
+            iconView.image = image
+            iconView.contentMode = .scaleAspectFit
+        } else {
+            iconView.image = UIImage(systemName: fallbackSymbol)
+            iconView.tintColor = FCUITheme.green500
+            iconView.contentMode = .scaleAspectFit
+            iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 84, weight: .light)
+        }
+        iconView.isAccessibilityElement = false
+        iconView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        iconView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        // Colour and alignment first: `fcSetText` goes through `attributedText`.
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
-        titleLabel.fcSetText(title, style: FCUITypography.current.displaySmall)
-
-        subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+        titleLabel.fcSetText(mainMessage, style: FCUITypography.current.displaySmall)
+        subtitleLabel.textColor = .white
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
-        subtitleLabel.fcSetText(subtitle, style: FCUITypography.current.bodyMedium)
+        subtitleLabel.fcSetText(subtitle, style: subtitleLarge ? FCUITypography.current.bodyLarge : FCUITypography.current.bodyMedium)
+        for label in [titleLabel, subtitleLabel] {
+            label.setContentCompressionResistancePriority(.required, for: .vertical)
+        }
 
-        primaryButton.setTitle(primaryTitle, for: .normal)
-        primaryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
-        primaryButton.setTitleColor(FCUITheme.green800, for: .normal)
-        primaryButton.backgroundColor = .white
-        primaryButton.layer.cornerRadius = 16
-        primaryButton.layer.cornerCurve = .continuous
-        primaryButton.heightAnchor.constraint(equalToConstant: 54).isActive = true
+        var config = UIButton.Configuration.filled()
+        config.baseBackgroundColor = FCUITheme.green800
+        config.baseForegroundColor = .white
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 16
+        config.attributedTitle = AttributedString(primaryTitle, attributes: AttributeContainer([.font: FCUITypography.current.titleMedium.font]))
+        if primaryChevron {
+            config.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))?
+                .withTintColor(FCUITheme.green500, renderingMode: .alwaysOriginal)
+            config.imagePlacement = .trailing
+            config.imagePadding = 8
+        }
+        primaryButton.configuration = config
+        primaryButton.accessibilityIdentifier = "fcFullScreenPrimary"
+        primaryButton.translatesAutoresizingMaskIntoConstraints = false
+        primarySpinner.color = FCUITheme.green500
+        primarySpinner.hidesWhenStopped = true
+        primarySpinner.translatesAutoresizingMaskIntoConstraints = false
+        primaryButton.addSubview(primarySpinner)
 
         secondaryButton.setTitle(secondaryTitle, for: .normal)
         secondaryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
         secondaryButton.setTitleColor(.white, for: .normal)
         secondaryButton.isHidden = secondaryTitle == nil
 
-        let stack = UIStackView(arrangedSubviews: [iconView, titleLabel, subtitleLabel])
-        stack.axis = .vertical
-        stack.spacing = 16
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        let text = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        text.axis = .vertical
+        text.spacing = 10
+        text.translatesAutoresizingMaskIntoConstraints = false
 
         let buttons = UIStackView(arrangedSubviews: [primaryButton, secondaryButton])
         buttons.axis = .vertical
-        buttons.spacing = 10
+        buttons.spacing = 0
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(stack)
+        addSubview(iconView)
+        addSubview(text)
         addSubview(buttons)
         NSLayoutConstraint.activate([
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -40),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 32),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -32),
-            buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
-            buttons.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
-            buttons.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -20)
+            bar.topAnchor.constraint(equalTo: topAnchor),
+            bar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            iconView.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 16),
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.widthAnchor.constraint(lessThanOrEqualToConstant: 322),
+            iconView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 28),
+            iconView.bottomAnchor.constraint(equalTo: text.topAnchor, constant: -16),
+            text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 28),
+            text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -28),
+            text.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -28),
+            primaryButton.heightAnchor.constraint(equalToConstant: 64),
+            primarySpinner.centerYAnchor.constraint(equalTo: primaryButton.centerYAnchor),
+            primarySpinner.leadingAnchor.constraint(equalTo: primaryButton.leadingAnchor, constant: 20),
+            buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            buttons.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            buttons.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -8)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// PrimaryButtonState.Loading.
+    func setPrimaryLoading(_ loading: Bool) {
+        primaryButton.isEnabled = !loading
+        if loading { primarySpinner.startAnimating() } else { primarySpinner.stopAnimating() }
+    }
 }
 #endif

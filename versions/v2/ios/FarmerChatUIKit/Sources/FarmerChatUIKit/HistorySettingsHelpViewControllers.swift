@@ -1,12 +1,13 @@
 #if canImport(UIKit)
 import UIKit
 import Combine
-import SafariServices
+import WebKit
 import FarmerChatCore
 
 // MARK: - Chat history (grouped table, paginated)
 
-final class FCUIChatHistoryViewController: UITableViewController {
+final class FCUIChatHistoryViewController: FCUITableScreen {
+    static let drawerRoute = "chatHistory"
     private let viewModel = ChatHistoryViewModel()
     private var cancellables = Set<AnyCancellable>()
     private var rows: [ChatHistoryRow] = []
@@ -16,12 +17,15 @@ final class FCUIChatHistoryViewController: UITableViewController {
         super.init(style: .insetGrouped)
     }
 
+    override func appBarLeading() -> (FCUIAppBarLeading, () -> Void)? {
+        fcuiDrawerScreenLeading(route: Self.drawerRoute)
+    }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = fcuiLabel(FCLabels.recentChats, "Recent chats")
-        navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         tableView.backgroundView = spinner
         spinner.hidesWhenStopped = true
@@ -119,7 +123,8 @@ final class FCUIChatHistoryViewController: UITableViewController {
 
 // MARK: - Settings (appearance + name + logout/sign-up)
 
-final class FCUISettingsViewController: UITableViewController {
+final class FCUISettingsViewController: FCUITableScreen {
+    static let drawerRoute = "settings"
     private let settingsVM = SettingsViewModel()
     private var cancellables = Set<AnyCancellable>()
 
@@ -127,12 +132,15 @@ final class FCUISettingsViewController: UITableViewController {
         super.init(style: .insetGrouped)
     }
 
+    override func appBarLeading() -> (FCUIAppBarLeading, () -> Void)? {
+        fcuiDrawerScreenLeading(route: Self.drawerRoute)
+    }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = fcuiLabel(FCLabels.settings, "Settings")
-        navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         FarmerChat.shared.analytics.screenViewed(ScreenNames.settings)
 
@@ -255,7 +263,8 @@ final class FCUISettingsViewController: UITableViewController {
 
 // MARK: - Help (FAQ + legal)
 
-final class FCUIHelpViewController: UITableViewController {
+final class FCUIHelpViewController: FCUITableScreen {
+    static let drawerRoute = "help"
     private let viewModel = HelpViewModel()
     private var cancellables = Set<AnyCancellable>()
 
@@ -263,12 +272,15 @@ final class FCUIHelpViewController: UITableViewController {
         super.init(style: .insetGrouped)
     }
 
+    override func appBarLeading() -> (FCUIAppBarLeading, () -> Void)? {
+        fcuiDrawerScreenLeading(route: Self.drawerRoute)
+    }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = fcuiLabel(FCLabels.help, "Help")
-        navigationController?.setNavigationBarHidden(false, animated: false)
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
 
         viewModel.$helpState
@@ -334,7 +346,57 @@ final class FCUIHelpViewController: UITableViewController {
             urlString = indexPath.row == 0 ? viewModel.legal?.termsOfUse : viewModel.legal?.privacyPolicy
         }
         guard let urlString, let url = URL(string: urlString) else { return }
-        present(SFSafariViewController(url: url), animated: true)
+        // PolicyWebViewScreen.kt: a DefaultAppBar (round close, the row's title) over a web view —
+        // not Safari's own chrome.
+        let title = indexPath.section == 1
+            ? (indexPath.row == 0 ? fcuiLabel(FCLabels.termsOfUse, "Terms of use") : fcuiLabel(FCLabels.privacyPolicy, "Privacy policy"))
+            : fcuiLabel(FCLabels.faq, "FAQ")
+        let page = FCUIWebPageViewController(title: title, url: url)
+        page.modalPresentationStyle = .fullScreen
+        present(page, animated: true)
     }
+}
+
+// MARK: - Legal / FAQ web page (PolicyWebViewScreen.kt)
+
+final class FCUIWebPageViewController: UIViewController, WKNavigationDelegate {
+    private let url: URL
+    private let webView = WKWebView()
+    private let spinner = UIActivityIndicatorView(style: .large)
+
+    init(title: String, url: URL) {
+        self.url = url
+        super.init(nibName: nil, bundle: nil)
+        self.title = title
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = FCUITheme.surfaceReadingPrimary
+        let bar = fcuiInstallAppBar(title: title, leading: .close) { [weak self] in self?.dismiss(animated: true) }
+        webView.navigationDelegate = self
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(webView)
+        spinner.color = FCUITheme.brandAccent
+        spinner.hidesWhenStopped = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            spinner.centerXAnchor.constraint(equalTo: webView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: webView.centerYAnchor)
+        ])
+        spinner.startAnimating()
+        webView.load(URLRequest(url: url))
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { spinner.stopAnimating() }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { spinner.stopAnimating() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { spinner.stopAnimating() }
 }
 #endif

@@ -295,6 +295,13 @@ public final class HomeViewModel: ObservableObject {
 
     // MARK: - Cards
 
+    /// App HomeScreen.kt:2092: only an IMAGE card that is not already viewed is marked viewed
+    /// (`PATCH api/images/v2/viewed/`). Statement cards are never sent — DEMO 404s them; the SDK
+    /// used to mark every content card.
+    public nonisolated static func shouldMarkViewed(_ section: SectionDto) -> Bool {
+        section.type == "image" && section.isViewed != true && section.statementId != nil
+    }
+
     private func markImageViewed(statementId: FlexibleID, userId: String) async {
         let key = statementId.stringValue
         guard markedViewedIds.insert(key).inserted else { return }

@@ -18,7 +18,12 @@ let package = Package(
         .target(
             name: "FarmerChatCore",
             path: "Sources/FarmerChatCore",
-            resources: [.copy("PrivacyInfo.xcprivacy")]
+            resources: [
+                .copy("PrivacyInfo.xcprivacy"),
+                // The app's country farmer illustrations (CountryImageAssets: ke/et/ng/in), used
+                // by the full-screen message screens. Same files the Android SDK ships in assets/.
+                .copy("Resources/FarmerIllustrations")
+            ]
         ),
         .testTarget(
             name: "FarmerChatCoreTests",

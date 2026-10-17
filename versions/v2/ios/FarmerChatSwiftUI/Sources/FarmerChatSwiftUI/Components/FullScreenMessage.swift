@@ -1,12 +1,22 @@
 import SwiftUI
+import UIKit
 import FarmerChatCore
 
-/// Farmer illustration slots (the app ships PNG illustrations; the SDK uses
-/// SF-symbol compositions to stay asset-free).
+/// Farmer illustration slots — the app's country farmer pictures (CountryImageAssets.kt),
+/// bundled in Core as ``FCFarmerIllustration``. `symbol` is the fallback drawn only when a
+/// binary build did not carry the resource bundle.
 public enum FCIllustration {
     case lookingAtCamera
     case lookingAtSky
     case lookingAtPhone
+
+    var asset: FCFarmerIllustration {
+        switch self {
+        case .lookingAtCamera: return .lookingAtCamera
+        case .lookingAtSky: return .lookingAtSky
+        case .lookingAtPhone: return .lookingAtPhone
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -17,14 +27,23 @@ public enum FCIllustration {
     }
 }
 
-/// Port of `FullScreenMessage` (NoInternetScreen.kt): shared green full-screen
-/// layout — app bar with yellow glow, illustration, title/subtitle, forced
-/// light-mode primary button, optional secondary CTA, optional debounce.
+/// Port of `FullScreenMessage` (app ui/error/NoInternetScreen.kt): the shared green full-screen
+/// layout behind Sign up (AccountBenefits), You're all set, No internet / Something went wrong
+/// and the location interstitial.
+///
+/// - `brand.surfacePrimary` ground; a DefaultAppBar WITH its 80pt yellow glow: centred white
+///   titleMedium title, an optional 42pt left tile (ArrowBack / Close, Radius.Rounded or MD) and
+///   an optional right label tile ("Skip").
+/// - The country farmer illustration (Fit, max 322pt wide) in the flexible space, 16pt above and
+///   below; then the displaySmall main message and the subtitle (bodyMedium, or bodyLarge where
+///   the screen asks), white, 10pt apart, 28pt sides, 28pt above the CTA.
+/// - A forced-LIGHT 64pt PrimaryButton (Green800, white label, Green500 chevron), 20pt sides.
+///
+/// The SDK drew a Green800 ground, an SF symbol, a white CTA with green text and a bottom Skip
+/// link — the RN-style version, not the app's.
 public struct FCFullScreenMessage: View {
-    /// Read for typography only — this screen deliberately paints fixed green primitives
-    /// rather than theme colors (it is a forced-light brand surface), but the type scale must
-    /// still follow the farmer's language.
     @Environment(\.fcTheme) private var theme
+    /// The main message (app `mainMessage`).
     let title: String
     let subtitle: String
     var illustration: FCIllustration = .lookingAtSky
@@ -35,149 +54,143 @@ public struct FCFullScreenMessage: View {
     var secondaryTitle: String?
     var onSecondary: (() -> Void)?
     var onClose: (() -> Void)?
-    /// App `FullScreenMessage(title =)`: the app-bar title (the GPS interstitial's "Share Location").
+    /// App `FullScreenMessage(title =)`: the app-bar title.
     var barTitle: String?
-    /// App `leftIcon` ← (interstitial Back). Replaces the logo glow when set.
+    /// App `leftIcon` = ArrowBack.
     var onBack: (() -> Void)?
-    /// App `rightLabel` text action (interstitial "Skip").
+    /// App `rightLabel` ("Skip").
     var rightLabel: String?
     var onRight: (() -> Void)?
-    /// App `PrimaryButtonState.Chevron`: a trailing chevron on the primary CTA.
+    /// App `PrimaryButtonState.Chevron`.
     var primaryChevron: Bool = false
+    /// App `subtitleTextStyle = bodyLarge` (Sign up, You're all set).
+    var subtitleLarge: Bool = false
+    /// App `leftRadius` / `rightRadius = Radius.Rounded` (Sign up); MD otherwise.
+    var roundedBarActions: Bool = false
 
     @State private var debounced = false
 
     public var body: some View {
         ZStack {
-            FCPrimitive.green800.ignoresSafeArea()
+            theme.brand.surfacePrimary.ignoresSafeArea()
             VStack(spacing: 0) {
-                // App bar with yellow glow behind the logo.
-                HStack(spacing: 8) {
-                    if let onBack {
-                        Button(action: onBack) {
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                    ZStack {
-                        // App parity (AppBars.kt:189-194): DefaultAppBar's glow is 80dp
-                        // tall and lives INSIDE the bar, at full alpha. iOS previously drew
-                        // an 84pt circle here (and earlier revisions a 120pt page-wide glow).
-                        Circle()
-                            .fill(FCPrimitive.sun300.opacity(0.35))
-                            .frame(width: 80, height: 80)
-                            .blur(radius: 26)
-                        FCLogoMark(size: 36, tint: .white)
-                    }
-                    }
-                    if let barTitle {
-                        Text(barTitle)
-                            .fcTextStyle(theme.typography.titleMedium)
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    if let rightLabel, let onRight {
-                        Button(action: onRight) {
-                            Text(rightLabel)
-                                .fcTextStyle(theme.typography.labelLarge)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .frame(height: 44)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if let onClose {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 64)
-
-                Spacer()
-
-                Image(systemName: illustration.symbol)
-                    .font(.system(size: 96, weight: .light))
-                    .foregroundColor(FCPrimitive.green500)
-                    .padding(.vertical, 16)
-
-                Spacer()
-
-                // App parity (FullScreenMessage.kt:124-144): the text column is 10dp-spaced
-                // and sits 28dp above the CTA, inside a 28dp horizontal inset. iOS had a
-                // 32dp inset and a 12dp gap.
-                VStack(spacing: 10) {
-                    Text(title)
-                        .fcTextStyle(theme.typography.displaySmall)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text(subtitle)
-                        .fcTextStyle(theme.typography.bodyMedium)
-                        .foregroundColor(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 28)
+                FCAppBar(
+                    title: barTitle ?? "",
+                    leading: onBack != nil ? .back : (onClose != nil ? .close : .none),
+                    onLeadingTap: onBack ?? onClose,
+                    trailing: rightTile,
+                    showGlow: true,
+                    leadingRadius: roundedBarActions ? 21 : 12
+                )
 
                 VStack(spacing: 0) {
-                    // Forced light-mode primary button. 64pt tall per
-                    // FullScreenMessage.kt:167; the label is `labelLarge` because android
-                    // routes it through PrimaryButton (Buttons.kt:110) — `bodyMedium` at
-                    // FullScreenMessage.kt:59 is the *subtitle* default, not this.
-                    Button(action: primaryTapped) {
-                        HStack(spacing: 8) {
-                            if primaryLoading {
-                                ProgressView().tint(FCPrimitive.green800)
-                            }
-                            Text(primaryTitle)
-                                .fcTextStyle(theme.typography.labelLarge)
-                            if primaryChevron && !primaryLoading {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 15, weight: .semibold))
-                            }
-                        }
-                        .foregroundColor(FCPrimitive.green800)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 64)
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    illustrationView
+                        .frame(maxWidth: 322, maxHeight: .infinity)
+                        .padding(.vertical, 16)
+
+                    VStack(spacing: 10) {
+                        Text(title)
+                            .fcTextStyle(theme.typography.displaySmall)
+                            .foregroundColor(theme.brand.foregroundPrimary)
+                            .multilineTextAlignment(.center)
+                        Text(subtitle)
+                            .fcTextStyle(subtitleLarge ? theme.typography.bodyLarge : theme.typography.bodyMedium)
+                            .foregroundColor(theme.brand.foregroundPrimary)
+                            .multilineTextAlignment(.center)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(primaryLoading || debounced)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 28)
+                }
+                .padding(.horizontal, 28)
+                .frame(maxWidth: .infinity)
+
+                primaryButton
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
 
-                    if let secondaryTitle, let onSecondary {
-                        Button(action: onSecondary) {
-                            Text(secondaryTitle)
-                                .fcTextStyle(theme.typography.bodyMedium)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.plain)
+                if let secondaryTitle, let onSecondary {
+                    Button(action: onSecondary) {
+                        Text(secondaryTitle)
+                            .fcTextStyle(theme.typography.bodyMedium)
+                            .foregroundColor(theme.brand.foregroundPrimary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .preferredColorScheme(.dark) // status bar legibility on green
+    }
+
+    @ViewBuilder
+    private var illustrationView: some View {
+        if let url = illustration.asset.url(prefs: FarmerChat.shared.prefs),
+           let image = UIImage(contentsOfFile: url.path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: illustration.symbol)
+                .font(.system(size: 96, weight: .light))
+                .foregroundColor(FCPrimitive.green500)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// ActionButton with a label (DefaultAppBar `rightLabel`): 42pt, `brand.surfaceSecondary`.
+    private var rightTile: AnyView? {
+        guard let rightLabel, let onRight else { return nil }
+        return AnyView(
+            Button(action: onRight) {
+                Text(rightLabel)
+                    .fcTextStyle(theme.typography.labelLarge)
+                    .foregroundColor(theme.brand.foregroundPrimary)
+                    .padding(.horizontal, 16)
+                    .frame(minWidth: 42)
+                    .frame(height: 42)
+                    .background(
+                        RoundedRectangle(cornerRadius: roundedBarActions ? 21 : 12, style: .continuous)
+                            .fill(theme.brand.surfaceSecondary)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("fcAppBarTrailing")
+        )
+    }
+
+    /// Forced light PrimaryButton (Buttons.kt): Green800, white titleMedium, Green500 chevron.
+    private var primaryButton: some View {
+        Button(action: primaryTapped) {
+            HStack(spacing: 8) {
+                if primaryLoading || (enablePrimaryDebounce && debounced) {
+                    ProgressView().tint(FCPrimitive.green500)
+                }
+                Text(primaryTitle)
+                    .fcTextStyle(theme.typography.titleMedium)
+                    .foregroundColor(.white)
+                if primaryChevron && !primaryLoading {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(FCPrimitive.green500)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .background(FCPrimitive.green800)
+            .clipShape(RoundedRectangle(cornerRadius: theme.shapes.button, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(primaryLoading || debounced)
+        .accessibilityIdentifier("fcFullScreenPrimary")
     }
 
     private func primaryTapped() {
         if enablePrimaryDebounce {
             guard !debounced else { return }
             debounced = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { debounced = false }
+            // NoInternetScreen.kt: the "Try again" debounce lasts 1500 ms.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { debounced = false }
         }
         onPrimary()
     }

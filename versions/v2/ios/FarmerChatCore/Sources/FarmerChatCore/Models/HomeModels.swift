@@ -177,6 +177,15 @@ public struct ImageViewedRequest: Codable, Sendable {
         self.userId = userId
         self.status = status
     }
+
+    /// App `ImageViewedRequest(statement_id: String)` (HomeScreen.kt:2092 `it.toString()`): the id
+    /// always goes out as a STRING, even when the feed sent a number.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(statementId.stringValue, forKey: .statementId)
+        try container.encode(userId, forKey: .userId)
+        try container.encode(status, forKey: .status)
+    }
 }
 
 public struct ImageViewedResponse: Codable, Sendable {

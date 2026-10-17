@@ -221,6 +221,34 @@ public final class LocationPromptManager: NSObject, ObservableObject {
     /// Live connectivity, for callers that pre-check before triggering (Home weather chip).
     public var isOnline: Bool { platform.isOnline() }
 
+    /// App `hasCurrentLocationPermission()` — the live check the decision tree uses. The Home
+    /// location pill pairs it with ``isLocationKnown``: a stored fix outlives a revoked permission.
+    public var hasCurrentLocationPermission: Bool { platform.hasPermission() }
+
+    /// App `isBlockedByPermission()`: denied twice and still not granted. Unlike the transient
+    /// ``LocationPromptState/recovery`` this stays true after the sheet is dismissed, until the
+    /// permission is granted from Settings.
+    public var isBlockedByPermission: Bool {
+        envDeps.prefs.int(.permissionDenyCount) >= 2 && !platform.hasPermission()
+    }
+
+    /// The Home pill's place name (app `getApproxLocationName()`): the best readable place the
+    /// SDK knows — district › state › country, as #11 / the profile backfill stored them. Android
+    /// collapses these into one `APPROX_LOCATION_NAME` key with the same precedence; iOS keeps the
+    /// app's three keys, so the name is derived instead of stored twice. Empty when none is known.
+    public var approxPlaceName: String {
+        Self.approxPlaceName(prefs: envDeps.prefs)
+    }
+
+    nonisolated static func approxPlaceName(prefs: PreferenceStore) -> String {
+        for key in [PrefKey.userDistrict, .userState, .userCountryName] {
+            if let value = prefs.string(key)?.trimmingCharacters(in: .whitespaces), !value.isEmpty {
+                return value
+            }
+        }
+        return ""
+    }
+
     /// App HomeScreen `isWidgetGpsLoading`: a CAMPAIGN flow is asking for permission / GPS /
     /// fetching. Home shows its "Getting your location" spinner only then.
     public var isCampaignLocationLoading: Bool {
@@ -550,12 +578,21 @@ public final class LocationPromptManager: NSObject, ObservableObject {
         }
     }
 
+    private static func store(_ value: String?, _ key: PrefKey, _ prefs: PreferenceStore) {
+        if let value { prefs.setString(value, key) } else { prefs.remove(key) }
+    }
+
     private func saveLocation(lat: Double, lng: Double, response: GetLocationResponse?) {
         let prefs = envDeps.prefs
         if let response {
-            if let country = response.country { prefs.setString(country, .userCountryName) }
-            if let state = response.state { prefs.setString(state, .userState) }
-            if let district = response.district { prefs.setString(district, .userDistrict) }
+            // The new place REPLACES the old one: a field the reply leaves out is cleared, never
+            // left over from the previous location (the bubble mixed "Karnataka, India" with a
+            // South Dakota fix).
+            if response.userProfile != nil || response.country != nil || response.state != nil || response.district != nil {
+                Self.store(response.resolvedCountryName, .userCountryName, prefs)
+                Self.store(response.resolvedState, .userState, prefs)
+                Self.store(response.resolvedDistrict, .userDistrict, prefs)
+            }
         }
         prefs.setDouble(lat, .latitude)
         prefs.setDouble(lng, .longitude)

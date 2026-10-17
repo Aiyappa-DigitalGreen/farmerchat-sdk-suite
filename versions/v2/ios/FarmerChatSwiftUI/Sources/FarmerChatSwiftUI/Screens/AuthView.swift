@@ -15,7 +15,8 @@ struct AuthView: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: "",
+                // AuthScreen.kt:426 — "Sign up".
+                title: fcLabel(FCLabels.signUp, "Sign up"),
                 leading: .close,
                 onLeadingTap: { router.pop() }
             )
@@ -97,7 +98,12 @@ struct AuthView: View {
                         if viewModel.state.isLoadingCountries {
                             ProgressView().scaleEffect(0.8)
                         } else {
-                            Text(viewModel.state.selectedCountry?.flag ?? "🌐")
+                            if let url = viewModel.state.selectedCountry?.flagImageURL {
+                                FCRemoteImage(urlString: url.absoluteString, contentMode: .fit)
+                                    .frame(width: 24, height: 16)
+                            } else {
+                                Text(viewModel.state.selectedCountry?.flagText ?? "🌐")
+                            }
                             Text(viewModel.state.countryCode)
                                 .fcTextStyle(theme.typography.bodyMedium)
                                 .foregroundColor(theme.content.foregroundPrimary)
@@ -273,7 +279,7 @@ struct CountryPickerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             FCAppBar(
-                title: fcLabel(FCLabels.selectCountryCode, "Select country"),
+                title: fcLabel(FCLabels.selectCountryCode, "Select country code"),
                 leading: .close,
                 onLeadingTap: { dismiss() }
             )
@@ -289,7 +295,7 @@ struct CountryPickerSheet: View {
                 LazyVStack(spacing: 0) {
                     ForEach(filtered) { country in
                         FCRadioRow(
-                            title: "\(country.flag ?? "") \(country.displayName ?? country.name ?? "")",
+                            title: [country.flagText, country.displayName ?? country.name].compactMap { $0 }.joined(separator: " "),
                             subtitle: country.phoneCountryCode.map { $0.hasPrefix("+") ? $0 : "+\($0)" },
                             selected: (pending ?? selected) == country,
                             action: { pending = country }

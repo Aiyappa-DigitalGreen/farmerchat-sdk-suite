@@ -342,6 +342,9 @@ public struct ChatState: Sendable {
     public var errorMessage: String?
     public var failedMessageId: String?
     public var isLoading: Bool = false
+    /// A voice clip is being transcribed (#16): the bubble reads "One second..." and the thinking
+    /// spinner is hidden (ChatThreadContent.kt:615-633 `isTranscribing`).
+    public var isTranscribing: Bool = false
     public var isLoadingSynthesiseAudio: Bool = false
     public var audioPlaybackUrl: String?
     public var isAudioPlaying: Bool = false
@@ -513,6 +516,7 @@ public final class ChatViewModel: ObservableObject {
             state.chatResponseState = .success(answer)
         } else {
             // No answer supplied — behave like a plain question.
+            notifyMessageSent(question)
             Task {
                 await self.sendQuestionInternal(
                     question,
@@ -552,6 +556,7 @@ public final class ChatViewModel: ObservableObject {
             state.messages.removeLast()
         }
         env.analytics.track(AnalyticsEvents.readFullAdviceClicked, props: ["question": question])
+        notifyMessageSent(question)
         Task {
             await self.sendQuestionInternal(
                 question,
@@ -588,7 +593,7 @@ public final class ChatViewModel: ObservableObject {
             "input_type": triggeredInputType,
             "screen": originScreen
         ], triggeredInputType: triggeredInputType))
-        env.config.onMessageSent?(question) // C4 semantic callback
+        notifyMessageSent(question)
         await sendQuestionInternal(
             question,
             transcriptionId: transcriptionId,
@@ -814,9 +819,7 @@ public final class ChatViewModel: ObservableObject {
         state.chatResponseState = .success(text)
         state.failedMessageId = nil
         lastRequest = nil
-        if let mid = response.messageId?.stringValue {
-            env.config.onAnswerReceived?(mid) // C4 semantic callback
-        }
+        notifyAnswerReceived(response.messageId?.stringValue)
         if response.hideTtsSpeaker == true { state.isTtsEnabled = false }
         // Real follow-ups always come from endpoint #29.
         if Self.fetchesFollowUps(alignmentKind: alignmentKind, hideFollowUpQuestion: response.hideFollowUpQuestion),
@@ -997,6 +1000,8 @@ public final class ChatViewModel: ObservableObject {
         state.suggestedQuestions = followUps
         state.suggestedQuestionIds = nil
         lastRequest = nil
+        // A streamed answer that ended without `metadata` has no server id.
+        notifyAnswerReceived(nil)
     }
 
     /// Settles a stream that ended early; `text` may hold a preserved partial answer.
@@ -1111,7 +1116,7 @@ public final class ChatViewModel: ObservableObject {
             "input_type": FCAlignChipSelInputType,
             "screen": ScreenNames.chat
         ], triggeredInputType: FCAlignChipSelInputType))
-        env.config.onMessageSent?(query) // C4 semantic callback
+        notifyMessageSent(query)
         Task {
             // `replaceExistingUserBubble: true` with a non-empty thread suppresses the user text
             // bubble (the location bubble above IS the farmer's reply) and appends the loading
@@ -1200,7 +1205,7 @@ public final class ChatViewModel: ObservableObject {
             "input_type": FCAlignChipSelInputType,
             "screen": ScreenNames.chat
         ], triggeredInputType: FCAlignChipSelInputType))
-        env.config.onMessageSent?(query) // C4 semantic callback
+        notifyMessageSent(query)
         Task {
             await self.sendQuestionInternal(
                 query,
@@ -1449,9 +1454,18 @@ public final class ChatViewModel: ObservableObject {
         guard !state.isLoading else { return }
         state.isLoading = true
         let userMessageId = UUID().uuidString
-        state.messages.append(.user(ChatMessage.UserMessage(text: "", audioURL: audioURL, id: userMessageId)))
+        // App `sendFollowUpVoiceQuestion` (ChatViewModel.kt:508-530): the voice bubble reads
+        // "One second..." while the clip is transcribed, and the thinking spinner stays hidden
+        // until the transcription is accepted (ChatThreadContent.kt:615-633 `isTranscribing`).
+        state.messages.append(.user(ChatMessage.UserMessage(
+            text: env.labels.label(FCLabels.oneSecondPlease, fallback: "One second..."),
+            audioURL: audioURL,
+            id: userMessageId
+        )))
         let placeholderId = UUID().uuidString
         state.messages.append(.loadingPlaceholder(id: placeholderId))
+        state.isTranscribing = true
+        defer { state.isTranscribing = false }
 
         guard let convId = await ensureConversationId() else {
             state.isLoading = false
@@ -1487,6 +1501,8 @@ public final class ChatViewModel: ObservableObject {
                 return entry
             }
             state.messages.removeAll { $0.id == "loading_\(placeholderId)" }
+            state.isTranscribing = false
+            notifyMessageSent(text)
             await sendQuestionInternal(
                 text,
                 transcriptionId: response.transcriptionId?.stringValue,
@@ -1497,23 +1513,47 @@ public final class ChatViewModel: ObservableObject {
                 statementId: nil,
                 replaceExistingUserBubble: true
             )
-        case .success:
+        case .success(let response):
             env.analytics.track(AnalyticsEvents.transcriptionFailed, props: ["reason": "low_confidence"])
+            // ChatViewModel.kt:598-617: a rejected transcription shows what was heard in the
+            // (failed) voice bubble, and that text is the error too.
+            let heard = Self.voiceFailureText(heard: response.heardInputQuery ?? "", accepted: false, labels: env.labels)
+            setUserText(heard, id: userMessageId)
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
-                message: env.labels.label("transcription_failed", fallback: "We couldn't hear that. Please try again."),
+                message: heard,
                 retry: { [weak self] in await self?.sendVoiceQuestion(audioURL: audioURL, base64Audio: base64Audio) }
             )
         case .error(let error):
             env.analytics.track(AnalyticsEvents.transcriptionFailed, props: ["reason": error.message ?? "network"])
+            // ChatViewModel.kt:620-636: "Something went wrong" in the failed voice bubble.
+            let text = Self.voiceFailureText(heard: nil, accepted: false, labels: env.labels)
+            setUserText(text, id: userMessageId)
             failCurrent(
                 placeholderId: placeholderId,
                 userMessageId: userMessageId,
-                message: error.message ?? env.labels.label("transcription_failed", fallback: "We couldn't hear that. Please try again."),
+                message: text,
                 retry: { [weak self] in await self?.sendVoiceQuestion(audioURL: audioURL, base64Audio: base64Audio) }
             )
         }
+    }
+
+    private func setUserText(_ text: String, id: String) {
+        state.messages = state.messages.map { entry in
+            if case .user(var user) = entry, user.id == id {
+                user.text = text
+                return .user(user)
+            }
+            return entry
+        }
+    }
+
+    /// The failed voice bubble's text: the heard text for a rejected transcription (app
+    /// `heard_input_query.toString()`), else `something_went_wrong`.
+    nonisolated static func voiceFailureText(heard: String?, accepted: Bool, labels: LabelManager) -> String {
+        if let heard { return heard }
+        return labels.label(FCLabels.somethingWentWrong, fallback: "Something went wrong")
     }
 
     // MARK: - Image question (#28)
@@ -1524,6 +1564,15 @@ public final class ChatViewModel: ObservableObject {
         // (ChatScreen.kt:1780); an UPLOAD_PHOTO chip's photo is reported as that chip's pick
         // (ChatScreen.kt:430-452 `isAlignmentChip = true`, type upload-photo, the chip's value/label).
         let chip = chipOverride ?? ChipAnalytics.manualSend(messages: state.messages)
+        // App (Android ChatViewModel SendQuestionWithImage): Send_Query_Initiated fires for a photo
+        // send too — the SDK tracked it for every send except this one.
+        env.analytics.track(AnalyticsEvents.sendQueryInitiated, props: chip.merged(into: [
+            // Same `input_type` the photo's Send_Query carries (PendingSendQuery below).
+            "input_type": "camera",
+            "screen": ScreenNames.chat
+        ], triggeredInputType: "image"))
+        // The caption as typed; "" for a photo sent without one.
+        notifyMessageSent(question)
         state.isLoading = true
         state.errorMessage = nil
         state.suggestedQuestions = nil
@@ -1629,6 +1678,7 @@ public final class ChatViewModel: ObservableObject {
             )))
             state.chatResponseState = .success(text)
             lastRequest = nil
+            notifyAnswerReceived(response.messageId?.stringValue)
             if let messageId = response.messageId?.stringValue {
                 // App parity (`applyFollowUpQuestionsFromApi` launches; finalize sets isLoading=false
             // first): #29 runs AFTER the answer settles, never inside the loading window. Awaiting
@@ -1783,7 +1833,33 @@ public final class ChatViewModel: ObservableObject {
         return result
     }
 
+    // MARK: - C4 semantic callbacks
+
+    /// `onMessageSent(text)`: the farmer's question, at the moment the chat sends it (a photo
+    /// without a caption reports ""). Not telemetry — fires whether or not analytics is enabled.
+    private func notifyMessageSent(_ text: String) {
+        env.config.onMessageSent?(text)
+    }
+
+    /// `onAnswerReceived(messageId)`: only once a real answer has landed (never for a failure),
+    /// with its server `message_id` ("" when the reply carried none).
+    private func notifyAnswerReceived(_ messageId: String?) {
+        env.config.onAnswerReceived?(messageId ?? "")
+    }
+
     // MARK: - TTS (#31)
+
+    /// A #31 reply may still play only while its answer is the latest AI response and no new
+    /// answer is loading. A slow reply that lands after the farmer moved on (a new question, a
+    /// follow-up chip) would otherwise start the OLD answer's audio over the new turn — seen on
+    /// DEMO in the 2026-10-17 scenario pass (Android SynthesisGuard.kt).
+    nonisolated static func synthesisStillWanted(requestedMessageId: String, state: ChatState) -> Bool {
+        if state.isLoading { return false }
+        for entry in state.messages.reversed() {
+            if case .aiResponse(let ai) = entry { return ai.messageId == requestedMessageId }
+        }
+        return false
+    }
 
     private func synthesiseAudio() async {
         guard state.isTtsEnabled, !state.isLoadingSynthesiseAudio else { return }
@@ -1799,6 +1875,10 @@ public final class ChatViewModel: ObservableObject {
         state.isLoadingSynthesiseAudio = true
         defer { state.isLoadingSynthesiseAudio = false }
         let result = await env.api.synthesiseAudio(SynthesiseAudioRequest(messageId: messageId, text: target.text, userId: userId))
+        guard Self.synthesisStillWanted(requestedMessageId: messageId, state: state) else {
+            NetworkLog.note("synthesise_audio reply dropped: message \(messageId) is no longer the latest answer")
+            return
+        }
         if case .success(let response) = result, let audio = response.audio, !audio.isEmpty {
             state.audioPlaybackUrl = audio
         } else {

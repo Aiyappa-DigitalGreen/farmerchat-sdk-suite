@@ -9039,3 +9039,25 @@ samples' `appstage`, LastCheckSDKCompose/XML, FarmerChatRNDemo and the iOS demo 
   image; the unused emoji fallback removed. Compose — AccountBenefits subtitle bodyLarge, back no longer
   sends Account_Benefit_Screen_Skip (Views already matched). RN (emoji placeholders, ✕ circle, bottom
   Skip link, no subtitle/chevron) and iOS: in progress.
+
+## Full scenario pass: iOS SwiftUI + UIKit (2026-10-17, agentic ON)
+PASS 30, FIXED 22, SERVER 0 (16/16 agentic calls 200, no error event), UNVERIFIED 11. Fixed: host
+callbacks (question text + server message_id, once per send, never on failure; photo sends fire
+Send_Query_Initiated); language rows don't switch labels before Save, and UIKit chat/Home pick up the
+new labels after Save; late `synthesise_audio` replies dropped (Android's rule — iOS shows Listen on
+the latest answer only); `images/v2/viewed` only for image cards, `statement_id` a string (DEMO 404s
+gone); #11 `user_profile` decoded (location bubble showed a stale place); auth flag URL printed as text;
+Home on both UIs is the app's composer Home (green band, HomeAppBar, logo + "For your farm today",
+location pill, ContentCard "Ask Now", floating composer); DefaultAppBar on Settings, Name, Language,
+Help, History, Auth, legal (UIKit legal in an app-bar web view; edge-swipe back kept); UIKit Home's
+system navigation bar removed — `systemNavBars=0` asserted on every screen on iPhone 17, 17 Pro, 16e,
+17 Pro Max; full-screen messages match the app (bundled country farmer photos in Core resources,
+1.5 MB; round ← + round "Skip"; chevron CTA); UIKit weather pill, SwiftUI ✕ over Skip, UIKit Listen
+reset, photo+caption, "One second..." voice bubble. UNVERIFIED: B9/D2/D4 (simulator: offline, camera,
+mic), C4/C5/C9/C11/C7 (DEMO sent no such surface), C1 chip→answer and C2 tap not driven, A10 UIKit
+(links not tappable), F4 (no RTL language). Gaps: iOS has no `enableComposerUi` flag (composer Home
+always on; Android falls back to the legacy Home when off); the composer Home drops the greeting,
+in-feed FeedHeader, UIKit "Type" alert and the content card's ✕/statement text as the app's composer
+Home does; UIKit phone screen lacks the app's agreement card and "Send via SMS" layout (E8); farmer
+images are not in xcframework (binary) builds yet (SF Symbol fallback). DEBUG-only launch args
+`-fcAutoBenefits` / `-fcUIBenefits` exist because DEMO returns `bypass_interstitial`.

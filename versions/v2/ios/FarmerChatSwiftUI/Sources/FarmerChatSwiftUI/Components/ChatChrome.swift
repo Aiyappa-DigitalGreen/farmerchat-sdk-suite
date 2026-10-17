@@ -54,6 +54,9 @@ struct FCAppBarTile: View {
     /// Draw [FCHistoryGlyph] (the Material "history" vector, 23pt like Android's 42dp tile with
     /// 9.5dp padding) instead of the SF Symbol. Used by the chat-header history button only.
     var historyGlyph: Bool = false
+    /// ActionButton `radius`: Radius.MD (12, the default square) or Radius.Rounded (a circle —
+    /// DefaultAppBar's menu/close and HomeAppBar's menu pass it).
+    var radius: CGFloat = 12
     let action: () -> Void
 
     var body: some View {
@@ -70,10 +73,10 @@ struct FCAppBarTile: View {
                 .foregroundColor(theme.brand.foregroundPrimary)
                 .frame(width: 42, height: 42)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(theme.brand.surfaceSecondary)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -172,6 +175,13 @@ struct FCChatComposer: View {
     var showCamera: Bool = true
     var showMic: Bool = true
     var visible: Bool = true
+    /// The strip behind the floating sheet: the chat's reading surface by default; Home passes
+    /// `.clear` so the feed shows around the pill (HomeScreen.kt floating `InputComposer`).
+    var backdrop: Color? = nil
+    /// InputComposer.kt `photoUris` (single image): a picked photo waits here as a 64pt thumbnail
+    /// so the farmer can add a caption before sending (PhotoThumbnail.kt).
+    var attachment: UIImage? = nil
+    var onRemoveAttachment: () -> Void = {}
     @Binding var focusRequest: Bool
     var onFocusChange: (Bool) -> Void = { _ in }
     let onSend: (String) -> Void
@@ -189,7 +199,9 @@ struct FCChatComposer: View {
     private static let circleAccent = FCPrimitive.green500
 
     private var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var isActive: Bool { isFocused || !isBlank }
+    /// InputComposer.kt:284 `hasContent = text.isNotBlank() || photoUris.isNotEmpty()`.
+    private var hasContent: Bool { !isBlank || attachment != nil }
+    private var isActive: Bool { isFocused || hasContent }
     private var compact: Bool { isFocused }
     private var buttonSize: CGFloat { compact ? 42 : 48 }
     private var iconSize: CGFloat { compact ? 20 : 22 }
@@ -200,7 +212,7 @@ struct FCChatComposer: View {
             .padding(.bottom, isFocused ? 4 : max(0, 20 - FCWindowSafeArea.bottom))
             .frame(maxWidth: .infinity)
             .background(
-                theme.content.surfaceReadingPrimary
+                (backdrop ?? theme.content.surfaceReadingPrimary)
                     .ignoresSafeArea(edges: .bottom)
             )
             .background(
@@ -229,7 +241,7 @@ struct FCChatComposer: View {
 
     private var sheet: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            if showCamera && isBlank {
+            if showCamera && !hasContent {
                 circleButton(label: "Camera", identifier: "fcComposerCamera", action: {
                     isFocused = false
                     onCamera()
@@ -241,7 +253,7 @@ struct FCChatComposer: View {
 
             field
 
-            if !isBlank {
+            if hasContent {
                 circleButton(label: "Send", identifier: "fcComposerSend", action: send) {
                     FCSendGlyph().frame(width: iconSize, height: iconSize)
                 }
@@ -263,18 +275,64 @@ struct FCChatComposer: View {
                 .fill(theme.brand.surfacePrimary)
         )
         .animation(.easeInOut(duration: 0.25), value: compact)
-        .animation(.easeInOut(duration: 0.2), value: isBlank)
+        .animation(.easeInOut(duration: 0.2), value: hasContent)
     }
 
     private func send() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || attachment != nil else { return }
         isFocused = false
         text = ""
         onSend(trimmed)
     }
 
     private var field: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let attachment {
+                thumbnail(attachment)
+                    .padding(.vertical, 10)
+            }
+            textField
+        }
+        .frame(minHeight: 24)
+        .padding(.horizontal, 14)
+        .frame(minHeight: buttonSize)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isActive ? theme.content.surfaceReadingTertiary : theme.content.surfaceSecondary)
+        )
+        .animation(.easeInOut(duration: 0.22), value: isActive)
+        .overlay { aura }
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture { isFocused = true }
+    }
+
+    /// PhotoThumbnail.kt: 64pt, radius SM (8), crop; a 20pt surfaceSecondary circle with a 14pt
+    /// close glyph, 3pt in from the top-right corner, removes it.
+    private func thumbnail(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                Button(action: onRemoveAttachment) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(theme.content.foregroundPrimary)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(theme.content.surfaceSecondary))
+                }
+                .buttonStyle(.plain)
+                .padding(3)
+                .accessibilityLabel("Remove photo")
+                .accessibilityIdentifier("fcComposerRemovePhoto")
+            }
+            .accessibilityIdentifier("fcComposerPhoto")
+    }
+
+    private var textField: some View {
         ZStack(alignment: .leading) {
             if text.isEmpty {
                 FCShimmerText(
@@ -315,17 +373,6 @@ struct FCChatComposer: View {
                 }
         }
         .frame(minHeight: 24)
-        .padding(.horizontal, 14)
-        .frame(minHeight: buttonSize)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(isActive ? theme.content.surfaceReadingTertiary : theme.content.surfaceSecondary)
-        )
-        .animation(.easeInOut(duration: 0.22), value: isActive)
-        .overlay { aura }
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onTapGesture { isFocused = true }
     }
 
     // MARK: Aura
