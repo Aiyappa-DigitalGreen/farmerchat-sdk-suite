@@ -13,6 +13,7 @@ import { FcIcon } from '../components/FcIcon';
 import { useAuth } from '../../state/useAuth';
 import { Events, Screens } from '../../core/analytics';
 import type { CountryItem } from '../../core/types';
+import { legalLinksFromPrivacyPolicy } from '../../core/types';
 
 export function AuthScreen(props: {
   onSuccess: (phoneE164: string, existingUser: boolean) => void;
@@ -29,7 +30,7 @@ export function AuthScreen(props: {
   const [privacyUrl, setPrivacyUrl] = useState<string | null>(null);
   useEffect(() => {
     void services.api.getPrivacyPolicy().then((res) => {
-      if (res.ok) setPrivacyUrl(res.data.privacy_policy_url ?? res.data.privacy_policy ?? null);
+      if (res.ok) setPrivacyUrl(legalLinksFromPrivacyPolicy(res.data).privacyPolicyUrl);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

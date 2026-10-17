@@ -18,7 +18,7 @@ import type {
 import { UiState, idle, loading, success } from './uiState';
 import { toUiState, userDeviceTime } from './helpers';
 import { Events } from '../core/analytics';
-import { renderableSections } from '../core/types';
+import { legalLinksFromPrivacyPolicy, renderableSections } from '../core/types';
 
 export interface HomeState {
   homeFeedState: UiState<HomeUdfResponse>;
@@ -201,10 +201,8 @@ export function useHome(services: SdkServices): [HomeState, HomeActions] {
   const fetchPrivacyPolicy = useCallback(async () => {
     const res = await api.getPrivacyPolicy();
     if (!res.ok) return;
-    // The endpoint sends the terms under either key depending on deployment; prefer the explicit
-    // *_url and fall back to the bare field, taking the first non-blank.
-    const candidates = [res.data.terms_of_use_url, res.data.terms_of_use];
-    const url = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    // App HomeViewModel.fetchPrivacyPolicy (:123-131): `farmerchat_terms_of_use`.
+    const url = legalLinksFromPrivacyPolicy(res.data).termsOfUseUrl;
     if (url) patch({ farmerchatTermsOfUse: url });
   }, [api, patch]);
 

@@ -74,6 +74,8 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Web: Privacy/Terms links used invented response fields (wrong or empty links); drawer history
+  analytics; a silent agentic stream could hang (now the app's 60 s read timeout).
 - React Native: sign-up / account / error / location screens showed emoji instead of the app's farmer
   illustrations; tables showed raw text; the drawer, Name and Auth screens differed from the app; the
   privacy link opened a wrong URL; a silent agentic stream could hang (now 60 s idle timeout); weather

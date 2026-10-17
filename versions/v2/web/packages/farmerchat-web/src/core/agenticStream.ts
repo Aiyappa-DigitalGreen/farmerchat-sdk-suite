@@ -8,9 +8,14 @@
  *   `Accept: text/event-stream` — which is exactly why `EventSource` is unusable here:
  *   it cannot set headers, cannot POST, and forces that Accept value.
  * - The response is `Content-Type: text/event-stream`, `Transfer-Encoding: chunked`.
- * - No request timeout may cut a long stream (agentic answers stream for a long time), so
+ * - No whole-request deadline may cut a long stream (agentic answers stream for a long time), so
  *   `HttpClient.openStream` deliberately skips the ApiPriority timeout/retry table. Cancellation
  *   is the host's job via `AbortController` — leaving the chat aborts the request.
+ * - There IS an idle read timeout, as the app's streaming OkHttp client has
+ *   (`readTimeout(AGENTIC_STREAM_READ_TIMEOUT_SECONDS = 60)`, NetworkModule.kt:32, 111-119): the gap
+ *   between two reads, not the total. A stream silent for that long fails as NETWORK (okhttp's
+ *   SocketTimeoutException), so a stalled answer ends in the error card + Try again instead of
+ *   "Getting your answer…" forever.
  *
  * Bytes → text is decoded incrementally with a single `TextDecoder` and
  * `decode(value, { stream: true })`, so a multi-byte UTF-8 character split across two reads is
@@ -25,6 +30,26 @@ export function isAbortError(err: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true;
   if (typeof DOMException !== 'undefined' && err instanceof DOMException) return err.name === 'AbortError';
   return !!err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError';
+}
+
+/** App NetworkModule.kt:32 `AGENTIC_STREAM_READ_TIMEOUT_SECONDS = 60`: the idle read timeout. */
+export const AGENTIC_STREAM_IDLE_TIMEOUT_MS = 60_000;
+
+/** Thrown when no bytes arrived for the idle timeout (okhttp's SocketTimeoutException). */
+export class StreamIdleTimeoutError extends Error {
+  constructor() {
+    super('Stream timed out');
+    this.name = 'StreamIdleTimeoutError';
+  }
+}
+
+/** `promise`, or a {@link StreamIdleTimeoutError} after `ms` (the timer never outlives it). */
+export function withIdleTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StreamIdleTimeoutError()), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function failure(message: string | null, kind: StreamErrorKind): AgenticEvent {
@@ -51,7 +76,11 @@ export function thrownMessage(err: unknown): string | null {
  * - a `metadata` event is terminal — the loop stops and the body reader is cancelled, so the
  *   request does not stay open.
  */
-export async function* readAgenticStream(response: Response, signal?: AbortSignal): AsyncGenerator<AgenticEvent> {
+export async function* readAgenticStream(
+  response: Response,
+  signal?: AbortSignal,
+  idleTimeoutMs: number = AGENTIC_STREAM_IDLE_TIMEOUT_MS,
+): AsyncGenerator<AgenticEvent> {
   if (!response.ok) {
     yield failure(`HTTP ${response.status}`, 'SERVER');
     return;
@@ -68,7 +97,7 @@ export async function* readAgenticStream(response: Response, signal?: AbortSigna
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await withIdleTimeout(reader.read(), idleTimeoutMs);
       if (done) break;
       // `{ stream: true }` belongs on decode(), not on the constructor: it is what keeps a
       // partial multi-byte sequence buffered until the next chunk arrives.

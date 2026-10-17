@@ -451,7 +451,8 @@ export function HomeScreen(props: {
                   }}
                 />
                 <span className="fc-t-labelMedium" style={{ marginLeft: 8 }}>
-                  {weather?.current_temp ?? ''}
+                  {/* HomeScreen.kt:345 current_temp ?: "--°", verbatim (the server sends the unit) */}
+                  {weather?.current_temp ?? '--°'}
                 </span>
                 <FcIcon name="m_keyboard_arrow_right" size={22} tint="var(--fc-c-brand-fg-secondary)" style={{ marginLeft: 2 }} />
               </>

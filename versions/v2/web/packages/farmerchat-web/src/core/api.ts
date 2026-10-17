@@ -6,7 +6,7 @@
 import { toLocationWire } from './locationWire';
 import { HttpClient, ApiResult } from './http';
 import { GEOLOCATE_URL } from './config';
-import { isAbortError, readAgenticStream, thrownMessage } from './agenticStream';
+import { AGENTIC_STREAM_IDLE_TIMEOUT_MS, StreamIdleTimeoutError, isAbortError, readAgenticStream, thrownMessage, withIdleTimeout } from './agenticStream';
 import type { AgenticEvent } from './agentic';
 import type {
   AcceptPPandTCRequest,
@@ -279,20 +279,37 @@ export class FarmerChatApi {
     signal: AbortSignal,
   ): AsyncGenerator<AgenticEvent> {
     let response: Response;
+    // The app's read timeout also covers the wait for the response headers: a request that gets
+    // no reply for 60 s fails as NETWORK. Our own timer aborts the request; the caller's signal
+    // still aborts it silently.
+    const headerWait = new AbortController();
+    const onAbort = () => headerWait.abort();
+    if (signal.aborted) headerWait.abort();
+    else signal.addEventListener('abort', onAbort, { once: true });
     try {
-      response = await this.http.openStream(
-        {
-          path: 'api/chat/get_answer_for_text_query_agentic/',
-          body,
-          apiName: 'get_answer_for_text_query_agentic',
-        },
-        signal,
+      response = await withIdleTimeout(
+        this.http.openStream(
+          {
+            path: 'api/chat/get_answer_for_text_query_agentic/',
+            body,
+            apiName: 'get_answer_for_text_query_agentic',
+          },
+          headerWait.signal,
+        ),
+        AGENTIC_STREAM_IDLE_TIMEOUT_MS,
       );
     } catch (err) {
+      if (err instanceof StreamIdleTimeoutError) {
+        headerWait.abort();
+        yield { type: 'failure', message: err.message, kind: 'NETWORK' };
+        return;
+      }
       if (isAbortError(err, signal)) return;
       yield { type: 'failure', message: thrownMessage(err), kind: 'NETWORK' };
       return;
     }
+    // The listener stays: the body is read on `headerWait`'s fetch, so leaving the chat (the
+    // caller's abort) must still cancel it.
     yield* readAgenticStream(response, signal);
   }
 

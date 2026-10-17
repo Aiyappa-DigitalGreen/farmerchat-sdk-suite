@@ -95,12 +95,24 @@ export type LabelsResponse = Record<string, string>;
 // #4 privacy_policy
 // ---------------------------------------------------------------------------
 
+/**
+ * #4 privacy_policy — app PrivacyPolicyResponse.kt, field for field. The privacy link is `url` and
+ * the FarmerChat terms are `farmerchat_terms_of_use` (GetSupportedLanguagesUseCase.kt:75-78).
+ */
 export interface PrivacyPolicyResponse {
-  privacy_policy?: string | null;
-  terms_of_use?: string | null;
-  privacy_policy_url?: string | null;
-  terms_of_use_url?: string | null;
-  [key: string]: unknown;
+  url?: string | null;
+  leaderboard_privacy_policy_url?: string | null;
+  farmerchat_terms_of_use?: string | null;
+  leaderboard_terms_of_use?: string | null;
+}
+
+/** App LegalLinks from #4: privacy = `url`, terms = `farmerchat_terms_of_use`; blank → null. */
+export function legalLinksFromPrivacyPolicy(res: PrivacyPolicyResponse | null | undefined): {
+  privacyPolicyUrl: string | null;
+  termsOfUseUrl: string | null;
+} {
+  const clean = (v: unknown) => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
+  return { privacyPolicyUrl: clean(res?.url), termsOfUseUrl: clean(res?.farmerchat_terms_of_use) };
 }
 
 // ---------------------------------------------------------------------------

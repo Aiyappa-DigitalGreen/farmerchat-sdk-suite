@@ -9084,3 +9084,11 @@ checks all pass. SERVER: C8 — DEMO accepted the agentic request and sent 0 byt
 answered). UNVERIFIED: C10/C11 (no commodity-confirm / error event from DEMO), D4 (silent emulator mic),
 D5 UI feedback (reject confirmed by event), E5 (history needs sign-in; OTP not completed), F4 (no RTL
 language). `onAnswerReceived` fires for every successful response including prompts — same as Android.
+Web, RN-found checks (same day): endpoint #4 fields now the app's (`url` = privacy,
+`farmerchat_terms_of_use` = terms; GetSupportedLanguagesUseCase.kt:75-78) — the web type used invented
+names; drawer "Recent chats"/"See all" send `Chat_History_Click_Event {screen_name:'Menu'}` and a recent
+question sends `Chat_History_Click {screen_name:'Side Menu', conversation_id, question_index}` (app
+:367-378); agentic stream read/header timeout 60 s like the app's (NetworkModule.kt:32/119); weather chip
+shows `--°` before load (app HomeScreen.kt:345). Already correct: chip text verbatim, `cardCornerRadius`
+on feed cards, GFM tables as cards. Web still sends `X-Request-ID` on the agentic call (app's streaming
+client doesn't; kept per CLAUDE.md header rule).

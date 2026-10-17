@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SdkServices } from '../core/services';
 import { PrefKeys } from '../core/storage';
 import type { GeoResponse, SupportedLanguage, SupportedLanguageGroup } from '../core/types';
+import { legalLinksFromPrivacyPolicy } from '../core/types';
 import { UiState, idle, loading } from './uiState';
 import { toUiState } from './helpers';
 import { Events } from '../core/analytics';
@@ -273,10 +274,7 @@ export function useOnboardingLanguage(services: SdkServices): [OnboardingLanguag
   const fetchLegalLinks = useCallback(async () => {
     const res = await api.getPrivacyPolicy();
     if (res.ok) {
-      patch({
-        privacyPolicyUrl: res.data.privacy_policy_url ?? res.data.privacy_policy ?? null,
-        termsOfUseUrl: res.data.terms_of_use_url ?? res.data.terms_of_use ?? null,
-      });
+      patch(legalLinksFromPrivacyPolicy(res.data));
     }
   }, [api, patch]);
 

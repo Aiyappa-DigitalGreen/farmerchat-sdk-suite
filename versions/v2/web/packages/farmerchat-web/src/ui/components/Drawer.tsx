@@ -4,6 +4,7 @@
  * current language, retry on history error.
  */
 
+import { chatHistoryFromMenuProps, drawerQuestionClickProps, menuOptionProps, type DrawerMenuOption } from '../../core/drawerAnalytics';
 import type { ConversationListItem } from '../../core/types';
 import { LogoSpinner, PrimaryButton } from './common';
 import { FcIcon, type IconName } from './FcIcon';
@@ -54,12 +55,12 @@ export function Drawer(props: {
   // android-compose drawer, which renders the recent section only when authenticated).
   const canShowHistory = services.config.showHistory && props.isAuthenticated;
   const showSettings = services.config.showSettings;
-  const navItem = (route: DrawerRoute, icon: IconName, text: string, option: string) => (
+  const navItem = (route: DrawerRoute, icon: IconName, text: string, option: DrawerMenuOption) => (
     <button
       type="button"
       className={`fcsdk-c-drawer-btn${props.currentRoute === route ? ' fcsdk-c-drawer-btn--active' : ''}`}
       onClick={() => {
-        services.analytics.track(Events.MENU_OPTION_CLICK_EVENT, { option });
+        services.analytics.track(Events.MENU_OPTION_CLICK_EVENT, menuOptionProps(option));
         props.onNavigate(route);
       }}
     >
@@ -96,7 +97,7 @@ export function Drawer(props: {
                 type="button"
                 className="fc-t-titleMedium fcsdk-c-drawer-recent"
                 onClick={() => {
-                  services.analytics.track(Events.CHAT_HISTORY_CLICK_EVENT, { source: 'drawer' });
+                  services.analytics.track(Events.CHAT_HISTORY_CLICK_EVENT, chatHistoryFromMenuProps());
                   props.onSeeAllClick();
                 }}
               >
@@ -121,7 +122,11 @@ export function Drawer(props: {
               ) : hasHistory ? (
                 <div className="fcsdk-c-drawer-nav">
                   {props.previousQuestions.slice(0, 8).map((item, i) => (
-                    <button key={item.conversation_id ?? i} type="button" className="fcsdk-c-drawer-btn" onClick={() => props.onOpenQuestion(item)}>
+                    <button key={item.conversation_id ?? i} type="button" className="fcsdk-c-drawer-btn" onClick={() => {
+                        services.analytics.track(Events.CHAT_HISTORY_CLICK, drawerQuestionClickProps(item.conversation_id, i));
+                        props.onOpenQuestion(item);
+                      }}
+                    >
                       <FcIcon name={questionIcon(item.message_type)} size={18} />
                       <span className="fc-t-labelMedium fcsdk-c-drawer-btn-label">{item.conversation_title ?? ''}</span>
                     </button>
@@ -142,7 +147,7 @@ export function Drawer(props: {
                     state="chevron"
                     label={label('fc_v2_app_label_see_all', 'See all')}
                     onClick={() => {
-                      services.analytics.track(Events.CHAT_HISTORY_CLICK_EVENT, { source: 'drawer' });
+                      services.analytics.track(Events.CHAT_HISTORY_CLICK_EVENT, chatHistoryFromMenuProps());
                       props.onSeeAllClick();
                     }}
                   />
@@ -169,7 +174,7 @@ export function Drawer(props: {
                   state="chevron"
                   label={label('fc_v2_app_label_sign_up', 'Sign up')}
                   onClick={() => {
-                    services.analytics.track(Events.MENU_OPTION_CLICK_EVENT, { option: 'Signup' });
+                    services.analytics.track(Events.MENU_OPTION_CLICK_EVENT, menuOptionProps('Signup'));
                     props.onSignUpClick();
                   }}
                 />
