@@ -276,4 +276,13 @@ class ViewsAppParityTest {
         val body = File("src/main/java/org/digitalgreen/farmerchat/sdk/views/internal/ui/HomeFeedAdapter.kt").readText()
         assertEquals(3, Regex("applyHostCardRadius\\(it.root\\)").findAll(body).count())
     }
+
+    /** The photo sheet tiles are named, focusable buttons for TalkBack (2026-10-17). */
+    @Test
+    fun `photo sheet tiles are accessible buttons`() {
+        val body = File("src/main/java/org/digitalgreen/farmerchat/sdk/views/internal/input/InputOverlaysController.kt").readText()
+        assertTrue(body.contains("markPhotoTileAccessible(binding.fcPhotoCamera, binding.fcPhotoCameraLabel.text)"))
+        assertTrue(body.contains("markPhotoTileAccessible(binding.fcPhotoGallery, binding.fcPhotoGalleryLabel.text)"))
+        assertEquals("android.widget.Button", org.digitalgreen.farmerchat.sdk.views.internal.input.PHOTO_TILE_A11Y_CLASS)
+    }
 }

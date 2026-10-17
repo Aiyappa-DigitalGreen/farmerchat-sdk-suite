@@ -28,6 +28,8 @@ internal object Markdown {
         cardColor: Int = 0xFFECECEE.toInt(),
         /** Muted card text: labels and meanings (app foregroundSecondary). */
         mutedColor: Int = 0xFF52525C.toInt(),
+        /** The 1dp rules inside a card (app borderDefault). */
+        ruleColor: Int = 0xFFD4D4D8.toInt(),
     ): CharSequence {
         val out = SpannableStringBuilder()
         val blocks = parseBlocks(source)
@@ -61,7 +63,7 @@ internal object Markdown {
 
             val lineStart = out.length
             if (block is Block.Table) {
-                appendTableCards(out, block, density, cardColor, mutedColor, topSpacingDp)
+                appendTableCards(out, block, density, cardColor, mutedColor, topSpacingDp, ruleColor)
                 return@forEachIndexed
             }
             if (block is Block.Divider) {
@@ -304,7 +306,7 @@ internal object Markdown {
      */
     private fun appendTableCards(
         out: SpannableStringBuilder, table: Block.Table, density: Float,
-        cardColor: Int, mutedColor: Int, firstGapDp: Int
+        cardColor: Int, mutedColor: Int, firstGapDp: Int, ruleColor: Int
     ) {
         tableCards(TableModel(table.headers, table.rows)).forEachIndexed { cardIdx, card ->
             if (cardIdx > 0) out.append("\n")
@@ -317,23 +319,53 @@ internal object Markdown {
                 val e = out.length
                 when (line.kind) {
                     CardLine.Kind.TITLE -> out.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    CardLine.Kind.VALUE -> out.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    CardLine.Kind.VALUE -> {
+                        out.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        // Row cards set the value in bodySmall (15sp), answer cards in bodyMedium.
+                        if (line.small) out.setSpan(RelativeSizeSpan(15f / 17f), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
                     CardLine.Kind.LABEL -> {
                         out.setSpan(android.text.style.ForegroundColorSpan(mutedColor), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         out.setSpan(RelativeSizeSpan(15f / 17f), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
                     CardLine.Kind.MEANING -> out.setSpan(android.text.style.ForegroundColorSpan(mutedColor), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
-                // 12dp between readings / after the title (app spacedBy(12.dp)).
-                if (i > 0 && line.kind != CardLine.Kind.VALUE && line.kind != CardLine.Kind.MEANING) {
-                    out.setSpan(BlockGapSpan((12 * density).toInt()), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                // The Compose card's spacing, and its 1dp borderDefault rule after the title and
+                // between readings (MarkdownAnswerCard / MarkdownRowCards).
+                if (i > 0 && line.gapAboveDp > 0) {
+                    out.setSpan(BlockGapSpan((line.gapAboveDp * density).toInt()), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                if (i > 0 && line.ruleAboveAtDp != null) {
+                    out.setSpan(CardRuleSpan(density, ruleColor, line.ruleAboveAtDp), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             }
             val gapAbove = if (cardIdx == 0) firstGapDp else 12
             out.setSpan(
                 CardSpan(density, cardColor, (gapAbove * density).toInt()),
-                cardStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                cardStart, out.length,
+                // Highest priority = first in getSpans, so the card surface is painted BEFORE the
+                // rules on its lines; set last without it, the surface covered the rules.
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or Spanned.SPAN_PRIORITY
             )
+        }
+    }
+
+    /**
+     * A 1dp rule [atDp] below the top of the line it spans, inset by the card padding. That line's
+     * [BlockGapSpan] supplies the space: 12dp, the rule, 12dp (Compose spacedBy(12.dp)).
+     */
+    private class CardRuleSpan(density: Float, color: Int, private val atDp: Int) :
+        android.text.style.LineBackgroundSpan {
+        private val d = density
+        private val padH = 16f * density
+        private val paint = Paint().apply { this.color = color }
+        override fun drawBackground(
+            canvas: Canvas, p: Paint, left: Int, right: Int, top: Int, baseline: Int,
+            bottom: Int, text: CharSequence, start: Int, end: Int, lineNumber: Int
+        ) {
+            if (start != (text as Spanned).getSpanStart(this)) return
+            val y = top + atDp * d
+            canvas.drawRect(left + padH, y, right - padH, y + 1f * d, paint)
         }
     }
 
@@ -426,7 +458,19 @@ internal object Markdown {
 
 internal data class TableModel(val headers: List<String>, val rows: List<List<String>>)
 
-internal data class CardLine(val kind: Kind, val text: String) {
+/**
+ * One line of a table card.
+ * @param gapAboveDp space above the line (Compose arrangement spacing).
+ * @param ruleAboveAtDp when set, a 1dp borderDefault rule this far down inside that space.
+ * @param small value set in bodySmall (row cards) rather than bodyMedium (answer cards).
+ */
+internal data class CardLine(
+    val kind: Kind,
+    val text: String,
+    val gapAboveDp: Int = 0,
+    val ruleAboveAtDp: Int? = null,
+    val small: Boolean = false,
+) {
     enum class Kind { TITLE, LABEL, VALUE, MEANING }
 }
 
@@ -454,22 +498,37 @@ internal fun parseTable(lines: List<String>): TableModel? {
 internal fun TableModel.isCard(): Boolean =
     headers.size == 3 && headers[0].isNotEmpty() && headers.drop(1).all { it.isEmpty() }
 
-/** The app's card layout for a table (MarkdownAnswerCard / MarkdownRowCards). */
+/**
+ * The app's card layout for a table (MarkdownAnswerCard / MarkdownRowCards), with Compose's
+ * spacing: answer card = title, rule, then readings separated by rules (spacedBy 12dp; inside a
+ * reading spacedBy 2dp, meaning +2dp); row card = title, rule, then label/value pairs (spacedBy
+ * 10dp, pair spacedBy 2dp).
+ */
 internal fun tableCards(t: TableModel): List<TableCard> = when {
     t.isCard() -> listOf(TableCard(buildList {
         add(CardLine(CardLine.Kind.TITLE, t.headers[0]))
         t.rows.forEach { row ->
-            row.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.LABEL, it)) }
-            add(CardLine(CardLine.Kind.VALUE, row.getOrNull(1).orEmpty()))
-            row.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.MEANING, it)) }
+            // Title → rule → reading, and reading → rule → reading: 12dp, 1dp rule, 12dp.
+            var first = true
+            fun lead(kind: CardLine.Kind, text: String) =
+                if (first) { first = false; CardLine(kind, text, gapAboveDp = 25, ruleAboveAtDp = 12) }
+                else CardLine(kind, text, gapAboveDp = 2)
+            row.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let { add(lead(CardLine.Kind.LABEL, it)) }
+            add(lead(CardLine.Kind.VALUE, row.getOrNull(1).orEmpty()))
+            row.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.MEANING, it, gapAboveDp = 4)) }
         }
     }))
     t.headers.size >= 2 -> t.rows.map { row ->
         TableCard(buildList {
-            row.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.TITLE, it)) }
+            val title = row.getOrNull(0)?.takeIf { it.isNotEmpty() }
+            title?.let { add(CardLine(CardLine.Kind.TITLE, it)) }
             for (c in 1 until t.headers.size) {
-                add(CardLine(CardLine.Kind.LABEL, t.headers[c]))
-                add(CardLine(CardLine.Kind.VALUE, row.getOrNull(c).orEmpty()))
+                val firstPair = c == 1 && title != null
+                add(
+                    if (firstPair) CardLine(CardLine.Kind.LABEL, t.headers[c], gapAboveDp = 21, ruleAboveAtDp = 10)
+                    else CardLine(CardLine.Kind.LABEL, t.headers[c], gapAboveDp = 10)
+                )
+                add(CardLine(CardLine.Kind.VALUE, row.getOrNull(c).orEmpty(), gapAboveDp = 2, small = true))
             }
         })
     }

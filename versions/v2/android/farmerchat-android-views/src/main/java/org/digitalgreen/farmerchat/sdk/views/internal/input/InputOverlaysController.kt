@@ -192,6 +192,28 @@ internal class InputOverlaysController(
         binding.fcPhotoCameraLabel.text = label(Labels.CAMERA, "Camera")
         // App PhotoInput.kt labels the second tile "Photos", not "Gallery".
         binding.fcPhotoGalleryLabel.text = label(Labels.PHOTOS, "Photos")
+        // Accessibility (2026-10-17): each tile is ONE focusable button named by its label, as
+        // the Compose tile's merged semantics are; TalkBack read "unlabelled" layouts before.
+        markPhotoTileAccessible(binding.fcPhotoCamera, binding.fcPhotoCameraLabel.text)
+        markPhotoTileAccessible(binding.fcPhotoGallery, binding.fcPhotoGalleryLabel.text)
+    }
+
+    private fun markPhotoTileAccessible(tile: android.view.View, name: CharSequence) {
+        tile.contentDescription = name
+        tile.isFocusable = true
+        tile.isClickable = true
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(
+            tile,
+            object : androidx.core.view.AccessibilityDelegateCompat() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: android.view.View,
+                    info: androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+                ) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = PHOTO_TILE_A11Y_CLASS
+                }
+            }
+        )
     }
 
     /**
@@ -576,3 +598,6 @@ internal class InputOverlaysController(
         const val SHEET_SCRIM_ALPHA = 0.5f
     }
 }
+
+/** Photo sheet tiles announce as buttons. */
+internal const val PHOTO_TILE_A11Y_CLASS = "android.widget.Button"

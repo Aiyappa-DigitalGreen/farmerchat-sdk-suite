@@ -9103,6 +9103,8 @@ answer, follow-up chip with #30 id, Share, Listen, language change, offline → 
 on the agentic endpoint with `image_name`, long question, close ✕). RN-found checks: #4 fields and the
 weather chip already matched the app; fixed — host `cardCornerRadius` on Compose select/multi/SSFR cards
 and all Views feed cards; Views answers rendered raw `|` table pipes, now the app's cards (thin in-card
-dividers still missing in Views); the agentic stream client had no read timeout — now the app's connect
+dividers added the same day); the agentic stream client had no read timeout — now the app's connect
 15 s / read 60 s / write 30 s (`AgenticStreamTimeouts`, test with a silent local server). Noted: Views
 photo-sheet Camera/Photos tiles are not exposed to accessibility.
+Android Views follow-up (same day): table cards draw the app's/Compose's in-card dividers and spacing
+(device screenshot); photo-sheet Camera/Photos tiles are named accessible buttons (uiautomator dump).

@@ -44,4 +44,22 @@ class MarkdownTableTest {
     fun `pipes without a separator row are not a table`() {
         assertNull(parseTable(listOf("| just | text |", "| more | text |")))
     }
+
+    /** Compose MarkdownAnswerCard: a rule after the title and between readings, none after the last. */
+    @Test
+    fun `answer cards draw a rule after the title and between readings`() {
+        val t = parseTable(listOf("| Day | | |", "|---|---|---|", "| A | 1 | x |", "| B | 2 | y |"))!!
+        val lines = tableCards(t).single().lines
+        assertEquals(listOf(null, 12, null, null, 12, null, null), lines.map { it.ruleAboveAtDp })
+        assertEquals(listOf(0, 25, 2, 4, 25, 2, 4), lines.map { it.gapAboveDp })
+    }
+
+    /** Compose MarkdownRowCards: one rule after the title only; values in bodySmall. */
+    @Test
+    fun `row cards draw one rule after the title`() {
+        val t = parseTable(listOf("| Crop | Dose | Timing |", "|---|---|---|", "| Maize | 50 kg | Sowing |"))!!
+        val lines = tableCards(t).single().lines
+        assertEquals(listOf(null, 10, null, null, null), lines.map { it.ruleAboveAtDp })
+        assertEquals(listOf(false, false, true, false, true), lines.map { it.small })
+    }
 }

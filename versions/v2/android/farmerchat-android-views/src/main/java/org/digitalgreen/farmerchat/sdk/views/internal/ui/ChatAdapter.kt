@@ -513,7 +513,8 @@ internal class ChatAdapter(
                 message.text,
                 b.root.resources.displayMetrics.density,
                 ContextCompat.getColor(b.root.context, R.color.fc_surface_reading_secondary),
-                ContextCompat.getColor(b.root.context, R.color.fc_foreground_secondary)
+                ContextCompat.getColor(b.root.context, R.color.fc_foreground_secondary),
+                ContextCompat.getColor(b.root.context, R.color.fc_border_default)
             )
 
         // Chat UI customization (null = XML/theme default).
