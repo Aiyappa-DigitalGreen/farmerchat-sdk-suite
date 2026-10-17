@@ -187,9 +187,8 @@ FarmerChatConfig(
                                           // language icon, plus history when showHistory resolves true.
     enableWeather: true, enableSsfr: true,
 
-    // 2.0.0 agentic streaming chat (#27a). Leave it false (the default): the real app runs with it
-    // off on DEMO (remote config v2_agent_5_in_hi=false), and DEMO's agentic endpoint fails often.
-    enableAgenticChat: false,
+    // 2.0.0 agentic streaming chat (#27a) — default false keeps 1.0.0 chat
+    enableAgenticChat: true,
 
     // C5 host strings + forced locale
     // Keys are the CANONICAL server keys — use `FCLabels`, never a bare string.
@@ -431,9 +430,6 @@ Listen (TTS) uses `synthesise_audio` → AVPlayer.
 1.0.0 synchronous #27 contract unchanged. When true, **text** queries stream
 endpoint **#27a** `api/chat/get_answer_for_text_query_agentic/` (voice
 transcription and image analysis stay synchronous, as on Android).
-
-
-**Not recommended today:** the real FarmerChat app runs with streaming off on DEMO (remote config `v2_agent_5_in_hi=false`, so it answers on the synchronous endpoint), and DEMO's agentic endpoint often fails ("Sorry, I had a problem just now", 503, `service_unavailable`) — the real app fails the same way when forced onto it. Leave `enableAgenticChat` off (the default) until the backend team confirms the agentic service.
 
 ```swift
 FarmerChatConfig(environment: .demo, enableAgenticChat: true)

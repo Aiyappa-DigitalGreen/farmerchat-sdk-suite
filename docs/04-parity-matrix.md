@@ -9016,3 +9016,12 @@ tapping a language row no longer switches labels before Save (labels stored as t
 on older answers: newest answer at tap time vs reply time); `PATCH api/images/v2/viewed/` only for
 `type == "image"` cards with a string `statement_id` (app HomeScreen.kt:2092) — DEMO's 404s were ours;
 a photo retry reuses the failed bubble and sends `retry: true` (app retryLastRequest :2160-2207).
+
+## CORRECTION (2026-10-17): agentic restored everywhere
+The two entries above that switched agentic chat off (hosted demos, `appstage`, LastCheck/RN/iOS demo
+hosts, docs warnings; commits d07b3a4 and 4af5e9d) were a misreading of the user's "streaming forced
+on - stop in all platforms" and are REVERTED. The user wants the agentic endpoint
+(`api/chat/get_answer_for_text_query_agentic/`) on every platform. `streaming_required` already follows
+each language's setting from the language API on all SDKs, exactly like the app
+(ChatViewModel.kt:1400-1415, default true); nothing forces it. Hosted demo app + widget page,
+samples' `appstage`, LastCheckSDKCompose/XML, FarmerChatRNDemo and the iOS demo hosts are agentic again.

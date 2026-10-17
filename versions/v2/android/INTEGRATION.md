@@ -247,6 +247,7 @@ class MyApp : Application() {
                 // built in (see "API keys" below). Default mode is CHAT_ONLY.
                 .languageCode("en")
                 .defaultCountryCode("IN")
+                .enableAgenticChat(true)                     // 2.0.0 streaming answers
                 .debugLogging(BuildConfig.DEBUG)
                 .build()
         )
@@ -737,8 +738,8 @@ In order — each step rules out the failures below it.
    CTA on a fresh install means language preselection is not running.
 3. **(FULL_JOURNEY) Home shows feed sections.** Empty sections = location did not resolve → check
    the `geolocate` call in the logs (and any `geoApiKey` override).
-4. **Ask a question.** The answer arrives in one piece (streaming stays off, as in the real app on
-   DEMO); the question stays pinned above it.
+4. **Ask a question.** With `enableAgenticChat(true)` the answer streams in; the question should
+   stay pinned while it grows.
 5. **Force-stop and relaunch.** This is the check that catches `initialize` being called from an
    `Activity` instead of `Application.onCreate`.
 6. **Build a release variant.** R8 problems only appear here.

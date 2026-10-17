@@ -87,9 +87,8 @@ object SampleConfig {
             // Screen-fidelity harness, agentic on (the app's source hardcodes the agentic +
             // composer flags to true). Profile name kept; backend is DEMO (testing is DEMO-only:
             // no stage, no prod), so this now equals "agentic" plus an explicit DEMO base URL.
-            // Streaming off, as the real app on DEMO (v2_agent_5_in_hi=false); composer UI on.
             "appstage" -> b.customBaseUrl("https://farmerchat.farmstack.co/mobile-app-demo/")
-                .enableAgenticChat(false).enableComposerUi(true)
+                .enableAgenticChat(true)
             "themed_mock" -> b.customBaseUrl(MOCK_URL).theme(blueTheme())
             "chatonly" -> b.customBaseUrl(MOCK_URL).mode(FarmerChatMode.CHAT_ONLY)
             "togglesoff" -> b

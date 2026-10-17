@@ -212,9 +212,6 @@ storage (session-only).
 
 ## Agentic chat (2.0.0 preview, opt-in)
 
-
-**Not recommended today:** the real FarmerChat app runs with streaming off on DEMO (remote config `v2_agent_5_in_hi=false`, so it answers on the synchronous endpoint), and DEMO's agentic endpoint often fails ("Sorry, I had a problem just now", 503, `service_unavailable`) — the real app fails the same way when forced onto it. Leave `enableAgenticChat` off (the default) until the backend team confirms the agentic service.
-
 ```tsx
 <FarmerChat config={{ /* … */ enableAgenticChat: true }} />
 ```

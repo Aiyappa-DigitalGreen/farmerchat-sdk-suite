@@ -178,7 +178,6 @@ struct ContentView: View {
 FarmerChat.shared.openChat(question: "Why are my tomato leaves yellow?")
 FarmerChat.shared.openChat(conversationId: savedId)""")]),
     SUB("Streaming agentic chat"),
-    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     CB([("Swift","swift",None,"FarmerChatConfig(environment: .demo, enableAgenticChat: true)")]),
     SUB("Point at your own backend"),
     CB([("Swift","swift",None,"""FarmerChatConfig(
@@ -274,7 +273,6 @@ NSLayoutConstraint.activate([
     SUB("Deep-link into a question"),
     CB([("Swift","swift",None,'FarmerChat.shared.openChat(question: "Why are my tomato leaves yellow?")')]),
     SUB("Streaming agentic chat"),
-    ("warn","Leave streaming off",["Not recommended today: the real FarmerChat app runs with streaming off on DEMO and answers on the synchronous endpoint; DEMO&#39;s agentic endpoint often fails (the real app fails the same way when forced onto it). Leave it off, the default, until the backend team confirms the agentic service."]),
     CB([("Swift","swift",None,"FarmerChatConfig(environment: .demo, enableAgenticChat: true)")])),
 ]}
 
