@@ -1675,8 +1675,13 @@ class ChatViewModel(
                     )
                 }
                 pendingSendQueryProperties = null
-                // Real follow-ups always come from endpoint #29.
-                data.message_id?.let { applyFollowUpQuestionsFromApi(it) }
+                // Real follow-ups always come from endpoint #29, but only after a normal or
+                // additive answer. An EXCLUSIVE surface (clarify / confirm / escalate / gps-prompt /
+                // upload-photo) owns the chip area, so the app skips #29 there
+                // (ChatViewModel.kt:2020-2025).
+                if (fetchesFollowUpsAfter(alignmentKind)) {
+                    data.message_id?.let { applyFollowUpQuestionsFromApi(it) }
+                }
             }
             is ApiResult.Error -> {
                 pendingSendQueryProperties?.let { base ->

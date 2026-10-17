@@ -155,4 +155,33 @@ final class Round3ChipAnalyticsAndBodyTests: XCTestCase {
         }
         XCTAssertEqual(texts, ["typed text", "only heard"])
     }
+
+    // MARK: - #29 after alignment surfaces (app ChatViewModel.kt:2020-2025)
+
+    func testFollowUpsSkippedOnlyAfterExclusiveSurfaces() {
+        XCTAssertTrue(ChatViewModel.fetchesFollowUps(alignmentKind: nil, hideFollowUpQuestion: nil))
+        for kind in [AlignmentKind.clarify, .confirm, .escalate, .gpsPrompt, .uploadPhoto] {
+            XCTAssertFalse(ChatViewModel.fetchesFollowUps(alignmentKind: kind, hideFollowUpQuestion: nil), "\(kind)")
+        }
+        for kind in [AlignmentKind.genderSelect, .commodityConfirm] {
+            XCTAssertTrue(ChatViewModel.fetchesFollowUps(alignmentKind: kind, hideFollowUpQuestion: false), "\(kind)")
+        }
+        XCTAssertFalse(ChatViewModel.fetchesFollowUps(alignmentKind: nil, hideFollowUpQuestion: true))
+    }
+
+    // MARK: - Unset fields are omitted, as the app's Gson does (no serializeNulls)
+
+    func testUnsetFieldsAreOmittedFromTheBody() throws {
+        let body = try json(ChatViewModel.makeTextPromptRequest(
+            query: "q", conversationId: "c", triggeredInputType: "text", streamingRequired: true
+        ))
+        XCTAssertEqual(Set(body.keys), [
+            "query", "conversation_id", "message_id", "weather_cta_triggered", "triggered_input_type",
+            "use_entity_extraction", "retry", "streaming_required"
+        ])
+        let raw = try XCTUnwrap(String(data: JSONEncoder().encode(ChatViewModel.makeTextPromptRequest(
+            query: "q", conversationId: "c", triggeredInputType: "text", streamingRequired: true
+        )), encoding: .utf8))
+        XCTAssertFalse(raw.contains("null"), raw)
+    }
 }

@@ -50,6 +50,8 @@ import { isTranscriptionAcceptable } from './useHome';
 import {
   ALIGN_CHIP_SEL,
   alignmentChipRequestParams,
+  fetchesFollowUps,
+  omitNullFields,
   historyFollowUpQuestions,
   historyVoiceText,
   imageQueryName,
@@ -648,8 +650,9 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       // Semantic callback (C4).
       sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId);
       // Real follow-ups always come from endpoint #29.
-      if (serverMessageId && data.hide_follow_up_question !== true) {
-        void fetchFollowUps(serverMessageId, aiLocalId);
+      // App ChatViewModel.kt:2020-2025: not after an exclusive alignment surface.
+      if (fetchesFollowUps(alignmentKind, serverMessageId, data.hide_follow_up_question)) {
+        void fetchFollowUps(serverMessageId as string, aiLocalId);
       }
     },
     [failQuery, fetchFollowUps, markFirstQueryAsked, mutate, reportSendQuery, sdk],
@@ -1040,7 +1043,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         return;
       }
 
-      const request: TextPromptRequest = {
+      // App Gson omits unset fields (no serializeNulls): never send `null` members.
+      const request: TextPromptRequest = omitNullFields({
         query: question,
         conversation_id: conversationId,
         // App parity: message_id is sent empty (""); the response id is authoritative.
@@ -1059,7 +1063,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         ...(params.parentMessageId ? { parent_message_id: params.parentMessageId } : {}),
         ...(params.locationDeclined === true ? { location_declined: true } : {}),
         ...(params.photoDeclined === true ? { photo_declined: true } : {}),
-      };
+      });
       const ctx = {
         userMessageId,
         triggeredInputType: params.triggeredInputType,
@@ -1330,7 +1334,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         return;
       }
 
-      const result = await sdk.api.imageAnalysis({
+      // Retrofit's Gson omits unset fields here too (lat/lng when no location).
+      const result = await sdk.api.imageAnalysis(omitNullFields({
         conversation_id: conversationId,
         image: imageBase64,
         // App parity (PlantixRequest.kt, ChatViewModel.kt:1884-1893): triggered_input_type
@@ -1341,7 +1346,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         longitude: lng != null ? String(lng) : null,
         image_name: imageName,
         retry: isRetry,
-      });
+      }));
       if (!mounted.current) return;
 
       if (result.ok && result.data.error !== true && (result.data.response ?? '').length > 0) {

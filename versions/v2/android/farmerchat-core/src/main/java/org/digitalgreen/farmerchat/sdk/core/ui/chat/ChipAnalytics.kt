@@ -67,3 +67,11 @@ fun followUpChipSendProperties(question: String): SendQueryProperties = SendQuer
     lengthOfTextQuery = question.length,
     audioFormat = ""
 )
+
+/**
+ * Whether #29 (follow_up_questions) is fetched after an answer: app ChatViewModel.kt:2020-2025,
+ * `if (!isExclusiveAlignment)`. A normal answer (no surface) and an additive nudge do fetch it; an
+ * exclusive surface does not.
+ */
+internal fun fetchesFollowUpsAfter(kind: org.digitalgreen.farmerchat.sdk.core.model.AlignmentKind?): Boolean =
+    kind == null || kind.isAdditive

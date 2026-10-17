@@ -12,6 +12,8 @@ import {
   ALIGN_CHIP_SEL,
   alignmentChipRequestParams,
   criticallyDampedProgress,
+  fetchesFollowUps,
+  omitNullFields,
   historyFollowUpQuestions,
   historyVoiceText,
   imageQueryName,
@@ -201,4 +203,30 @@ test('Listen analytics carry the app properties', () => {
   const src = read('src/state/useChat.ts');
   assert.ok(src.includes('? { screen_name: ScreenNames.CHAT }'));
   assert.ok(src.includes('No_of_seconds_played: Math.max(0, Math.floor(action.secondsPlayed ?? 0))'));
+});
+
+// --- web parity: null fields + #29 gating -------------------------------------------------
+
+test('request bodies omit null / undefined fields, as the app Gson does', () => {
+  // AgenticChatDataSource.kt:58 gson.toJson (no serializeNulls).
+  assert.deepEqual(
+    omitNullFields({ query: 'q', statement_id: null, ssfr_crop: null, transcription_id: undefined, retry: false, message_id: '' }),
+    { query: 'q', retry: false, message_id: '' },
+  );
+  const src = read('src/state/useChat.ts');
+  assert.ok(src.includes('const request: TextPromptRequest = omitNullFields({'));
+  assert.ok(src.includes('sdk.api.imageAnalysis(omitNullFields({'));
+});
+
+test('#29 follow-ups are skipped after an exclusive alignment surface only', () => {
+  // ChatViewModel.kt:2020-2025.
+  for (const k of ['CLARIFY', 'CONFIRM', 'ESCALATE', 'GPS_PROMPT', 'UPLOAD_PHOTO'] as const) {
+    assert.equal(fetchesFollowUps(k, 'm1', false), false, k);
+  }
+  assert.equal(fetchesFollowUps('GENDER_SELECT', 'm1', false), true);
+  assert.equal(fetchesFollowUps('COMMODITY_CONFIRM', 'm1', null), true);
+  assert.equal(fetchesFollowUps(null, 'm1', null), true);
+  assert.equal(fetchesFollowUps(null, null, null), false);
+  assert.equal(fetchesFollowUps(null, 'm1', true), false);
+  assert.ok(read('src/state/useChat.ts').includes('if (fetchesFollowUps(alignmentKind, serverMessageId, data.hide_follow_up_question))'));
 });

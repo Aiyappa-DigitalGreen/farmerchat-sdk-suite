@@ -819,7 +819,8 @@ public final class ChatViewModel: ObservableObject {
         }
         if response.hideTtsSpeaker == true { state.isTtsEnabled = false }
         // Real follow-ups always come from endpoint #29.
-        if response.hideFollowUpQuestion != true, let messageId = response.messageId?.stringValue {
+        if Self.fetchesFollowUps(alignmentKind: alignmentKind, hideFollowUpQuestion: response.hideFollowUpQuestion),
+           let messageId = response.messageId?.stringValue, !messageId.isEmpty {
             // App parity (`applyFollowUpQuestionsFromApi` launches; finalize sets isLoading=false
             // first): #29 runs AFTER the answer settles, never inside the loading window. Awaiting
             // it here held `isLoading` true for the whole #29 round trip — tips stayed over the
@@ -1374,6 +1375,17 @@ public final class ChatViewModel: ObservableObject {
         request.image = image
         request.imageName = imageName
         return request
+    }
+
+    /// Whether an answer fetches #29 follow-ups. App `handleTextPromptResult`
+    /// (ChatViewModel.kt:2020-2025): only an EXCLUSIVE alignment surface (clarify / confirm /
+    /// escalate / gps-prompt / upload-photo) owns the chip area and skips #29; a normal answer and
+    /// an ADDITIVE surface (gender-select / commodity-confirm) still fetch. `hide_follow_up_question`
+    /// suppresses it too.
+    nonisolated static func fetchesFollowUps(alignmentKind: AlignmentKind?, hideFollowUpQuestion: Bool?) -> Bool {
+        guard hideFollowUpQuestion != true else { return false }
+        guard let alignmentKind else { return true }
+        return alignmentKind.isAdditive
     }
 
     /// `triggered_input_type` of a ``ChatAction/sendFollowUpQuestion(question:followUpQuestionId:transcriptionId:audioURL:)``

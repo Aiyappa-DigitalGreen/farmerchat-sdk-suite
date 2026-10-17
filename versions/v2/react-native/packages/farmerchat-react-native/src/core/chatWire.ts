@@ -2,7 +2,12 @@
  * Pure chat wire rules shared by `useChat` and its tests. Internal: not re-exported from
  * `index.ts`. Kept free of React / native imports so the unit tests can load it directly.
  */
-import { AlignmentKinds, type AlignmentKind, type ConversationChatHistoryQuestion } from './types';
+import {
+  AlignmentKinds,
+  isAdditiveAlignment,
+  type AlignmentKind,
+  type ConversationChatHistoryQuestion,
+} from './types';
 
 /**
  * `triggered_input_type` for every alignment-chip send: a text chip, a capability-chip outcome,
@@ -140,4 +145,31 @@ export function shareCardText(
 ): { title: string; body: string } {
   const limits = hasPhoto ? SHARE_CARD_LIMITS.photo : SHARE_CARD_LIMITS.textOnly;
   return { title: title.slice(0, limits.title), body: body.slice(0, limits.body) };
+}
+
+/**
+ * Whether an answer's follow-ups are fetched from endpoint #29. App ChatViewModel.kt:2020-2025:
+ * never after an EXCLUSIVE alignment surface (clarify / confirm / escalate / gps-prompt /
+ * upload-photo) — its chips are the next step — but still after a normal answer and after an
+ * ADDITIVE one (gender-select / commodity-confirm); and only with a server message id and no
+ * `hide_follow_up_question`.
+ */
+export function fetchesFollowUps(
+  alignmentKind: AlignmentKind | null | undefined,
+  messageId: string | null | undefined,
+  hideFollowUpQuestion: boolean | null | undefined,
+): boolean {
+  if (!messageId || hideFollowUpQuestion === true) return false;
+  return alignmentKind == null || isAdditiveAlignment(alignmentKind);
+}
+
+/**
+ * Drops null / undefined members, as the app's Gson does when it serialises a request (no
+ * `serializeNulls()`; AgenticChatDataSource.kt:58 `gson.toJson(request)`, and Retrofit's Gson
+ * converter for #27): an unset field is absent from the body, never `null`.
+ */
+export function omitNullFields<T extends object>(body: T): T {
+  return Object.fromEntries(
+    Object.entries(body).filter(([, v]) => v !== null && v !== undefined),
+  ) as T;
 }
