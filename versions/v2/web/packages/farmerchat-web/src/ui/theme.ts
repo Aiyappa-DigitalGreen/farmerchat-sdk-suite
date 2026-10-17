@@ -1537,9 +1537,11 @@ const css = `
 /* FullScreenMessage forces the LIGHT palette on its CTA: #08361B even in night mode. */
 .fcsdk-c-btn-primary--forcelight { background: #08361B; }
 /* Farmer illustrations */
+/* .fcsdk-root .fcsdk-c-farmer--… beats the root reset .fcsdk-root img { max-width: 100% }, which
+   otherwise dropped Compose's widthIn(max = 322dp). */
 .fcsdk-c-farmer { display: block; }
-.fcsdk-c-farmer--farmer { width: 100%; max-width: 322px; max-height: 100%; aspect-ratio: 300 / 450; object-fit: cover; border-radius: 9999px; }
-.fcsdk-c-farmer--fit { width: 100%; height: 100%; object-fit: contain; }
+.fcsdk-root .fcsdk-c-farmer--farmer { width: 100%; max-width: 322px; max-height: 100%; aspect-ratio: 300 / 450; object-fit: cover; border-radius: 9999px; }
+.fcsdk-root .fcsdk-c-farmer--fit { width: 100%; max-width: 322px; height: 100%; object-fit: contain; }
 .fcsdk-c-farmer--crop { width: 100%; height: 100%; object-fit: cover; }
 .fcsdk-location-layer { position: absolute; inset: 0; z-index: 55; display: flex; flex-direction: column; padding: 0; background: none; }
 /* M3 ModalBottomSheet (Recovery) */

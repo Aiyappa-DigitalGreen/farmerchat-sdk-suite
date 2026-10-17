@@ -47,6 +47,8 @@ fun AccountBenefitsScreen(
             Labels.WELL_SAVE_YOUR_CHATS_YOU_CONTINUE,
             "We'll save your chats so you can continue later."
         ),
+        // App parity (AppNavGraph.kt:793): the subtitle uses bodyLarge on this screen.
+        subtitleTextStyle = MaterialTheme.typography.bodyLarge,
         primaryCtaLabel = label(Labels.SIGN_UP_PHONE_NUMBER, "Sign up with phone number"),
         onPrimaryCta = {
             graph.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_PROCEED)
@@ -57,10 +59,8 @@ fun AccountBenefitsScreen(
         // here, so only the glyph differed.
         leftIcon = Icons.AutoMirrored.Filled.ArrowBack,
         leftRadius = Radius.Rounded,
-        onLeftClick = {
-            graph.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP)
-            onSkip()
-        },
+        // The app's back only pops (AppNavGraph.kt:813); only Skip sends Account_Benefit_Screen_Skip.
+        onLeftClick = { onSkip() },
         rightLabel = label(Labels.SKIP, "Skip"),
         rightRadius = Radius.Rounded,
         onRightClick = {

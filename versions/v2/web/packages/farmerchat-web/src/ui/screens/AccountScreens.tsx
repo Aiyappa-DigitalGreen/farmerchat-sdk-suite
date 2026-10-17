@@ -30,14 +30,19 @@ export function AccountBenefitsScreen(props: { onSignUp: () => void; onSkip: () 
       title={label('fc_v2_app_label_sign_up', 'Sign up')}
       mainMessage={label('fc_v2_app_label_save_your_questions_answers', 'Save your questions\nand answers')}
       subtitle={label('fc_v2_app_label_well_save_your_chats_you_continue', "We'll save your chats so you can continue later.")}
+      // AppNavGraph.kt:787-829: bodyLarge subtitle; the farmer image is ContentScale.Fit,
+      // fillMaxSize, widthIn(max = 322dp) — not the default stadium-clipped crop.
+      subtitleLarge
       image="camera"
+      imageMode="fit"
       primaryLabel={label('fc_v2_app_label_sign_up_phone_number', 'Sign up with phone number')}
       primaryState="chevron"
       onPrimary={() => {
         services.analytics.track(Events.ACCOUNT_BENEFIT_SCREEN_PROCEED, {});
         props.onSignUp();
       }}
-      left={{ icon: 'm_arrow_back', ariaLabel: 'back', radius: 'rounded', onClick: skip }}
+      // App onLeftClick = popBackStack() with no event; only "Skip" tracks the skip event.
+      left={{ icon: 'm_arrow_back', ariaLabel: 'back', radius: 'rounded', onClick: props.onSkip }}
       right={{ label: label('fc_v2_app_label_skip', 'Skip'), radius: 'rounded', onClick: skip }}
     />
   );
@@ -60,6 +65,7 @@ export function AccountSuccessScreen(props: { onContinue: () => void }) {
       subtitle={label('fc_v2_app_label_previous_questions_menu', 'Find your previous questions in the menu and continue anytime.')}
       subtitleLarge
       image="sky"
+      imageMode="fit"
       primaryLabel={label('fc_v2_app_label_continue', 'Continue')}
       onPrimary={() => {
         services.analytics.track(Events.SIGNUP_CONTINUE_CLICKED, {});

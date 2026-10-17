@@ -28,6 +28,7 @@ import { LanguageChooserScreen } from './screens/LanguageChooserScreen';
 import { HelpScreen, LegalContentModal } from './screens/HelpScreen';
 import { ErrorScreen } from './screens/ErrorScreen';
 import { AccountBenefitsScreen, AccountSuccessScreen } from './screens/AccountScreens';
+import { prefetchFarmerIllustrations } from './components/common';
 import { AuthScreen } from './screens/AuthScreen';
 import { LocationPromptOverlay } from './screens/LocationPromptOverlay';
 import { Events } from '../core/analytics';
@@ -335,7 +336,18 @@ export function FarmerChatRoot(props: {
     onOwnExitChange?.(hasOwnExit);
   }, [hasOwnExit, onOwnExitChange]);
   // Hidden while the drawer is open: the drawer's own header owns that corner.
-  const fallbackCloseSlot: 'right' | 'left' | 'hidden' = drawerOpen ? 'hidden' : current.name === 'home' ? 'left' : 'right';
+  // AccountBenefits' app bar has "Skip" in the right corner (AppNavGraph.kt:821), so the ✕ sits
+  // beside its back arrow there, as on Home.
+  const fallbackCloseSlot: 'right' | 'left' | 'hidden' = drawerOpen
+    ? 'hidden'
+    : current.name === 'home' || current.name === 'accountBenefits'
+      ? 'left'
+      : 'right';
+  // Download the farmer illustrations while online, so the No-internet screen still has one.
+  // Re-checked on every screen change: the country is often resolved only after guest init.
+  useEffect(() => {
+    prefetchFarmerIllustrations(services.config.assetBaseUrl, services.store.getString(PrefKeys.USER_COUNTRY_CODE));
+  }, [current.name, services]);
   const onFallbackCloseSlotChange = props.onFallbackCloseSlotChange;
   useEffect(() => {
     onFallbackCloseSlotChange?.(fallbackCloseSlot);

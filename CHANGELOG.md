@@ -71,6 +71,8 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Sign-up / account / no-internet screens match the app on web (cropped images, wrong width, missing
+  offline image, ✕ over Skip) and Compose (subtitle size; back no longer reports "Skip").
 - Web: image-viewed tracking was sent for text cards too (404 on DEMO); tapping a language row switched
   the language before Save; a photo retry added a second bubble and fired the host callbacks again;
   a late Listen reply could play an old answer.

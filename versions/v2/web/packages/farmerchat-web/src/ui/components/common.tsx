@@ -29,7 +29,6 @@ export const Icon = {
   retry: '↻',
   weatherDefault: '⛅',
   logo: '🌱',
-  farmer: '🧑‍🌾',
   sky: '🌤️',
   phone: '📱',
   chat: '💬',
@@ -578,7 +577,9 @@ export function ListItem(props: {
 
 // --- FullScreenMessage (docs/01 §3.14) ----------------------------------------------------------
 
-export type FarmerImage = 'camera' | 'sky' | 'phone' | 'phone_square';
+export type { FarmerImage } from '../../core/illustrations';
+import { farmerCountry, illustrationSrc, type FarmerImage } from '../../core/illustrations';
+export { prefetchFarmerIllustrations } from '../../core/illustrations';
 
 /**
  * The country farmer illustration (`farmer_looking_at_*`) Android bundles as assets, served from
@@ -595,10 +596,15 @@ export function FarmerIllustration(props: {
   const { services } = useSdk();
   const base = services.config.assetBaseUrl;
   if (!base) return null;
-  const cc = (services.store.getString('USER_COUNTRY_CODE') ?? '').toLowerCase();
-  const country = ['ke', 'et', 'ng', 'in'].includes(cc) ? cc : 'ke';
+  const country = farmerCountry(services.store.getString('USER_COUNTRY_CODE'));
   const src = `${base}${country}/farmer_looking_at_${props.image}.webp`;
-  return <img className={`fcsdk-c-farmer fcsdk-c-farmer--${props.mode}${props.className ? ' ' + props.className : ''}`} src={src} alt="" />;
+  return (
+    <img
+      className={`fcsdk-c-farmer fcsdk-c-farmer--${props.mode}${props.className ? ' ' + props.className : ''}`}
+      src={illustrationSrc(src)}
+      alt=""
+    />
+  );
 }
 
 /**

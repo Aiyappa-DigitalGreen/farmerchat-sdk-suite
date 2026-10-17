@@ -9025,3 +9025,17 @@ on - stop in all platforms" and are REVERTED. The user wants the agentic endpoin
 each language's setting from the language API on all SDKs, exactly like the app
 (ChatViewModel.kt:1400-1415, default true); nothing forces it. Hosted demo app + widget page,
 samples' `appstage`, LastCheckSDKCompose/XML, FarmerChatRNDemo and the iOS demo hosts are agentic again.
+
+## Agentic live check + full-screen illustration screens (2026-10-17)
+- Live hosted widget, agentic (DEMO): the "No internet connection" after a 200 was the test Mac
+  idle-sleeping mid-request (`net::ERR_NETWORK_IO_SUSPENDED`; Railway logged 43 bytes then client
+  abandon), reproduced once; the app shows the same card for a dropped connection. With sleep blocked:
+  weather → GPS prompt → Give permission → real forecast, 5/5 consecutive live runs. DEMO returns
+  `streaming_required: true` for every language, so the SDKs send what the app sends.
+- FullScreenMessage screens vs app (AppNavGraph.kt:787-829, AccountSuccessScreen.kt,
+  NoInternetScreen.kt): web/widget — AccountBenefits/AccountSuccess images fit (were cropped), the
+  322 px max width now applies, larger subtitle on AccountBenefits, back pops without the Skip event,
+  the FAB ✕ no longer covers Skip, illustrations preloaded so the offline No-internet screen shows its
+  image; the unused emoji fallback removed. Compose — AccountBenefits subtitle bodyLarge, back no longer
+  sends Account_Benefit_Screen_Skip (Views already matched). RN (emoji placeholders, ✕ circle, bottom
+  Skip link, no subtitle/chevron) and iOS: in progress.
