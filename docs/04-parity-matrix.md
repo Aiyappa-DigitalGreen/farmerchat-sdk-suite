@@ -9061,3 +9061,10 @@ in-feed FeedHeader, UIKit "Type" alert and the content card's ✕/statement text
 Home does; UIKit phone screen lacks the app's agreement card and "Send via SMS" layout (E8); farmer
 images are not in xcframework (binary) builds yet (SF Symbol fallback). DEBUG-only launch args
 `-fcAutoBenefits` / `-fcUIBenefits` exist because DEMO returns `bypass_interstitial`.
+iOS follow-up (same day): E8 phone screen follows the app's AuthScreen.kt on both UIs (sending
+heading, flag selector, 56 pt field, "What you are agreeing to:" card, WhatsApp/SMS buttons, consent
+line); the Core resource bundle (farmer photos) now ships inside the xcframeworks and the podspec
+(proven with a binary-only app; `pod spec lint --quick` passes, full `pod install` not run); C1 clarify
+chip → answer and C2 "Type or say it" → typed answer PASS on DEMO (both UIs); new
+`FarmerChatConfig.enableComposerUi: Bool?` (+ ObjC `NSNumber`) with Android's semantics — unset follows
+`enableAgenticChat`, so an iOS host with agentic off now gets the legacy Home/input (as Android).

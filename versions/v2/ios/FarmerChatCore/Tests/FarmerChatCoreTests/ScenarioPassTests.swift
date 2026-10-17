@@ -113,4 +113,19 @@ final class ScenarioPassTests: XCTestCase {
             }
         }
     }
+
+    /// `enableComposerUi` mirrors Android's `FarmerChatConfig.resolvedComposerUi`: nil follows
+    /// `enableAgenticChat`; an explicit value wins either way.
+    func testComposerUiFollowsAgenticUnlessSet() {
+        var config = FarmerChatConfig(environment: .demo, enableAgenticChat: false)
+        XCTAssertNil(config.enableComposerUi)
+        XCTAssertFalse(config.resolvedComposerUi)
+        config.enableAgenticChat = true
+        XCTAssertTrue(config.resolvedComposerUi)
+        config.enableComposerUi = false
+        XCTAssertFalse(config.resolvedComposerUi)
+        config.enableAgenticChat = false
+        config.enableComposerUi = true
+        XCTAssertTrue(config.resolvedComposerUi)
+    }
 }

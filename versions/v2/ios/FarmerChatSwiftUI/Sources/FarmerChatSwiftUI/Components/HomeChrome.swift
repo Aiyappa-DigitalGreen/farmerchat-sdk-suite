@@ -263,8 +263,12 @@ struct FCHomeAppBar: View {
     let weather: WeatherResponse?
     let weatherLoading: Bool
     var trailingInset: CGFloat = 0
+    /// HomeAppBar `showBackground`: the legacy (non-composer) Home paints the bar green with the
+    /// 80pt glow; the composer Home leaves it transparent over the band.
+    var showBackground: Bool = false
     let onMenu: () -> Void
     let onWeather: () -> Void
+    @Environment(\.fcTheme) private var theme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -280,6 +284,15 @@ struct FCHomeAppBar: View {
         .padding(.leading, 16)
         .padding(.trailing, 16 + trailingInset)
         .frame(height: 52)
+        .background(alignment: .top) {
+            if showBackground {
+                ZStack(alignment: .top) {
+                    theme.brand.surfacePrimary
+                    FCChatGlow(height: 80)
+                }
+                .ignoresSafeArea(edges: .top)
+            }
+        }
         .animation(.easeInOut(duration: 0.4), value: showWeather)
     }
 }

@@ -905,6 +905,8 @@ final class FCUIAlignmentSurfaceView: UIView {
         ])
         escapeHatchLabel.numberOfLines = 0
         escapeHatchLabel.isUserInteractionEnabled = true
+        escapeHatchLabel.accessibilityIdentifier = "fcTypeInstead"
+        escapeHatchLabel.accessibilityTraits = .button
         escapeHatchLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(typeInsteadTapped)))
         escapeHatch.axis = .horizontal
         escapeHatch.spacing = 6

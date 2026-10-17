@@ -3,8 +3,16 @@ import FarmerChatCore
 
 // MARK: - PrimaryInputButtons (Photo / Speak / Type sticky header)
 
+/// Port of components/userinput/PrimaryInputButtons.kt — the legacy (non-composer) input row,
+/// shown when ``FarmerChatConfig/resolvedComposerUi`` is false: a `brand.surfacePrimary` band
+/// (16pt sides, 8pt top, 6pt gaps) of three `brand.surfaceSecondary` tiles (radius 16) with a
+/// 28pt green icon and a white labelSmall label. Home: 78pt tiles, 17/12 padding, 10pt bottom.
+/// Chat: 72pt tiles, 13/9 padding, a hairline top border, the bottom inset below.
 public struct FCPrimaryInputButtons: View {
+    public enum Variant { case home, chat }
+
     @Environment(\.fcTheme) private var theme
+    var variant: Variant = .home
     var showPhoto: Bool = true
     var showVoice: Bool = true
     let onPhoto: () -> Void
@@ -12,32 +20,53 @@ public struct FCPrimaryInputButtons: View {
     let onType: () -> Void
 
     public var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             if showPhoto {
-                inputButton(icon: "camera.fill", title: fcLabel(FCLabels.photo, "Photo"), action: onPhoto)
+                tile(icon: "camera.fill", title: fcLabel(FCLabels.photo, "Photo"), id: "fcInputPhoto", action: onPhoto)
             }
             if showVoice {
-                inputButton(icon: "mic.fill", title: fcLabel(FCLabels.speak, "Speak"), action: onSpeak)
+                tile(icon: "mic.fill", title: fcLabel(FCLabels.speak, "Speak"), id: "fcInputSpeak", action: onSpeak)
             }
-            inputButton(icon: "keyboard", title: fcLabel(FCLabels.type, "Type"), action: onType)
+            tile(icon: "keyboard", title: fcLabel(FCLabels.type, "Type"), id: "fcInputType", action: onType)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, variant == .home ? 10 : 0)
+        .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                theme.brand.surfacePrimary
+                if variant == .chat {
+                    Color.black.opacity(0.1).frame(height: 0.5)
+                }
+            }
+            .ignoresSafeArea(edges: .bottom)
         }
     }
 
-    private func inputButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
+    private func tile(icon: String, title: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: 0) {
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(theme.brand.foregroundSecondary)
+                    .frame(width: 28, height: 28)
+                Spacer(minLength: 0)
                 Text(title)
-                    .fcTextStyle(theme.typography.labelMedium)
+                    .fcTextStyle(theme.typography.labelSmall)
+                    .foregroundColor(theme.content.buttonPrimaryForeground)
+                    .lineLimit(1)
             }
-            .foregroundColor(theme.content.buttonPrimaryForeground)
+            .padding(.top, variant == .home ? 17 : 13)
+            .padding(.bottom, variant == .home ? 12 : 9)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity)
-            .frame(height: 74)
-            .background(theme.content.buttonPrimarySurface)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .frame(height: variant == .home ? 78 : 72)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(theme.brand.surfaceSecondary))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(id)
     }
 }
 

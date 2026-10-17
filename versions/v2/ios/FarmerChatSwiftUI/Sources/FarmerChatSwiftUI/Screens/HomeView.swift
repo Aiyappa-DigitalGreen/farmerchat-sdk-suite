@@ -39,20 +39,25 @@ struct HomeView: View {
     @State private var pillSuccess = false
     @State private var pillFlowWasActive = false
     @State private var pillTick = 0
+    /// Legacy Home (composer UI off): the text input is open after Type.
+    @State private var legacyTyping = false
+    private var composerUi: Bool { FarmerChat.shared.config.resolvedComposerUi }
 
     var body: some View {
         ZStack {
             theme.content.surfacePrimary.ignoresSafeArea()
-            FCHomeBand()
+            if composerUi { FCHomeBand() }
 
             VStack(spacing: 0) {
                 appBar
                 content
             }
 
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                composer
+            if composerUi || legacyTyping {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    composer
+                }
             }
 
             if showVoiceInput {
@@ -165,6 +170,7 @@ struct HomeView: View {
             weather: viewModel.state.weatherState.value,
             weatherLoading: viewModel.state.weatherState.isLoading,
             trailingInset: fallbackCloseShown ? 48 : 0,
+            showBackground: !composerUi,
             onMenu: {
                 FarmerChat.shared.analytics.track(AnalyticsEvents.hamburgerMenuClicked)
                 openDrawer()
@@ -185,7 +191,12 @@ struct HomeView: View {
             attachment: composerPhoto?.image,
             onRemoveAttachment: { composerPhoto = nil },
             focusRequest: $composerFocusRequest,
+            onFocusChange: { focused in
+                // Legacy Home: the text input closes when it loses focus empty.
+                if !focused && typedText.isEmpty && !composerUi { legacyTyping = false }
+            },
             onSend: { question in
+                legacyTyping = false
                 let photo = composerPhoto
                 composerPhoto = nil
                 typedText = ""
@@ -228,7 +239,67 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private func feedList(_ feed: HomeUdfResponse) -> some View {
+        if composerUi { composerFeedList(feed) } else { legacyFeedList(feed) }
+    }
+
+    /// The legacy (non-composer) Home, HomeScreen.kt:1108-1300: the green greeting band (the
+    /// GET_STARTED label, titleMedium white, centred), the sticky green Photo / Speak / Type
+    /// row, the in-feed "For your farm today" header, then the cards.
+    private func legacyFeedList(_ feed: HomeUdfResponse) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Text(fcLabel(FCLabels.getStartedByClickingOnPhotoSpeakOrTypeToAskYourQuestion, "Tap a button to ask a question"))
+                    .fcTextStyle(theme.typography.titleMedium)
+                    .foregroundColor(theme.brand.foregroundPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(theme.brand.surfacePrimary)
+
+                Section {
+                    if feed.ssfrEnable == true && FarmerChat.shared.config.enableSsfr {
+                        FCSsfrCard { crop in
+                            openChat(FCDestination.ChatArgs(
+                                question: fcLabel("ssfr_question", "Fertilizer advice for {crop}", params: ["crop": crop]),
+                                isSSFR: true,
+                                ssfrCrop: crop
+                            ))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                    }
+                    FCFeedHeader()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 16)
+                    ForEach(viewModel.state.visibleSections()) { section in
+                        sectionView(section)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                            .onAppear { markViewedIfNeeded(section) }
+                    }
+                    FCFeedFooter()
+                } header: {
+                    FCPrimaryInputButtons(
+                        variant: .home,
+                        showPhoto: FarmerChat.shared.config.enableImages,
+                        showVoice: FarmerChat.shared.config.enableVoice,
+                        onPhoto: { showPhotoSheet = true },
+                        onSpeak: startVoice,
+                        onType: {
+                            legacyTyping = true
+                            composerFocusRequest = true
+                        }
+                    )
+                }
+            }
+            .padding(.bottom, legacyTyping ? composerHeight + 8 : 24)
+        }
+        .refreshable { loadHome(skipLoadingCheck: true) }
+    }
+
+    private func composerFeedList(_ feed: HomeUdfResponse) -> some View {
         ZStack(alignment: .top) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -582,6 +653,11 @@ struct HomeView: View {
     }
 
     private func attach(_ picked: FCPickedImage) {
+        guard composerUi else {
+            // Legacy Home (HomeScreen.kt): a picked photo opens Chat with it at once.
+            openChat(FCDestination.ChatArgs(question: "", imagePath: picked.fileURL.path))
+            return
+        }
         composerPhoto = picked
         composerFocusRequest = true
     }

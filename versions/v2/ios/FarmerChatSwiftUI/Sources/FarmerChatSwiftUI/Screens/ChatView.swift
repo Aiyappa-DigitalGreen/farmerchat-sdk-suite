@@ -69,6 +69,8 @@ struct ChatView: View {
     @State private var alignmentPhotoChip: AlignmentChip?
     /// A composer photo waiting for its caption (InputComposer `photoUris`, one image).
     @State private var composerPhoto: FCPickedImage?
+    /// Legacy input (composer UI off): the text input is open after Type / "Type or say it".
+    @State private var legacyTyping = false
 
     var body: some View {
         ZStack {
@@ -88,7 +90,7 @@ struct ChatView: View {
                     .animation(.easeInOut(duration: 0.3), value: showTips)
                     // ChatInputOverlays.kt: the floating InputComposer over the thread, sliding
                     // away while an answer is loading (ChatScreen.kt:1752).
-                    .overlay(alignment: .bottom) { composer }
+                    .overlay(alignment: .bottom) { inputSurface }
                     .onPreferenceChange(FCComposerHeightKey.self) { composerHeight = $0 }
             }
 
@@ -799,6 +801,11 @@ struct ChatView: View {
             // InputComposer flow (ChatScreen.kt:497-503 `photoUris = listOf(uri)`): the photo
             // waits in the composer for an optional caption; Send sends both.
             alignmentPhotoSourceId = nil
+            guard FarmerChat.shared.config.resolvedComposerUi else {
+                // Legacy input (ChatScreen.kt:651-658): a picked photo is sent at once.
+                viewModel.onAction(.sendQuestionWithImage(question: "", imageData: picked.sourceData, imageURL: picked.fileURL))
+                return
+            }
             composerPhoto = picked
             composerFocusRequest = true
         }
@@ -900,6 +907,50 @@ struct ChatView: View {
     }
 
     // MARK: - Composer (follow-up entry points)
+
+    /// `resolvedComposerUi` (Android `FarmerChatConfig.resolvedComposerUi`): the floating
+    /// InputComposer, or the legacy Photo / Speak / Type row (ChatScreen.kt:1709) that slides
+    /// 150pt down while an answer generates or the text input is open; Type opens the text
+    /// input (the composer, focused) over it.
+    @ViewBuilder
+    private var inputSurface: some View {
+        if FarmerChat.shared.config.resolvedComposerUi {
+            composer
+        } else {
+            ZStack(alignment: .bottom) {
+                FCPrimaryInputButtons(
+                    variant: .chat,
+                    showPhoto: FarmerChat.shared.config.enableImages,
+                    showVoice: FarmerChat.shared.config.enableVoice,
+                    onPhoto: { showPhotoSheet = true },
+                    onSpeak: startVoice,
+                    onType: {
+                        legacyTyping = true
+                        composerFocusRequest = true
+                    }
+                )
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: FCComposerHeightKey.self, value: proxy.size.height)
+                    }
+                )
+                .offset(y: viewModel.state.isLoading || legacyTyping ? 150 : 0)
+                .animation(.easeInOut(duration: 0.45), value: viewModel.state.isLoading || legacyTyping)
+
+                if legacyTyping {
+                    composer
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .onChange(of: composerFocusRequest) { requested in
+                // "Type or say it" and the empty state's Type open the text input here too.
+                if requested { legacyTyping = true }
+            }
+            .onChange(of: composerFocused) { focused in
+                if !focused && typedText.isEmpty { legacyTyping = false }
+            }
+        }
+    }
 
     /// ChatInputOverlays.kt:64-77 — the floating InputComposer. Hidden (slid 400 down) while an
     /// answer is loading: the first-question loading state and `Thread && isLoading`.

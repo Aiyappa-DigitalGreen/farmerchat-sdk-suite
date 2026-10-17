@@ -151,6 +151,9 @@ public final class FCFarmerChatConfiguration: NSObject {
     @objc public var enableWeather: Bool = true
     @objc public var enableSsfr: Bool = true
     @objc public var enableAgenticChat: Bool = false
+    /// `FarmerChatConfig.enableComposerUi`: nil (default) follows `enableAgenticChat`; a boxed
+    /// BOOL forces the InputComposer on or off.
+    @objc public var enableComposerUi: NSNumber?
     /// Telemetry master switch, default false — matches Android. Events are dropped at the
     /// dispatch point until a host opts in.
     @objc public var enableAnalytics: Bool = false
@@ -244,7 +247,7 @@ public final class FCFarmerChatConfiguration: NSObject {
         }
 
         let onErrorBlock = onError
-        return FarmerChatConfig(
+        var config = FarmerChatConfig(
             environment: environment.swiftValue,
             customBaseURL: customBaseURL,
             geoApiKey: geoApiKey,
@@ -293,6 +296,8 @@ public final class FCFarmerChatConfiguration: NSObject {
             onExit: onExit.map { block in { @Sendable in block() } },
             debugLogging: debugLogging
         )
+        config.enableComposerUi = enableComposerUi?.boolValue
+        return config
     }
 }
 

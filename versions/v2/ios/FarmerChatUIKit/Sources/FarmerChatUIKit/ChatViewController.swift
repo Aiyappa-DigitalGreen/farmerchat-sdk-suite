@@ -77,6 +77,8 @@ final class FCUIChatViewController: UIViewController {
     /// `ChatEmptyState`). A sibling of the list pinned to its frame, so it sits above the input bar
     /// and never scrolls away.
     private var emptyState: FCUIChatEmptyStateView!
+    /// Legacy input row (composer UI off); nil with the InputComposer.
+    private var legacyInputRow: FCUIPrimaryInputButtonsView?
     /// The language the chrome's labels were resolved for (see `viewWillAppear`).
     private var builtLanguage: String?
     /// The answer id the indicator's timeline last started for (`remember(triggerKey)`).
@@ -478,6 +480,11 @@ final class FCUIChatViewController: UIViewController {
         composer = FCUIComposerView(showCamera: config.enableImages, showMic: config.enableVoice)
         composer.onSend = { [weak self] question in
             guard let self else { return }
+            if self.legacyInputRow != nil {
+                // Legacy: the text input closes once sent; the row comes back after the answer.
+                self.composer.textView.resignFirstResponder()
+                self.composer.isHidden = true
+            }
             if let photo = self.composerPhoto {
                 // ChatScreen.kt:1795-1803: the attached photo goes with the typed caption
                 // (blank → image-only bubble; Core supplies the default prompt).
@@ -502,6 +509,10 @@ final class FCUIChatViewController: UIViewController {
         }
         composer.onFocusChange = { [weak self] focused in
             guard let self else { return }
+            if self.legacyInputRow != nil, !focused, !self.composer.hasText, self.composerPhoto == nil {
+                // Legacy: the text input closes when it loses focus empty.
+                self.composer.isHidden = true
+            }
             self.composerBottom.constant = focused ? -4 : 0
             self.render(self.viewModel.state)
         }
@@ -524,6 +535,25 @@ final class FCUIChatViewController: UIViewController {
         emptyState.isHidden = true
         view.addSubview(emptyState)
         composerBottom = composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        if FarmerChat.shared.config.resolvedComposerUi {
+            collectionView.bottomAnchor.constraint(equalTo: composer.topAnchor).isActive = true
+        } else {
+            // Legacy input (ChatScreen.kt:1709): the Photo / Speak / Type row at the bottom; the
+            // composer opens over it only as the text input (Type / "Type or say it").
+            let row = FCUIPrimaryInputButtonsView(variant: .chat)
+            row.onPhoto = { [weak self] in self?.photoTapped() }
+            row.onSpeak = { [weak self] in self?.speakTapped() }
+            row.onType = { [weak self] in self?.typeTapped() }
+            view.insertSubview(row, belowSubview: composer)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                row.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                row.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                collectionView.bottomAnchor.constraint(equalTo: row.topAnchor)
+            ])
+            legacyInputRow = row
+            composer.isHidden = true
+        }
         NSLayoutConstraint.activate([
             emptyState.topAnchor.constraint(equalTo: collectionView.topAnchor),
             emptyState.bottomAnchor.constraint(equalTo: collectionView.bottomAnchor),
@@ -534,7 +564,6 @@ final class FCUIChatViewController: UIViewController {
             collectionView.topAnchor.constraint(equalTo: appBar.bottomAnchor),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: composer.topAnchor),
             composer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             composer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             composerBottom,
@@ -662,6 +691,14 @@ final class FCUIChatViewController: UIViewController {
         // ChatScreen.kt:1752 — the composer slides 400pt down while an answer loads (Thread &&
         // isLoading; tween 300 ms) and comes back on success or error.
         setComposerHidden(state.isLoading && !state.messages.isEmpty)
+        if let row = legacyInputRow {
+            // The legacy row slides 150pt down while an answer generates or the text input is
+            // open (ChatScreen.kt:1709-1716, tween 450 ms).
+            let hidden = state.isLoading || !composer.isHidden
+            UIView.animate(withDuration: 0.45) {
+                row.transform = hidden ? CGAffineTransform(translationX: 0, y: 150) : .identity
+            }
+        }
         // Tips.kt over the bottom while loading and before any streamed text (ChatThreadContent.kt:680-685).
         let awaitingText: Bool = {
             switch state.messages.last {
@@ -1155,6 +1192,10 @@ final class FCUIChatViewController: UIViewController {
 
     /// Type (empty-state chip) and the alignment escape hatch focus the composer's field.
     private func typeTapped() {
+        if legacyInputRow != nil {
+            composer.isHidden = false
+            render(viewModel.state)
+        }
         composer.focus()
     }
 
@@ -1218,6 +1259,11 @@ extension FCUIChatViewController: UIImagePickerControllerDelegate, UINavigationC
             // An UPLOAD_PHOTO chip's photo is reported as that chip's pick (ChatScreen.kt:425-460).
             viewModel.sendAlignmentPhoto(chip: photoChip, imageData: original ?? data, imageURL: url)
         } else {
+            if legacyInputRow != nil {
+                // Legacy input (ChatScreen.kt:651-658): a picked photo is sent at once.
+                viewModel.onAction(.sendQuestionWithImage(question: "", imageData: original ?? data, imageURL: url))
+                return
+            }
             // InputComposer flow (ChatScreen.kt:497-503 `photoUris = listOf(uri)`): the photo
             // waits in the composer for an optional caption.
             composerPhoto = (original ?? data, url)

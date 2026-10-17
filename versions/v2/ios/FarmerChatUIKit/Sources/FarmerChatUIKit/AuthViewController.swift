@@ -15,8 +15,14 @@ final class FCUIAuthViewController: UIViewController {
     private let phoneStack = UIStackView()
     private let countryButton = UIButton(type: .system)
     private let phoneField = UITextField()
-    private let whatsappButton: FCUIPrimaryButton
-    private let smsButton: FCUIPrimaryButton
+    private let phoneTitle = UILabel()
+    private let phoneSubtitle = UILabel()
+    private let flagView = UIImageView()
+    private var flagTask: URLSessionDataTask?
+    private var flagURL: URL?
+    private let whatsappButton = UIButton(type: .custom)
+    private let smsButton = UIButton(type: .custom)
+    private let sendingButton: FCUIPrimaryButton
 
     // OTP step
     private let otpStack = UIStackView()
@@ -29,8 +35,7 @@ final class FCUIAuthViewController: UIViewController {
 
     init(onSuccess: @escaping () -> Void) {
         self.onSuccess = onSuccess
-        self.whatsappButton = FCUIPrimaryButton(title: "Get code on WhatsApp")
-        self.smsButton = FCUIPrimaryButton(title: "Get code by SMS")
+        self.sendingButton = FCUIPrimaryButton(title: "Sending code...")
         self.verifyButton = FCUIPrimaryButton(title: "Verify")
         super.init(nibName: nil, bundle: nil)
     }
@@ -45,8 +50,6 @@ final class FCUIAuthViewController: UIViewController {
             self?.fcuiGoBack()
         }
 
-        whatsappButton.setTitle(fcuiLabel("send_code_whatsapp", "Get code on WhatsApp"), for: .normal)
-        smsButton.setTitle(fcuiLabel("send_code_sms", "Get code by SMS"), for: .normal)
         verifyButton.setTitle(fcuiLabel(FCLabels.verify, "Verify"), for: .normal)
 
         buildPhoneStep()
@@ -58,22 +61,49 @@ final class FCUIAuthViewController: UIViewController {
         FarmerChat.shared.analytics.screenViewed(ScreenNames.auth)
     }
 
+    /// AuthScreen.kt PhoneEntryContent: centred titleLarge + bodyMedium heading, the country
+    /// selector (flag image + code) beside a 56pt phone field, the AgreementCard, "Send via
+    /// WhatsApp" / "Send via SMS" (48pt, leading icon) — or one "Sending code..." while sending —
+    /// and the consent line with an underlined Privacy Policy link.
     private func buildPhoneStep() {
-        countryButton.setTitle("+91", for: .normal)
-        countryButton.titleLabel?.font = FCUITypography.current.bodyMedium.font
-        countryButton.setTitleColor(FCUITheme.foregroundPrimary, for: .normal)
-        countryButton.backgroundColor = FCUITheme.surfaceSecondary
-        countryButton.layer.cornerRadius = 14
-        countryButton.layer.cornerCurve = .continuous
-        countryButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 14, bottom: 0, right: 14)
-        countryButton.addAction(UIAction { [weak self] _ in self?.showCountryPicker() }, for: .touchUpInside)
+        phoneTitle.font = FCUITypography.current.titleLarge.font
+        phoneTitle.textColor = FCUITheme.foregroundPrimary
+        phoneTitle.textAlignment = .center
+        phoneTitle.numberOfLines = 0
+        phoneSubtitle.font = FCUITypography.current.bodyMedium.font
+        phoneSubtitle.textColor = FCUITheme.foregroundSecondary
+        phoneSubtitle.textAlignment = .center
+        phoneSubtitle.numberOfLines = 0
 
-        phoneField.placeholder = fcuiLabel("phone_placeholder", "Phone number")
+        var countryConfig = UIButton.Configuration.plain()
+        countryConfig.baseForegroundColor = FCUITheme.foregroundPrimary
+        countryConfig.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 40, bottom: 0, trailing: 12)
+        countryButton.configuration = countryConfig
+        countryButton.backgroundColor = FCUITheme.surfaceSecondary
+        countryButton.layer.cornerRadius = 12
+        countryButton.layer.cornerCurve = .continuous
+        countryButton.layer.borderWidth = 0.5
+        countryButton.layer.borderColor = FCUITheme.borderDefault.cgColor
+        countryButton.accessibilityIdentifier = "fcAuthCountry"
+        countryButton.addAction(UIAction { [weak self] _ in self?.showCountryPicker() }, for: .touchUpInside)
+        flagView.contentMode = .scaleAspectFit
+        flagView.isUserInteractionEnabled = false
+        flagView.translatesAutoresizingMaskIntoConstraints = false
+        countryButton.addSubview(flagView)
+
+        phoneField.placeholder = "00000 00000"
         phoneField.keyboardType = .phonePad
         phoneField.textContentType = .telephoneNumber
-        phoneField.borderStyle = .roundedRect
+        phoneField.borderStyle = .none
         phoneField.backgroundColor = FCUITheme.surfaceSecondary
         phoneField.font = FCUITypography.current.bodyMedium.font
+        phoneField.layer.cornerRadius = 12
+        phoneField.layer.cornerCurve = .continuous
+        phoneField.layer.borderWidth = 2
+        phoneField.layer.borderColor = FCUITheme.green500.cgColor
+        phoneField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 16, height: 1))
+        phoneField.leftViewMode = .always
+        phoneField.accessibilityIdentifier = "fcAuthPhone"
         phoneField.addAction(UIAction { [weak self] _ in
             self?.viewModel.setPhoneLocal(self?.phoneField.text ?? "")
             self?.refreshButtons()
@@ -81,26 +111,157 @@ final class FCUIAuthViewController: UIViewController {
 
         let row = UIStackView(arrangedSubviews: [countryButton, phoneField])
         row.axis = .horizontal
-        row.spacing = 10
-        countryButton.heightAnchor.constraint(equalToConstant: 54).isActive = true
-        phoneField.heightAnchor.constraint(equalToConstant: 54).isActive = true
+        row.spacing = 8
+        // CountryCodeSelector hugs its content (min 90pt); the phone field takes the rest.
+        countryButton.setContentHuggingPriority(.required, for: .horizontal)
+        countryButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        phoneField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        configureSend(whatsappButton, title: fcuiLabel(FCLabels.sendViaWhatsapp, "Send via WhatsApp"),
+                      icon: "phone.bubble.left.fill", id: "fcAuthSendWhatsapp")
+        configureSend(smsButton, title: fcuiLabel(FCLabels.sendViaSms, "Send via SMS"),
+                      icon: "message.fill", id: "fcAuthSendSms")
+        sendingButton.setTitle(fcuiLabel(FCLabels.sendingCode, "Sending code..."), for: .normal)
+        sendingButton.isLoading = true
+        sendingButton.isHidden = true
+
+        let consent = UIButton(type: .custom)
+        let prefix = fcuiLabel(FCLabels.authConsentPrefix, "By continuing, you agree to these communications.\nSee our ")
+        let link = fcuiLabel(FCLabels.privacyPolicy, "Privacy Policy")
+        let suffix = " " + fcuiLabel(FCLabels.authConsentSuffix, "for more information, including how to withdraw your consent.")
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: FCUITheme.foregroundSecondary, .paragraphStyle: para]
+        let text = NSMutableAttributedString(string: prefix, attributes: base)
+        var linkAttrs = base
+        linkAttrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        text.append(NSAttributedString(string: link, attributes: linkAttrs))
+        text.append(NSAttributedString(string: suffix, attributes: base))
+        consent.setAttributedTitle(text, for: .normal)
+        consent.titleLabel?.numberOfLines = 0
+        consent.addAction(UIAction { [weak self] _ in
+            guard let url = URL(string: "https://digitalgreen.org/privacy-policy/") else { return }
+            let page = FCUIWebPageViewController(title: link, url: url)
+            page.modalPresentationStyle = .fullScreen
+            self?.present(page, animated: true)
+        }, for: .touchUpInside)
 
         phoneStack.axis = .vertical
-        phoneStack.spacing = 12
-        phoneStack.addArrangedSubview(row)
-        phoneStack.addArrangedSubview(whatsappButton)
-        phoneStack.addArrangedSubview(smsButton)
+        phoneStack.spacing = 8
+        for v in [phoneTitle, phoneSubtitle, row, makeAgreementCard(), sendingButton, whatsappButton, smsButton, consent] {
+            phoneStack.addArrangedSubview(v)
+        }
+        phoneStack.setCustomSpacing(24, after: phoneSubtitle)
+        phoneStack.setCustomSpacing(20, after: row)
+        phoneStack.setCustomSpacing(12, after: phoneStack.arrangedSubviews[3])
         phoneStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(phoneStack)
         NSLayoutConstraint.activate([
             phoneStack.topAnchor.constraint(equalTo: appBar.bottomAnchor, constant: 24),
             phoneStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            phoneStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
+            phoneStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            countryButton.heightAnchor.constraint(equalToConstant: 56),
+            countryButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 90),
+            phoneField.heightAnchor.constraint(equalToConstant: 56),
+            flagView.leadingAnchor.constraint(equalTo: countryButton.leadingAnchor, constant: 12),
+            flagView.centerYAnchor.constraint(equalTo: countryButton.centerYAnchor),
+            flagView.widthAnchor.constraint(equalToConstant: 22),
+            flagView.heightAnchor.constraint(equalToConstant: 16)
         ])
 
-        whatsappButton.addAction(UIAction { [weak self] _ in self?.viewModel.sendOtp(channel: "whatsapp") }, for: .touchUpInside)
-        smsButton.addAction(UIAction { [weak self] _ in self?.viewModel.sendOtp(channel: "sms") }, for: .touchUpInside)
+        whatsappButton.addAction(UIAction { [weak self] _ in
+            guard let self, self.viewModel.isPhoneValid(), !self.viewModel.state.sendOtpState.isLoading else { return }
+            self.viewModel.sendOtp(channel: "whatsapp")
+        }, for: .touchUpInside)
+        smsButton.addAction(UIAction { [weak self] _ in
+            guard let self, self.viewModel.isPhoneValid(), !self.viewModel.state.sendOtpState.isLoading else { return }
+            self.viewModel.sendOtp(channel: "sms")
+        }, for: .touchUpInside)
         phoneField.becomeFirstResponder()
+    }
+
+    /// PrimaryButton with a leading icon, 48pt.
+    private func configureSend(_ button: UIButton, title: String, icon: String, id: String) {
+        var config = UIButton.Configuration.filled()
+        config.baseBackgroundColor = FCUITheme.buttonPrimarySurface
+        config.baseForegroundColor = .white
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 16
+        config.image = UIImage(systemName: icon, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold))?
+            .withTintColor(FCUITheme.green500, renderingMode: .alwaysOriginal)
+        config.imagePadding = 8
+        config.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: FCUITypography.current.titleMedium.font]))
+        button.configuration = config
+        button.accessibilityIdentifier = id
+        button.heightAnchor.constraint(equalToConstant: 48).isActive = true
+    }
+
+    /// AuthScreen.kt AgreementCard: Neutral200, radius 16, 18/12 padding; bold 18pt title, two
+    /// 15pt bullets, a bold-italic 14pt note, black.
+    private func makeAgreementCard() -> UIView {
+        let card = UIView()
+        card.backgroundColor = UIColor(red: 0xE4 / 255, green: 0xE4 / 255, blue: 0xE7 / 255, alpha: 1)
+        card.layer.cornerRadius = 16
+        card.layer.cornerCurve = .continuous
+        card.accessibilityIdentifier = "fcAuthAgreement"
+        let title = UILabel()
+        title.text = fcuiLabel(FCLabels.agreementCardTitle, "What you are agreeing to:")
+        title.font = .systemFont(ofSize: 18, weight: .bold)
+        title.textColor = .black
+        title.numberOfLines = 0
+        func bullet(_ text: String) -> UIView {
+            let dot = UILabel()
+            dot.text = "•"
+            dot.font = .systemFont(ofSize: 15)
+            dot.textColor = .black
+            dot.widthAnchor.constraint(equalToConstant: 16).isActive = true
+            dot.setContentHuggingPriority(.required, for: .horizontal)
+            let label = UILabel()
+            label.text = text
+            label.font = .systemFont(ofSize: 15)
+            label.textColor = .black
+            label.numberOfLines = 0
+            let row = UIStackView(arrangedSubviews: [dot, label])
+            row.alignment = .top
+            return row
+        }
+        let bullets = UIStackView(arrangedSubviews: [
+            bullet(fcuiLabel(FCLabels.agreementPointVerificationCode, "A verification code by SMS or WhatsApp")),
+            bullet(fcuiLabel(FCLabels.agreementPointUpdates, "FarmerChat updates, farming information, and occasional surveys or research by SMS, phone, or WhatsApp"))
+        ])
+        bullets.axis = .vertical
+        bullets.spacing = 2
+        let note = UILabel()
+        note.text = fcuiLabel(FCLabels.agreementCardInfoText, "Surveys or research may be conducted by Digital Green or trusted partners working with us.")
+        let italicBold = UIFont.systemFont(ofSize: 14, weight: .bold).fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic])
+        note.font = italicBold.map { UIFont(descriptor: $0, size: 14) } ?? .italicSystemFont(ofSize: 14)
+        note.textColor = .black
+        note.numberOfLines = 0
+        let stack = UIStackView(arrangedSubviews: [title, bullets, note])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18)
+        ])
+        return card
+    }
+
+    private func loadFlag(_ url: URL?) {
+        guard url != flagURL else { return }
+        flagURL = url
+        flagTask?.cancel()
+        flagView.image = nil
+        guard let url else { return }
+        flagTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data, let image = UIImage(data: data) else { return }
+            DispatchQueue.main.async { self?.flagView.image = image }
+        }
+        flagTask?.resume()
     }
 
     private func buildOtpStep() {
@@ -168,12 +329,23 @@ final class FCUIAuthViewController: UIViewController {
         otpStack.isHidden = state.step != .otpEntry
 
         // Phone step widgets.
-        let flag = state.selectedCountry?.flagText ?? ""
-        countryButton.setTitle("\(flag) \(state.countryCode)".trimmingCharacters(in: .whitespaces), for: .normal)
-        whatsappButton.isHidden = !state.availableChannels.whatsappEnabled
-        smsButton.isHidden = !state.availableChannels.smsEnabled
-        whatsappButton.isLoading = state.sendOtpState.isLoading && state.lastChannel == "whatsapp"
-        smsButton.isLoading = state.sendOtpState.isLoading && state.lastChannel == "sms"
+        let sending = state.sendOtpState.isLoading
+        phoneTitle.text = sending
+            ? fcuiLabel(FCLabels.enterPhoneNumber, "Enter phone number")
+            : fcuiLabel(FCLabels.enterYourPhoneNumber, "Enter your phone number")
+        phoneSubtitle.text = sending
+            ? fcuiLabel(FCLabels.sendOtpSigninShort, "And we will send you a one time code")
+            : fcuiLabel(FCLabels.sendOtpSignin, "We'll send a one-time code to sign you in")
+        let flagText = state.selectedCountry?.flagText.map { $0 + " " } ?? ""
+        countryButton.configuration?.contentInsets.leading = state.selectedCountry?.flagImageURL != nil ? 40 : 12
+        countryButton.configuration?.attributedTitle = AttributedString(
+            flagText + state.countryCode,
+            attributes: AttributeContainer([.font: FCUITypography.current.bodyMedium.font])
+        )
+        loadFlag(state.selectedCountry?.flagImageURL)
+        whatsappButton.isHidden = sending || !state.availableChannels.whatsappEnabled
+        smsButton.isHidden = sending || !state.availableChannels.smsEnabled
+        sendingButton.isHidden = !sending
         refreshButtons()
 
         // OTP step widgets.
@@ -217,10 +389,20 @@ final class FCUIAuthViewController: UIViewController {
         }
     }
 
+    /// PrimaryButton.kt: the Green800 fill never dims — only the content drops to 50% — so the
+    /// buttons stay enabled (a UIKit-disabled filled button greys its fill) and the send action
+    /// checks validity itself.
     private func refreshButtons() {
-        let valid = viewModel.isPhoneValid()
-        whatsappButton.isEnabled = valid && !viewModel.state.sendOtpState.isLoading
-        smsButton.isEnabled = valid && !viewModel.state.sendOtpState.isLoading
+        let enabled = viewModel.isPhoneValid() && !viewModel.state.sendOtpState.isLoading
+        for button in [whatsappButton, smsButton] {
+            let dim: CGFloat = enabled ? 1 : 0.5
+            if var config = button.configuration {
+                config.attributedTitle?.foregroundColor = UIColor.white.withAlphaComponent(dim)
+                config.image = config.image?.withTintColor(FCUITheme.green500.withAlphaComponent(dim), renderingMode: .alwaysOriginal)
+                button.configuration = config
+            }
+            button.accessibilityTraits = enabled ? .button : [.button, .notEnabled]
+        }
     }
 
     private func showCountryPicker() {

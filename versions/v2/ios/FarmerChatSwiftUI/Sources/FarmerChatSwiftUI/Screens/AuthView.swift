@@ -78,20 +78,26 @@ struct AuthView: View {
             // endpoint #3 serves for nobody, so every farmer read the English fallback whatever
             // their language; the fallback copy itself was invented rather than the app's; and
             // the headings were left-aligned at 24/16 pt where the app centres them at 22/17.
-            Text(fcLabel(FCLabels.enterYourPhoneNumber, "Enter your phone number"))
+            Text(isSending
+                 ? fcLabel(FCLabels.enterPhoneNumber, "Enter phone number")
+                 : fcLabel(FCLabels.enterYourPhoneNumber, "Enter your phone number"))
                 .fcTextStyle(theme.typography.titleLarge)
                 .foregroundColor(theme.content.foregroundPrimary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
 
-            Text(fcLabel(FCLabels.sendOtpSignin, "We'll send a one-time code to sign you in"))
+            Text(isSending
+                 ? fcLabel(FCLabels.sendOtpSigninShort, "And we will send you a one time code")
+                 : fcLabel(FCLabels.sendOtpSignin, "We'll send a one-time code to sign you in"))
                 .fcTextStyle(theme.typography.bodyMedium)
                 .foregroundColor(theme.content.foregroundSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+                .padding(.top, -8)
+                .padding(.bottom, 8)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 // CountryCodeSelector
                 Button(action: { showCountryPicker = true }) {
                     HStack(spacing: 6) {
@@ -107,21 +113,20 @@ struct AuthView: View {
                             Text(viewModel.state.countryCode)
                                 .fcTextStyle(theme.typography.bodyMedium)
                                 .foregroundColor(theme.content.foregroundPrimary)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(theme.content.foregroundSecondary)
                         }
                     }
                     .padding(.horizontal, 12)
+                    .frame(minWidth: 90)
                     .frame(height: 56)
                     .background(theme.content.surfaceSecondary)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(theme.content.borderDefault, lineWidth: 1)
+                            .stroke(theme.content.borderDefault, lineWidth: 0.5)
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isSending)
 
                 FCTextField(
                     // App parity (AuthScreen): the phone field's placeholder is the literal digit mask,
@@ -144,54 +149,117 @@ struct AuthView: View {
                     .foregroundColor(FCPrimitive.red500)
             }
 
+            // AuthScreen.kt AgreementCard, 20pt under the phone row.
+            agreementCard
+                .padding(.top, 4)
+
             if viewModel.state.isLoadingChannels {
                 ProgressView().frame(maxWidth: .infinity)
+            } else if isSending {
+                // AuthScreen.kt:893 — one loading button while the code is being sent.
+                FCPrimaryButton(
+                    title: fcLabel(FCLabels.sendingCode, "Sending code..."),
+                    state: .loading,
+                    action: {},
+                    height: 56
+                )
             } else {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     if viewModel.state.availableChannels.whatsappEnabled {
-                        FCPrimaryButton(
-                            title: fcLabel("send_code_whatsapp", "Get code on WhatsApp"),
-                            state: sendState(for: "whatsapp"),
-                            enabled: viewModel.isPhoneValid(),
-                            action: { viewModel.sendOtp(channel: "whatsapp") }
-                        )
+                        sendButton(
+                            title: fcLabel(FCLabels.sendViaWhatsapp, "Send via WhatsApp"),
+                            icon: "phone.bubble.left.fill",
+                            id: "fcAuthSendWhatsapp"
+                        ) { viewModel.sendOtp(channel: "whatsapp") }
                     }
                     if viewModel.state.availableChannels.smsEnabled {
-                        FCPrimaryButton(
-                            title: fcLabel("send_code_sms", "Get code by SMS"),
-                            state: sendState(for: "sms"),
-                            enabled: viewModel.isPhoneValid(),
-                            action: { viewModel.sendOtp(channel: "sms") }
-                        )
+                        sendButton(
+                            title: fcLabel(FCLabels.sendViaSms, "Send via SMS"),
+                            icon: "message.fill",
+                            id: "fcAuthSendSms"
+                        ) { viewModel.sendOtp(channel: "sms") }
                     }
                 }
-                .padding(.top, 8)
             }
 
-            legalFooter
+            consentText
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 24)
     }
 
-    private func sendState(for channel: String) -> PrimaryButtonState {
-        viewModel.state.sendOtpState.isLoading && viewModel.state.lastChannel == channel ? .loading : .normal
+    private var isSending: Bool { viewModel.state.sendOtpState.isLoading }
+
+    /// AuthScreen.kt AgreementCard: Neutral200, radius 16, 18/12 padding; bold 18pt title,
+    /// two 15pt bullets, a bold-italic 14pt note — black on the light card.
+    private var agreementCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(fcLabel(FCLabels.agreementCardTitle, "What you are agreeing to:"))
+                .font(.system(size: 18, weight: .bold))
+            VStack(alignment: .leading, spacing: 2) {
+                bullet(fcLabel(FCLabels.agreementPointVerificationCode, "A verification code by SMS or WhatsApp"))
+                bullet(fcLabel(FCLabels.agreementPointUpdates, "FarmerChat updates, farming information, and occasional surveys or research by SMS, phone, or WhatsApp"))
+            }
+            Text(fcLabel(FCLabels.agreementCardInfoText, "Surveys or research may be conducted by Digital Green or trusted partners working with us."))
+                .font(.system(size: 14, weight: .bold).italic())
+        }
+        .foregroundColor(.black)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(red: 0xE4 / 255, green: 0xE4 / 255, blue: 0xE7 / 255)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("fcAuthAgreement")
     }
 
-    private var legalFooter: some View {
+    private func bullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            Text("•").font(.system(size: 15)).frame(width: 16, alignment: .leading)
+            Text(text).font(.system(size: 15)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// PrimaryButton with a leading icon, 48pt (AuthScreen.kt:907-930).
+    private func sendButton(title: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
+        let enabled = viewModel.isPhoneValid()
+        return Button(action: { if enabled { action() } }) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(theme.content.buttonPrimaryAccent.opacity(enabled ? 1 : 0.5))
+                Text(title)
+                    .fcTextStyle(theme.typography.titleMedium)
+                    .foregroundColor(theme.content.buttonPrimaryForeground.opacity(enabled ? 1 : 0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(theme.content.buttonPrimarySurface)
+            .clipShape(RoundedRectangle(cornerRadius: theme.shapes.button, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
+    /// AuthConsentText: centred 15pt secondary, prefix + underlined "Privacy Policy" + suffix.
+    private var consentText: some View {
         Button {
             router.openLegal(
                 url: "https://digitalgreen.org/privacy-policy/",
                 title: fcLabel(FCLabels.privacyPolicy, "Privacy policy")
             )
         } label: {
-            Text(fcLabel(FCLabels.termsPrivacyAgreement, "By continuing you agree to our Terms and Privacy policy"))
-                .fcTextStyle(theme.typography.bodySmall)
+            (Text(fcLabel(FCLabels.authConsentPrefix, "By continuing, you agree to these communications.\nSee our "))
+             + Text(fcLabel(FCLabels.privacyPolicy, "Privacy Policy")).underline()
+             + Text(" " + fcLabel(FCLabels.authConsentSuffix, "for more information, including how to withdraw your consent.")))
+                .font(.system(size: 15))
                 .foregroundColor(theme.content.foregroundSecondary)
-                .multilineTextAlignment(.leading)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .padding(.top, 4)
+    }
+
+    private func sendState(for channel: String) -> PrimaryButtonState {
+        viewModel.state.sendOtpState.isLoading && viewModel.state.lastChannel == channel ? .loading : .normal
     }
 
     // MARK: - OTP entry step

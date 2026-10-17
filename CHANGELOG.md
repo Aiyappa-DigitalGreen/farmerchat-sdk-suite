@@ -10,6 +10,9 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
 2026-10-09 snapshot ship in it (user decision, 2026-10-16).
 
 ### Added (v2, all four platforms unless noted)
+- iOS: `FarmerChatConfig.enableComposerUi` (and ObjC `enableComposerUi`), as on Android: unset follows
+  `enableAgenticChat`. An iOS host with agentic chat off now gets the legacy Home and input row, as on
+  Android; set it to true to keep the composer.
 - React Native: optional peers `expo-sharing` (image-card share) and `expo-image-manipulator`
   (photo shrink). Without them the SDK falls back to text share and an unshrunk JPEG 80.
 - iOS FarmerChatCore: `ChatViewModel.sendAlignmentChip` and `LabelManager.answerGenerationTips()`.
@@ -71,6 +74,8 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- iOS: the phone sign-up screen matches the app (agreement card, WhatsApp/SMS buttons); the farmer
+  photos now ship in the xcframework and CocoaPods builds.
 - iOS: every full-journey screen uses the app's headers (UIKit Home had the system navigation bar);
   Home is the app's composer Home; sign-up/account/error screens show the country farmer photos;
   host callbacks, language tap vs Save, late Listen replies, image-viewed 404s, stale location bubble,

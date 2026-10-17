@@ -5,29 +5,53 @@ import FarmerChatCore
 
 // MARK: - Greeting cell
 
+/// Legacy Home greeting (HomeScreen.kt:1117-1170): the GET_STARTED label on the green band,
+/// titleMedium white, centred, 16pt sides, min 40pt. Also the in-feed "For your farm today"
+/// header (`feedHeader: true`): titleMedium, primary colour, centred, no band.
 final class FCUIGreetingCell: UICollectionViewCell {
     private let label = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         label.font = FCUITypography.current.titleMedium.font
-        label.textColor = FCUITheme.foregroundPrimary
+        label.textAlignment = .center
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(label)
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4)
+            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            contentView.heightAnchor.constraint(greaterThanOrEqualToConstant: 40)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func configure(text: String) {
+    func configure(text: String, feedHeader: Bool = false) {
         label.text = text
+        label.textColor = feedHeader ? FCUITheme.foregroundPrimary : .white
+        contentView.backgroundColor = feedHeader ? .clear : FCUITheme.brandSurfacePrimary
     }
+}
+
+/// The legacy Home's sticky Photo / Speak / Type row as a pinned section header.
+final class FCUIInputRowSupplementary: UICollectionReusableView {
+    let row = FCUIPrimaryInputButtonsView(variant: .home)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }
 
 // MARK: - Photo/Speak/Type pinned header

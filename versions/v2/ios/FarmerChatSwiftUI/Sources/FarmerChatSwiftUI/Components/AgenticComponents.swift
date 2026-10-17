@@ -368,6 +368,7 @@ public struct FCAlignmentSurface: View {
                             return .handled
                         })
                 }
+                .accessibilityIdentifier("fcTypeInstead")
             }
         }
     }
@@ -408,6 +409,7 @@ public struct FCAlignmentSurface: View {
                             enabled: !isSelected && !isLoading && !chipsLocked,
                             onTap: { onChipTap(chip) }
                         )
+                        .accessibilityIdentifier("fcAlignmentChip")
                     }
                 }
             }

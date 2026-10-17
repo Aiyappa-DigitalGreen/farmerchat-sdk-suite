@@ -80,6 +80,17 @@ archive_one() {
     mkdir -p "$fw/Modules"
     cp -R "$built_module" "$fw/Modules/"
   fi
+
+  # Ship each package's SwiftPM resource bundle INSIDE its framework (xcodebuild leaves it beside
+  # the build products, so a binary consumer never received it). Core's carries the country farmer
+  # illustrations; FCFarmerIllustration looks for it in the framework bundle.
+  local res_bundle
+  for res_bundle in $(find "$dd/Build/Intermediates.noindex/ArchiveIntermediates/$scheme" \
+      -type d -name "${scheme}_${scheme}.bundle" -prune 2>/dev/null); do
+    rm -rf "$fw/$(basename "$res_bundle")"
+    cp -R "$res_bundle" "$fw/"
+    break
+  done
   echo "$fw"
 }
 

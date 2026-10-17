@@ -26,7 +26,13 @@ Pod::Spec.new do |s|
 
   # Apple privacy manifest. The pod bundles Core, and Core's manifest is the superset (UIKit's
   # declares nothing of its own), so Core's is the one shipped.
-  s.resource_bundles = { 'FarmerChatUIKit_Privacy' => ['../FarmerChatCore/Sources/FarmerChatCore/PrivacyInfo.xcprivacy'] }
+  s.resource_bundles = {
+    'FarmerChatUIKit_Privacy' => ['../FarmerChatCore/Sources/FarmerChatCore/PrivacyInfo.xcprivacy'],
+    # The app's country farmer illustrations (full-screen messages). Named like SwiftPM's Core
+    # resource bundle so FCFarmerIllustration finds it the same way; the folder is copied whole
+    # (ke/et/ng/in share file names).
+    'FarmerChatCore_FarmerChatCore' => ['../FarmerChatCore/Sources/FarmerChatCore/Resources/FarmerIllustrations']
+  }
 
   s.frameworks = 'UIKit', 'AVFoundation', 'CoreLocation', 'Security', 'SafariServices', 'WebKit', 'Photos', 'PhotosUI'
 end

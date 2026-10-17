@@ -413,4 +413,74 @@ final class FCUIWeatherPill: UIControl {
         iconTask?.resume()
     }
 }
+
+// MARK: - PrimaryInputButtons (legacy, composer UI off)
+
+/// components/userinput/PrimaryInputButtons.kt — shown when `resolvedComposerUi` is false: a
+/// `brand.surfacePrimary` band (16pt sides, 8pt top, 6pt gaps) of `brand.surfaceSecondary`
+/// tiles (radius 16), a 28pt green icon over a white labelSmall label. Home: 78pt tiles, 10pt
+/// bottom. Chat: 72pt tiles, a hairline top border, the safe-area inset below.
+final class FCUIPrimaryInputButtonsView: UIView {
+    enum Variant { case home, chat }
+    var onPhoto: (() -> Void)?
+    var onSpeak: (() -> Void)?
+    var onType: (() -> Void)?
+
+    init(variant: Variant) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = FCUITheme.brandSurfacePrimary
+        let config = FarmerChat.shared.config
+        var tiles: [UIView] = []
+        if config.enableImages { tiles.append(tile("camera.fill", fcuiLabel(FCLabels.photo, "Photo"), "fcInputPhoto", variant) { [weak self] in self?.onPhoto?() }) }
+        if config.enableVoice { tiles.append(tile("mic.fill", fcuiLabel(FCLabels.speak, "Speak"), "fcInputSpeak", variant) { [weak self] in self?.onSpeak?() }) }
+        tiles.append(tile("keyboard", fcuiLabel(FCLabels.type, "Type"), "fcInputType", variant) { [weak self] in self?.onType?() })
+        let row = UIStackView(arrangedSubviews: tiles)
+        row.axis = .horizontal
+        row.spacing = 6
+        row.distribution = .fillEqually
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        let bottom: NSLayoutConstraint = variant == .home
+            ? row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+            : row.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -4)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            bottom
+        ])
+        if variant == .chat {
+            let border = UIView()
+            border.backgroundColor = UIColor.black.withAlphaComponent(0.1)
+            border.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(border)
+            NSLayoutConstraint.activate([
+                border.topAnchor.constraint(equalTo: topAnchor),
+                border.leadingAnchor.constraint(equalTo: leadingAnchor),
+                border.trailingAnchor.constraint(equalTo: trailingAnchor),
+                border.heightAnchor.constraint(equalToConstant: 0.5)
+            ])
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    private func tile(_ icon: String, _ title: String, _ id: String, _ variant: Variant, action: @escaping () -> Void) -> UIView {
+        var config = UIButton.Configuration.filled()
+        config.baseBackgroundColor = FCUITheme.brandSurfaceSecondary
+        config.baseForegroundColor = .white
+        config.cornerStyle = .fixed
+        config.background.cornerRadius = 16
+        config.image = UIImage(systemName: icon, withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .semibold))?
+            .withTintColor(FCUITheme.brandAccent, renderingMode: .alwaysOriginal)
+        config.imagePlacement = .top
+        config.imagePadding = variant == .home ? 12 : 8
+        config.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: FCUITypography.current.labelSmall.font]))
+        let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
+        button.accessibilityIdentifier = id
+        button.heightAnchor.constraint(equalToConstant: variant == .home ? 78 : 72).isActive = true
+        return button
+    }
+}
 #endif

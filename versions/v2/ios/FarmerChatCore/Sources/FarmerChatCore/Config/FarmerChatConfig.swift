@@ -192,6 +192,19 @@ public struct FarmerChatConfig: Sendable {
     /// stream (docs/05-open-questions.md), so treat this as preview until it is.
     public var enableAgenticChat: Bool
 
+    /// Show the unified InputComposer (camera / text / mic) — the app's `v2_composer_ui_enabled`
+    /// RemoteConfig flag, which the app documents as independent of agentic chat: it only
+    /// controls the input surface, not which API a query goes to.
+    ///
+    /// **`nil` (the default) means "follow ``enableAgenticChat``"**, exactly as Android's
+    /// `FarmerChatConfig.enableComposerUi` (null ⇒ follow). Set it to decouple the two: the
+    /// composer with synchronous #27 chat (`true` + agentic off), or the legacy Photo / Speak /
+    /// Type row with agentic chat (`false` + agentic on). Read ``resolvedComposerUi``, never this.
+    public var enableComposerUi: Bool? = nil
+
+    /// Whether the InputComposer UI is shown: ``enableComposerUi``, else ``enableAgenticChat``.
+    public var resolvedComposerUi: Bool { enableComposerUi ?? enableAgenticChat }
+
     // MARK: - FAB customization (config-level defaults; per-instance params win)
     /// Default launcher label; nil = round icon-only FAB (current behavior).
     public var fabLabel: String?

@@ -14,6 +14,7 @@ import FarmerChatCore
 final class FCUIHomeViewController: UIViewController {
     private enum Item: Hashable {
         case greeting(String)
+        case feedHeader
         case ssfr
         case section(String) // SectionDto.id — resolved via lookup
     }
@@ -45,6 +46,8 @@ final class FCUIHomeViewController: UIViewController {
     private var pillFlowWasActive = false
     private var fetchingSectionId: String?
     private var sectionHeader: FCUISectionHeaderView?
+    /// `resolvedComposerUi` (Android parity): the composer Home, else the legacy Home.
+    private let composerUi = FarmerChat.shared.config.resolvedComposerUi
     private var builtLanguage: String?
 
     override func viewDidLoad() {
@@ -53,6 +56,7 @@ final class FCUIHomeViewController: UIViewController {
         navigationItem.hidesBackButton = true
 
         band.translatesAutoresizingMaskIntoConstraints = false
+        band.isHidden = !composerUi
         view.addSubview(band)
         NSLayoutConstraint.activate([
             band.topAnchor.constraint(equalTo: view.topAnchor),
@@ -80,7 +84,9 @@ final class FCUIHomeViewController: UIViewController {
             inset.widthAnchor.constraint(equalToConstant: 48).isActive = true
             right.addArrangedSubview(inset)
         }
-        appBar = FCUIAppBar(title: nil, left: menu ?? FCUIAppBar.spacer(), right: right, height: 52, background: false)
+        // The legacy Home paints the bar green with its glow; the composer Home's band does.
+        appBar = FCUIAppBar(title: nil, left: menu ?? FCUIAppBar.spacer(), right: right, height: 52,
+                            background: !composerUi, glow: !composerUi)
         view.addSubview(appBar)
         NSLayoutConstraint.activate([
             appBar.topAnchor.constraint(equalTo: view.topAnchor),
@@ -89,6 +95,7 @@ final class FCUIHomeViewController: UIViewController {
         ])
 
         buildCollectionView()
+        if !composerUi { installLegacyInputHeader() }
         buildErrorView()
         spinner.hidesWhenStopped = true
         spinner.translatesAutoresizingMaskIntoConstraints = false
@@ -194,14 +201,30 @@ final class FCUIHomeViewController: UIViewController {
     // MARK: - Layout
 
     private func buildCollectionView() {
-        let layout = UICollectionViewCompositionalLayout { _, _ in
+        let legacy = !composerUi
+        let layout = UICollectionViewCompositionalLayout { sectionIndex, _ in
             let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .estimated(320))
             let item = NSCollectionLayoutItem(layoutSize: itemSize)
             let group = NSCollectionLayoutGroup.vertical(layoutSize: itemSize, subitems: [item])
             let section = NSCollectionLayoutSection(group: group)
+            if legacy && sectionIndex == 0 {
+                // The legacy greeting band, edge to edge.
+                return section
+            }
             // HomeScreen.kt:1310/1507 — 16pt sides, a 16pt gap after every card.
             section.interGroupSpacing = 16
-            section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16)
+            section.contentInsets = NSDirectionalEdgeInsets(top: legacy ? 16 : 0, leading: 16, bottom: 16, trailing: 16)
+            if legacy {
+                // The sticky green Photo / Speak / Type row (HomeScreen.kt:1184).
+                let header = NSCollectionLayoutBoundarySupplementaryItem(
+                    layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(96)),
+                    elementKind: UICollectionView.elementKindSectionHeader,
+                    alignment: .top
+                )
+                header.pinToVisibleBounds = true
+                header.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: -16, bottom: 0, trailing: -16)
+                section.boundarySupplementaryItems = [header]
+            }
             return section
         }
 
@@ -210,7 +233,7 @@ final class FCUIHomeViewController: UIViewController {
         feedContainer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(feedContainer)
         feedMask.colors = [UIColor.clear.cgColor, UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor]
-        feedContainer.layer.mask = feedMask
+        if composerUi { feedContainer.layer.mask = feedMask }
 
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.backgroundColor = .clear
@@ -245,6 +268,7 @@ final class FCUIHomeViewController: UIViewController {
         self.sectionHeader = sectionHeader
         header.addArrangedSubview(locationPill)
         header.translatesAutoresizingMaskIntoConstraints = false
+        header.isHidden = !composerUi
         view.addSubview(header)
 
         let config = FarmerChat.shared.config
@@ -257,6 +281,10 @@ final class FCUIHomeViewController: UIViewController {
             self.composerPhoto = nil
             self.composer.attachment = nil
             // HomeScreen.kt sendMessage(query, photoUris.firstOrNull()): Chat sends both.
+            if !self.composerUi {
+                self.composer.textView.resignFirstResponder()
+                self.composer.isHidden = true
+            }
             self.openChat(FCUIChatArgs(question: question, imagePath: photo?.path))
         }
         composer.onRemoveAttachment = { [weak self] in
@@ -270,10 +298,14 @@ final class FCUIHomeViewController: UIViewController {
         }
         composer.onMic = { [weak self] in self?.speakTapped() }
         composer.onFocusChange = { [weak self] focused in
-            self?.composerBottom.constant = focused ? -4 : 0
+            guard let self else { return }
+            self.composerBottom.constant = focused ? -4 : 0
+            if !self.composerUi, !focused, !self.composer.hasText { self.composer.isHidden = true }
         }
         view.addSubview(composer)
         composerBottom = composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        // Legacy Home: the composer is only the text input, opened by Type.
+        composer.isHidden = !composerUi
 
         NSLayoutConstraint.activate([
             feedContainer.topAnchor.constraint(equalTo: appBar.bottomAnchor),
@@ -303,10 +335,18 @@ final class FCUIHomeViewController: UIViewController {
             cell.onCropSelected = { crop in self?.ssfrCropSelected(crop) }
         }
         let emptyCell = UICollectionView.CellRegistration<UICollectionViewCell, Int> { _, _, _ in }
+        let greetingCell = UICollectionView.CellRegistration<FCUIGreetingCell, String> { cell, _, text in
+            cell.configure(text: text)
+        }
+        let feedHeaderCell = UICollectionView.CellRegistration<FCUIGreetingCell, Int> { cell, _, _ in
+            cell.configure(text: fcuiLabel(FCLabels.forYourFarmToday, "For your farm today"), feedHeader: true)
+        }
         dataSource = UICollectionViewDiffableDataSource<Int, Item>(collectionView: collectionView) { [weak self] collectionView, indexPath, item in
             switch item {
-            case .greeting:
-                return collectionView.dequeueConfiguredReusableCell(using: emptyCell, for: indexPath, item: 0)
+            case .greeting(let text):
+                return collectionView.dequeueConfiguredReusableCell(using: greetingCell, for: indexPath, item: text)
+            case .feedHeader:
+                return collectionView.dequeueConfiguredReusableCell(using: feedHeaderCell, for: indexPath, item: 0)
             case .ssfr:
                 return collectionView.dequeueConfiguredReusableCell(using: ssfrCell, for: indexPath, item: 0)
             case .section(let id):
@@ -318,8 +358,31 @@ final class FCUIHomeViewController: UIViewController {
         }
     }
 
+    /// The legacy Home's pinned input row.
+    private func installLegacyInputHeader() {
+        let registration = UICollectionView.SupplementaryRegistration<FCUIInputRowSupplementary>(
+            elementKind: UICollectionView.elementKindSectionHeader
+        ) { [weak self] header, _, _ in
+            header.row.onPhoto = { self?.photoTapped() }
+            header.row.onSpeak = { self?.speakTapped() }
+            header.row.onType = {
+                self?.composer.isHidden = false
+                self?.composer.focus()
+            }
+        }
+        dataSource.supplementaryViewProvider = { collectionView, _, indexPath in
+            collectionView.dequeueConfiguredReusableSupplementary(using: registration, for: indexPath)
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        guard composerUi else {
+            let bottom = composer.isHidden ? 0 : max(0, view.bounds.maxY - composer.frame.minY) - view.safeAreaInsets.bottom + 8
+            let insets = UIEdgeInsets(top: 0, left: 0, bottom: max(bottom, 0), right: 0)
+            if collectionView.contentInset != insets { collectionView.contentInset = insets }
+            return
+        }
         // Item 0's reservation = the fixed header's height; the bottom reserves the composer.
         let headerHeight = header.frame.height
         let bottom = max(0, view.bounds.maxY - composer.frame.minY) - view.safeAreaInsets.bottom + 8
@@ -407,7 +470,7 @@ final class FCUIHomeViewController: UIViewController {
         }
         }
         // The fixed header belongs to the feed (HomeScreen.kt draws it in the Success branch).
-        header.isHidden = collectionView.isHidden
+        header.isHidden = collectionView.isHidden || !composerUi
 
         // HomeScreen.kt: the pill shows once weather is loading or loaded; `current_temp` verbatim
         // (the server already sends the unit, "21 °C").
@@ -441,6 +504,20 @@ final class FCUIHomeViewController: UIViewController {
 
     private func applySnapshot(_ feed: HomeUdfResponse, state: HomeState) {
         var snapshot = NSDiffableDataSourceSnapshot<Int, Item>()
+        if !composerUi {
+            // Legacy Home: the greeting band (the label only — HomeScreen.kt:1117), then the feed
+            // section under the pinned input row, opening with "For your farm today".
+            snapshot.appendSections([0, 1])
+            snapshot.appendItems([.greeting(fcuiLabel(FCLabels.getStartedByClickingOnPhotoSpeakOrTypeToAskYourQuestion, "Tap a button to ask a question"))], toSection: 0)
+            if feed.ssfrEnable == true && FarmerChat.shared.config.enableSsfr {
+                snapshot.appendItems([.ssfr], toSection: 1)
+            }
+            snapshot.appendItems([.feedHeader], toSection: 1)
+            sectionsById = Dictionary(uniqueKeysWithValues: state.visibleSections().map { ($0.id, $0) })
+            snapshot.appendItems(state.visibleSections().map { .section($0.id) }, toSection: 1)
+            dataSource.apply(snapshot, animatingDifferences: true)
+            return
+        }
         snapshot.appendSections([1])
         // The composer Home has no greeting and no in-feed header: "For your farm today" is in
         // the fixed header. C3 + feed flag: SSFR card above the feed cards.
@@ -680,6 +757,11 @@ extension FCUIHomeViewController: UIImagePickerControllerDelegate, UINavigationC
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("fc_sdk_img_\(UUID().uuidString).jpg")
         try? data.write(to: url)
+        guard composerUi else {
+            // Legacy Home (HomeScreen.kt): a picked photo opens Chat with it at once.
+            openChat(FCUIChatArgs(question: "", imagePath: url.path))
+            return
+        }
         // Composer Home: the photo is ATTACHED for an optional caption; a new pick replaces it.
         composerPhoto = url
         composer.attachment = image
