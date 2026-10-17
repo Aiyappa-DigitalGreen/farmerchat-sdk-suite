@@ -519,7 +519,9 @@ fun InputComposer(
                     // Camera button (hidden when image attached, text being typed, or the host
                     // disabled images via FarmerChatConfig.enableImages)
                     if (fcCfg.enableImages && photoUris.isEmpty() && textFieldValue.text.isBlank()) {
-                        CompositionLocalProvider(LocalContentColors provides LightContentColors) {
+                        // Forced light, as in the app, but through the host theme: raw LightContentColors left
+                        // the camera/mic/send buttons brand green under a host brand (scenario pass F1).
+                        CompositionLocalProvider(LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()) {
                             val buttonColors = LocalContentColors.current
                             Box(
                                 modifier = Modifier
@@ -711,7 +713,9 @@ fun InputComposer(
                     // FarmerChatConfig.enableVoice off there is no mic state, so the button only
                     // exists when there is something to send.
                     if (hasContent || fcCfg.enableVoice) {
-                    CompositionLocalProvider(LocalContentColors provides LightContentColors) {
+                    // Forced light, as in the app, but through the host theme: raw LightContentColors left
+                        // the camera/mic/send buttons brand green under a host brand (scenario pass F1).
+                        CompositionLocalProvider(LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()) {
                         val buttonColors = LocalContentColors.current
                         Box(
                             modifier = Modifier

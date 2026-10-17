@@ -147,4 +147,19 @@ class ComposeAppParityTest {
         assertTrue(body.contains("label(Labels.TERMS_OF_USE"))
         assertTrue(body.contains("label(Labels.PRIVACY_POLICY"))
     }
+
+    /**
+     * Scenario pass 2026-10-17 F1: the composer forced the raw SDK light palette, so a host brand
+     * never reached the camera / mic / send buttons. Forced-light surfaces must go through
+     * `hostLightContentColors()`, which applies the host theme to the light palette.
+     */
+    @Test
+    fun `composer buttons take the host theme`() {
+        val body = read("components/InputComposer.kt")
+        assertFalse(
+            "raw LightContentColors bypasses the host theme",
+            body.contains("LocalContentColors provides LightContentColors")
+        )
+        assertTrue(body.contains("LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()"))
+    }
 }

@@ -1966,6 +1966,16 @@ class ChatViewModel(
                 when (result) {
                     is ApiResult.Success -> {
                         val url = result.data.audio
+                        // A slow #31 reply that lands after the farmer moved on (a new question,
+                        // a follow-up chip) must not start the OLD answer's audio over the new
+                        // turn, nor attach it to the new answer's Listen pill. Seen on DEMO in the
+                        // 2026-10-17 scenario pass: #31 took 5.1 s, the follow-up was tapped at
+                        // 3.9 s, and answer 1 played for 58 s beside answer 2. (The app has the
+                        // same race; this guard only drops a reply nobody can use.)
+                        if (!synthesisStillWanted(messageId, _state.value)) {
+                            _state.update { it.copy(isLoadingSynthesiseAudio = false) }
+                            return@collect
+                        }
                         if (!result.data.error && !url.isNullOrBlank()) {
                             audioPlaybackStartedAtMs = System.currentTimeMillis()
                             analytics.track(

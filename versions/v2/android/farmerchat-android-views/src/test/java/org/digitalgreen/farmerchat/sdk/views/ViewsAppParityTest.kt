@@ -252,4 +252,18 @@ class ViewsAppParityTest {
             .map { it.name }
         assertEquals("layouts using app: must declare xmlns:app", emptyList<String>(), broken)
     }
+
+    /**
+     * Scenario pass 2026-10-17: the Views composer buttons had no contentDescription (TalkBack:
+     * "unlabelled button"); the Compose composer names them Camera / Send / Voice.
+     */
+    @Test
+    fun `composer buttons carry accessibility names`() {
+        val body = java.io.File(
+            "src/main/java/org/digitalgreen/farmerchat/sdk/views/internal/widgets/InputComposerView.kt"
+        ).readText()
+        assertTrue(body.contains("fcComposerAction.contentDescription = composerActionDescription(content)"))
+        assertTrue(body.contains("fcComposerCamera.contentDescription = CAMERA_DESCRIPTION"))
+        assertTrue(body.contains("if (hasContent) \"Send\" else \"Voice\""))
+    }
 }

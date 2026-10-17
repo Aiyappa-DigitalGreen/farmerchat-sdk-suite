@@ -55,7 +55,7 @@ class FarmerChatAnalytics(
      * (`text_query` is a Boolean), so every host received "". Not telemetry: fires whether or not
      * analytics is enabled. An image sent without a caption reports "".
      */
-    fun messageSent(text: String) {
+    internal fun messageSent(text: String) {
         runCatching { hooks?.onMessageSent?.invoke(text) }
     }
 
@@ -64,7 +64,7 @@ class FarmerChatAnalytics(
      * `message_id`. It used to be derived from Send_Query, which carries no message id and also
      * fires for FAILED answers, so hosts got "" on every answer and on every error.
      */
-    fun answerReceived(messageId: String) {
+    internal fun answerReceived(messageId: String) {
         runCatching { hooks?.onAnswerReceived?.invoke(messageId) }
     }
 

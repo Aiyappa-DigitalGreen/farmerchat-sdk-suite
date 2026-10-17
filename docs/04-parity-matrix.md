@@ -8994,3 +8994,19 @@ call is not retried (the app's streaming client has no retry). SERVER (DEMO): `P
 api/images/v2/viewed/` → 404 (path/method as the app); streaming replies after gender / save-crop /
 profile statements end `done.error:true tokens_out:0`. UNVERIFIED: camera (headless), RTL (no RTL
 language on DEMO), audible TTS, real OS share sheet. RN has bugs 1–3 too (being fixed).
+
+## Full scenario pass: Android Compose + Views (2026-10-17)
+≈44 PASS, 5 FIXED, 2 SERVER, 4 UNVERIFIED, 1 N/A on emulator-5554 / DEMO, streaming off (C1–C11 once
+with agentic on). Fixed: (1) `onMessageSent` / `onAnswerReceived` host callbacks carried "" and fired
+on failed answers — now the question text and the server message_id, real answers only; (2) tapping a
+language row switched the UI language before Save (tap → Back left the wrong language) — labels load on
+Save only, as the app; (3) a slow `synthesise_audio` reply arriving after a follow-up played the old
+answer — a late reply is dropped (`SynthesisGuard`; the app has the same race, deliberate improvement);
+(4) Compose composer buttons ignored the host theme; (5) Views composer buttons had no TalkBack labels.
+Web-found checks pass on Android: language Save keeps the thread; the GPS place comes from
+`user_profile`; the onboarding name is never wiped; `images/v2/viewed` → 200 for Android. SERVER: C3
+weather first try and C9 save-crop (Views) ended in DEMO's "Sorry, I had a problem just now" (200; the
+retry/the same step on Compose passed). UNVERIFIED: C7 (DEMO sent no gender nudge), D4 (emulator mic
+silent; D5 rejection passes), F3 (one emulator size), F4 RTL (no RTL language on DEMO). N/A: A10
+(answer links are not tappable on Android, already recorded). Note: commit 4af5e9d swept part of this
+work in early (its API check failed at that commit; the full set passes `apiCheck`).

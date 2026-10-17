@@ -80,6 +80,10 @@ internal class InputComposerView @JvmOverloads constructor(
         const val FIELD_MAX_HEIGHT = 72f
         /** bodyMedium (app InputComposer.kt:640): 17sp text on a 25sp line. */
         const val COMPOSER_TEXT_SP = 17f
+        const val CAMERA_DESCRIPTION = "Camera"
+
+        /** The action button's accessibility name, as in the Compose composer. */
+        fun composerActionDescription(hasContent: Boolean): String = if (hasContent) "Send" else "Voice"
         const val COMPOSER_LINE_HEIGHT_SP = 25f
 
         /** Compose `animateDpAsState(tween(250))` for the compact/standard transition. */
@@ -426,6 +430,11 @@ internal class InputComposerView @JvmOverloads constructor(
         binding.fcComposerAction.setImageResource(
             if (content) R.drawable.fc_icon_send else R.drawable.fc_icon_mic
         )
+        // Accessibility parity with the Compose composer (InputComposer.kt: "Camera" / "Send" /
+        // "Voice"): the Views buttons had no description, so TalkBack read "unlabelled button"
+        // (scenario pass 2026-10-17).
+        binding.fcComposerAction.contentDescription = composerActionDescription(content)
+        binding.fcComposerCamera.contentDescription = CAMERA_DESCRIPTION
         FcRecolor.maybeRecolor(binding.fcComposerAction)
         val showHint = binding.fcComposerInput.text.isNullOrEmpty()
         binding.fcComposerHintA.isVisible = showHint && hintShowingA

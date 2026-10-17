@@ -71,6 +71,9 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Android: `onMessageSent` / `onAnswerReceived` carried empty values (and fired on failures); tapping a
+  language row changed the language before Save; a late Listen reply played the previous answer; the
+  Compose composer ignored the host theme; Views composer buttons had no accessibility labels.
 - React Native: changing the language never left the language screen; the profile name was wiped on
   every profile fetch (and removed from storage by Enter Name); sharing GPS showed the previous place.
 - Web: changing the language never left the language screen; sharing GPS showed the wrong place; the
