@@ -12,7 +12,8 @@ export interface ChatRouteParams {
   imageUri?: string;
   transcriptionId?: string;
   audioUri?: string;
-  statementId?: number;
+  /** A Home card's statement id (a string, as the app sends it). */
+  statementId?: string;
   homeStatementId?: string;
   preGeneratedAnswer?: string;
   follow_up_questions?: string[];

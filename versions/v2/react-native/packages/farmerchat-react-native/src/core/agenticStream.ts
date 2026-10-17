@@ -10,7 +10,11 @@
  * - The response is `Content-Type: text/event-stream`, `Transfer-Encoding: chunked`.
  * - The request must send `Accept: application/json`. The backend **406s**
  *   `Accept: text/event-stream`.
- * - There must be **no read timeout** — agentic answers stream for minutes — so this never goes
+ * - There is no whole-request deadline — agentic answers stream for minutes — but there IS an
+ *   IDLE read timeout of {@link AGENTIC_STREAM_IDLE_TIMEOUT_MS} (app NetworkModule.kt:32, 111-119
+ *   `readTimeout(60 s)`: the gap between successive reads, not the total). Without it a stalled
+ *   DEMO stream left "Getting your answer…" up for 17 minutes (scenario pass 2026-10-17). It never
+ *   goes
  *   through {@link HttpClient}/ApiPriority, whose per-request `AbortController` deadline (P1 5 s /
  *   P2 10 s / P3 30 s) would cut the stream short. Auth headers and the 401 refresh still apply:
  *   the same `Build-Version` / `Device-Info` / `Authorization` set as
@@ -59,6 +63,9 @@ import {
 import type { SessionStore } from './sessionStore';
 import type { TokenAuthenticator } from './tokenAuthenticator';
 import type { TextPromptRequest } from './types';
+
+/** App NetworkModule.kt:32 `AGENTIC_STREAM_READ_TIMEOUT_SECONDS = 60` (an idle read timeout). */
+export const AGENTIC_STREAM_IDLE_TIMEOUT_MS = 60_000;
 
 /** #27a — agentic streaming answer. Returns `text/event-stream`. */
 export const AGENTIC_TEXT_QUERY_PATH = 'api/chat/get_answer_for_text_query_agentic/';
@@ -262,7 +269,23 @@ export class AgenticChatDataSource {
     /** Text after the last newline — a possibly half-arrived line. Never parsed until complete. */
     let pending = '';
 
+    // App readTimeout(60 s): no bytes for this long ends the stream as a transport failure.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearIdle = (): void => {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      idleTimer = null;
+    };
+    const armIdle = (): void => {
+      clearIdle();
+      idleTimer = setTimeout(() => {
+        idleTimer = null;
+        logOnce('ERR timeout');
+        failAndFinish('Stream timed out', StreamErrorKinds.NETWORK);
+      }, AGENTIC_STREAM_IDLE_TIMEOUT_MS);
+    };
+
     const finish = (): void => {
+      clearIdle();
       if (terminated) return;
       terminated = true;
       queue.close();
@@ -315,6 +338,7 @@ export class AgenticChatDataSource {
 
     xhr.onreadystatechange = (): void => {
       if (terminated) return;
+      armIdle();
       switch (xhr.readyState) {
         case 2: {
           // HEADERS_RECEIVED — the status is known before any body is read, so a non-2xx is
@@ -369,6 +393,7 @@ export class AgenticChatDataSource {
     // Attaching onprogress (and onreadystatechange above) is what switches RN's native
     // networking into incremental mode; without it the body arrives in a single chunk.
     xhr.onprogress = (): void => {
+      armIdle();
       pump();
     };
 
@@ -384,6 +409,7 @@ export class AgenticChatDataSource {
     };
 
     xhr.onabort = (): void => {
+      clearIdle();
       // Aborts are ours (terminal event, or the consumer left). Close quietly — never write a
       // stale error card, mirroring the Android CancellationException path.
       if (!terminated) {
@@ -409,6 +435,7 @@ export class AgenticChatDataSource {
       const token = this.store.accessToken;
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(JSON.stringify(request));
+      armIdle();
     } catch (e) {
       failAndFinish(
         e instanceof Error ? e.message : 'Failed to start agentic stream',

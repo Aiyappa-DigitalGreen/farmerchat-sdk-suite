@@ -47,7 +47,11 @@ export function HelpScreen(props: {
   const legal = helpState.kind === 'success' ? helpState.data.legal ?? null : null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      // DefaultAppBar draws under the status bar and pads its own top inset.
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <DefaultAppBar
         title={label('fc_v2_app_label_help', 'Help')}
         navIcon={props.onBack ? 'back' : 'menu'}

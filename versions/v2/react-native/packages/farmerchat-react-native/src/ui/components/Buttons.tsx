@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { Assets, type IconName } from '../assets';
 import { useTheme } from '../context';
-import { dayTheme, radius, typography } from '../theme';
+import { dayTheme, nightTheme, radius, typography } from '../theme';
 import { FcIcon } from './Icon';
 
 export type PrimaryButtonState = 'Default' | 'Chevron' | 'Loading';
@@ -36,10 +36,15 @@ export function PrimaryButton(props: {
   radiusOverride?: number;
   /** Force light-mode button colors regardless of theme. */
   forceLight?: boolean;
+  /** Force dark-mode button colors (app `LocalContentColors provides DarkContentColors`). */
+  forceDark?: boolean;
+  /** Leading icon in the accent colour (app `iconRes` + `IconPosition.Leading`). */
+  leadingIcon?: IconName;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }): React.ReactElement {
-  const theme = useTheme();
+  const ctxTheme = useTheme();
+  const theme = props.forceDark ? nightTheme : ctxTheme;
   const state = props.state ?? 'Default';
   const enabled = props.enabled !== false && state !== 'Loading';
   const contentAlpha = props.enabled === false ? 0.5 : 1;
@@ -70,6 +75,14 @@ export function PrimaryButton(props: {
       ]}
     >
       <View style={styles.primaryRow}>
+        {props.leadingIcon && state !== 'Loading' ? (
+          <FcIcon
+            name={props.leadingIcon}
+            size={22}
+            tint={accent}
+            style={{ marginRight: 8, opacity: contentAlpha }}
+          />
+        ) : null}
         <Text
           style={[
             typography.labelLarge,

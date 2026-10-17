@@ -14,6 +14,9 @@ import {
   criticallyDampedProgress,
   fetchesFollowUps,
   omitNullFields,
+  marksCardViewed,
+  statementIdOf,
+  synthesisStillWanted,
   historyFollowUpQuestions,
   historyVoiceText,
   imageQueryName,
@@ -229,4 +232,237 @@ test('#29 follow-ups are skipped after an exclusive alignment surface only', () 
   assert.equal(fetchesFollowUps(null, null, null), false);
   assert.equal(fetchesFollowUps(null, 'm1', true), false);
   assert.ok(read('src/state/useChat.ts').includes('if (fetchesFollowUps(alignmentKind, serverMessageId, data.hide_follow_up_question))'));
+});
+
+// --- Android scenario-pass parity (2026-10-17) ------------------------------------------------
+
+test('a late synthesise_audio reply is dropped once the farmer moved on', () => {
+  const answered = [{ kind: 'user', id: 'u1' }, { kind: 'ai', id: 'a1' }];
+  assert.equal(synthesisStillWanted('a1', answered, false), true);
+  assert.equal(synthesisStillWanted('a1', answered, true), false, 'a new answer is loading');
+  const moved = [...answered, { kind: 'user', id: 'u2' }, { kind: 'ai', id: 'a2' }];
+  assert.equal(synthesisStillWanted('a1', moved, false), false, 'no longer the latest answer');
+  assert.ok(read('src/state/useChat.ts').includes('!synthesisStillWanted(answerLocalId, stateRef.current.messages, stateRef.current.isLoading)'));
+});
+
+test('onAnswerReceived carries the server message_id, never the local list id', () => {
+  const src = read('src/state/useChat.ts');
+  assert.ok(!src.includes("fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId)"));
+  assert.equal((src.match(/fireCallback\('onAnswerReceived', serverMessageId \?\? ''\)/g) ?? []).length, 2);
+});
+
+test('a language row tap only selects; labels change on Save', () => {
+  const src = read('src/state/useSettings.ts');
+  const select = src.slice(src.indexOf('const selectLanguage'), src.indexOf('const submitLanguage'));
+  assert.ok(!select.includes('getLabels') && !select.includes('setLabels') && !select.includes('sdk.store.set'));
+  const save = src.slice(src.indexOf('const submitLanguage'), src.indexOf('const consumeLanguageResult'));
+  assert.ok(save.includes('sdk.api.getLabels(languageId)') && save.includes('sdk.labels.setLabels(labels.data)'));
+});
+
+test('only image Home cards are marked viewed, with a string statement_id', () => {
+  // App HomeScreen.kt:2092-2093.
+  assert.equal(marksCardViewed({ type: 'image', statement_id: 7, is_viewed: false }), true);
+  assert.equal(marksCardViewed({ type: 'statement', statement_id: 7 }), false);
+  assert.equal(marksCardViewed({ type: 'image', statement_id: 7, is_viewed: true }), false);
+  assert.equal(marksCardViewed({ type: 'image', statement_id: null }), false);
+  // DEMO sends a UUID string (scenario pass 2026-10-17: a `typeof === 'number'` check marked none).
+  assert.equal(marksCardViewed({ type: 'image', statement_id: '6295d904-c7da-4782-a406-09bdca99657e' }), true);
+  assert.equal(marksCardViewed({ type: 'statement', statement_id: '21d795fa' }), false);
+  assert.equal(statementIdOf({ statement_id: 'abc' }), 'abc');
+  assert.equal(statementIdOf({ statement_id: 42 }), '42');
+  assert.equal(statementIdOf({ statement_id: '  ' }), null);
+  assert.equal(statementIdOf({}), null);
+  const home = read('src/ui/screens/HomeScreen.tsx');
+  assert.ok(!home.includes("typeof section.statement_id === 'number'") && !home.includes("typeof row.section.statement_id === 'number'"));
+  assert.ok(read('src/ui/screens/HomeScreen.tsx').includes('marksCardViewed(row.section)'));
+});
+
+test('the composer field grows to hold an attached photo and the caption', () => {
+  // Scenario D3: `flex: 1` collapsed the field to minHeight and clipped the text input.
+  const src = read('src/ui/components/InputComposer.tsx');
+  const field = src.slice(src.indexOf('  field: {'), src.indexOf('  inputWrap: {'));
+  assert.ok(field.includes('    flexGrow: 1,') && !field.includes('\n    flex: 1,'));
+});
+
+test('FULL_JOURNEY first launch: no guest init on the splash (onboarding does it with coordinates)', () => {
+  // App OnboardingSharedViewModel.kt:341-366; scenario E1 placed the farmer at the locale centroid.
+  const src = read('src/ui/screens/SplashScreen.tsx');
+  assert.ok(/\} else if \(sdk\.isLanguageSelected\) \{\s*\/\/[^\n]*\n\s*await sdk\.session\.ensureGuestSession\(\);/.test(src));
+  assert.ok(read('src/state/useOnboarding.ts').includes('sdk.session.ensureGuestSession({ lat, long: lng, accuracy })'));
+});
+
+test('the FAB fallback ✕ moves left of the Home weather pill', async () => {
+  const { fallbackCloseSlotFor, onFallbackCloseSlot, setFallbackCloseSlot } = await import('../src/core/exitSignal.ts');
+  assert.equal(fallbackCloseSlotFor('Home'), 'left');
+  assert.equal(fallbackCloseSlotFor('Language'), 'right');
+  assert.equal(fallbackCloseSlotFor(null), 'right');
+  assert.equal(fallbackCloseSlotFor('Home', true), 'hidden', 'drawer open: no ✕ over the drawer');
+  assert.equal(fallbackCloseSlotFor('AccountBenefits'), 'hidden', 'no ✕ over its Skip chip');
+  const { isDrawerOpenInState } = await import('../src/core/exitSignal.ts');
+  const open = { type: 'drawer', history: [{ type: 'route' }, { type: 'drawer', status: 'open' }], routes: [] };
+  assert.equal(isDrawerOpenInState(open), true);
+  assert.equal(isDrawerOpenInState({ type: 'stack', routes: [{ state: open }] }), true);
+  assert.equal(isDrawerOpenInState({ type: 'drawer', history: [{ type: 'route' }], routes: [] }), false);
+  const seen: string[] = [];
+  const off = onFallbackCloseSlot((s) => seen.push(s));
+  setFallbackCloseSlot('left');
+  setFallbackCloseSlot('left');
+  setFallbackCloseSlot('right');
+  off();
+  assert.deepEqual(seen, ['right', 'left', 'right']);
+  assert.ok(read('src/FarmerChatFab.tsx').includes("closeSlot === 'left' ? { left: FALLBACK_CLOSE_LEFT_HOME } : { right: 16 }"));
+});
+
+test('FullScreenMessage follows the app: real country farmer images, back + Skip chips, main + subtitle', () => {
+  const fsm = read('src/ui/components/FullScreenMessage.tsx');
+  assert.ok(!/🧑|🌦|📍/u.test(fsm), 'no emoji placeholders');
+  assert.ok(fsm.includes('countryFarmerIllustration(props.illustration, countryCode)'));
+  assert.ok(fsm.includes("navIcon={props.onBack ? 'back' : 'none'}"));
+  const assets = read('src/ui/assets.ts');
+  for (const n of ['camera', 'sky', 'phone']) {
+    for (const c of ['ke', 'et', 'ng', 'in']) assert.ok(assets.includes(`../assets/${c}/farmer_looking_at_${n}.webp`), `${c}/${n}`);
+  }
+  const acct = read('src/ui/screens/AccountScreens.tsx');
+  // App AppNavGraph.kt:800-835.
+  for (const k of ['Labels.SAVE_YOUR_QUESTIONS_ANSWERS', 'Labels.WELL_SAVE_YOUR_CHATS_YOU_CONTINUE', 'primaryState="Chevron"', "rightLabel={label(Labels.SKIP, 'Skip')}", 'onBack={() => {', 'Labels.YOURE_ALL_SET']) {
+    assert.ok(acct.includes(k), k);
+  }
+  const err = read('src/ui/screens/ErrorScreen.tsx');
+  assert.ok(err.includes('Labels.FARMERCHAT_NEEDS_THE_INTERNET') && err.includes('Labels.FARMERCHAT_COULDNT_LOAD'));
+});
+
+test('country flags are images (the API sends a URL), never printed as text', () => {
+  const inputs = read('src/ui/components/Inputs.tsx');
+  assert.ok(!inputs.includes("{props.flag ?? '🇮🇳'}"));
+  assert.ok(inputs.includes('<FlagMark flag={props.flag ?? null} width={20} height={20} radius={4} />'));
+  const picker = read('src/ui/components/CountryPicker.tsx');
+  assert.ok(!picker.includes('`${item.flag ? `${item.flag} ` :'));
+});
+
+test('home weather chip: current_temp verbatim, SVG icons fall back (scenario E, 2026-10-17)', async () => {
+  const { weatherChipText, weatherIconUri } = await import('../src/core/chatWire.ts');
+  assert.equal(weatherChipText('27 °C'), '27 °C');
+  assert.equal(weatherChipText(null), '--°');
+  assert.equal(weatherChipText(''), '--°');
+  assert.equal(weatherIconUri('https://x.org/icons/04d.svg'), null);
+  assert.equal(weatherIconUri('https://x.org/icons/04d.SVG?v=2'), null);
+  assert.equal(weatherIconUri('https://x.org/icons/04d.png'), 'https://x.org/icons/04d.png');
+  assert.equal(weatherIconUri('cloudy'), null);
+  assert.equal(weatherIconUri(null), null);
+  const home = read('src/ui/screens/HomeScreen.tsx');
+  assert.ok(!home.includes('`${weather.current_temp}°`'));
+  assert.ok(home.includes('weatherIconUrl={weatherIconUri(weather?.weather_icon)}'));
+});
+
+test('drawer follows the app DrawerContent.kt (scenario E4, 2026-10-17)', async () => {
+  const { drawerMenuOption } = await import('../src/core/chatWire.ts');
+  assert.equal(drawerMenuOption('home'), 'Home');
+  assert.equal(drawerMenuOption('settings/language'), 'Language');
+  assert.equal(drawerMenuOption('settings'), 'Settings');
+  assert.equal(drawerMenuOption('help'), 'Help_Support');
+  assert.equal(drawerMenuOption('signup'), 'Signup');
+  assert.equal(drawerMenuOption('chatHistory'), null);
+  const drawer = read('src/ui/navigation/DrawerContent.tsx');
+  assert.ok(drawer.includes('export const DRAWER_WIDTH = 320;'));
+  assert.ok(drawer.includes('backgroundColor: b.surfaceSecondary'));
+  assert.ok(drawer.includes('Labels.SAVE_YOUR_QUESTIONS_ANSWERS'));
+  assert.ok(drawer.includes('Labels.WELL_SAVE_YOUR_CHATS_YOU_CONTINUE'));
+  assert.ok(drawer.includes('Labels.HELP_SUPPORT'));
+  assert.ok(drawer.includes("`${label(Labels.LANGUAGE, 'Language')}: "));
+  assert.ok(!drawer.includes("'drawer_recent'"), 'invented label keys removed');
+  const graph = read('src/ui/navigation/AppNavGraph.tsx');
+  assert.ok(graph.includes("CHAT_HISTORY_CLICK_EVENT, { screen_name: 'Menu' }"));
+  assert.ok(!graph.includes('MENU_OPTION_CLICK_EVENT, { route }'));
+});
+
+test('screens with DefaultAppBar do not pad the top inset twice (scenario E4/E7/E8)', () => {
+  for (const f of ['HelpScreen', 'AuthScreen', 'LanguageChooserScreen', 'ChatHistoryScreen', 'SettingsNameScreen', 'LegalContentScreen']) {
+    const src = read(`src/ui/screens/${f}.tsx`);
+    assert.ok(src.includes('DefaultAppBar'), f);
+    assert.ok(src.includes("edges={['left', 'right', 'bottom']}"), `${f} SafeAreaView must leave the top edge to the app bar`);
+  }
+});
+
+test('auth phone step matches AuthScreen.kt (scenario E8, 2026-10-17)', () => {
+  const src = read('src/ui/screens/AuthScreen.tsx');
+  for (const key of ['AGREEMENT_CARD_TITLE', 'AGREEMENT_POINT_VERIFICATION_CODE', 'AGREEMENT_POINT_UPDATES',
+    'AGREEMENT_CARD_INFO_TEXT', 'AUTH_CONSENT_PREFIX', 'AUTH_CONSENT_SUFFIX', 'SEND_VIA_SMS', 'SEND_VIA_WHATSAPP',
+    'SENDING_CODE', 'PLEASE_ENTER', 'SECONDS', 'VERIFYING']) {
+    assert.ok(src.includes(`Labels.${key}`), key);
+  }
+  assert.ok(src.includes("title={label(Labels.SIGN_UP, 'Sign up')}"));
+  for (const invented of ["'auth_send_sms'", "'auth_send_whatsapp'", "'auth_legal_prefix'", "'otp_resend_in'", "'auth_loading_channels'"]) {
+    assert.ok(!src.includes(invented), `invented key ${invented}`);
+  }
+  const labels = read('src/core/labels.ts');
+  assert.ok(labels.includes("AGREEMENT_CARD_TITLE: 'fc_v2_app_label_agreement_card_title'"));
+  assert.ok(src.includes('return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, \'0\')}`;'), 'app m:ss timer');
+});
+
+test('enter-name screen matches EnterNameScreen.kt (scenario E1, 2026-10-17)', () => {
+  const src = read('src/ui/screens/EnterNameScreen.tsx');
+  assert.ok(src.includes("label(Labels.WE_GREET_YOU_NAME, 'So we can greet you by name')"));
+  assert.ok(src.includes("label(Labels.YOUR_NAME_OR_NICKNAME, 'Your name or nickname')"));
+  assert.ok(!src.includes("'name_subtitle'"), 'invented key removed');
+  assert.ok(!src.includes('styles.footer'), 'buttons sit under the field, not pinned to the bottom');
+  assert.ok(src.includes('<LogoMark size={32} color={c.borderActive}'));
+});
+
+test('language chooser keeps an expanded-only selection visible (LanguageChooserScreen.kt:138-149)', async () => {
+  const { collapsedLanguages } = await import('../src/core/chatWire.ts');
+  const p = [{ id: 1 }, { id: 2 }];
+  const all = [...p, { id: 9 }];
+  assert.deepEqual(collapsedLanguages(p, all, 9).map((l) => l.id), [9, 1, 2]);
+  assert.deepEqual(collapsedLanguages(p, all, 2).map((l) => l.id), [1, 2]);
+  assert.deepEqual(collapsedLanguages(p, all, 77).map((l) => l.id), [1, 2]);
+  assert.deepEqual(collapsedLanguages(p, all, null).map((l) => l.id), [1, 2]);
+});
+
+test('auth privacy link uses endpoint privacy_policy, never a guessed URL (scenario E8)', () => {
+  const src = read('src/ui/screens/AuthScreen.tsx');
+  assert.ok(src.includes('sdk.api.getPrivacyPolicy()'));
+  assert.ok(!src.includes("'https://digitalgreen.org/privacy-policy/'"), 'the guessed URL 404s on digitalgreen.org');
+  assert.ok(src.includes("if (privacyUrl && privacyUrl.trim() !== '')"));
+});
+
+test('legal links read the app PrivacyPolicyResponse fields (url / farmerchat_terms_of_use)', async () => {
+  const { legalLinksOf } = await import('../src/core/chatWire.ts');
+  assert.deepEqual(legalLinksOf({ url: 'https://p', farmerchat_terms_of_use: 'https://t' }), {
+    privacyPolicyUrl: 'https://p',
+    termsOfUseUrl: 'https://t',
+  });
+  assert.deepEqual(legalLinksOf({ url: ' ', privacy_policy_url: 'https://old' }), {
+    privacyPolicyUrl: 'https://old',
+    termsOfUseUrl: null,
+  });
+  assert.deepEqual(legalLinksOf({}), { privacyPolicyUrl: null, termsOfUseUrl: null });
+  for (const f of ['src/state/useOnboarding.ts', 'src/state/useHome.ts', 'src/ui/screens/AuthScreen.tsx']) {
+    assert.ok(read(f).includes('legalLinksOf(result.data)'), f);
+  }
+});
+
+test('home cards honour the host cardCornerRadius at render (scenario F1)', () => {
+  const src = read('src/ui/components/Cards.tsx');
+  const sheet = src.slice(src.indexOf('const styles = StyleSheet.create({'));
+  const card = sheet.slice(sheet.indexOf('card: {'), sheet.indexOf('},', sheet.indexOf('card: {')));
+  assert.ok(!card.includes('borderRadius'), 'a module-load StyleSheet freezes the default radius');
+  assert.equal(src.split('{ borderRadius: radius.xxl }').length - 1, 3);
+});
+
+test('FAB fallback ✕ follows the live safe-area top (scenario F3)', () => {
+  const src = read('src/FarmerChatFab.tsx');
+  assert.ok(!src.includes('const FALLBACK_CLOSE_TOP ='));
+  assert.ok(!src.includes('StatusBar.currentHeight'), 'a startup constant does not follow density changes');
+  assert.ok(src.includes('const top = insets.top + 8;'), 'both platforms follow the live inset');
+  assert.ok(!src.includes('<SafeAreaProvider style={StyleSheet.absoluteFill}'), 'a full-screen native provider swallows touches on Android');
+  assert.ok(src.includes("closeColumn: { position: 'absolute', top: 0, width: FALLBACK_CLOSE_SIZE }"));
+  assert.ok(src.includes('setCloseColumnHeight(top + FALLBACK_CLOSE_SIZE)'), 'column ends under the button: no dead zone below the bar');
+});
+
+test('Name_Save_Click_Event only for name saves, on the tap (scenario C7)', () => {
+  const src = read('src/state/useEnterName.ts');
+  const i = src.indexOf('NAME_SAVE_CLICK');
+  assert.ok(i > 0 && src.lastIndexOf('NAME_SAVE_CLICK') === i, 'tracked once');
+  assert.ok(src.slice(i - 120, i).includes('if (body.name)'));
+  assert.ok(i < src.indexOf('await sdk.api.updateUserProfile(body)'), 'before the call, as the app does');
 });

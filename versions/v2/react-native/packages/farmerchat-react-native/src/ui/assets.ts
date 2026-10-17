@@ -56,6 +56,19 @@ import farmerPhoneSquareKe from '../assets/ke/farmer_looking_at_phone_square.web
 import farmerPhoneSquareEt from '../assets/et/farmer_looking_at_phone_square.webp';
 import farmerPhoneSquareNg from '../assets/ng/farmer_looking_at_phone_square.webp';
 import farmerPhoneSquareIn from '../assets/in/farmer_looking_at_phone_square.webp';
+// Full-screen message illustrations (Android SDK CountryImageAssets, farmerchat-core assets).
+import farmerCameraKe from '../assets/ke/farmer_looking_at_camera.webp';
+import farmerCameraEt from '../assets/et/farmer_looking_at_camera.webp';
+import farmerCameraNg from '../assets/ng/farmer_looking_at_camera.webp';
+import farmerCameraIn from '../assets/in/farmer_looking_at_camera.webp';
+import farmerSkyKe from '../assets/ke/farmer_looking_at_sky.webp';
+import farmerSkyEt from '../assets/et/farmer_looking_at_sky.webp';
+import farmerSkyNg from '../assets/ng/farmer_looking_at_sky.webp';
+import farmerSkyIn from '../assets/in/farmer_looking_at_sky.webp';
+import farmerPhoneKe from '../assets/ke/farmer_looking_at_phone.webp';
+import farmerPhoneEt from '../assets/et/farmer_looking_at_phone.webp';
+import farmerPhoneNg from '../assets/ng/farmer_looking_at_phone.webp';
+import farmerPhoneIn from '../assets/in/farmer_looking_at_phone.webp';
 
 export const Icons = {
   camera: iconCamera,
@@ -111,9 +124,8 @@ export const Assets = {
  * Country-scoped farmer illustrations — port of the Android SDK's `CountryImageAssets`
  * (`ke` / `et` / `ng` / `in`, falling back to `ke` for any other or blank country code).
  *
- * Only `farmer_looking_at_phone_square` (the location Recovery sheet) is bundled in this package;
- * the other `farmer_looking_at_*` illustrations are still rendered as glyphs by
- * `FullScreenMessage`.
+ * All four `farmer_looking_at_*` images are bundled per country (the same files as the Android
+ * SDK's `farmerchat-core/src/main/assets/<cc>/`).
  */
 const FARMER_LOOKING_AT_PHONE_SQUARE: Record<string, number> = {
   ke: farmerPhoneSquareKe,
@@ -129,4 +141,26 @@ export function farmerLookingAtPhoneSquare(countryCode: string | null | undefine
   return (
     FARMER_LOOKING_AT_PHONE_SQUARE[code] ?? FARMER_LOOKING_AT_PHONE_SQUARE[FALLBACK_FARMER_COUNTRY]
   );
+}
+
+/** App `CountryImageAssets` names used by `FullScreenMessage`. */
+export type FarmerIllustration = 'LOOKING_AT_CAMERA' | 'LOOKING_AT_SKY' | 'LOOKING_AT_PHONE';
+
+const FARMER_ILLUSTRATIONS: Record<FarmerIllustration, Record<string, number>> = {
+  LOOKING_AT_CAMERA: { ke: farmerCameraKe, et: farmerCameraEt, ng: farmerCameraNg, in: farmerCameraIn },
+  LOOKING_AT_SKY: { ke: farmerSkyKe, et: farmerSkyEt, ng: farmerSkyNg, in: farmerSkyIn },
+  LOOKING_AT_PHONE: { ke: farmerPhoneKe, et: farmerPhoneEt, ng: farmerPhoneNg, in: farmerPhoneIn },
+};
+
+/**
+ * Android SDK `rememberCountryFarmerPainter` (compose util/Utils.kt:77-87): the stored
+ * `USER_COUNTRY_CODE`, lower-cased; any other or blank code falls back to `ke`.
+ */
+export function countryFarmerIllustration(
+  illustration: FarmerIllustration,
+  countryCode: string | null | undefined,
+): number {
+  const set = FARMER_ILLUSTRATIONS[illustration];
+  const code = (countryCode ?? '').trim().toLowerCase();
+  return set[code] ?? (set[FALLBACK_FARMER_COUNTRY] as number);
 }

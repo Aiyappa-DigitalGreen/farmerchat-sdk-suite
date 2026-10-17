@@ -49,6 +49,7 @@ export function ContentCard(props: {
       onPress={props.onTap}
       style={({ pressed }) => [
         styles.card,
+        { borderRadius: radius.xxl },
         cardShadow,
         { backgroundColor: c.surfaceSecondary, transform: [{ scale: pressed ? 0.985 : 1 }] },
       ]}
@@ -112,6 +113,7 @@ function SelectCardShell(props: {
     <View
       style={[
         styles.card,
+        { borderRadius: radius.xxl },
         cardShadow,
         { backgroundColor: c.surfaceSecondary, overflow: 'hidden' },
       ]}
@@ -324,7 +326,7 @@ export function SsfrCard(props: {
     </Pressable>
   );
   return (
-    <View style={[styles.card, cardShadow, { backgroundColor: c.surfaceSecondary, padding: 16 }]}>
+    <View style={[styles.card, { borderRadius: radius.xxl }, cardShadow, { backgroundColor: c.surfaceSecondary, padding: 16 }]}>
       <Text
         numberOfLines={1}
         style={[typography.bodyMedium, { color: c.foregroundPrimary, fontWeight: '700' }]}
@@ -476,8 +478,9 @@ export function ListItem(props: {
 }
 
 const styles = StyleSheet.create({
+  // borderRadius is applied at render (radius.xxl is the host's cardCornerRadius, which
+  // applyHostTheme sets after this module's StyleSheet was created).
   card: {
-    borderRadius: radius.xxl,
     marginHorizontal: 16,
     marginVertical: 8,
     overflow: 'hidden',

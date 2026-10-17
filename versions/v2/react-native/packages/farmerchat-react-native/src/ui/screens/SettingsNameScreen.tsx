@@ -65,7 +65,11 @@ export function SettingsNameScreen(props: {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      // DefaultAppBar draws under the status bar and pads its own top inset.
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <DefaultAppBar
         title={label('fc_v2_app_label_name', 'Name')}
         navIcon="back"

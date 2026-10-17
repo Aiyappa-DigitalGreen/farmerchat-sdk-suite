@@ -40,9 +40,12 @@ export function LocationPromptHost(props: {
   if (state.kind === 'Idle') return null;
 
   const interstitial = (busy: 'none' | 'inert' | 'fetching') => (
+    // App LocationPromptHost (compose ShareLocationInterstitial): LOOKING_AT_PHONE, Fit, bottom shade.
     <FullScreenMessage
-      appBarTitle={label(Labels.SHARE_LOCATION, 'Share Location')}
-      title={label(Labels.GET_ADVICE_YOUR_AREA, 'Get advice for your area')}
+      title={label(Labels.SHARE_LOCATION, 'Share Location')}
+      mainMessage={label(Labels.GET_ADVICE_YOUR_AREA, 'Get advice for your area')}
+      illustrationStyle="fit"
+      illustrationGradient
       subtitle={label(
         Labels.LOCATION_HELPS_SUGGESTIONS,
         'Your location helps us suggest crops, weather, and pests near you.',
@@ -147,10 +150,11 @@ export function LocationPromptHost(props: {
   return (
     <Modal animationType="fade" onRequestClose={() => prompt.dismiss()}>
       <FullScreenMessage
-        appBarTitle={copy.title}
-        title={copy.main}
+        title={copy.title}
+        mainMessage={copy.main}
         subtitle={copy.sub}
         illustration={copy.illustration}
+        illustrationStyle="cover"
         primaryLabel={label(Labels.TRY_AGAIN, 'Try again')}
         onPrimary={prompt.onErrorCta}
         enablePrimaryDebounce

@@ -90,6 +90,13 @@ export type LabelsResponse = Record<string, string>;
 // ---------------------------------------------------------------------------
 
 export interface PrivacyPolicyResponse {
+  /** App domain/model/privacypolicy/PrivacyPolicyResponse.kt — the privacy-policy page. */
+  url?: string | null;
+  leaderboard_privacy_policy_url?: string | null;
+  /** App: the FarmerChat terms-of-use page (LegalLinks.termsOfUseUrl). */
+  farmerchat_terms_of_use?: string | null;
+  leaderboard_terms_of_use?: string | null;
+  // Earlier SDK reading of #4, kept as a fallback only (no environment is known to send them).
   privacy_policy?: string | null;
   terms_of_use?: string | null;
   privacy_policy_url?: string | null;
@@ -385,7 +392,11 @@ export interface SectionDto {
   image_url?: string | null;
   title?: string | null;
   question_text?: string | null;
-  statement_id?: number | null;
+  /**
+   * App `SectionDto.statement_id: Any?` — DEMO sends a UUID string; older backends a number. The
+   * app sends it back as a String (`toString()`), and so does the SDK.
+   */
+  statement_id?: string | number | null;
   badge?: SectionBadge | null;
   cta?: SectionCta | null;
   statement?: string | null;
@@ -668,7 +679,8 @@ export interface HelpSupportResponse {
 // ---------------------------------------------------------------------------
 
 export interface ImageViewedRequest {
-  statement_id: number;
+  /** A string on the wire, as the app sends it (HomeScreen.kt:2093 `it.toString()`). */
+  statement_id: string;
   user_id: string;
   status: 'viewed';
 }
@@ -682,7 +694,8 @@ export interface ImageViewedResponse {
 // ---------------------------------------------------------------------------
 
 export interface ImageStatementRequest {
-  statement_id: number;
+  /** A String, as the app sends it (domain/model/home/start_chat/ImageStatementRequest.kt). */
+  statement_id: string;
   triggered_input_type: string;
 }
 
@@ -706,7 +719,8 @@ export interface TextPromptRequest {
   query: string;
   conversation_id: string;
   message_id: string;
-  statement_id?: number | null;
+  /** App TextPromptRequest.statement_id: String? (a Home card's statement). */
+  statement_id?: string | null;
   weather_cta_triggered: boolean;
   triggered_input_type: string;
   ssfr_crop?: string | null;

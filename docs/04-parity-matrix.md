@@ -9068,3 +9068,19 @@ line); the Core resource bundle (farmer photos) now ships inside the xcframework
 chip → answer and C2 "Type or say it" → typed answer PASS on DEMO (both UIs); new
 `FarmerChatConfig.enableComposerUi: Bool?` (+ ObjC `NSNumber`) with Android's semantics — unset follows
 `enableAgenticChat`, so an iOS host with agentic off now gets the legacy Home/input (as Android).
+
+## Full scenario pass: React Native (2026-10-17, agentic ON, emulator-5554 + RN-iPhone-16)
+61 rows: 43 PASS, 11 FIXED, 1 SERVER, 6 UNVERIFIED. Fixed: full-screen messages (sign-up, account,
+error, location interstitial) rebuilt to the app with the 12 country farmer illustrations — the emoji
+placeholders, ✕ circle and bottom Skip link the user screenshotted are gone; GFM tables render as the
+app's cards (raw `| … |` before); gender save emitted a stray Name_Save_Click_Event; the agentic stream
+had no idle timeout (hung 17 min) — fails after 60 s of silence; Name screen layout/copy; weather chip
+"27 °C°" + blank icon; drawer rebuilt to DrawerContent.kt (dark green, "Language: X", "Help & Support",
+sign-up card) and six screens no longer pad the status bar twice; endpoint #4 privacy-policy fields
+(the Privacy link opened a guessed 404 URL; onboarding/Home legal links empty); Auth screen as the app
+(title, agreement card, SMS/WhatsApp, consent, OTP step); feed cards honour `cardCornerRadius`; FAB ✕
+on the app-bar row on iOS; an expanded-list language shows first when selected. Web-/Android-found
+checks all pass. SERVER: C8 — DEMO accepted the agentic request and sent 0 bytes for ~17 min (retry
+answered). UNVERIFIED: C10/C11 (no commodity-confirm / error event from DEMO), D4 (silent emulator mic),
+D5 UI feedback (reject confirmed by event), E5 (history needs sign-in; OTP not completed), F4 (no RTL
+language). `onAnswerReceived` fires for every successful response including prompts — same as Android.

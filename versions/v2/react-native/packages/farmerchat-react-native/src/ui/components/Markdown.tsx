@@ -6,7 +6,13 @@
 import React from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { useSdk, useTheme } from '../context';
-import { spacing, typography } from '../theme';
+import {
+  blockTopSpacing,
+  parseMarkdownBlocks,
+  tableLayout,
+  type MarkdownBlock,
+} from '../../core/markdownBlocks';
+import { radius, spacing, typography } from '../theme';
 
 interface InlineSegment {
   text: string;
@@ -104,68 +110,13 @@ export function MarkdownText(props: {
   const color = props.color ?? theme.bubbleAiText;
   // Chat UI customization: message body font size (undefined = typography.body).
   const sizeStyle = props.fontSize != null ? { fontSize: props.fontSize } : undefined;
-  const lines = props.markdown.replace(/\r\n/g, '\n').split('\n');
-
-  // App MarkdownText.kt:519-580 parseMarkdownBlocks: blank lines are skipped (spacing is
-  // derived from block kinds, never from blank lines).
-  type Block =
-    | { kind: 'divider' }
-    | { kind: 'header'; level: number; text: string }
-    | { kind: 'quote'; text: string }
-    | { kind: 'bullet'; text: string }
-    | { kind: 'numbered'; number: string; text: string }
-    | { kind: 'paragraph'; text: string };
-  const parsed: Block[] = [];
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (trimmed.length === 0) continue;
-    if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
-      parsed.push({ kind: 'divider' });
-      continue;
-    }
-    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
-    if (heading) {
-      parsed.push({
-        kind: 'header',
-        level: Math.min(3, (heading[1] ?? '#').length),
-        text: (heading[2] ?? '').trim(),
-      });
-      continue;
-    }
-    const quote = /^>\s?(.*)$/.exec(trimmed);
-    if (quote) {
-      parsed.push({ kind: 'quote', text: quote[1] ?? '' });
-      continue;
-    }
-    const bullet = /^[-*•]\s+(.*)$/.exec(trimmed);
-    if (bullet) {
-      parsed.push({ kind: 'bullet', text: bullet[1] ?? '' });
-      continue;
-    }
-    const numbered = /^(\d+)[.)]\s+(.*)$/.exec(trimmed);
-    if (numbered) {
-      parsed.push({ kind: 'numbered', number: numbered[1] ?? '', text: numbered[2] ?? '' });
-      continue;
-    }
-    parsed.push({ kind: 'paragraph', text: trimmed });
-  }
-
-  // App MarkdownText.kt:106-122 vertical rhythm.
-  const topSpacing = (block: Block, prev: Block | undefined): number => {
-    if (!prev) return 0;
-    if (block.kind === 'divider' || prev.kind === 'divider') return 24;
-    if (block.kind === 'header') return 24;
-    if (prev.kind === 'header') return 20;
-    if (block.kind === 'bullet' && prev.kind === 'bullet') return 5;
-    if (block.kind === 'numbered' && prev.kind === 'numbered') return 5;
-    if (block.kind === 'paragraph' && prev.kind === 'paragraph') return 20;
-    return 12;
-  };
+  // App MarkdownText.kt:519-580 parseMarkdownBlocks (tables included), see core/markdownBlocks.
+  const parsed: MarkdownBlock[] = parseMarkdownBlocks(props.markdown);
 
   const blocks: React.ReactElement[] = [];
   parsed.forEach((block, index) => {
     const key = `md-${index}`;
-    const gap = topSpacing(block, parsed[index - 1]);
+    const gap = blockTopSpacing(block, parsed[index - 1]);
     if (gap > 0) blocks.push(<View key={`${key}-gap`} style={{ height: gap }} />);
     switch (block.kind) {
       case 'divider':
@@ -230,6 +181,9 @@ export function MarkdownText(props: {
           </View>,
         );
         return;
+      case 'table':
+        blocks.push(<MarkdownTable key={key} block={block} textColor={color} />);
+        return;
       case 'paragraph':
         blocks.push(
           <InlineText key={key} text={block.text} color={color} linkColor={theme.brandPrimary} baseStyle={sizeStyle} />,
@@ -241,7 +195,141 @@ export function MarkdownText(props: {
   return <View>{blocks}</View>;
 }
 
+type TableBlock = Extract<MarkdownBlock, { kind: 'table' }>;
+
+/**
+ * App MarkdownText.kt:214-236 `MarkdownTable`: a "card" table (`| Title | | |`) draws as one
+ * titled card of label / value / meaning readings; any other 2+ column table draws as one
+ * stacked card per row (never pans sideways); a lone single-column table is a bordered grid.
+ */
+function MarkdownTable(props: { block: TableBlock; textColor: string }): React.ReactElement | null {
+  const theme = useTheme();
+  const c = theme.content;
+  const { block, textColor } = props;
+  const linkColor = theme.brandPrimary;
+  const line = <View style={[styles.tableRule, { backgroundColor: c.borderDefault }]} />;
+  const layout = tableLayout(block.headers);
+  if (layout === 'none') return null;
+
+  if (layout === 'card') {
+    // MarkdownAnswerCard (:262-344).
+    const title = (block.headers[0] ?? '').trim();
+    return (
+      <View style={[styles.tableCard, { backgroundColor: c.surfaceReadingSecondary, gap: 12 }]}>
+        {title ? (
+          <>
+            <InlineText text={title} color={textColor} linkColor={linkColor} baseStyle={[typography.labelLarge, styles.bold]} />
+            {line}
+          </>
+        ) : null}
+        {block.rows.map((row, rowIdx) => {
+          const label = (row[0] ?? '').trim();
+          const value = (row[1] ?? '').trim();
+          const meaning = (row[2] ?? '').trim();
+          return (
+            <React.Fragment key={rowIdx}>
+              <View style={{ gap: 2 }}>
+                {label ? (
+                  <InlineText text={label} color={c.foregroundSecondary} linkColor={linkColor} baseStyle={typography.bodySmall} />
+                ) : null}
+                <InlineText text={value} color={textColor} linkColor={linkColor} baseStyle={[typography.bodyMedium, styles.bold]} />
+                {meaning ? (
+                  <InlineText
+                    text={meaning}
+                    color={c.foregroundSecondary}
+                    linkColor={linkColor}
+                    baseStyle={[typography.bodyMedium, { paddingTop: 2 }]}
+                  />
+                ) : null}
+              </View>
+              {rowIdx !== block.rows.length - 1 ? line : null}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    );
+  }
+
+  if (layout === 'rowCards') {
+    // MarkdownRowCards (:346-416): first cell is the title, then label / value per column.
+    return (
+      <View style={{ gap: 12 }}>
+        {block.rows.map((row, rowIdx) => {
+          const title = (row[0] ?? '').trim();
+          return (
+            <View key={rowIdx} style={[styles.tableCard, { backgroundColor: c.surfaceReadingSecondary, gap: 10 }]}>
+              {title ? (
+                <>
+                  <InlineText text={title} color={textColor} linkColor={linkColor} baseStyle={[typography.labelLarge, styles.bold]} />
+                  {line}
+                </>
+              ) : null}
+              {block.headers.slice(1).map((header, i) => (
+                <View key={i} style={{ gap: 2 }}>
+                  <InlineText text={header.trim()} color={c.foregroundSecondary} linkColor={linkColor} baseStyle={typography.bodySmall} />
+                  <InlineText
+                    text={(row[i + 1] ?? '').trim()}
+                    color={textColor}
+                    linkColor={linkColor}
+                    baseStyle={[typography.bodySmall, styles.bold]}
+                  />
+                </View>
+              ))}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  // MarkdownWeightedTable (:422-498): header on surfaceTertiary, rows alternate
+  // surfaceSecondary / surfaceReadingSecondary, 1dp borderDefault, radius SM.
+  const align = (i: number) => {
+    const a = block.alignments[i] ?? 'start';
+    return a === 'center' ? 'center' : a === 'end' ? 'right' : 'left';
+  };
+  return (
+    <View style={[styles.grid, { borderColor: c.borderDefault }]}>
+      <View style={[styles.gridRow, { backgroundColor: c.surfaceTertiary }]}>
+        {block.headers.map((h, i) => (
+          <View key={i} style={styles.gridCell}>
+            <InlineText
+              text={h.trim()}
+              color={textColor}
+              linkColor={linkColor}
+              baseStyle={[typography.labelSmall, styles.bold, { textAlign: align(i) }]}
+            />
+          </View>
+        ))}
+      </View>
+      {block.rows.map((row, rowIdx) => (
+        <View
+          key={rowIdx}
+          style={[styles.gridRow, { backgroundColor: rowIdx % 2 === 0 ? c.surfaceSecondary : c.surfaceReadingSecondary }]}
+        >
+          {block.headers.map((_, i) => (
+            <View key={i} style={styles.gridCell}>
+              <InlineText
+                text={(row[i] ?? '').trim()}
+                color={textColor}
+                linkColor={linkColor}
+                baseStyle={[typography.bodySmall, { textAlign: align(i) }]}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  bold: { fontWeight: '700' },
+  tableCard: { borderRadius: radius.lg, paddingHorizontal: 16, paddingVertical: 14 },
+  tableRule: { height: 1, alignSelf: 'stretch' },
+  grid: { borderWidth: 1, borderRadius: radius.sm, overflow: 'hidden' },
+  gridRow: { flexDirection: 'row' },
+  gridCell: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   bulletDot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 10 },
   numberedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },

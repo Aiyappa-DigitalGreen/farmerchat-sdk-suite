@@ -644,7 +644,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   field: {
-    flex: 1,
+    // flexGrow, NOT flex: 1. `flex: 1` sets flexBasis 0 inside the auto-height SweepBorder, so
+    // the field collapsed to the row's minHeight: with a photo attached the 64dp thumbnail filled
+    // it and the text input was clipped away — no caption could be typed (scenario D3,
+    // 2026-10-17). The app's field grows to hold thumbnail + text (InputComposer.kt).
+    flexGrow: 1,
     paddingHorizontal: 14 - AURA_WIDTH,
     justifyContent: 'center',
   },

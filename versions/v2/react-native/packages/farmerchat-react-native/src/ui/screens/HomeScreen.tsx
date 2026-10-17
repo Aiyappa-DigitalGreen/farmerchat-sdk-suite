@@ -5,6 +5,7 @@
  * (content / single-select / multi-select cards), input overlays, feed
  * loading/error UI.
  */
+import { marksCardViewed, statementIdOf, weatherChipText, weatherIconUri } from '../../core/chatWire';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -126,7 +127,7 @@ export function HomeScreen(props: {
   const [photoInputVisible, setPhotoInputVisible] = useState(false);
   const [permissionDialog, setPermissionDialog] = useState<'camera' | 'microphone' | null>(null);
   const pendingVoice = useRef<RecordedAudio | null>(null);
-  const viewedStatements = useRef(new Set<number>());
+  const viewedStatements = useRef(new Set<string>());
   const pendingCard = useRef<SectionDto | null>(null);
 
   const userId = sdk.session.userId;
@@ -423,12 +424,13 @@ export function HomeScreen(props: {
         const row = token.item as FeedRow;
         if (
           row.rowType === 'section' &&
-          typeof row.section.statement_id === 'number' &&
-          row.section.is_viewed !== true &&
-          !viewedStatements.current.has(row.section.statement_id)
+          // App HomeScreen.kt:2092: image cards only (statement cards 404 on DEMO).
+          marksCardViewed(row.section) &&
+          !viewedStatements.current.has(statementIdOf(row.section) as string)
         ) {
-          viewedStatements.current.add(row.section.statement_id);
-          onAction({ type: 'MarkImageViewed', statementId: row.section.statement_id, userId: uid });
+          const sid = statementIdOf(row.section) as string;
+          viewedStatements.current.add(sid);
+          onAction({ type: 'MarkImageViewed', statementId: sid, userId: uid });
         }
       }
     },
@@ -570,11 +572,12 @@ export function HomeScreen(props: {
             }
             return;
           }
-          if (typeof section.statement_id === 'number') {
+          const cardStatementId = statementIdOf(section);
+          if (cardStatementId !== null) {
             pendingCard.current = section;
             onAction({
               type: 'FetchImageStatement',
-              statementId: section.statement_id,
+              statementId: cardStatementId,
               // App parity (HomeScreen.kt:580-584): image_card / text_card by section type.
               triggeredInputType:
                 section.type === 'image' ? 'image_card' : section.type === 'statement' ? 'text_card' : 'card',
@@ -748,8 +751,8 @@ export function HomeScreen(props: {
     (props.locationPrompt.state.kind === 'RequestPermission' ||
       props.locationPrompt.state.kind === 'RequestEnableGps' ||
       props.locationPrompt.state.kind === 'FetchingLocation');
-  // App parity: current_temp is a String, rendered verbatim (was Math.round of a number).
-  const weatherText = weather?.current_temp ? `${weather.current_temp}°` : '';
+  // App parity: current_temp is a String, rendered verbatim; "--°" until it loads (HomeScreen.kt:345).
+  const weatherText = weatherChipText(weather?.current_temp);
 
   return (
     <View
@@ -778,7 +781,7 @@ export function HomeScreen(props: {
         }
         weatherState={(weatherLoading ? 'Loading' : 'Default') as WeatherButtonState}
         weatherText={weatherText}
-        weatherIconUrl={weather?.weather_icon}
+        weatherIconUrl={weatherIconUri(weather?.weather_icon)}
         weatherLoadingLabel={label(Labels.LOADING, 'Loading...')}
         onWeatherPress={onWeatherClick}
       />

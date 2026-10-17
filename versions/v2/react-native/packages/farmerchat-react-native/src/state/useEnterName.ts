@@ -65,6 +65,12 @@ export function useEnterName(sdk: FarmerChatSdk): UseEnterNameResult {
 
   const updateUserName = useCallback(
     async (body: UserNameRequest, screenName: string) => {
+      // App EnterNameRoute.kt:126-135 / SettingsNameScreen.kt:172-180: Name_Save_Click_Event is
+      // the name screens' Save tap, tracked before the call. Gender / livestock card updates
+      // share this request but never emit it (scenario C7, 2026-10-17).
+      if (body.name) {
+        sdk.analytics.track(AnalyticsEvents.NAME_SAVE_CLICK, { screen_name: screenName });
+      }
       setState({ updateUserNameState: UiStates.loading() });
       const result = await sdk.api.updateUserProfile(body);
       if (!mounted.current) return;
@@ -73,9 +79,6 @@ export function useEnterName(sdk: FarmerChatSdk): UseEnterNameResult {
           sdk.store.set(StorageKeys.USER_NAME, body.name);
           sdk.store.set(StorageKeys.USER_NAME_ADDED, true);
         }
-        sdk.analytics.track(AnalyticsEvents.NAME_SAVE_CLICK, {
-          screen_name: screenName,
-        });
         setState({ updateUserNameState: UiStates.success(result.data) });
       } else {
         setState({

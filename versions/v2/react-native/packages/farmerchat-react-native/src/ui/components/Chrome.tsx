@@ -368,6 +368,8 @@ export const INLINE_SPINNER_STYLE: ViewStyle = { padding: 0, justifyContent: 'fl
 export function LogoSpinnerVertical(props: {
   message?: string | null;
   messages?: string[];
+  /** Label colour override (the drawer passes white, DrawerContent.kt:281). */
+  color?: string;
 }): React.ReactElement {
   const theme = useTheme();
   const label = useCyclingLabel(props.message, props.messages);
@@ -378,7 +380,7 @@ export function LogoSpinnerVertical(props: {
         <Text
           style={[
             typography.bodyMedium,
-            { color: theme.content.foregroundPrimary, textAlign: 'center' },
+            { color: props.color ?? theme.content.foregroundPrimary, textAlign: 'center' },
           ]}
         >
           {label}

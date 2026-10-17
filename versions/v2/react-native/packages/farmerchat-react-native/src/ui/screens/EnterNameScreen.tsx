@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -25,7 +26,8 @@ import {
 import { PrimaryButton, SecondaryButton } from '../components/Buttons';
 import { LogoMark, Toast, useToastState } from '../components/Chrome';
 import { TextInputField } from '../components/Inputs';
-import { spacing, typography } from '../theme';
+import { typography } from '../theme';
+import { Labels } from '../../core/labels';
 
 export function EnterNameScreen(props: { onDone: () => void }): React.ReactElement {
   const theme = useTheme();
@@ -97,50 +99,64 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
     props.onDone();
   };
 
+  const trimmed = name.trim();
+  // App: Save is "enabled" for 1..max chars (validation toasts 1–2 chars on tap); Chevron then.
+  const canSave = trimmed.length >= 1 && trimmed.length <= NAME_MAX_LENGTH && !isSaving;
+  const c = theme.content;
+
+  // App EnterNameScreen.kt:100-218: one top-aligned scrolling column (24 sides, 32 top), the
+  // buttons directly under the field — not pinned to the bottom.
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.surfacePrimary }]}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.body}>
-          <LogoMark size={56} style={{ alignSelf: 'center' }} />
-          {/* App parity (EnterNameScreen.kt:127): titleLarge (22), not the legacy `title` alias
-              which is 24 — one type step too large. */}
-          <Text style={[typography.titleLarge, { color: theme.textPrimary, textAlign: 'center' }]}>
-            {label('fc_v2_app_label_what_should_we_call_you', 'What should we call you?')}
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <LogoMark size={32} color={c.borderActive} style={{ alignSelf: 'center' }} />
+          <View style={{ height: 14 }} />
+          <Text style={[typography.titleLarge, { color: c.foregroundPrimary, textAlign: 'center' }]}>
+            {label(Labels.WHAT_SHOULD_WE_CALL_YOU, 'What should we call you?')}
           </Text>
+          <View style={{ height: 8 }} />
           <Text
-            style={[typography.body, { color: theme.textSecondary, textAlign: 'center' }]}
+            style={[typography.bodyMedium, { color: c.foregroundSecondary, textAlign: 'center', maxWidth: 260 }]}
           >
-            {label('name_subtitle', 'We will use this to make FarmerChat personal to you')}
+            {label(Labels.WE_GREET_YOU_NAME, 'So we can greet you by name')}
           </Text>
+          <View style={{ height: 24 }} />
           <TextInputField
             value={name}
             onChangeText={(text) => setName(normalizeNameInput(text))}
-            placeholder={label('fc_v2_app_label_your_name_or_nickname', 'Your name')}
+            placeholder={label(Labels.YOUR_NAME_OR_NICKNAME, 'Your name or nickname')}
             autoFocus
             maxLength={NAME_MAX_LENGTH}
             onSubmitEditing={save}
+            style={styles.stretch}
             testID="fc-name-input"
           />
-        </View>
-        <View style={styles.footer}>
+          <View style={{ height: 16 }} />
           <PrimaryButton
-            label={label('fc_v2_app_label_save_name', 'Save name')}
-            state={isSaving ? 'Loading' : 'Chevron'}
-            enabled={name.trim().length >= 1}
+            label={isSaving ? label(Labels.SAVING, 'Saving') : label(Labels.SAVE_NAME, 'Save name')}
+            state={isSaving ? 'Loading' : canSave ? 'Chevron' : 'Default'}
+            enabled={canSave}
+            height={56}
             onPress={save}
+            style={styles.stretch}
             testID="fc-name-save"
           />
+          <View style={{ height: 12 }} />
           {showSkip ? (
             <SecondaryButton
-              label={label('fc_v2_app_label_skip_for_now', 'Skip for now')}
+              label={label(Labels.SKIP_FOR_NOW, 'Skip for now')}
               onPress={skip}
+              backgroundColor={c.surfacePrimary}
+              contentColor={c.foregroundPrimary}
+              style={styles.stretch}
               testID="fc-name-skip"
             />
           ) : null}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
       <Toast toast={toast} />
     </SafeAreaView>
@@ -149,11 +165,6 @@ export function EnterNameScreen(props: { onDone: () => void }): React.ReactEleme
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  body: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
-  },
-  footer: { padding: spacing.xl, gap: spacing.md },
+  body: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24, alignItems: 'center' },
+  stretch: { alignSelf: 'stretch' },
 });

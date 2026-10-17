@@ -173,3 +173,130 @@ export function omitNullFields<T extends object>(body: T): T {
     Object.entries(body).filter(([, v]) => v !== null && v !== undefined),
   ) as T;
 }
+
+/**
+ * Whether a #31 synthesise reply for the answer `requestedAnswerId` (local list id) may still play:
+ * only while that answer is still the latest AI message and no new answer is loading. A slow reply
+ * that lands after the farmer moved on (new question, follow-up chip) is dropped, so the OLD answer
+ * never plays over the new turn (Android scenario pass 2026-10-17, `SynthesisGuard`; the app has
+ * the same race — a deliberate improvement).
+ */
+export function synthesisStillWanted(
+  requestedAnswerId: string,
+  messages: ReadonlyArray<{ kind: string; id: string }>,
+  isLoading: boolean,
+): boolean {
+  if (isLoading) return false;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m && m.kind === 'ai') return m.id === requestedAnswerId;
+  }
+  return false;
+}
+
+/**
+ * Whether a Home card that became >= 50 % visible is marked viewed (#25). App HomeScreen.kt:2092:
+ * only `type == "image"` cards with a statement id that are not already viewed. Statement / other
+ * cards are not (DEMO 404s them).
+ */
+export function marksCardViewed(section: {
+  type?: string | null;
+  statement_id?: string | number | null;
+  is_viewed?: boolean | null;
+}): boolean {
+  return section.type === 'image' && statementIdOf(section) !== null && section.is_viewed !== true;
+}
+
+/**
+ * A Home card's statement id as the app sends it: `statement_id?.toString()` (HomeScreen.kt:2093).
+ * DEMO sends a UUID string; a number is tolerated. Null when absent or blank.
+ */
+export function statementIdOf(section: { statement_id?: string | number | null }): string | null {
+  const v = section.statement_id;
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s.length > 0 ? s : null;
+}
+
+/**
+ * Home weather chip text — app HomeScreen.kt:345 `current_temp ?: "--°"`, rendered verbatim (the
+ * server already sends the unit, e.g. "27 °C"; appending "°" drew "27 °C°").
+ */
+export function weatherChipText(currentTemp: string | null | undefined): string {
+  return currentTemp != null && currentTemp !== '' ? currentTemp : '--°';
+}
+
+/**
+ * Remote weather icon to draw, or null for the bundled glyph. The server sends SVG icons, which
+ * the app draws with a Coil SvgDecoder (WeatherButton.kt:117-119); RN `Image` cannot decode SVG and
+ * drew an empty 24dp square, so SVG (and non-http) URLs fall back like the iOS SDK does.
+ */
+export function weatherIconUri(url: string | null | undefined): string | null {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const path = url.split(/[?#]/)[0] ?? '';
+  return path.toLowerCase().endsWith('.svg') ? null : url;
+}
+
+/** Drawer destinations (ui/navigation/DrawerContent.tsx). */
+export type DrawerRoute = 'home' | 'settings' | 'settings/language' | 'help' | 'chatHistory';
+
+/**
+ * `Menu_Option_Click_Event.option` for a drawer row — app DrawerContent.kt
+ * `trackMenuOptionClick("Home" | "Language" | "Settings" | "Help_Support" | "Signup")`.
+ * "See all" / "Recent chats" track Chat_History_Click_Event instead (null here).
+ */
+export function drawerMenuOption(route: DrawerRoute | 'signup'): string | null {
+  switch (route) {
+    case 'home':
+      return 'Home';
+    case 'settings/language':
+      return 'Language';
+    case 'settings':
+      return 'Settings';
+    case 'help':
+      return 'Help_Support';
+    case 'signup':
+      return 'Signup';
+    case 'chatHistory':
+      return null;
+  }
+}
+
+/**
+ * Collapsed language list — app LanguageChooserScreen.kt:138-149: when the selected language is
+ * only in the expanded list, it is shown first above the priority list so the current choice
+ * stays visible (and selected).
+ */
+export function collapsedLanguages<T extends { id: number }>(
+  priority: readonly T[],
+  all: readonly T[],
+  selectedId: number | null,
+): T[] {
+  const selected = selectedId == null ? undefined : all.find((l) => l.id === selectedId);
+  if (!selected || priority.some((l) => l.id === selected.id)) return [...priority];
+  return [selected, ...priority];
+}
+
+/**
+ * Legal links from endpoint #4 — app GetSupportedLanguagesUseCase.kt:75-78
+ * `LegalLinks(privacyPolicyUrl = url, termsOfUseUrl = farmerchat_terms_of_use)`. The RN SDK used
+ * to read `privacy_policy_url` / `terms_of_use_url`, which the app model does not have, so the
+ * links stayed null; those remain only as a fallback. Blank strings count as missing.
+ */
+export function legalLinksOf(response: {
+  url?: string | null;
+  farmerchat_terms_of_use?: string | null;
+  privacy_policy_url?: string | null;
+  privacy_policy?: string | null;
+  terms_of_use_url?: string | null;
+  terms_of_use?: string | null;
+}): { privacyPolicyUrl: string | null; termsOfUseUrl: string | null } {
+  const first = (...values: Array<string | null | undefined>): string | null => {
+    for (const v of values) if (v != null && v.trim() !== '') return v.trim();
+    return null;
+  };
+  return {
+    privacyPolicyUrl: first(response.url, response.privacy_policy_url, response.privacy_policy),
+    termsOfUseUrl: first(response.farmerchat_terms_of_use, response.terms_of_use_url, response.terms_of_use),
+  };
+}

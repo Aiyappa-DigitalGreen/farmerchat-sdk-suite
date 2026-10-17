@@ -15,9 +15,7 @@ import React from 'react';
 import {
   BackHandler,
   Image,
-  Platform,
   Pressable,
-  StatusBar,
   StyleSheet,
   Text,
   View,
@@ -25,7 +23,14 @@ import {
 } from 'react-native';
 import { FarmerChat } from './FarmerChat';
 import { FarmerChatView } from './FarmerChatView';
-import { emitSdkExit, onScreenHasOwnExit, onSdkExit } from './core/exitSignal';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  emitSdkExit,
+  onFallbackCloseSlot,
+  onScreenHasOwnExit,
+  onSdkExit,
+  type FallbackCloseSlot,
+} from './core/exitSignal';
 import { Assets } from './ui/assets';
 import { brandLogo, dayTheme } from './ui/theme';
 
@@ -64,6 +69,10 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
   // Fallback close only where the visible screen has no exit of its own (route-driven).
   const [screenHasOwnExit, setScreenHasOwnExit] = React.useState(false);
   React.useEffect(() => onScreenHasOwnExit(setScreenHasOwnExit), []);
+  const [closeSlot, setCloseSlot] = React.useState<FallbackCloseSlot>('right');
+  // The ✕ column ends just under the button (inset + 8 + 40); 120 until the inset is measured.
+  const [closeColumnHeight, setCloseColumnHeight] = React.useState(120);
+  React.useEffect(() => onFallbackCloseSlot(setCloseSlot), []);
   const showFallbackClose = !screenHasOwnExit;
   // Android hardware back. Registered ONCE, when the FAB mounts, i.e. before the overlay's
   // NavigationContainer registers its own listener. BackHandler calls the newest listener first,
@@ -126,18 +135,24 @@ export function FarmerChatFab(props: FarmerChatFabProps): React.ReactElement {
         // SafeAreaProvider, so every SDK screen pads for the status bar and nav bar itself.
         <View style={styles.overlay}>
           <FarmerChatView />
-          {showFallbackClose ? (
+          {showFallbackClose && closeSlot !== 'hidden' ? (
             // Home, language and onboarding have no exit of their own (and iOS has no system
             // Back), so the overlay keeps its fallback close there. The CHAT_ONLY chat draws its
             // own ✕; a second one would cover the globe button (iOS FAB fix, b26efcb).
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close FarmerChat"
-              onPress={exitOverlay}
-              style={[styles.close, { top: FALLBACK_CLOSE_TOP }]}
+            // Its own SafeAreaProvider: the live top inset keeps the ✕ on the app-bar row even
+            // after a display-size / density change (scenario F3), which the status-bar height constant
+            // (a startup constant) does not follow.
+            // The provider is sized to the ✕ column only: a native SafeAreaProvider ignores
+            // pointerEvents on Android, so a full-screen one swallowed every tap and scroll.
+            <SafeAreaProvider
+              style={[
+                styles.closeColumn,
+                { height: closeColumnHeight },
+                closeSlot === 'left' ? { left: FALLBACK_CLOSE_LEFT_HOME } : { right: 16 },
+              ]}
             >
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
+              <FallbackClose onTop={(top) => setCloseColumnHeight(top + FALLBACK_CLOSE_SIZE)} />
+            </SafeAreaProvider>
           ) : null}
         </View>
       ) : null}
@@ -157,9 +172,33 @@ function exitOverlay(): void {
   }
 }
 
-/** Below the status bar: Android reports its height; iOS keeps the old modal's 44. */
-const FALLBACK_CLOSE_TOP =
-  Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 44;
+/** Fallback ✕ button size. */
+const FALLBACK_CLOSE_SIZE = 40;
+
+/** Home: after the 42dp menu button at 16dp (Chrome HomeAppBar). */
+const FALLBACK_CLOSE_LEFT_HOME = 70;
+
+/**
+ * On the app-bar row, just below the live safe-area top (status bar / Dynamic Island). iOS used a
+ * fixed 44, which sat ~20pt above the bar row on notch / Dynamic Island phones (scenario F3 iOS).
+ */
+function FallbackClose(props: { onTop: (top: number) => void }): React.ReactElement {
+  const insets = useSafeAreaInsets();
+  const top = insets.top + 8;
+  const { onTop } = props;
+  // Shrink the provider column to the button so no content under the bar is a dead zone.
+  React.useEffect(() => onTop(top), [onTop, top]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Close FarmerChat"
+      onPress={exitOverlay}
+      style={[styles.close, { top, left: 0 }]}
+    >
+      <Text style={styles.closeText}>✕</Text>
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   fab: {
@@ -186,11 +225,13 @@ const styles = StyleSheet.create({
     elevation: 1000,
     backgroundColor: '#FFFFFF',
   },
+  // Home: clear of the weather pill, in the gap after the menu button; elsewhere top-right.
+  // Tall enough for any status bar + 8 + the 40dp button; nothing interactive sits under it.
+  closeColumn: { position: 'absolute', top: 0, width: FALLBACK_CLOSE_SIZE },
   close: {
     position: 'absolute',
-    right: 16,
-    width: 40,
-    height: 40,
+    width: FALLBACK_CLOSE_SIZE,
+    height: FALLBACK_CLOSE_SIZE,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',

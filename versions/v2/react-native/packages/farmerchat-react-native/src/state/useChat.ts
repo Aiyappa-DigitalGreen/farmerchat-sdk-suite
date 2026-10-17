@@ -52,6 +52,7 @@ import {
   alignmentChipRequestParams,
   fetchesFollowUps,
   omitNullFields,
+  synthesisStillWanted,
   historyFollowUpQuestions,
   historyVoiceText,
   imageQueryName,
@@ -217,7 +218,7 @@ export type ChatAction =
       isSSFR?: boolean;
       ssfrCrop?: string | null;
       channel?: string | null;
-      statementId?: number | null;
+      statementId?: string | null;
     }
   | { type: 'ReplacePreGeneratedWithQuestion'; question: string; triggerInputType?: string | null }
   | {
@@ -648,7 +649,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
             : null,
       });
       // Semantic callback (C4).
-      sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId);
+      // Host callback: the SERVER message_id (never the local list id), as Android.
+      sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? '');
       // Real follow-ups always come from endpoint #29.
       // App ChatViewModel.kt:2020-2025: not after an exclusive alignment surface.
       if (fetchesFollowUps(alignmentKind, serverMessageId, data.hide_follow_up_question)) {
@@ -920,7 +922,7 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       isWeatherAdviceCTA?: boolean;
       isSSFR?: boolean;
       ssfrCrop?: string | null;
-      statementId?: number | null;
+      statementId?: string | null;
       isRetry?: boolean;
       sendQueryProperties?: SendQueryProperties | null;
       /**
@@ -1376,7 +1378,8 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         // App ChatViewModel.kt:2121-2127: Plantix success → Send_Query, Valid_Query true.
         reportSendQuery({ sendQueryProperties: analyticsProps }, { isValid: true });
         // Semantic callback (C4).
-        sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? aiLocalId);
+        // Host callback: the SERVER message_id (never the local list id), as Android.
+      sdk.analytics.fireCallback('onAnswerReceived', serverMessageId ?? '');
         if (serverMessageId) void fetchFollowUps(serverMessageId, aiLocalId);
       } else {
         const message = result.ok
@@ -1623,14 +1626,19 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
       if (!userId) return;
       let targetId = messageId ?? null;
       let targetText = text ?? null;
+      const lastAi = [...stateRef.current.messages]
+        .reverse()
+        .find((m): m is AiResponse => m.kind === 'ai');
       if (targetId === null || targetText === null) {
-        const lastAi = [...stateRef.current.messages]
-          .reverse()
-          .find((m): m is AiResponse => m.kind === 'ai');
         if (!lastAi) return;
         targetId = targetId ?? lastAi.messageId ?? lastAi.id;
         targetText = targetText ?? lastAi.text;
       }
+      // The answer (local id) this Listen belongs to, for the late-reply guard below.
+      const answerLocalId =
+        stateRef.current.messages.find(
+          (m): m is AiResponse => m.kind === 'ai' && (m.messageId === targetId || m.id === targetId),
+        )?.id ?? lastAi?.id ?? null;
       patch({ isLoadingSynthesiseAudio: true });
       const result = await sdk.api.synthesiseAudio({
         message_id: targetId,
@@ -1638,6 +1646,15 @@ export function useChat(sdk: FarmerChatSdk): UseChatResult {
         user_id: userId,
       });
       if (!mounted.current) return;
+      // A reply that lands after the farmer moved on (new send / follow-up) is dropped: the old
+      // answer must not start playing over the new turn.
+      if (
+        answerLocalId === null ||
+        !synthesisStillWanted(answerLocalId, stateRef.current.messages, stateRef.current.isLoading)
+      ) {
+        patch({ isLoadingSynthesiseAudio: false });
+        return;
+      }
       if (result.ok && result.data.audio) {
         // App ChatViewModel.kt:664-670: the URL and `isAudioPlaying = url != null` land in ONE
         // update, so the Listen pill goes Loading -> Playing at once. Setting it only after the

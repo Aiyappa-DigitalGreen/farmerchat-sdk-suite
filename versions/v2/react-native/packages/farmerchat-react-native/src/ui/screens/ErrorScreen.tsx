@@ -6,6 +6,7 @@
 import React, { useEffect } from 'react';
 import { useLabel, useSdk } from '../context';
 import { FullScreenMessage } from '../components/FullScreenMessage';
+import { Labels } from '../../core/labels';
 
 export function ErrorScreen(props: {
   isNetworkError: boolean;
@@ -23,25 +24,27 @@ export function ErrorScreen(props: {
     return () => sdk.analytics.trackScreenExit('Error Screen');
   }, [props.fromScreen, props.isNetworkError, sdk]);
 
-  const title = props.isNetworkError
-    ? label('fc_v2_app_label_no_internet_connection', 'No internet connection')
-    : label('fc_v2_app_label_something_went_wrong', 'Something went wrong');
-  const subtitle = props.isNetworkError
-    ? label(
-        'error_no_internet_subtitle',
-        'Please check your mobile data or Wi-Fi and try again.',
-      )
-    : label(
-        'error_api_subtitle',
-        'We had trouble reaching FarmerChat. Please try again in a moment.',
-      );
+  // App NoInternetScreen.kt (NO_INTERNET / API_ERROR copy; compose ErrorScreen.kt:40-74).
+  const [title, mainMessage, subtitle] = props.isNetworkError
+    ? [
+        label(Labels.NO_INTERNET_CONNECTION, 'No internet connection'),
+        label(Labels.FARMERCHAT_NEEDS_THE_INTERNET, 'FarmerChat needs \nthe internet'),
+        label(Labels.CHECK_MOBILE_DATA_WIFI_SIGNAL, 'Check mobile data or Wi-Fi signal'),
+      ]
+    : [
+        label(Labels.SOMETHING_WENT_WRONG, 'Something went wrong'),
+        label(Labels.FARMERCHAT_COULDNT_LOAD, "FarmerChat couldn't load"),
+        label(Labels.PLEASE_TRY_AGAIN, 'Please try again'),
+      ];
 
   return (
     <FullScreenMessage
       title={title}
+      mainMessage={mainMessage}
       subtitle={subtitle}
       illustration="LOOKING_AT_SKY"
-      primaryLabel={label('fc_v2_app_label_try_again', 'Try again')}
+      illustrationStyle="fit"
+      primaryLabel={label(Labels.TRY_AGAIN, 'Try again')}
       onPrimary={props.onTryAgain}
       enablePrimaryDebounce
     />

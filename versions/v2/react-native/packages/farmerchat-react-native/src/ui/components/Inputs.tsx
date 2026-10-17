@@ -7,6 +7,7 @@
  */
 import React, { useRef, useState } from 'react';
 import {
+  Image,
   ActivityIndicator,
   Pressable,
   StyleSheet,
@@ -260,6 +261,35 @@ export function SearchInput(props: {
   );
 }
 
+/** True for a flag image URL (the API sends one, e.g. `…/dg-country-flags/100px/in.png`). */
+export function isFlagUrl(flag: string | null | undefined): boolean {
+  return typeof flag === 'string' && /^https?:\/\//i.test(flag.trim());
+}
+
+/**
+ * The API's country flag (app CountryCodeSelector.kt:50-56 / RadioButton.kt:107-115 load it as an
+ * image). The SDK used to print the URL as text in the phone field (scenario E8, 2026-10-17).
+ * A non-URL value (an emoji) is drawn as text; none draws nothing.
+ */
+export function FlagMark(props: {
+  flag: string | null;
+  width: number;
+  height: number;
+  radius: number;
+}): React.ReactElement | null {
+  if (!props.flag || props.flag.trim().length === 0) return null;
+  if (isFlagUrl(props.flag)) {
+    return (
+      <Image
+        source={{ uri: props.flag.trim() }}
+        resizeMode="cover"
+        style={{ width: props.width, height: props.height, borderRadius: props.radius }}
+      />
+    );
+  }
+  return <Text style={typography.bodyMedium}>{props.flag}</Text>;
+}
+
 export function CountryCodeSelector(props: {
   countryCode: string;
   flag?: string | null;
@@ -281,7 +311,7 @@ export function CountryCodeSelector(props: {
         },
       ]}
     >
-      <Text style={typography.bodyMedium}>{props.flag ?? '🇮🇳'}</Text>
+      <FlagMark flag={props.flag ?? null} width={20} height={20} radius={4} />
       <Text style={[typography.bodyMedium, { color: c.foregroundPrimary }]}>
         {props.loading ? '…' : props.countryCode}
       </Text>

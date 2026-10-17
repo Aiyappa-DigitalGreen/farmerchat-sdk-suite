@@ -42,9 +42,15 @@ export function SplashScreen(props: {
         if (!sdk.chatOnlyNeedsLanguageScreen) {
           await sdk.ensureChatOnlySession();
         }
-      } else {
+      } else if (sdk.isLanguageSelected) {
+        // Returning farmer: make sure a session exists before Home's calls.
         await sdk.session.ensureGuestSession();
       }
+      // First FULL_JOURNEY launch: NO guest init here. As in the app (Splash routes, and
+      // OnboardingSharedViewModel.kt:341-366 initialises the guest WITH the geolocated
+      // coordinates), the language screen does geolocate → initialize_user. Initialising here
+      // without coordinates made that geolocated init a no-op, so the farmer was placed at the
+      // device-locale centroid instead (US → Butte County, scenario E1, 2026-10-17).
       sdk.store.set(StorageKeys.IS_PROFILE_LOADED, true);
       sdk.analytics.track(AnalyticsEvents.APP_OPENED, { build_version: 'V2' });
       sdk.analytics.trackScreenView(ScreenNames.SPLASH);

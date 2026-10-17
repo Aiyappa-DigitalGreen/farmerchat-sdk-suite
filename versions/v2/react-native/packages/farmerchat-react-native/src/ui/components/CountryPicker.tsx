@@ -10,7 +10,7 @@ import { useLabel, useSdk, useTheme } from '../context';
 import { AnalyticsEvents, ScreenNames } from '../../core/analytics';
 import { spacing, typography } from '../theme';
 import { PrimaryButton } from './Buttons';
-import { RadioRow, SearchInput } from './Inputs';
+import { FlagMark, RadioRow, SearchInput } from './Inputs';
 import { DefaultAppBar, LogoSpinner } from './Chrome';
 
 export function CountryPickerModal(props: {
@@ -71,7 +71,9 @@ export function CountryPickerModal(props: {
             contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 120 }}
             renderItem={({ item }) => (
               <RadioRow
-                label={`${item.flag ? `${item.flag} ` : ''}${item.display_name}`}
+                // The flag is an image URL (app RadioButton.kt:107-115, 30x20, radius 2), never text.
+                label={item.display_name}
+                trailing={<FlagMark flag={item.flag ?? null} width={30} height={20} radius={2} />}
                 sublabel={`+${item.phone_country_code.replace(/^\+/, '')}`}
                 selected={selected?.id === item.id}
                 onPress={() => setSelected(item)}

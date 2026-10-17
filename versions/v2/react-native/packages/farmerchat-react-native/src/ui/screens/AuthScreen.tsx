@@ -20,11 +20,13 @@ import { AnalyticsEvents, ScreenNames } from '../../core/analytics';
 import { Labels } from '../../core/labels';
 import { useLabel, useSdk, useTheme } from '../context';
 import { useAuth } from '../../state/useAuth';
-import { PrimaryButton, SecondaryButton } from '../components/Buttons';
+import { PrimaryButton } from '../components/Buttons';
+import { FcIcon } from '../components/Icon';
+import { legalLinksOf } from '../../core/chatWire';
 import { DefaultAppBar, Toast, useToastState } from '../components/Chrome';
 import { CountryCodeSelector, OtpInput, TextInputField } from '../components/Inputs';
 import { CountryPickerModal } from '../components/CountryPicker';
-import { spacing, typography } from '../theme';
+import { Neutral200, radius, typography } from '../theme';
 
 export function AuthScreen(props: {
   onSuccess: (phoneE164: string, existingUser: boolean) => void;
@@ -38,6 +40,20 @@ export function AuthScreen(props: {
   const { state } = auth;
   const { toast, showToast } = useToastState();
   const [pickerVisible, setPickerVisible] = useState(false);
+  // App AuthViewModel.fetchLegalLinks: the privacy-policy URL comes from endpoint privacy_policy;
+  // the link opens only once a non-blank URL is known (AuthScreen.kt:490-493).
+  const [privacyUrl, setPrivacyUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void sdk.api.getPrivacyPolicy().then((result) => {
+      if (alive && result.ok) {
+        setPrivacyUrl(legalLinksOf(result.data).privacyPolicyUrl);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [sdk]);
 
   useEffect(() => {
     sdk.analytics.trackScreenView(ScreenNames.AUTH);
@@ -87,10 +103,31 @@ export function AuthScreen(props: {
 
   const isSending = state.sendOtpState.kind === 'loading';
   const isVerifying = state.verifyOtpState.kind === 'loading';
+  const c = theme.content;
+  // App: send buttons are enabled only for a valid number; an invalid tap toasts
+  // PLEASE_CHECK_TRY_AGAIN (AuthScreen.kt:466-478).
+  const canSend = !isSending && auth.isPhoneValid();
+  const send = (channel: 'whatsapp' | 'sms') => {
+    if (!auth.isPhoneValid()) {
+      showToast(label(Labels.PLEASE_CHECK_TRY_AGAIN, 'Please check and try again.'), 'error');
+      return;
+    }
+    auth.sendOtp(channel);
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <DefaultAppBar navIcon="close" onNavPress={props.onClose} title={null} />
+    <SafeAreaView
+      // DefaultAppBar draws under the status bar and pads its own top inset.
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
+      {/* App: DefaultAppBar("Sign up", close, rounded, no glow, surfacePrimary) — AuthScreen.kt:426-433. */}
+      <DefaultAppBar
+        navIcon="close"
+        onNavPress={props.onClose}
+        title={label(Labels.SIGN_UP, 'Sign up')}
+        showGlow={false}
+      />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -98,37 +135,31 @@ export function AuthScreen(props: {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {state.step === 'PhoneEntry' ? (
             <>
-              {/* App parity (AuthScreen.kt:801-814). THREE things were wrong, not just the type:
-                  `auth_title` / `auth_subtitle` are SDK-invented keys that endpoint #3 serves for
-                  nobody, so every farmer read the English fallback whatever their language; the
-                  fallback copy was invented rather than the app's; and the headings sat at the
-                  24 pt legacy `title` alias, left-aligned, where the app centres them at 22/17. */}
-              <Text
-                style={[
-                  typography.titleLarge,
-                  { color: theme.textPrimary, textAlign: 'center' },
-                ]}
-              >
-                {label(Labels.ENTER_YOUR_PHONE_NUMBER, 'Enter your phone number')}
+              {/* App PhoneEntryContent (AuthScreen.kt:783-929). */}
+              <Text style={[typography.titleLarge, { color: c.foregroundPrimary, textAlign: 'center' }]}>
+                {isSending
+                  ? label(Labels.ENTER_PHONE_NUMBER, 'Enter phone number')
+                  : label(Labels.ENTER_YOUR_PHONE_NUMBER, 'Enter your phone number')}
               </Text>
-              <Text
-                style={[
-                  typography.bodyMedium,
-                  { color: theme.textSecondary, textAlign: 'center' },
-                ]}
-              >
-                {label(Labels.SEND_OTP_SIGNIN, "We'll send a one-time code to sign you in")}
+              <View style={{ height: 8 }} />
+              <Text style={[typography.bodyMedium, { color: c.foregroundSecondary, textAlign: 'center' }]}>
+                {isSending
+                  ? label(Labels.SEND_OTP_SIGNIN_SHORT, 'And we will send you a one time code')
+                  : label(Labels.SEND_OTP_SIGNIN, "We'll send a one-time code to sign you in")}
               </Text>
+              <View style={{ height: 24 }} />
               <View style={styles.phoneRow}>
                 <CountryCodeSelector
                   countryCode={state.countryCode}
                   flag={state.selectedCountry?.flag ?? null}
-                  loading={state.countries.kind === 'loading'}
-                  onPress={() => setPickerVisible(true)}
+                  loading={state.countries.kind === 'loading' && state.selectedCountry == null}
+                  onPress={() => {
+                    if (!isSending) setPickerVisible(true);
+                  }}
                 />
                 <TextInputField
                   value={state.phoneLocal}
-                  onChangeText={auth.setPhoneLocal}
+                  onChangeText={(t) => auth.setPhoneLocal(t.replace(/\D/g, ''))}
                   placeholder="00000 00000"
                   keyboardType="phone-pad"
                   style={{ flex: 1 }}
@@ -136,112 +167,141 @@ export function AuthScreen(props: {
                 />
               </View>
               {state.phoneError ? (
-                <Text style={[typography.bodySmall, { color: theme.error }]}>
+                <Text style={[typography.bodySmall, { color: theme.brand.feedbackFail, alignSelf: 'stretch' }]}>
                   {state.phoneError}
                 </Text>
               ) : null}
-              {state.isLoadingChannels ? (
-                <Text style={[typography.bodySmall, { color: theme.textTertiary }]}>
-                  {label('auth_loading_channels', 'Checking available channels…')}
-                </Text>
+              <View style={{ height: 20 }} />
+              <AgreementCard label={label} />
+              <View style={{ height: 12 }} />
+              {isSending ? (
+                <PrimaryButton
+                  label={label(Labels.SENDING_CODE, 'Sending code...')}
+                  state="Loading"
+                  height={56}
+                  onPress={() => undefined}
+                  style={styles.stretch}
+                />
               ) : (
-                <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                <View style={[styles.stretch, { gap: 8 }]}>
                   {state.availableChannels.whatsappEnabled ? (
                     <PrimaryButton
-                      label={label('auth_send_whatsapp', 'Get code on WhatsApp')}
-                      state={isSending ? 'Loading' : 'Default'}
-                      onPress={() => auth.sendOtp('whatsapp')}
+                      label={label(Labels.SEND_VIA_WHATSAPP, 'Send via WhatsApp')}
+                      leadingIcon="whatsapp"
+                      enabled={canSend}
+                      onPress={() => send('whatsapp')}
                       testID="fc-auth-whatsapp"
                     />
                   ) : null}
                   {state.availableChannels.smsEnabled ? (
-                    <SecondaryButton
-                      label={label('auth_send_sms', 'Get code by SMS')}
-                      enabled={!isSending}
-                      onPress={() => auth.sendOtp('sms')}
+                    <PrimaryButton
+                      label={label(Labels.SEND_VIA_SMS, 'Send via SMS')}
+                      leadingIcon="sms"
+                      enabled={canSend}
+                      onPress={() => send('sms')}
                       testID="fc-auth-sms"
                     />
                   ) : null}
                 </View>
               )}
-              <Text style={[typography.caption, { color: theme.textTertiary }]}>
-                {label('auth_legal_prefix', 'By continuing you agree to our')}{' '}
+              <View style={{ height: 8 }} />
+              {/* AuthConsentText (:987-1023): prefix + underlined Privacy Policy link + suffix. */}
+              <Text style={[styles.consent, { color: c.foregroundSecondary }]}>
+                {label(Labels.AUTH_CONSENT_PREFIX, 'By continuing, you agree to these communications.\nSee our ')}
                 <Text
-                  style={{ color: theme.brandPrimary, textDecorationLine: 'underline' }}
-                  onPress={() =>
-                    props.onOpenLegal(
-                      'https://digitalgreen.org/terms-of-use/',
-                      label('fc_v2_app_label_terms_of_use', 'Terms of use'),
-                    )
-                  }
+                  style={{ textDecorationLine: 'underline' }}
+                  onPress={() => {
+                    // privacy_policy_opened is tracked by LegalContentScreen for every caller.
+                    if (privacyUrl && privacyUrl.trim() !== '') {
+                      props.onOpenLegal(privacyUrl, label(Labels.PRIVACY_POLICY, 'Privacy Policy'));
+                    }
+                  }}
                 >
-                  {label('fc_v2_app_label_terms_of_use', 'Terms of use')}
+                  {label(Labels.PRIVACY_POLICY, 'Privacy Policy')}
                 </Text>
+                {' ' +
+                  label(
+                    Labels.AUTH_CONSENT_SUFFIX,
+                    'for more information, including how to withdraw your consent.',
+                  )}
               </Text>
             </>
           ) : (
             <>
-              {/* App parity (AuthScreen.kt:1039-1050) — same three problems as the phone step.
-                  Note the app's OTP subtitle is a FIXED sentence with no phone number and no
-                  channel suffix interpolated into it. */}
-              <Text
-                style={[
-                  typography.titleLarge,
-                  { color: theme.textPrimary, textAlign: 'center' },
-                ]}
-              >
+              {/* App OtpEntryContent (AuthScreen.kt:1025-1146). The subtitle is a fixed sentence. */}
+              <Text style={[typography.titleLarge, { color: c.foregroundPrimary, textAlign: 'center' }]}>
                 {label(Labels.ENTER_CODE_WE_SENT, 'Enter the code we sent')}
               </Text>
-              <Text
-                style={[
-                  typography.bodyMedium,
-                  { color: theme.textSecondary, textAlign: 'center' },
-                ]}
-              >
+              <View style={{ height: 8 }} />
+              <Text style={[typography.bodyMedium, { color: c.foregroundSecondary, textAlign: 'center' }]}>
                 {label(Labels.CHECK_YOUR_MESSAGES_CODE, 'Check your messages for the code')}
               </Text>
-              <OtpInput value={state.otp} onChange={auth.setOtp} error={state.otpError} />
+              <View style={{ height: 24 }} />
+              <View style={styles.stretch}>
+                <OtpInput value={state.otp} onChange={auth.setOtp} error={state.otpError} />
+              </View>
+              <View style={{ height: 16 }} />
               <PrimaryButton
-                label={label('fc_v2_app_label_verify', 'Verify')}
+                label={
+                  isVerifying ? label(Labels.VERIFYING, 'Verifying') : label(Labels.VERIFY, 'Verify')
+                }
                 state={isVerifying ? 'Loading' : 'Default'}
-                enabled={state.otp.length === 4}
+                height={56}
+                enabled={state.otp.length === 4 && !isVerifying}
                 onPress={auth.verifyOtp}
                 testID="fc-auth-verify"
+                style={styles.stretch}
               />
+              <View style={{ height: 16 }} />
               {!state.timerExpired ? (
-                <Text
-                  style={[
-                    typography.body,
-                    { color: theme.textSecondary, textAlign: 'center' },
-                  ]}
-                >
-                  {label('otp_resend_in', 'Resend code in {name}', {
-                    name: formatTimer(state.timerSeconds),
-                  })}
-                </Text>
+                <>
+                  <View style={styles.timerRow}>
+                    <View style={[styles.timerDot, { backgroundColor: theme.brand.feedbackSuccess }]}>
+                      <FcIcon name="history" size={18} tint="#FFFFFF" />
+                    </View>
+                    <Text style={[typography.bodyMedium, { color: c.foregroundPrimary }]}>
+                      {`${label(Labels.PLEASE_ENTER, 'Please enter in')} ${formatTimer(state.timerSeconds)} ${label(Labels.SECONDS, 'seconds')}`}
+                    </Text>
+                  </View>
+                  <View style={{ height: 16 }} />
+                  {/* Disabled while the timer runs. */}
+                  <Text style={[typography.labelLarge, styles.textAction, { color: c.foregroundSecondary }]}>
+                    {label(Labels.RESEND_CODE, 'Resend code')}
+                  </Text>
+                </>
               ) : (
-                <View style={{ gap: spacing.md }}>
-                  <SecondaryButton
-                    label={label('fc_v2_app_label_resend_code', 'Resend code')}
-                    onPress={() => auth.resendOtp(state.sentVia ?? 'sms')}
-                  />
+                <>
                   <Text
-                    onPress={() => {
-                      sdk.analytics.track(AnalyticsEvents.START_OVER_CLICKED, {});
-                      auth.startOver();
-                    }}
+                    accessibilityRole="button"
+                    onPress={
+                      isVerifying
+                        ? undefined
+                        : () => {
+                            sdk.analytics.track(AnalyticsEvents.START_OVER_CLICKED, {});
+                            auth.startOver();
+                          }
+                    }
                     style={[
-                      typography.body,
-                      {
-                        color: theme.brandPrimary,
-                        textAlign: 'center',
-                        textDecorationLine: 'underline',
-                      },
+                      typography.labelLarge,
+                      styles.textAction,
+                      { color: isVerifying ? c.foregroundSecondary : c.foregroundPrimary },
                     ]}
                   >
-                    {label('fc_v2_app_label_start_over', 'Start over')}
+                    {label(Labels.START_OVER, 'Start over')}
                   </Text>
-                </View>
+                  <View style={{ height: 8 }} />
+                  <Text
+                    accessibilityRole="button"
+                    onPress={isVerifying ? undefined : () => auth.resendOtp(state.sentVia ?? 'sms')}
+                    style={[
+                      typography.labelLarge,
+                      styles.textAction,
+                      { color: isVerifying ? c.foregroundSecondary : c.foregroundPrimary },
+                    ]}
+                  >
+                    {label(Labels.RESEND_CODE, 'Resend code')}
+                  </Text>
+                </>
               )}
             </>
           )}
@@ -264,14 +324,59 @@ export function AuthScreen(props: {
   );
 }
 
-function formatTimer(totalSeconds: number): string {
-  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-  const ss = String(totalSeconds % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+/** App AgreementCard (AuthScreen.kt:931-985): Neutral200 card, radius LG, black copy. */
+function AgreementCard(props: { label: (key: string, fallback: string) => string }): React.ReactElement {
+  const { label } = props;
+  const bullet = (text: string) => (
+    <View style={styles.bulletRow}>
+      <Text style={[styles.agreeText, { width: 16 }]}>•</Text>
+      <Text style={[styles.agreeText, { flex: 1 }]}>{text}</Text>
+    </View>
+  );
+  return (
+    <View style={[styles.agreement, { backgroundColor: Neutral200 }]}>
+      <Text style={styles.agreeTitle}>{label(Labels.AGREEMENT_CARD_TITLE, 'What you are agreeing to:')}</Text>
+      <View style={{ height: 8 }} />
+      <View style={{ gap: 2 }}>
+        {bullet(label(Labels.AGREEMENT_POINT_VERIFICATION_CODE, 'A verification code by SMS or WhatsApp'))}
+        {bullet(
+          label(
+            Labels.AGREEMENT_POINT_UPDATES,
+            'FarmerChat updates, farming information, and occasional surveys or research by SMS, phone, or WhatsApp',
+          ),
+        )}
+      </View>
+      <View style={{ height: 8 }} />
+      <Text style={styles.agreeInfo}>
+        {label(
+          Labels.AGREEMENT_CARD_INFO_TEXT,
+          'Surveys or research may be conducted by Digital Green or trusted partners working with us.',
+        )}
+      </Text>
+    </View>
+  );
 }
+
+/** App formatTimer (AuthScreen.kt:1148-1152): "m:ss". */
+export function formatOtpTimer(totalSeconds: number): string {
+  const secs = Math.max(0, totalSeconds);
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
+const formatTimer = formatOtpTimer;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { padding: spacing.xl, gap: spacing.lg },
-  phoneRow: { flexDirection: 'row', gap: spacing.md },
+  // App: 20 side padding, 32 top, 24 bottom, centred column.
+  scroll: { paddingHorizontal: 20, paddingTop: 32, paddingBottom: 24, alignItems: 'center' },
+  stretch: { alignSelf: 'stretch' },
+  phoneRow: { flexDirection: 'row', gap: 8, alignSelf: 'stretch' },
+  agreement: { alignSelf: 'stretch', borderRadius: radius.lg, paddingHorizontal: 18, paddingVertical: 12 },
+  agreeTitle: { fontWeight: '700', fontSize: 18, color: '#000000' },
+  agreeText: { fontSize: 15, color: '#000000' },
+  agreeInfo: { fontWeight: '700', fontSize: 14, fontStyle: 'italic', color: '#000000' },
+  bulletRow: { flexDirection: 'row' },
+  consent: { fontSize: 15, textAlign: 'center', alignSelf: 'stretch' },
+  timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  timerDot: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  textAction: { textAlign: 'center', paddingVertical: 8 },
 });

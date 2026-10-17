@@ -912,8 +912,7 @@ export interface HomeUdfResponse {
 
 // @public (undocumented)
 export interface ImageStatementRequest {
-    // (undocumented)
-    statement_id: number;
+    statement_id: string;
     // (undocumented)
     triggered_input_type: string;
 }
@@ -938,8 +937,7 @@ export interface ImageStatementResponse {
 
 // @public (undocumented)
 export interface ImageViewedRequest {
-    // (undocumented)
-    statement_id: number;
+    statement_id: string;
     // (undocumented)
     status: 'viewed';
     // (undocumented)
@@ -1243,6 +1241,11 @@ export interface PreferredLanguage {
 
 // @public (undocumented)
 export interface PrivacyPolicyResponse {
+    farmerchat_terms_of_use?: string | null;
+    // (undocumented)
+    leaderboard_privacy_policy_url?: string | null;
+    // (undocumented)
+    leaderboard_terms_of_use?: string | null;
     // (undocumented)
     message?: string | null;
     // (undocumented)
@@ -1253,6 +1256,7 @@ export interface PrivacyPolicyResponse {
     terms_of_use?: string | null;
     // (undocumented)
     terms_of_use_url?: string | null;
+    url?: string | null;
 }
 
 // @public (undocumented)
@@ -1361,8 +1365,7 @@ export interface SectionDto {
     selection_type?: string | null;
     // (undocumented)
     statement?: string | null;
-    // (undocumented)
-    statement_id?: number | null;
+    statement_id?: string | number | null;
     // (undocumented)
     statement_type?: string | null;
     // (undocumented)
@@ -1545,8 +1548,7 @@ export interface TextPromptRequest {
     retry: boolean;
     // (undocumented)
     ssfr_crop?: string | null;
-    // (undocumented)
-    statement_id?: number | null;
+    statement_id?: string | null;
     streaming_required?: boolean;
     // (undocumented)
     transcription_id?: string | null;

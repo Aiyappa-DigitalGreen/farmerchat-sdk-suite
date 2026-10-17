@@ -37,7 +37,7 @@ export function LegalContentScreen(props: {
   }, [props.title, props.url, sdk]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: theme.background }}>
       <DefaultAppBar title={title} navIcon="close" onNavPress={props.onClose} />
       {webView ? (
         <View style={{ flex: 1 }}>

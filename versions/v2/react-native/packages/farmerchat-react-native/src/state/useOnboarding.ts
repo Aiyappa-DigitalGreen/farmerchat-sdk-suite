@@ -3,6 +3,7 @@
  * (docs/01 §3.1/§3.2: OnboardingAction / OnboardingState).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { legalLinksOf } from '../core/chatWire';
 import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
 import { resolveCountryCode, resolveFallbackCoordinates } from '../core/config';
@@ -289,12 +290,7 @@ export function useOnboarding(sdk: FarmerChatSdk): UseOnboardingResult {
   const fetchLegalLinks = useCallback(async () => {
     const result = await sdk.api.getPrivacyPolicy();
     if (result.ok) {
-      patch({
-        privacyPolicyUrl:
-          result.data.privacy_policy_url ?? result.data.privacy_policy ?? null,
-        termsOfUseUrl:
-          result.data.terms_of_use_url ?? result.data.terms_of_use ?? null,
-      });
+      patch(legalLinksOf(result.data));
     }
   }, [patch, sdk]);
 

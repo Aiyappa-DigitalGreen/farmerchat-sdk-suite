@@ -7,6 +7,7 @@ import { BackHandler } from 'react-native';
 import { AnalyticsEvents, ScreenNames } from '../../core/analytics';
 import { useLabel, useSdk } from '../context';
 import { FullScreenMessage } from '../components/FullScreenMessage';
+import { Labels } from '../../core/labels';
 
 export function AccountBenefitsScreen(props: {
   onSignUp: () => void;
@@ -21,20 +22,30 @@ export function AccountBenefitsScreen(props: {
   }, [sdk]);
 
   return (
+    // App AppNavGraph.kt:800-835 (AccountBenefits): rounded ArrowBack (popBackStack) + rounded
+    // "Skip", LOOKING_AT_CAMERA card, subtitle bodyLarge, chevron CTA.
     <FullScreenMessage
-      title={label('fc_v2_app_label_sign_up', 'Sign up')}
+      title={label(Labels.SIGN_UP, 'Sign up')}
+      mainMessage={label(Labels.SAVE_YOUR_QUESTIONS_ANSWERS, 'Save your questions\nand answers')}
       subtitle={label(
-        'account_benefits_subtitle',
-        'Save your questions and answers',
+        Labels.WELL_SAVE_YOUR_CHATS_YOU_CONTINUE,
+        "We'll save your chats so you can continue later.",
       )}
+      subtitleLarge
       illustration="LOOKING_AT_CAMERA"
-      primaryLabel={label('fc_v2_app_label_sign_up_phone_number', 'Sign up with phone number')}
+      illustrationStyle="card"
+      primaryLabel={label(Labels.SIGN_UP_PHONE_NUMBER, 'Sign up with phone number')}
+      primaryState="Chevron"
       onPrimary={() => {
         sdk.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_PROCEED, {});
         props.onSignUp();
       }}
-      secondaryLabel={label('fc_v2_app_label_skip', 'Skip')}
-      onSecondary={() => {
+      onBack={() => {
+        sdk.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP, {});
+        props.onSkip();
+      }}
+      rightLabel={label(Labels.SKIP, 'Skip')}
+      onRight={() => {
         sdk.analytics.track(AnalyticsEvents.ACCOUNT_BENEFIT_SCREEN_SKIP, {});
         props.onSkip();
       }}
@@ -63,14 +74,19 @@ export function AccountSuccessScreen(props: {
   }, []);
 
   return (
+    // App AccountSuccessScreen.kt:55-85: title SIGN_UP, "You're all set!", bodyLarge subtitle,
+    // LOOKING_AT_SKY card, no bar buttons.
     <FullScreenMessage
-      title={label('account_success_title', "You're all set!")}
+      title={label(Labels.SIGN_UP, 'Sign up')}
+      mainMessage={label(Labels.YOURE_ALL_SET, "You're all set!")}
       subtitle={label(
-        'account_success_subtitle',
-        'Your questions and answers are now saved to your account',
+        Labels.PREVIOUS_QUESTIONS_MENU,
+        'Find your previous questions in the menu and continue anytime.',
       )}
+      subtitleLarge
       illustration="LOOKING_AT_SKY"
-      primaryLabel={label('fc_v2_app_label_continue', 'Continue')}
+      illustrationStyle="card"
+      primaryLabel={label(Labels.CONTINUE, 'Continue')}
       onPrimary={() => {
         sdk.analytics.track(AnalyticsEvents.SIGNUP_CONTINUE_CLICKED, {});
         props.onContinue();

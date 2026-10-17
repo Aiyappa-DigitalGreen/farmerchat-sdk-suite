@@ -22,6 +22,8 @@ export interface LanguageSettingsState {
   selectedLanguageCode: string | null;
   /** The picked language's streaming_required, saved with it (app SettingsViewModel). */
   selectedStreamingRequired: boolean;
+  /** The picked language's display name, stored on Save (drawer "Language: X"). */
+  selectedDisplayName: string | null;
   fetchingLabelsForId: number | null;
   isSubmitting: boolean;
   submitSuccess: boolean;
@@ -36,6 +38,7 @@ const initialLanguageSettingsState: LanguageSettingsState = {
   selectedLanguageId: null,
   selectedLanguageCode: null,
   selectedStreamingRequired: true,
+  selectedDisplayName: null,
   fetchingLabelsForId: null,
   isSubmitting: false,
   submitSuccess: false,
@@ -102,60 +105,70 @@ export function useLanguageSettings(sdk: FarmerChatSdk): UseLanguageSettingsResu
     });
   }, [patch, sdk]);
 
+  /**
+   * A row tap only SELECTS (app SettingsViewModel: the radio moves, nothing else). Labels, the
+   * stored language and the UI language change on Save — tapping a row and going Back leaves the
+   * old language in place (Android scenario pass, 2026-10-17).
+   */
   const selectLanguage = useCallback(
     (id: number, code: string, displayName?: string, streamingRequired?: boolean | null) => {
       patch({
         selectedLanguageId: id,
         selectedLanguageCode: code,
+        selectedDisplayName: displayName ?? null,
         selectedStreamingRequired: streamingRequired ?? true,
-        fetchingLabelsForId: id,
         labelsFetchFailed: false,
       });
-      void sdk.api.getLabels(id).then((result) => {
-        if (!mounted.current) return;
-        if (result.ok) {
-          sdk.store.set(StorageKeys.SELECTED_LANGUAGE_ID, id);
-          sdk.store.set(StorageKeys.SELECTED_LANGUAGE_CODE, code);
-          // App parity: persist the display name so the drawer's "Language: X"
-          // line updates (previously only id/code were saved → stale drawer).
-          if (displayName) sdk.store.set(StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME, displayName);
-          sdk.labels.setLabels(result.data);
-          patch({ fetchingLabelsForId: null });
-        } else {
-          patch({ fetchingLabelsForId: null, labelsFetchFailed: true });
-        }
-      });
     },
-    [patch, sdk],
+    [patch],
   );
 
+  /**
+   * Save — app SettingsViewModel.submitLanguage (:205-300): fetch the language's labels AND call
+   * set_preferred_language; on success store id / code / display name / streaming_required and
+   * switch the labels.
+   */
   const submitLanguage = useCallback(() => {
     const s = stateRef.current;
     const userId = sdk.session.userId;
-    if (!userId || s.selectedLanguageId === null) return;
-    patch({ isSubmitting: true, submitErrorMessage: null });
-    void sdk.api
-      .setPreferredLanguage({ user_id: userId, language_id: s.selectedLanguageId })
-      .then((result) => {
-        if (!mounted.current) return;
-        if (result.ok) {
-          // App SettingsViewModel: the language's streaming_required is saved with it.
-          sdk.store.set(StorageKeys.STREAMING_REQUIRED, s.selectedStreamingRequired);
-          sdk.analytics.track(AnalyticsEvents.SAVE_LANGUAGE_CLICK, {
-            language_id: s.selectedLanguageId,
-            language_code: s.selectedLanguageCode,
-            from_screen: 'settings',
-          });
-          patch({ isSubmitting: false, submitSuccess: true });
-        } else {
-          patch({
-            isSubmitting: false,
-            submitErrorMessage:
-              result.message ??
-              sdk.labels.getLabel('language_save_failed', 'Could not save your language.'),
-          });
+    if (!userId || s.selectedLanguageId === null || s.isSubmitting) return;
+    const languageId = s.selectedLanguageId;
+    patch({ isSubmitting: true, submitErrorMessage: null, fetchingLabelsForId: languageId });
+    void Promise.all([
+      sdk.api.getLabels(languageId),
+      sdk.api.setPreferredLanguage({ user_id: userId, language_id: languageId }),
+    ]).then(([labels, saved]) => {
+      if (!mounted.current) return;
+      if (!labels.ok) {
+        patch({ isSubmitting: false, fetchingLabelsForId: null, labelsFetchFailed: true });
+        return;
+      }
+      if (saved.ok) {
+        sdk.store.set(StorageKeys.SELECTED_LANGUAGE_ID, languageId);
+        if (s.selectedLanguageCode) sdk.store.set(StorageKeys.SELECTED_LANGUAGE_CODE, s.selectedLanguageCode);
+        // App parity: the display name feeds the drawer's "Language: X" line.
+        if (s.selectedDisplayName) {
+          sdk.store.set(StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME, s.selectedDisplayName);
         }
-      });
+        // App SettingsViewModel: the language's streaming_required is saved with it.
+        sdk.store.set(StorageKeys.STREAMING_REQUIRED, s.selectedStreamingRequired);
+        sdk.labels.setLabels(labels.data);
+        sdk.analytics.track(AnalyticsEvents.SAVE_LANGUAGE_CLICK, {
+          language_id: languageId,
+          language_code: s.selectedLanguageCode,
+          from_screen: 'settings',
+        });
+        patch({ isSubmitting: false, fetchingLabelsForId: null, submitSuccess: true });
+      } else {
+        patch({
+          isSubmitting: false,
+          fetchingLabelsForId: null,
+          submitErrorMessage:
+            saved.message ??
+            sdk.labels.getLabel('language_save_failed', 'Could not save your language.'),
+        });
+      }
+    });
   }, [patch, sdk]);
 
   const consumeLanguageResult = useCallback(() => {

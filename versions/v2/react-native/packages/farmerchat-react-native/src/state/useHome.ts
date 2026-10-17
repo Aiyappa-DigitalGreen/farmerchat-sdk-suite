@@ -4,6 +4,7 @@
  * new conversation, audio transcription.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { legalLinksOf } from '../core/chatWire';
 import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
 import type { FarmerChatSdk } from '../core/sdk';
@@ -41,8 +42,8 @@ export type HomeAction =
       audioFormat: string;
       triggeredType: string;
     }
-  | { type: 'MarkImageViewed'; statementId: number; userId: string }
-  | { type: 'FetchImageStatement'; statementId: number; triggeredInputType: string }
+  | { type: 'MarkImageViewed'; statementId: string; userId: string }
+  | { type: 'FetchImageStatement'; statementId: string; triggeredInputType: string }
   /**
    * 2.0.0: accept the terms of use from `TermsOfUseDialog`. Calls endpoint #7
    * (`accept_terms`) — best-effort, matching the app: acceptance is recorded but never blocks.
@@ -267,7 +268,7 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
   );
 
   const markImageViewed = useCallback(
-    async (statementId: number, userId: string) => {
+    async (statementId: string, userId: string) => {
       const result = await sdk.api.markImageViewed({
         statement_id: statementId,
         user_id: userId,
@@ -285,7 +286,7 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
   );
 
   const fetchImageStatement = useCallback(
-    async (statementId: number, triggeredInputType: string) => {
+    async (statementId: string, triggeredInputType: string) => {
       patch({ imageStatementState: UiStates.loading() });
       const result = await sdk.api.getImageStatement({
         statement_id: statementId,
@@ -354,15 +355,13 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
    * Fetches the legal links (#4) so `TermsOfUseDialog` can load the terms. Best-effort: a
    * failure only leaves the URL null (port of `HomeViewModel.fetchPrivacyPolicy`).
    *
-   * App parity: `terms_of_use_url` is the WebView URL; `terms_of_use` is the fallback the
-   * response uses on some environments.
+   * App parity: `farmerchat_terms_of_use` is the WebView URL (HomeViewModel.kt:128).
    */
   const fetchPrivacyPolicy = useCallback(async () => {
     const result = await sdk.api.getPrivacyPolicy();
     if (!mounted.current) return;
     if (result.ok) {
-      const url = result.data.terms_of_use_url ?? result.data.terms_of_use ?? null;
-      patch({ farmerchatTermsOfUse: url && url.trim().length > 0 ? url : null });
+      patch({ farmerchatTermsOfUse: legalLinksOf(result.data).termsOfUseUrl });
     }
   }, [patch, sdk]);
 

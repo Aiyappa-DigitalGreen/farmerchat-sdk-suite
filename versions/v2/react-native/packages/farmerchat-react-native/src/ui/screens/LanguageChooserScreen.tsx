@@ -3,6 +3,7 @@
  * (priority + "All languages" expand), per-row label-fetch loading,
  * bottom "Save language"/"Setting language" button.
  */
+import { collapsedLanguages } from '../../core/chatWire';
 import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -74,7 +75,11 @@ export function LanguageChooserScreen(props: {
   const languageGroups = state.languageState.kind === 'success' ? state.languageState.data : null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      // DefaultAppBar draws under the status bar and pads its own top inset.
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <DefaultAppBar
         title={label('fc_v2_app_label_choose_your_language', 'Choose your language')}
         navIcon={props.onBack ? 'back' : 'menu'}
@@ -89,14 +94,18 @@ export function LanguageChooserScreen(props: {
           <ScrollView contentContainerStyle={styles.scroll}>
             {(state.expandedLanguages
               ? dedupeLanguages(languageGroups.flatMap((g) => [...g.priority_view, ...g.expanded_view]))
-              : languageGroups.flatMap((g) => g.priority_view)
+              : collapsedLanguages(
+                  languageGroups.flatMap((g) => g.priority_view),
+                  dedupeLanguages(languageGroups.flatMap((g) => [...g.priority_view, ...g.expanded_view])),
+                  state.selectedLanguageId,
+                )
             ).map((lang) => (
               <RadioRow
                 key={lang.id}
                 label={lang.display_name}
                 sublabel={lang.name !== lang.display_name ? lang.name : null}
                 selected={state.selectedLanguageId === lang.id}
-                loading={state.fetchingLabelsForId === lang.id}
+                loading={false}
                 onPress={() => settings.selectLanguage(lang.id, lang.code, lang.display_name, lang.streaming_required)}
               />
             ))}
@@ -122,7 +131,7 @@ export function LanguageChooserScreen(props: {
                   : label('fc_v2_app_label_save_language', 'Save language')
               }
               state={state.isSubmitting ? 'Loading' : 'Default'}
-              enabled={state.selectedLanguageId !== null && state.fetchingLabelsForId === null}
+              enabled={state.selectedLanguageId !== null && !state.isSubmitting}
               onPress={settings.submitLanguage}
             />
           </View>

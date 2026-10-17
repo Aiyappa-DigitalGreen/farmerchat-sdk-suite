@@ -73,7 +73,11 @@ export function ChatHistoryScreen(props: {
   }));
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      // DefaultAppBar draws under the status bar and pads its own top inset.
+      edges={['left', 'right', 'bottom']}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <DefaultAppBar
         title={label('history_title', 'Recent Chats')}
         navIcon={props.onBack ? 'back' : 'menu'}

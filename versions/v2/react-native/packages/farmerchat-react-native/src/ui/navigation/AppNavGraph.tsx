@@ -14,7 +14,13 @@ import {
 } from '@react-navigation/drawer';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AnalyticsEvents } from '../../core/analytics';
-import { setScreenHasOwnExit } from '../../core/exitSignal';
+import { drawerMenuOption } from '../../core/chatWire';
+import {
+  fallbackCloseSlotFor,
+  isDrawerOpenInState,
+  setFallbackCloseSlot,
+  setScreenHasOwnExit,
+} from '../../core/exitSignal';
 import { addOpenChatListener } from '../../FarmerChat';
 import type { FarmerChatSdk } from '../../core/sdk';
 import { StorageKeys } from '../../core/sessionStore';
@@ -22,7 +28,7 @@ import { useSdk } from '../context';
 import { useChatHistory } from '../../state/useChatHistory';
 import { useLocationPrompt } from '../../state/useLocationPrompt';
 import { AppNavigator, createRootNavigationRef } from './AppNavigator';
-import { AppDrawerContent } from './DrawerContent';
+import { AppDrawerContent, DRAWER_WIDTH } from './DrawerContent';
 import { ErrorNavigationManager } from './errorManager';
 import type { DrawerParamList, RootStackParamList } from './types';
 import { SplashScreen } from '../screens/SplashScreen';
@@ -196,7 +202,8 @@ export function AppNavGraph(): React.ReactElement {
   // "See all": offline → Error(fromScreen=chatHistory), else ChatHistory
   const handleSeeAll = useCallback(() => {
     closeDrawer();
-    sdk.analytics.track(AnalyticsEvents.CHAT_HISTORY_CLICK_EVENT, {});
+    // App DrawerContent.kt trackChatHistoryClickFromMenu: screen_name "Menu".
+    sdk.analytics.track(AnalyticsEvents.CHAT_HISTORY_CLICK_EVENT, { screen_name: 'Menu' });
     if (chatHistory.state.isNetworkError && chatHistory.state.errorMessage !== null) {
       appNavigator.push('Error', { isNetworkError: true, fromScreen: 'chatHistory' });
     } else {
@@ -253,6 +260,12 @@ export function AppNavGraph(): React.ReactElement {
     setScreenHasOwnExit(currentRoute === 'Chat' && sdk.config.mode === 'CHAT_ONLY');
   }, [currentRoute, sdk]);
   useEffect(() => () => setScreenHasOwnExit(false), []);
+  // Home's top-right is the weather pill: a presenter's fallback ✕ moves left of it.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    setFallbackCloseSlot(fallbackCloseSlotFor(currentRoute, drawerOpen));
+  }, [currentRoute, drawerOpen]);
+  useEffect(() => () => setFallbackCloseSlot('right'), []);
 
   const currentLanguage = sdk.store.getString(
     StorageKeys.SELECTED_LANGUAGE_DISPLAY_NAME,
@@ -265,6 +278,7 @@ export function AppNavGraph(): React.ReactElement {
         onStateChange={() => {
           const route = navRef.getCurrentRoute()?.name ?? null;
           setCurrentRoute(route);
+          setDrawerOpen(isDrawerOpenInState(navRef.getRootState()));
           if (route) errorManager.setActiveScreen(routeToScreenId(route));
           setIsAuthenticated(sdk.session.isAuthenticated);
         }}
@@ -273,7 +287,7 @@ export function AppNavGraph(): React.ReactElement {
           screenOptions={{
             headerShown: false,
             swipeEnabled: false,
-            drawerStyle: { width: 300 },
+            drawerStyle: { width: DRAWER_WIDTH },
           }}
           drawerContent={() => (
             <AppDrawerContent
@@ -285,12 +299,16 @@ export function AppNavGraph(): React.ReactElement {
               isLoadingHistory={chatHistory.state.isLoading}
               onRetryHistory={() => chatHistory.refresh()}
               onSeeAllClick={handleSeeAll}
-              onSignUpClick={handleSignUpClick}
+              onSignUpClick={() => {
+                sdk.analytics.track(AnalyticsEvents.MENU_OPTION_CLICK_EVENT, { option: drawerMenuOption('signup') });
+                handleSignUpClick();
+              }}
               showSettings={sdk.config.showSettings}
               showHistory={sdk.config.showHistory}
               onNavigate={(route) => {
                 closeDrawer();
-                sdk.analytics.track(AnalyticsEvents.MENU_OPTION_CLICK_EVENT, { route });
+                const option = drawerMenuOption(route);
+                if (option) sdk.analytics.track(AnalyticsEvents.MENU_OPTION_CLICK_EVENT, { option });
                 switch (route) {
                   case 'home':
                     appNavigator.navigateDrawerRoute('Home');
@@ -309,8 +327,13 @@ export function AppNavGraph(): React.ReactElement {
                     break;
                 }
               }}
-              onOpenQuestion={(q) => {
+              onOpenQuestion={(q, index) => {
                 closeDrawer();
+                sdk.analytics.track(AnalyticsEvents.CHAT_HISTORY_CLICK, {
+                  screen_name: 'Side Menu',
+                  conversation_id: q.conversationId,
+                  question_index: String(index),
+                });
                 appNavigator.navigateToChat({
                   source: 'history',
                   conversationId: q.conversationId,
