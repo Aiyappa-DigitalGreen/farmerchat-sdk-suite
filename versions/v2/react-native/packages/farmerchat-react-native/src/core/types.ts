@@ -243,9 +243,21 @@ export interface UserProfile {
   user_id?: string | null;
 }
 
+/** App `RoleAssigned` (domain/model/profile/FarmerProfile.kt:20-24). */
+export interface RoleAssigned {
+  id?: number | null;
+  role_name?: string | null;
+  role_display_name?: string | null;
+}
+
+/**
+ * App `FarmerProfile` (domain/model/profile/FarmerProfile.kt:12-18). Wire names are snake_case:
+ * the SDK used to read `userProfile`, which the server never sends, so every profile fetch saw
+ * no name.
+ */
 export interface FarmerProfile {
-  userProfile?: UserProfile | null;
-  roleAssigned?: boolean | null;
+  user_profile?: UserProfile | null;
+  role_assigned?: RoleAssigned | null;
   message?: string | null;
 }
 
@@ -319,11 +331,28 @@ export interface UpdateLocationRequest {
   osm_response?: OsmResponse | null;
 }
 
+/** App `GetLocationResponse.UserProfile` (domain/model/location/GetLocationResponse.kt). */
+export interface LocationUserProfile {
+  user_id?: string | null;
+  country_name?: string | null;
+  country_code?: string | null;
+  geography_level2_name?: string | null;
+  geography_level3?: string | null;
+  geography_level4?: string | null;
+  geography_level5?: string | null;
+  geography_level6?: string | null;
+  display_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/**
+ * App `GetLocationResponse` (#11 `update_user_location`): the resolved place is nested under
+ * `user_profile` (verified on DEMO); there are no top-level country/state/district fields.
+ */
 export interface GetLocationResponse {
-  message?: string | null;
-  country?: string | null;
-  state?: string | null;
-  district?: string | null;
+  error_message?: string | null;
+  user_profile?: LocationUserProfile | null;
 }
 
 // ---------------------------------------------------------------------------

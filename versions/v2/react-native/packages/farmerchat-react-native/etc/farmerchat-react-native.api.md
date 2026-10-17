@@ -752,14 +752,14 @@ export type FarmerChatTokenProvider = () => Promise<{
 // @public (undocumented)
 export function FarmerChatView(): React_2.ReactElement;
 
-// @public (undocumented)
+// @public
 export interface FarmerProfile {
     // (undocumented)
     message?: string | null;
     // (undocumented)
-    roleAssigned?: boolean | null;
+    role_assigned?: RoleAssigned | null;
     // (undocumented)
-    userProfile?: UserProfile | null;
+    user_profile?: UserProfile | null;
 }
 
 // @public (undocumented)
@@ -842,16 +842,12 @@ export interface GeoResponse {
     location: GeoLocation;
 }
 
-// @public (undocumented)
+// @public
 export interface GetLocationResponse {
     // (undocumented)
-    country?: string | null;
+    error_message?: string | null;
     // (undocumented)
-    district?: string | null;
-    // (undocumented)
-    message?: string | null;
-    // (undocumented)
-    state?: string | null;
+    user_profile?: LocationUserProfile | null;
 }
 
 // @public (undocumented)
@@ -1045,6 +1041,32 @@ export interface LiveStockDetail {
     id?: number | null;
     // (undocumented)
     name?: string | null;
+}
+
+// @public
+export interface LocationUserProfile {
+    // (undocumented)
+    country_code?: string | null;
+    // (undocumented)
+    country_name?: string | null;
+    // (undocumented)
+    display_address?: string | null;
+    // (undocumented)
+    geography_level2_name?: string | null;
+    // (undocumented)
+    geography_level3?: string | null;
+    // (undocumented)
+    geography_level4?: string | null;
+    // (undocumented)
+    geography_level5?: string | null;
+    // (undocumented)
+    geography_level6?: string | null;
+    // (undocumented)
+    latitude?: number | null;
+    // (undocumented)
+    longitude?: number | null;
+    // (undocumented)
+    user_id?: string | null;
 }
 
 // @public (undocumented)
@@ -1260,6 +1282,16 @@ export interface Role {
     id?: number | null;
     // (undocumented)
     name?: string | null;
+}
+
+// @public
+export interface RoleAssigned {
+    // (undocumented)
+    id?: number | null;
+    // (undocumented)
+    role_display_name?: string | null;
+    // (undocumented)
+    role_name?: string | null;
 }
 
 // @public

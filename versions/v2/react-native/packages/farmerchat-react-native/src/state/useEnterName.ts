@@ -8,6 +8,7 @@ import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
+import { profileDisplayName } from '../core/profile';
 import type { FarmerProfile, UserNameRequest, UserNameResponse } from '../core/types';
 
 export type UserNameAction =
@@ -111,9 +112,8 @@ export function useEnterName(sdk: FarmerChatSdk): UseEnterNameResult {
       void sdk.api.viewUserProfile(userId).then((result) => {
         if (!mounted.current) return;
         if (result.ok) {
-          const first = result.data.userProfile?.first_name ?? '';
-          const last = result.data.userProfile?.last_name ?? '';
-          const full = sanitizeStoredName(`${first} ${last}`.trim());
+          // Wire key is `user_profile` (app FarmerProfile.kt:13); name per UserProfile.displayName().
+          const full = sanitizeStoredName(profileDisplayName(result.data.user_profile));
           if (full) {
             sdk.store.set(StorageKeys.USER_NAME, full);
           } else {

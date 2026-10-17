@@ -42,8 +42,13 @@ export function LanguageChooserScreen(props: {
   useEffect(() => {
     if (state.submitSuccess) {
       showToast(label('fc_v2_app_label_language_updated', 'Language updated'), 'success');
-      settings.consumeLanguageResult();
-      const timer = setTimeout(() => props.onLanguageSaved(), 500);
+      // Consume INSIDE the timer: consuming first flipped `submitSuccess` back to false, which
+      // re-ran this effect and its cleanup cleared the 500 ms timer, so the screen never left
+      // after a successful save (web scenario pass B7, 2026-10-17).
+      const timer = setTimeout(() => {
+        settings.consumeLanguageResult();
+        props.onLanguageSaved();
+      }, 500);
       return () => clearTimeout(timer);
     }
     return undefined;

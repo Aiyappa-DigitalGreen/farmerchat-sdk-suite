@@ -8,6 +8,7 @@ import { UiStates, type UiState } from '../core/apiResult';
 import { AnalyticsEvents } from '../core/analytics';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
+import { profileDisplayName } from '../core/profile';
 import type {
   CropResponse,
   GetVoiceResponse,
@@ -340,11 +341,10 @@ export function useHome(sdk: FarmerChatSdk): UseHomeResult {
       // Superseded by a guest replacement (docs/02 Step 3): built with the old user_id.
       if (gen !== sdk.session.guestGeneration) return;
       if (result.ok) {
-        const first = result.data.userProfile?.first_name ?? '';
-        const last = result.data.userProfile?.last_name ?? '';
-        const full = `${first} ${last}`.trim();
+        // Wire key is `user_profile` (app FarmerProfile.kt:13); name per UserProfile.displayName().
+        const full = profileDisplayName(result.data.user_profile);
         if (full) sdk.store.set(StorageKeys.USER_NAME, full);
-        backfillGeographyKeys(result.data.userProfile);
+        backfillGeographyKeys(result.data.user_profile);
       }
     },
     [backfillGeographyKeys, sdk],

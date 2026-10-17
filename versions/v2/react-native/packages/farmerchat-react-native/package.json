@@ -27,7 +27,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.json && tsc -p tsconfig.json --removeComments --declaration false --declarationMap false",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "node --import ./test/ts-extension-hook.mjs test/locationWire.test.ts && node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/chatWire.test.ts && node --import ./test/ts-extension-hook.mjs test/sendQueryAndExif.test.ts && node --import ./test/ts-extension-hook.mjs test/optionalPeers.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
+    "test": "node --import ./test/ts-extension-hook.mjs test/locationWire.test.ts && node --import ./test/ts-extension-hook.mjs test/appParity.test.ts && node --import ./test/ts-extension-hook.mjs test/agenticFinalText.test.ts && node --import ./test/ts-extension-hook.mjs test/chatWire.test.ts && node --import ./test/ts-extension-hook.mjs test/sendQueryAndExif.test.ts && node --import ./test/ts-extension-hook.mjs test/optionalPeers.test.ts && node --import ./test/ts-extension-hook.mjs test/profile.test.ts && node --import ./test/ts-extension-hook.mjs test/config.test.ts && node --import ./test/ts-extension-hook.mjs --import ./test/native-stubs-hook.mjs test/lifecycle.test.ts",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "size:check": "node scripts/size-check.mjs",

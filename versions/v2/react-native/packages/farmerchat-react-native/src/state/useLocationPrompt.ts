@@ -36,6 +36,7 @@ import type {
 } from '../core/locationOutcome';
 import type { FarmerChatSdk } from '../core/sdk';
 import { StorageKeys } from '../core/sessionStore';
+import { locationPrefsFromResponse } from '../core/profile';
 
 export type LocationErrorType = 'NoNetwork' | 'GpsUnavailable' | 'LocationFailed';
 
@@ -417,12 +418,15 @@ export function useLocationPrompt(sdk: FarmerChatSdk): UseLocationPromptResult {
       void sdk.api.updateUserLocation({ lat, long, user_id: userId }).then((result) => {
         if (result.ok) {
           sdk.analytics.track(AnalyticsEvents.LOCATION_UPDATE_SUCCESS, successProps);
-          if (result.data.country) {
-            sdk.store.set(StorageKeys.USER_COUNTRY_NAME, result.data.country);
-          }
-          if (result.data.state) sdk.store.set(StorageKeys.USER_STATE, result.data.state);
-          if (result.data.district) {
-            sdk.store.set(StorageKeys.USER_DISTRICT, result.data.district);
+          // App LocationPromptHost.kt:524-543: the place is under `user_profile`, and every field
+          // is stored as sent (a blank one clears the old value, so the bubble never shows the
+          // previous place).
+          const place = locationPrefsFromResponse(result.data);
+          if (place) {
+            sdk.store.set(StorageKeys.USER_COUNTRY_NAME, place.countryName);
+            sdk.store.set(StorageKeys.USER_COUNTRY_CODE, place.countryCode);
+            sdk.store.set(StorageKeys.USER_STATE, place.state);
+            sdk.store.set(StorageKeys.USER_DISTRICT, place.district);
           }
           saveLocation(lat, long);
           if (isWeather || generation.current !== gen) return;
