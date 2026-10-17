@@ -68,6 +68,7 @@ import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserLocationUseCase
 import org.digitalgreen.farmerchat.sdk.core.usecase.UpdateUserNameUseCase
 import org.digitalgreen.farmerchat.sdk.core.model.SetPreferredLanguageRequest
 import org.digitalgreen.farmerchat.sdk.core.remote.AgenticChatDataSource
+import org.digitalgreen.farmerchat.sdk.core.remote.AgenticStreamTimeouts
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -213,16 +214,24 @@ class FarmerChatGraph internal constructor(
     /**
      * Agentic streaming client (#27a, 2.0.0).
      *
-     * Deliberately NOT [mainClient]: agentic answers stream for minutes, so this client has
-     * **no read timeout**. It must also skip the ApiPriority/Timeout interceptors, whose whole
-     * job is to impose the P1/P2/P3 deadlines that would cut a stream short.
+     * Deliberately NOT [mainClient]: it must skip the ApiPriority/Timeout interceptors, whose
+     * whole job is to impose the P1/P2/P3 deadlines that would cut a stream short.
+     *
+     * App parity (core/di/NetworkModule.kt "streamingOkHttp"): connect 15 s, write 30 s, and a
+     * BOUNDED read timeout of [AgenticStreamTimeouts.READ_SECONDS] (60 s). readTimeout caps the
+     * gap between successive reads, not the stream, so a long answer still streams while tokens /
+     * status events keep arriving. The SDK used 0 (infinite): a server that went silent left the
+     * bubble spinning forever; now it surfaces as an IOException → Failure(NETWORK) → the
+     * interrupted card with Try again. No callTimeout, as in the app (it would cap the stream).
      *
      * It keeps [authHeaderInterceptor] and the [tokenAuthenticator], so `Authorization` and the
      * 401 refresh behave exactly as on every other call.
      */
     private val agenticClient: OkHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
-        .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .connectTimeout(AgenticStreamTimeouts.CONNECT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(AgenticStreamTimeouts.READ_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(AgenticStreamTimeouts.WRITE_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
         .callTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
         .addInterceptor(authHeaderInterceptor)
         .addInterceptor(loggingInterceptor)

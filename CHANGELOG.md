@@ -74,6 +74,8 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   `shell-quote` advisory.
 
 ### Fixed
+- Android: feed cards ignored the host corner radius; Views answers showed raw table pipes; a silent
+  agentic stream could hang (now the app's 60 s read timeout).
 - iOS: Privacy/Terms links were always empty (wrong response fields; the sign-up consent link opened a
   guessed URL); feed cards ignored the host corner radius on UIKit; a silent agentic stream could hang
   (now the app's 60 s read timeout).

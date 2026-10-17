@@ -509,7 +509,12 @@ internal class ChatAdapter(
         // simply grows in place (the Views flavour has no typewriter reveal to suppress).
         b.fcAiText.isVisible = message.text.isNotEmpty()
         b.fcAiText.text =
-            Markdown.render(message.text, b.root.resources.displayMetrics.density)
+            Markdown.render(
+                message.text,
+                b.root.resources.displayMetrics.density,
+                ContextCompat.getColor(b.root.context, R.color.fc_surface_reading_secondary),
+                ContextCompat.getColor(b.root.context, R.color.fc_foreground_secondary)
+            )
 
         // Chat UI customization (null = XML/theme default).
         val cfg = FarmerChat.requireGraph().config

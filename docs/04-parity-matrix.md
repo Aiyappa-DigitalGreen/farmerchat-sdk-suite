@@ -9098,3 +9098,11 @@ fields, with `privacyPolicy`/`termsOfUse` kept as computed properties; host card
 UIKit feed cards and SwiftUI question/SSFR cards (`FCUITheme.cardRadius`); agentic stream idle-read
 limit was 7 days (request timeout overrode the session's) — now the app's 60 s. Weather chip and tables
 already correct. docs/02 corrected: #4 field list, agentic 60 s read timeout (said "no read timeout").
+Android, agentic ON re-run (same day): every chat scenario passes in Compose and Views on DEMO (typed
+answer, follow-up chip with #30 id, Share, Listen, language change, offline → retry:true, photo+caption
+on the agentic endpoint with `image_name`, long question, close ✕). RN-found checks: #4 fields and the
+weather chip already matched the app; fixed — host `cardCornerRadius` on Compose select/multi/SSFR cards
+and all Views feed cards; Views answers rendered raw `|` table pipes, now the app's cards (thin in-card
+dividers still missing in Views); the agentic stream client had no read timeout — now the app's connect
+15 s / read 60 s / write 30 s (`AgenticStreamTimeouts`, test with a silent local server). Noted: Views
+photo-sheet Camera/Photos tiles are not exposed to accessibility.

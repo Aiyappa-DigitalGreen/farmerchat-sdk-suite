@@ -127,13 +127,24 @@ internal class HomeFeedAdapter(
         rotate.start()
     }
 
+    /**
+     * Host `FarmerChatTheme.cardCornerRadius` on the feed cards, as Compose does through
+     * `LocalFcShapes.card`. The XML card background is a 24dp shape; without this a host radius
+     * never reached the Views feed (found in the 2026-10-17 RN comparison).
+     */
+    private fun applyHostCardRadius(root: android.view.View) {
+        val dp = hostCardRadiusDp(org.digitalgreen.farmerchat.sdk.FarmerChat.requireGraph().config.theme) ?: return
+        (root.background?.mutate() as? android.graphics.drawable.GradientDrawable)?.cornerRadius =
+            dp * root.resources.displayMetrics.density
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
-            TYPE_SSFR -> SsfrHolder(FcItemHomeSsfrBinding.inflate(inflater, parent, false))
+            TYPE_SSFR -> SsfrHolder(FcItemHomeSsfrBinding.inflate(inflater, parent, false).also { applyHostCardRadius(it.root) })
             TYPE_HEADER -> HeaderHolder(FcItemHomeFeedHeaderBinding.inflate(inflater, parent, false))
-            TYPE_CONTENT -> ContentHolder(FcItemHomeContentCardBinding.inflate(inflater, parent, false))
-            TYPE_SELECT -> SelectHolder(FcItemHomeSelectCardBinding.inflate(inflater, parent, false))
+            TYPE_CONTENT -> ContentHolder(FcItemHomeContentCardBinding.inflate(inflater, parent, false).also { applyHostCardRadius(it.root) })
+            TYPE_SELECT -> SelectHolder(FcItemHomeSelectCardBinding.inflate(inflater, parent, false).also { applyHostCardRadius(it.root) })
             else -> FooterHolder(FcItemHomeFooterBinding.inflate(inflater, parent, false))
         }
     }
@@ -369,3 +380,7 @@ internal class HomeFeedAdapter(
         }
     }
 }
+
+/** The host's card radius in dp, or null to keep the SDK default (24dp, app Radius.XXL). */
+internal fun hostCardRadiusDp(theme: org.digitalgreen.farmerchat.sdk.FarmerChatTheme?): Float? =
+    theme?.cardCornerRadius?.toFloat()

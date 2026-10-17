@@ -266,4 +266,14 @@ class ViewsAppParityTest {
         assertTrue(body.contains("fcComposerCamera.contentDescription = CAMERA_DESCRIPTION"))
         assertTrue(body.contains("if (hasContent) \"Send\" else \"Voice\""))
     }
+
+    /** Host cardCornerRadius reaches the Views feed cards (2026-10-17). */
+    @Test
+    fun `feed cards honour the host card radius`() {
+        val theme = org.digitalgreen.farmerchat.sdk.FarmerChatTheme.builder().cardCornerRadius(8).build()
+        assertEquals(8f, org.digitalgreen.farmerchat.sdk.views.internal.ui.hostCardRadiusDp(theme))
+        assertEquals(null, org.digitalgreen.farmerchat.sdk.views.internal.ui.hostCardRadiusDp(null))
+        val body = File("src/main/java/org/digitalgreen/farmerchat/sdk/views/internal/ui/HomeFeedAdapter.kt").readText()
+        assertEquals(3, Regex("applyHostCardRadius\\(it.root\\)").findAll(body).count())
+    }
 }

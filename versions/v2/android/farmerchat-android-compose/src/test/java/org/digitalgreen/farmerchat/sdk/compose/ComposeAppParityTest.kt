@@ -162,4 +162,15 @@ class ComposeAppParityTest {
         )
         assertTrue(body.contains("LocalContentColors provides org.digitalgreen.farmerchat.sdk.compose.theme.hostLightContentColors()"))
     }
+
+    /** All home feed cards take the host card radius (LocalFcShapes.card), not a fixed XXL. */
+    @Test
+    fun `feed cards honour the host card radius`() {
+        val body = read("components/Cards.kt")
+        for (fn in listOf("fun SingleSelectCard(", "fun MultiSelectCard(", "fun SsfrCard(")) {
+            val start = body.indexOf(fn)
+            val end = body.indexOf("\n@Composable", start + 10).let { if (it < 0) body.length else it }
+            assertFalse("$fn uses a fixed Radius.XXL", body.substring(start, end).contains("Radius.XXL"))
+        }
+    }
 }

@@ -21,7 +21,14 @@ internal object Markdown {
      *   dp spec. Defaults to 1f only so the parser stays unit-testable without a Context.
      */
     @JvmOverloads
-    fun render(source: String, density: Float = 1f): CharSequence {
+    fun render(
+        source: String,
+        density: Float = 1f,
+        /** Card surface (app surfaceReadingSecondary). */
+        cardColor: Int = 0xFFECECEE.toInt(),
+        /** Muted card text: labels and meanings (app foregroundSecondary). */
+        mutedColor: Int = 0xFF52525C.toInt(),
+    ): CharSequence {
         val out = SpannableStringBuilder()
         val blocks = parseBlocks(source)
 
@@ -35,6 +42,7 @@ internal object Markdown {
             val topSpacingDp = when {
                 index == 0 -> 0
                 block is Block.Divider -> 24
+                block is Block.Table || prev is Block.Table -> 16
                 prev is Block.Divider -> 24
                 block is Block.Header -> 24
                 prev is Block.Header -> 20
@@ -52,6 +60,10 @@ internal object Markdown {
             if (index > 0) out.append("\n")
 
             val lineStart = out.length
+            if (block is Block.Table) {
+                appendTableCards(out, block, density, cardColor, mutedColor, topSpacingDp)
+                return@forEachIndexed
+            }
             if (block is Block.Divider) {
                 // One placeholder character; DividerSpan sizes the line to 3dp and draws the bar.
                 out.append(" ")
@@ -96,6 +108,7 @@ internal object Markdown {
                 }
                 is Block.Paragraph -> Unit
                 is Block.Divider -> Unit
+                is Block.Table -> Unit
             }
         }
         return out
@@ -111,13 +124,26 @@ internal object Markdown {
         /** `> text` — answers use it for tips. Not in the app's parser, which showed the `>`. */
         data class Quote(override val text: String) : Block()
         object Divider : Block() { override val text: String = "" }
+        /** A GFM table: header cells and body rows, cells trimmed (app `MarkdownBlock.Table`). */
+        data class Table(val headers: List<String>, val rows: List<List<String>>) : Block() {
+            override val text: String = ""
+        }
     }
 
     /** Splits into blocks, dropping blank lines the way the app's parser does. */
     private fun parseBlocks(source: String): List<Block> {
         val blocks = mutableListOf<Block>()
+        val pendingTable = mutableListOf<String>()
+        fun flushTable() {
+            if (pendingTable.isEmpty()) return
+            blocks += parseTable(pendingTable)?.let { Block.Table(it.headers, it.rows) }
+                ?: Block.Paragraph(pendingTable.joinToString(" "))
+            pendingTable.clear()
+        }
         source.replace("\r\n", "\n").split("\n").forEach { rawLine ->
             val trimmed = rawLine.trim()
+            if (trimmed.startsWith("|")) { pendingTable += trimmed; return@forEach }
+            flushTable()
             if (trimmed.isEmpty()) return@forEach
             blocks += when {
                 // App parser: `---` / `***` / `___` is a divider; one-to-six '#' + space is a
@@ -136,6 +162,7 @@ internal object Markdown {
                 else -> Block.Paragraph(trimmed)
             }
         }
+        flushTable()
         return blocks
     }
 
@@ -269,6 +296,90 @@ internal object Markdown {
         }
     }
 
+    /**
+     * Renders a table the way the app does (components/MarkdownText.kt MarkdownTable): never as a
+     * grid. A "card" table (3 columns, title only in the first header cell) becomes one card of
+     * label / value / meaning readings; any other 2+ column table becomes one card per row with
+     * column-header labels over values. Before 2026-10-17 the views flavour showed the raw pipes.
+     */
+    private fun appendTableCards(
+        out: SpannableStringBuilder, table: Block.Table, density: Float,
+        cardColor: Int, mutedColor: Int, firstGapDp: Int
+    ) {
+        tableCards(TableModel(table.headers, table.rows)).forEachIndexed { cardIdx, card ->
+            if (cardIdx > 0) out.append("\n")
+            val cardStart = out.length
+            card.lines.forEachIndexed { i, line ->
+                if (i > 0) out.append("\n")
+                val s = out.length
+                appendInline(out, line.text)
+                if (out.length == s) out.append(" ")
+                val e = out.length
+                when (line.kind) {
+                    CardLine.Kind.TITLE -> out.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    CardLine.Kind.VALUE -> out.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    CardLine.Kind.LABEL -> {
+                        out.setSpan(android.text.style.ForegroundColorSpan(mutedColor), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        out.setSpan(RelativeSizeSpan(15f / 17f), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                    CardLine.Kind.MEANING -> out.setSpan(android.text.style.ForegroundColorSpan(mutedColor), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                // 12dp between readings / after the title (app spacedBy(12.dp)).
+                if (i > 0 && line.kind != CardLine.Kind.VALUE && line.kind != CardLine.Kind.MEANING) {
+                    out.setSpan(BlockGapSpan((12 * density).toInt()), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            val gapAbove = if (cardIdx == 0) firstGapDp else 12
+            out.setSpan(
+                CardSpan(density, cardColor, (gapAbove * density).toInt()),
+                cardStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+    }
+
+    /** One card: a filled rounded surface (app Radius.LG, 16/14dp padding) behind its lines. */
+    private class CardSpan(density: Float, color: Int, private val gapAbovePx: Int) :
+        android.text.style.LineBackgroundSpan, LeadingMarginSpan, android.text.style.LineHeightSpan {
+        private val padH = (16f * density).toInt()
+        private val padV = (14f * density).toInt()
+        private val radius = 12f * density
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
+        private var firstAscent = Int.MIN_VALUE
+
+        override fun getLeadingMargin(first: Boolean): Int = padH
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence?, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) = Unit
+
+        override fun chooseHeight(
+            text: CharSequence, start: Int, end: Int, spanstartv: Int, lineHeight: Int,
+            fm: Paint.FontMetricsInt
+        ) {
+            val sp = text as Spanned
+            if (start == sp.getSpanStart(this)) { fm.ascent -= gapAbovePx + padV; fm.top = fm.ascent }
+            if (end >= sp.getSpanEnd(this)) { fm.descent += padV; fm.bottom = fm.descent }
+        }
+
+        override fun drawBackground(
+            canvas: Canvas, p: Paint, left: Int, right: Int, top: Int, baseline: Int,
+            bottom: Int, text: CharSequence, start: Int, end: Int, lineNumber: Int
+        ) {
+            val sp = text as Spanned
+            val isFirst = start == sp.getSpanStart(this)
+            val isLast = end >= sp.getSpanEnd(this)
+            val t = if (isFirst) top + gapAbovePx else top
+            val r = android.graphics.RectF(left.toFloat(), t.toFloat(), right.toFloat(), bottom.toFloat())
+            when {
+                isFirst && isLast -> canvas.drawRoundRect(r, radius, radius, paint)
+                isFirst -> { canvas.drawRoundRect(r, radius, radius, paint); canvas.drawRect(r.left, r.bottom - radius, r.right, r.bottom, paint) }
+                isLast -> { canvas.drawRoundRect(r, radius, radius, paint); canvas.drawRect(r.left, r.top, r.right, r.top + radius, paint) }
+                else -> canvas.drawRect(r, paint)
+            }
+        }
+    }
+
     /** Handles **bold** and *italic* / _italic_ inline markers. */
     private fun appendInline(out: SpannableStringBuilder, text: String) {
         var i = 0
@@ -309,4 +420,58 @@ internal object Markdown {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------- tables (pure, unit-tested)
+
+internal data class TableModel(val headers: List<String>, val rows: List<List<String>>)
+
+internal data class CardLine(val kind: Kind, val text: String) {
+    enum class Kind { TITLE, LABEL, VALUE, MEANING }
+}
+
+internal data class TableCard(val lines: List<CardLine>)
+
+/** Splits `| a | b |` into trimmed cells (outer pipes optional, as GFM allows). */
+internal fun splitTableRow(line: String): List<String> {
+    var t = line.trim()
+    if (t.startsWith("|")) t = t.substring(1)
+    if (t.endsWith("|")) t = t.dropLast(1)
+    return t.split("|").map { it.trim() }
+}
+
+private val TABLE_SEPARATOR = Regex("^\\|?\\s*:?-{1,}:?\\s*(\\|\\s*:?-{1,}:?\\s*)*\\|?$")
+
+/** A GFM table needs a header row and a `---` separator row; anything else stays text. */
+internal fun parseTable(lines: List<String>): TableModel? {
+    if (lines.size < 2 || !TABLE_SEPARATOR.matches(lines[1].replace(" ", ""))) return null
+    val headers = splitTableRow(lines[0])
+    val rows = lines.drop(2).map { splitTableRow(it) }
+    return TableModel(headers, rows)
+}
+
+/** App MarkdownBlock.Table.isCard: 3 columns, title in the first header cell only. */
+internal fun TableModel.isCard(): Boolean =
+    headers.size == 3 && headers[0].isNotEmpty() && headers.drop(1).all { it.isEmpty() }
+
+/** The app's card layout for a table (MarkdownAnswerCard / MarkdownRowCards). */
+internal fun tableCards(t: TableModel): List<TableCard> = when {
+    t.isCard() -> listOf(TableCard(buildList {
+        add(CardLine(CardLine.Kind.TITLE, t.headers[0]))
+        t.rows.forEach { row ->
+            row.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.LABEL, it)) }
+            add(CardLine(CardLine.Kind.VALUE, row.getOrNull(1).orEmpty()))
+            row.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.MEANING, it)) }
+        }
+    }))
+    t.headers.size >= 2 -> t.rows.map { row ->
+        TableCard(buildList {
+            row.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let { add(CardLine(CardLine.Kind.TITLE, it)) }
+            for (c in 1 until t.headers.size) {
+                add(CardLine(CardLine.Kind.LABEL, t.headers[c]))
+                add(CardLine(CardLine.Kind.VALUE, row.getOrNull(c).orEmpty()))
+            }
+        })
+    }
+    else -> t.rows.map { row -> TableCard(listOf(CardLine(CardLine.Kind.VALUE, row.getOrNull(0).orEmpty()))) }
 }

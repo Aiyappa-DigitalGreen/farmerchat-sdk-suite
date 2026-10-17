@@ -355,7 +355,7 @@ fun SingleSelectCard(
 ) {
     val contentColors = LocalContentColors.current
     val type = MaterialTheme.typography
-    val cardShape = SmoothShapes.rounded(Radius.XXL)
+    val cardShape = SmoothShapes.rounded(org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card)
 
     var uiState by remember { mutableStateOf(SingleSelectCardUiState.Selecting) }
     var selectedIndex by remember { mutableIntStateOf(-1) }
@@ -410,7 +410,7 @@ fun SingleSelectCard(
             modifier = modifier
                 .fillMaxWidth()
                 .then(
-                    Containers.elevated(radius = Radius.XXL, background = contentColors.surfaceSecondary)
+                    Containers.elevated(radius = org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card, background = contentColors.surfaceSecondary)
                 )
                 .clip(cardShape)
                 .animateContentSize(animationSpec = tween(durationMillis = 250))
@@ -556,7 +556,7 @@ fun MultiSelectCard(
 ) {
     val contentColors = LocalContentColors.current
     val type = MaterialTheme.typography
-    val cardShape = SmoothShapes.rounded(Radius.XXL)
+    val cardShape = SmoothShapes.rounded(org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card)
 
     var uiState by remember { mutableStateOf(MultiSelectCardUiState.Selecting) }
     var selectedIndices by remember { mutableStateOf(setOf<Int>()) }
@@ -611,7 +611,7 @@ fun MultiSelectCard(
             modifier = modifier
                 .fillMaxWidth()
                 .then(
-                    Containers.elevated(radius = Radius.XXL, background = contentColors.surfaceSecondary)
+                    Containers.elevated(radius = org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card, background = contentColors.surfaceSecondary)
                 )
                 .clip(cardShape)
                 .animateContentSize(animationSpec = tween(durationMillis = 250))
@@ -803,13 +803,13 @@ fun SsfrCard(
 ) {
     val contentColors = LocalContentColors.current
     val type = MaterialTheme.typography
-    val cardShape = SmoothShapes.rounded(Radius.XXL)
+    val cardShape = SmoothShapes.rounded(org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                Containers.elevated(radius = Radius.XXL, background = contentColors.surfaceSecondary)
+                Containers.elevated(radius = org.digitalgreen.farmerchat.sdk.compose.theme.LocalFcShapes.current.card, background = contentColors.surfaceSecondary)
             )
             .clip(cardShape)
             .padding(horizontal = 16.dp, vertical = 16.dp),
