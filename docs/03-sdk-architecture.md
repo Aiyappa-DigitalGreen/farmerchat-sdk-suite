@@ -104,7 +104,7 @@ Navigation graph, back-stack semantics (`popUpTo` equivalents), and the `routeFr
 | `android/farmerchat-android-compose` | Compose, Navigation-Compose | Screens ported from app; entry `FarmerChatActivity` + `FarmerChatRoot()` composable. minSdk 26. |
 | `android/farmerchat-android-views` | XML + Fragments + Navigation Component | Same flows in Views; entry `FarmerChatActivity` (views) / `FarmerChatFragment`. Shares farmerchat-core. |
 | `ios/FarmerChatCore` | Swift, URLSession, Codable, async/await | Interceptor chain replicated (priority timeouts via per-request URLSessionConfiguration, 401 refresh actor). Keychain token store. |
-| `ios/FarmerChatSwiftUI` | SwiftUI, NavigationStack | iOS 16+. Entry `FarmerChatView()` / `FarmerChat.present(from:)`. |
+| `ios/FarmerChatSwiftUI` | SwiftUI, NavigationStack | Package iOS 15+; the views are `@available(iOS 16, *)`. Entry `FarmerChatView()` / `FarmerChat.present(from:)`. v2 ships all three iOS products from the repo-root `Package.swift` (SPM by URL + release tag). |
 | `ios/FarmerChatUIKit` | UIKit wrapper | iOS 15+. `FarmerChatViewController` hosting the flow (UIKit-native screens where SwiftUI unavailable). |
 | `react-native/packages/farmerchat-react-native` | TypeScript, pure JS core + RN components, react-navigation | Expo 52+/RN 0.76+. AsyncStorage session, expo-av/rn-audio for voice, fetch client. |
 | `web/packages/farmerchat-web` | TypeScript, React 18 | Embeddable `<FarmerChat/>`; MediaRecorder for voice, localStorage session. |

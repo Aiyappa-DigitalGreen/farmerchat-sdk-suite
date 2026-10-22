@@ -74,4 +74,4 @@ the contact changes.
 |---|---|---|
 | npm (web, widget, React Native) | `NPM_TOKEN` (automation token for the `@digitalgreenorg` org) | Ready once the secret exists |
 | CocoaPods | `COCOAPODS_TRUNK_TOKEN` | Blocked: the podspec's paths need restructuring first (see docs/04) |
-| Swift Package Manager | none | Blocked: needs a root `Package.swift`, which raises SPM users to iOS 16 (team decision) |
+| Swift Package Manager | none | Ready: the root `Package.swift` resolves from the `vX.Y.Z` tag itself, like Android from one tag. iOS 15 floor; the SwiftUI views are `@available(iOS 16, *)` |

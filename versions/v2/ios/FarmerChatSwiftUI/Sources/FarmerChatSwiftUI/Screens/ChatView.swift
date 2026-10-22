@@ -6,6 +6,7 @@ import FarmerChatCore
 /// clarification labels, retry, Listen (TTS), share/download card
 /// (ImageRenderer + share sheet), voice clips, image queries, history
 /// pagination, input overlays.
+@available(iOS 16.0, macOS 13.0, *)
 struct ChatView: View {
     @Environment(\.fcTheme) private var theme
     @Environment(\.fcExitAction) private var exitAction
@@ -1109,6 +1110,7 @@ struct ChatView: View {
 /// Centred placeholder for a chat with no messages: the FarmerChat mark in a brand-green disc with
 /// a soft halo, the tagline, the "ask by…" hint and Photo / Speak / Type pills that do exactly what
 /// the chat's own input bar does. Labels only — existing keys, no new ones.
+@available(iOS 16.0, macOS 13.0, *)
 private struct FCChatEmptyState: View {
     @Environment(\.fcTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

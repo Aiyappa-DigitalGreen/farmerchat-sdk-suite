@@ -164,7 +164,7 @@ struct LanguageSelectionView: View {
         .frame(maxWidth: .infinity)
         .background(
             theme.content.surfaceSecondary
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
+                .fcClipTopCorners(20)
                 .ignoresSafeArea(edges: .bottom)
         )
     }

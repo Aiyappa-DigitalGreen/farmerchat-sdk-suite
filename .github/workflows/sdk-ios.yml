@@ -3,9 +3,9 @@
 name: SDK iOS (v2)
 on:
   push:
-    paths: ['versions/v2/ios/**', '.github/workflows/sdk-ios.yml']
+    paths: ['versions/v2/ios/**', 'Package.swift', '.github/workflows/sdk-ios.yml']
   pull_request:
-    paths: ['versions/v2/ios/**', '.github/workflows/sdk-ios.yml']
+    paths: ['versions/v2/ios/**', 'Package.swift', '.github/workflows/sdk-ios.yml']
 concurrency:
   group: sdk-ios-${{ github.ref }}
   cancel-in-progress: true
@@ -24,3 +24,5 @@ jobs:
       - name: UIKit (iOS Simulator)
         working-directory: versions/v2/ios/FarmerChatUIKit
         run: xcodebuild -scheme FarmerChatUIKit -destination 'generic/platform=iOS Simulator' build -quiet
+      - name: Root package — what SPM hosts resolve (iOS Simulator, iOS 15 floor)
+        run: xcodebuild -scheme FarmerChat-Package -destination 'generic/platform=iOS Simulator' build -quiet

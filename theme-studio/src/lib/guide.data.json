@@ -18,7 +18,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -498,7 +498,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -900,7 +900,7 @@
   "flavour": "SwiftUI",
   "badge": "Swift · iOS 16+",
   "intro": [
-   "The SwiftUI SDK embeds the FarmerChat journey as a single view you can present or push. It targets iOS 16+ and ships as two Swift packages: <code>FarmerChatCore</code> (no UI) and <code>FarmerChatSwiftUI</code> (the screens).",
+   "The SwiftUI SDK embeds the FarmerChat journey as a single view you can present or push. It ships in one Swift package, this repository, with <code>FarmerChatCore</code> (no UI) and <code>FarmerChatSwiftUI</code> (the screens) as products. The package builds for iOS 15; the SwiftUI views need iOS 16, so an iOS 15 app wraps them in <code>if #available(iOS 16, *)</code>.",
    "If your app is UIKit-based, use the UIKit flavour instead &mdash; it targets iOS 15 and keeps SwiftUI out of its public surface."
   ],
   "sections": [
@@ -913,7 +913,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -922,34 +922,34 @@
      },
      {
       "k": "p",
-      "html": "Until a tagged release exists, depend on a local checkout. Swift Package Manager accepts a filesystem path anywhere it accepts a URL."
+      "html": "The repository is the package: add it by URL, or by a local checkout until the release tag exists. Both are the same package, named <code>farmerchat-sdk-suite</code>."
      },
      {
       "k": "code",
       "tabs": [
        {
-        "label": "Local path",
+        "label": "Remote",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatSwiftUI\")\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatSwiftUI\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        },
        {
-        "label": "Remote (once tagged)",
+        "label": "Local checkout",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatSwiftUI\"])\n]"
+        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite\")   // a checkout of the repository\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatSwiftUI\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        }
       ]
      },
      {
       "k": "p",
-      "html": "In Xcode: <strong>File &rarr; Add Package Dependencies &rarr; Add Local&hellip;</strong> and pick the <code>FarmerChatSwiftUI</code> folder."
+      "html": "In Xcode: <strong>File &rarr; Add Package Dependencies</strong>, paste the repository URL, choose <strong>Up to Next Major</strong> from 2.2.0 and tick <code>FarmerChatCore</code> and <code>FarmerChatSwiftUI</code>."
      },
      {
       "k": "warn",
-      "tag": "No release tag yet",
+      "tag": "Until the release tag is pushed",
       "paras": [
-       "The repository currently has <strong>no git tags</strong>, so the remote form above cannot resolve. Use the local path until <code>ios-v2.2.0</code> is pushed."
+       "The remote form resolves once the tag <code>v2.2.0</code> exists on GitHub. Before that, use the local checkout."
       ]
      }
     ]
@@ -1322,7 +1322,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -1333,10 +1333,16 @@
       "k": "code",
       "tabs": [
        {
-        "label": "SPM — local path",
+        "label": "SPM",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit\")\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\"FarmerChatUIKit\"])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
+       },
+       {
+        "label": "SPM — local checkout",
+        "lang": "swift",
+        "fname": "Package.swift",
+        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite\")   // a checkout of the repository\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        },
        {
         "label": "CocoaPods",
@@ -1357,7 +1363,7 @@
       "k": "note",
       "tag": "One pod, both modules",
       "paras": [
-       "The CocoaPods spec bundles <code>FarmerChatCore</code> into the same pod. SPM consumers take the two packages separately."
+       "The CocoaPods spec bundles <code>FarmerChatCore</code> into the same pod. SPM consumers add the <code>FarmerChatCore</code> and <code>FarmerChatUIKit</code> products of one package."
       ]
      }
     ]
@@ -1692,7 +1698,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -1709,10 +1715,10 @@
         "code": "# Local development pod (no trunk release yet)\npod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'"
        },
        {
-        "label": "SPM — local path",
+        "label": "SPM",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(path: \"../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit\")\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        }
       ]
      },
@@ -2131,7 +2137,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {
@@ -2573,7 +2579,7 @@
       "tag": "Release status",
       "paras": [
        "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
-       "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm yet. Build from source and consume the package locally, as each install section shows."
+       "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
      {

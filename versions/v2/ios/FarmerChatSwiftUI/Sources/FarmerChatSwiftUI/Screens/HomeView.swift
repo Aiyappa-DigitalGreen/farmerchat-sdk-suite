@@ -10,6 +10,7 @@ import FarmerChatCore
 ///
 /// The SDK used to draw the 1.0 Home: a plain white bar, a black greeting and the big sticky
 /// Photo/Speak/Type buttons — which the app's composer Home replaces.
+@available(iOS 16.0, macOS 13.0, *)
 struct HomeView: View {
     @Environment(\.fcFallbackCloseShown) private var fallbackCloseShown
     @Environment(\.fcTheme) private var theme

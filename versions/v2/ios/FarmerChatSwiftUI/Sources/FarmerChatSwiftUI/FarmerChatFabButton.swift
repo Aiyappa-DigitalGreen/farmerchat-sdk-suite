@@ -16,6 +16,7 @@ import FarmerChatCore
 ///     FarmerChatFabButton(label: "Ask FarmerChat")
 /// }
 /// ```
+@available(iOS 16.0, macOS 13.0, *)
 public struct FarmerChatFabButton: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isPresented = false

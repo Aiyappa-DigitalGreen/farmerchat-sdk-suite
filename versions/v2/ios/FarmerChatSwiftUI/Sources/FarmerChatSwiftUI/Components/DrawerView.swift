@@ -156,7 +156,7 @@ public struct FCDrawerView: View {
                     .foregroundColor(isActive ? theme.brand.surfacePrimary : theme.content.foregroundSecondary)
                     .frame(width: 24)
                 Text(title)
-                    .fcTextStyle(theme.typography.labelMedium).fontWeight(isActive ? .semibold : .regular)
+                    .fcTextStyle(theme.typography.labelMedium).fcFontWeight(isActive ? .semibold : .regular, of: theme.typography.labelMedium)
                     .foregroundColor(theme.content.foregroundPrimary)
                 Spacer()
             }

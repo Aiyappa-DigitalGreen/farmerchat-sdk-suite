@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "FarmerChatSwiftUI",
     platforms: [
-        .iOS(.v16),
+        .iOS(.v15),
         .macOS(.v12) // dependency alignment only; the library is iOS-only
     ],
     products: [

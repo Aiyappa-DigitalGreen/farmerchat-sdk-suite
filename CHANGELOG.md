@@ -10,6 +10,15 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
 2026-10-09 snapshot ship in it (user decision, 2026-10-16).
 
 ### Added (v2, all four platforms unless noted)
+- iOS: Swift Package Manager install straight from this repository, published by the same release
+  tag as Android: `.package(url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+  from: "2.2.0")` with products `FarmerChatCore`, `FarmerChatSwiftUI`, `FarmerChatUIKit` (root
+  `Package.swift`). Target dependencies use `.product(name:package: "farmerchat-sdk-suite")`.
+- iOS FarmerChatSwiftUI: the package floor drops from iOS 16 to iOS 15, so one package serves every
+  host. Its views (`FarmerChatView`, `FarmerChatInlineView`, `FarmerChatFabButton`,
+  `FarmerChat.present(from:)`, and the public components that use iOS 16 APIs) are
+  `@available(iOS 16, *)`: iOS 16+ hosts change nothing; an iOS 15 host guards them with
+  `if #available(iOS 16, *)` or uses FarmerChatUIKit.
 - iOS: `FarmerChatConfig.enableComposerUi` (and ObjC `enableComposerUi`), as on Android: unset follows
   `enableAgenticChat`. An iOS host with agentic chat off now gets the legacy Home and input row, as on
   Android; set it to true to keep the composer.

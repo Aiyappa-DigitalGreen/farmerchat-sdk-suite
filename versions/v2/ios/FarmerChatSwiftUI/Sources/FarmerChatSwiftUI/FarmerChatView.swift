@@ -5,6 +5,11 @@ import FarmerChatCore
 /// router matching doc 01 §2, shared drawer overlay on
 /// Home/Chat/Settings/Help/SettingsLanguage/ChatHistory, centralized error
 /// route, global LocationPromptHost.
+///
+/// iOS 16+: the router is a `NavigationStack`. The package itself builds for iOS 15 (one Swift
+/// package for all three products), so iOS 15 hosts guard with `if #available(iOS 16, *)` or use
+/// FarmerChatUIKit.
+@available(iOS 16.0, macOS 13.0, *)
 public struct FarmerChatView: View {
     @Environment(\.colorScheme) private var colorScheme
     /// Set by the SDK's own presenters (FAB cover, `present(from:)`) — see ``FCExitActionKey``.
@@ -248,6 +253,7 @@ public struct FarmerChatView: View {
 ///     FarmerChatInlineView()          // fills the remaining space
 /// }
 /// ```
+@available(iOS 16.0, macOS 13.0, *)
 public struct FarmerChatInlineView: View {
     public init() {
         precondition(FarmerChat.isInitialized, "Call FarmerChat.initialize(config:) before FarmerChatInlineView()")
@@ -260,6 +266,7 @@ public struct FarmerChatInlineView: View {
 
 // MARK: - UIKit presentation helper (FarmerChat.present(from:))
 
+@available(iOS 16.0, macOS 13.0, *)
 extension FarmerChat {
     /// Presents the full SwiftUI journey modally from UIKit (iOS 16+).
     @MainActor

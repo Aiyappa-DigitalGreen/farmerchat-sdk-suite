@@ -112,7 +112,7 @@ struct LocationPromptHostView: View {
 
                 Text(fcLabel(FCLabels.weNeedYourLocation, "We need your location"))
                     .fcTextStyle(theme.typography.titleLarge)
-                    .fontWeight(.semibold)
+                    .fcFontWeight(.semibold, of: theme.typography.titleLarge)
                     .foregroundColor(.black)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -142,7 +142,7 @@ struct LocationPromptHostView: View {
             .frame(maxWidth: .infinity)
             .background(
                 FCPrimitive.neutral150
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+                    .fcClipTopCorners(24)
                     .ignoresSafeArea(edges: .bottom)
             )
             .gesture(

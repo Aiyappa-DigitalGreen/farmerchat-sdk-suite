@@ -168,6 +168,7 @@ struct FCSendGlyph: Shape {
 ///   is black while idle and #71717B once active (220ms), with the 2250ms green shimmer sweep while
 ///   unfocused, and the rotating sweep-gradient aura (7s/turn) that breathes while idle.
 /// - `visible == false` slides the whole composer 400 down over a 300ms FastOutSlowIn tween.
+@available(iOS 16.0, macOS 13.0, *)
 struct FCChatComposer: View {
     @Environment(\.fcTheme) private var theme
     @Binding var text: String

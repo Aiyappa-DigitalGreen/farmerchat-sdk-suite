@@ -195,6 +195,7 @@ func fcMarkdownTopSpacing(index: Int, block: FCMarkdownBlock, previous: FCMarkdo
 
 /// Renders the parsed blocks. `color` lets the streaming reveal keep the caret in the answer
 /// colour, which is why the old file carried a near-duplicate `FCMarkdownTextColored`.
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCMarkdownText: View {
     @Environment(\.fcTheme) private var theme
     let text: String
@@ -297,6 +298,7 @@ public struct FCMarkdownText: View {
 /// the farmer had to pan a table sideways inside a vertically scrolling thread. Each data row is
 /// now stacked into its own card (cell 0 as the title, the remaining columns as label/value
 /// rows) so the data reads top-to-bottom with no panning.
+@available(iOS 16.0, macOS 13.0, *)
 private struct FCMarkdownTable: View {
     @Environment(\.fcTheme) private var theme
     let headers: [String]
@@ -498,6 +500,7 @@ private func fcRevealChunks(_ text: String) -> [String] {
     return chunks.isEmpty ? [text] : chunks
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCAiAnswerText: View {
     @Environment(\.fcTheme) private var theme
     let text: String
@@ -594,6 +597,7 @@ private struct FCAnswerLinkHandler: ViewModifier {
 /// answer colour. Now a thin wrapper — `FCMarkdownText` takes the colour directly, so the
 /// two near-identical bodies (which had already drifted: only one of them read the theme)
 /// have collapsed into one.
+@available(iOS 16.0, macOS 13.0, *)
 private struct FCMarkdownTextColored: View {
     let text: String
     let color: Color
@@ -631,13 +635,7 @@ public struct FCUserChatBubble: View {
                     // UserChatBubble.kt: widthIn(max = 290.dp).
                     .frame(maxWidth: 290, alignment: .leading)
                     .background(FarmerChat.shared.config.userBubbleColor ?? theme.content.surfaceReadingSecondary)
-                    .clipShape(UnevenRoundedRectangle(
-                        topLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
-                        bottomLeadingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: FarmerChat.shared.config.bubbleCornerRadius ?? 20,
-                        style: .continuous
-                    ))
+                    .fcClipCorners(topLeading: FarmerChat.shared.config.bubbleCornerRadius ?? 20, bottomLeading: FarmerChat.shared.config.bubbleCornerRadius ?? 20, bottomTrailing: 0, topTrailing: FarmerChat.shared.config.bubbleCornerRadius ?? 20)
             }
             // A failed question shows no marker of its own: ChatThreadContent.kt renders
             // InlineErrorContent directly under it instead (see ChatView).
@@ -717,6 +715,7 @@ public struct FCVoiceClip: View {
 
 // MARK: - AI response bubble + actions
 
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCAiResponseBubble: View {
     @Environment(\.fcTheme) private var theme
     let message: ChatMessage.AiResponse
@@ -1184,6 +1183,7 @@ struct FCVoiceRetryPill: View {
 
 // MARK: - Follow-up chips (suggested/related questions)
 
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCFollowUpChips: View {
     @Environment(\.fcTheme) private var theme
     let title: String
@@ -1317,6 +1317,7 @@ public struct FCShareCard: View {
 }
 
 @MainActor
+@available(iOS 16.0, macOS 13.0, *)
 enum FCShareCardRenderer {
     static func render(question: String, answer: String, theme: FCTheme) -> UIImage? {
         let card = FCShareCard(question: question, answer: answer)
@@ -1456,7 +1457,7 @@ public struct FCLocationChatBubble: View {
                     .fcTextStyle(theme.typography.bodyMedium(atSize: fontSize))
                     .foregroundColor(theme.content.foregroundSecondary)
                 Text(address)
-                    .fcTextStyle(theme.typography.bodyMedium(atSize: fontSize)).fontWeight(.bold)
+                    .fcTextStyle(theme.typography.bodyMedium(atSize: fontSize)).fcFontWeight(.bold, of: theme.typography.bodyMedium(atSize: fontSize))
                     .foregroundColor(theme.content.foregroundPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1466,13 +1467,7 @@ public struct FCLocationChatBubble: View {
         }
         .frame(width: 290, height: 184)
         .background(theme.content.surfaceReadingSecondary)
-        .clipShape(UnevenRoundedRectangle(
-            topLeadingRadius: radius,
-            bottomLeadingRadius: radius,
-            bottomTrailingRadius: 0,
-            topTrailingRadius: radius,
-            style: .continuous
-        ))
+        .fcClipCorners(topLeading: radius, bottomLeading: radius, bottomTrailing: 0, topTrailing: radius)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label) \(address)")
     }

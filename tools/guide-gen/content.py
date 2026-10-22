@@ -65,8 +65,10 @@ DISTRIBUTION = ("warn","Release status",[
  "the same way as any other library. The first release is being set up: until it is published, "
  "Gradle reports <code>Could not find %s</code>. In the meantime, build the SDK from source "
  "with the <code>mavenLocal()</code> fallback shown in the Android install section." % (MAVEN_GROUP, VERSION, MAVEN_GROUP),
- "<strong>iOS, React Native and Web</strong> are not on CocoaPods, Swift Package Manager or npm "
- "yet. Build from source and consume the package locally, as each install section shows."])
+ "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, "
+ "like Android from one release tag: the remote form resolves once <code>v%s</code> is pushed; "
+ "until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. "
+ "Build from source and consume the package locally, as each install section shows." % VERSION])
 
 # CHAT_ONLY is the default mode, and showDrawer / showHistory both resolve to
 # `mode == FULL_JOURNEY` when unset (FarmerChatConfig.kt / .swift, web + RN core/config.ts).

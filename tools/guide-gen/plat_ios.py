@@ -71,36 +71,44 @@ SWIFTUI_PERMS = [IOS_PERMS[0], CB([("Info.plist","xml","Info.plist",PERMS_IOS_SW
 SWIFTUI = {
  "id":"ios-swiftui","name":"iOS","flavour":"SwiftUI","badge":"Swift · iOS 16+",
  "intro":["The SwiftUI SDK embeds the FarmerChat journey as a single view you can present or "
-   "push. It targets iOS 16+ and ships as two Swift packages: <code>FarmerChatCore</code> (no UI) "
-   "and <code>FarmerChatSwiftUI</code> (the screens).",
+   "push. It ships in one Swift package, this repository, with <code>FarmerChatCore</code> (no UI) "
+   "and <code>FarmerChatSwiftUI</code> (the screens) as products. The package builds for iOS 15; the "
+   "SwiftUI views need iOS 16, so an iOS 15 app wraps them in <code>if #available(iOS 16, *)</code>.",
    "If your app is UIKit-based, use the UIKit flavour instead &mdash; it targets iOS 15 and keeps "
    "SwiftUI out of its public surface."],
  "sections":[
   S("install","Install the FarmerChat SDK",
     DISTRIBUTION,
     SUB("Add the package to your project"),
-    P("Until a tagged release exists, depend on a local checkout. Swift Package Manager accepts a "
-      "filesystem path anywhere it accepts a URL."),
-    CB([("Local path","swift","Package.swift","""dependencies: [
-    .package(path: "../farmerchat-sdk-suite/versions/v2/ios/FarmerChatSwiftUI")
-],
-targets: [
-    .target(name: "MyApp", dependencies: ["FarmerChatSwiftUI"])
-]"""),
-        ("Remote (once tagged)","swift","Package.swift","""dependencies: [
+    P("The repository is the package: add it by URL, or by a local checkout until the release tag "
+      "exists. Both are the same package, named <code>farmerchat-sdk-suite</code>."),
+    CB([("Remote","swift","Package.swift","""dependencies: [
     .package(
         url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
         from: "%s"
     )
 ],
 targets: [
-    .target(name: "MyApp", dependencies: ["FarmerChatSwiftUI"])
-]""" % VERSION)]),
-    P("In Xcode: <strong>File &rarr; Add Package Dependencies &rarr; Add Local&hellip;</strong> "
-      "and pick the <code>FarmerChatSwiftUI</code> folder."),
-    ("warn","No release tag yet",[
-     "The repository currently has <strong>no git tags</strong>, so the remote form above cannot "
-     "resolve. Use the local path until <code>ios-v%s</code> is pushed." % VERSION])),
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatSwiftUI", package: "farmerchat-sdk-suite")
+    ])
+]""" % VERSION),
+        ("Local checkout","swift","Package.swift","""dependencies: [
+    .package(path: "../farmerchat-sdk-suite")   // a checkout of the repository
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatSwiftUI", package: "farmerchat-sdk-suite")
+    ])
+]""")]),
+    P("In Xcode: <strong>File &rarr; Add Package Dependencies</strong>, paste the repository URL, "
+      "choose <strong>Up to Next Major</strong> from %s and tick <code>FarmerChatCore</code> and "
+      "<code>FarmerChatSwiftUI</code>." % VERSION),
+    ("warn","Until the release tag is pushed",[
+     "The remote form resolves once the tag <code>v%s</code> exists on GitHub. Before that, use the "
+     "local checkout." % VERSION])),
 
   S("launch","Launch the journey",
     SUB("Initialize the SDK"),
@@ -197,11 +205,26 @@ UIKIT = {
   S("install","Install the FarmerChat SDK",
     DISTRIBUTION,
     SUB("Add the package to your project"),
-    CB([("SPM — local path","swift","Package.swift","""dependencies: [
-    .package(path: "../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit")
+    CB([("SPM","swift","Package.swift","""dependencies: [
+    .package(
+        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+        from: "%s"
+    )
 ],
 targets: [
-    .target(name: "MyApp", dependencies: ["FarmerChatUIKit"])
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatUIKit", package: "farmerchat-sdk-suite")
+    ])
+]""" % VERSION),
+        ("SPM — local checkout","swift","Package.swift","""dependencies: [
+    .package(path: "../farmerchat-sdk-suite")   // a checkout of the repository
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatUIKit", package: "farmerchat-sdk-suite")
+    ])
 ]"""),
         ("CocoaPods","ruby","Podfile","""# Local development pod (no trunk release yet)
 pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'
@@ -213,7 +236,7 @@ pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerC
      "tags</strong> today, so only the <code>:path =&gt;</code> form resolves."]),
     ("note","One pod, both modules",[
      "The CocoaPods spec bundles <code>FarmerChatCore</code> into the same pod. SPM consumers "
-     "take the two packages separately."])),
+     "add the <code>FarmerChatCore</code> and <code>FarmerChatUIKit</code> products of one package."])),
 
   S("launch","Launch the journey",
     SUB("Initialize the SDK"),
@@ -290,9 +313,18 @@ OBJC = {
     SUB("Add the package to your project"),
     CB([("CocoaPods","ruby","Podfile","""# Local development pod (no trunk release yet)
 pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'"""),
-        ("SPM — local path","swift","Package.swift","""dependencies: [
-    .package(path: "../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit")
-]""")]),
+        ("SPM","swift","Package.swift","""dependencies: [
+    .package(
+        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+        from: "%s"
+    )
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatUIKit", package: "farmerchat-sdk-suite")
+    ])
+]""" % VERSION)]),
     SUB("Import the module"),
     P("The facade is a Swift module, so import it as a module rather than a header."),
     CB([("Objective-C","objc",None,"@import FarmerChatUIKit;")])),

@@ -18,7 +18,7 @@ specified by `docs/01-app-specification.md`, `docs/02-api-reference.md` and
 | | Minimum |
 |---|---|
 | FarmerChatCore, FarmerChatUIKit | iOS 15 |
-| FarmerChatSwiftUI | iOS 16 |
+| FarmerChatSwiftUI | iOS 15 to link; its views need iOS 16 (`@available(iOS 16, *)`) |
 | Toolchain | Swift 5.9 / Xcode 15+ |
 | Your Info.plist | `NSMicrophoneUsageDescription`, `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSLocationWhenInUseUsageDescription`. Features without a granted permission are turned off. |
 
@@ -29,26 +29,40 @@ There is no minimum RAM or CPU: if the device runs the OS or browser version abo
 | Package | Min iOS | What it is |
 |---|---|---|
 | `FarmerChatCore` | 15.0 | Headless core: URLSession async/await API client (all 34 endpoints + token endpoints + Google geolocate), Codable models, priority timeouts + retry/backoff, actor-based 401 refresh with guest fallback, Keychain token store, `fc_sdk_`-namespaced UserDefaults prefs, LabelManager (server-driven i18n), SessionManager, analytics dispatcher, audio record/playback services, and every UDF view model (Onboarding, EnterName, Auth, Home, Chat, ChatHistory, Settings, Help, UserProfile, LocationPrompt). No UI. |
-| `FarmerChatSwiftUI` | 16.0 | Complete SwiftUI implementation: `FarmerChatView()` root with NavigationStack router (routeFromSplash tree, back-stack reset semantics, drawer side-overlay, centralized error route with per-source retry) and every screen from the spec. Also `FarmerChat.shared.present(from:)` to launch from UIKit via UIHostingController. |
+| `FarmerChatSwiftUI` | 15.0 (views 16.0) | Complete SwiftUI implementation: `FarmerChatView()` root with NavigationStack router (routeFromSplash tree, back-stack reset semantics, drawer side-overlay, centralized error route with per-source retry) and every screen from the spec. Also `FarmerChat.shared.present(from:)` to launch from UIKit via UIHostingController. |
 | `FarmerChatUIKit` | 15.0 | `FarmerChatViewController` entry with genuinely UIKit-native screens (Auth, Home feed via UICollectionView compositional layout, Chat via UICollectionView bubble cells, ChatHistory, Settings, Language, Help, onboarding, full-screen errors) for iOS 15 hosts. Ships `FarmerChatUIKit.podspec`. |
 
-> Packaging note: SPM does not allow an iOS 15 package to depend on an iOS 16
-> package, so `FarmerChatUIKit` does not link `FarmerChatSwiftUI`. iOS 16+
-> hosts that prefer the SwiftUI experience should depend on
-> `FarmerChatSwiftUI` and call `FarmerChat.shared.present(from: viewController)`
-> — that is the "host the SwiftUI flow in a UIHostingController" path.
-> `FarmerChatUIKit` stays fully native so iOS 15 devices get the same journey.
+> Packaging note: all three ship as one Swift package (the repo-root `Package.swift`) with an iOS 15
+> floor. The SwiftUI views use `NavigationStack`, so they are `@available(iOS 16, *)`: an iOS 15 app
+> links the package and wraps them in `if #available(iOS 16, *)`, or uses `FarmerChatUIKit`, which
+> stays fully native so iOS 15 devices get the same journey. iOS 16+ UIKit hosts that prefer the
+> SwiftUI experience call `FarmerChat.shared.present(from: viewController)`, the "host the SwiftUI
+> flow in a UIHostingController" path. `FarmerChatUIKit` does not link `FarmerChatSwiftUI`.
 
 ## Install
 
 ### Swift Package Manager
 
+Published the same way as Android: from this repository, by the release tag (`v2.2.0`). No extra
+repository or account. In Xcode: File → Add Package Dependencies, paste the URL, pick the products.
+
 ```swift
-// Package.swift or Xcode → Add Package Dependencies (local or git)
-.package(path: "ios/FarmerChatCore"),
-.package(path: "ios/FarmerChatSwiftUI"),   // iOS 16+ SwiftUI UI
-.package(path: "ios/FarmerChatUIKit"),     // iOS 15+ UIKit UI
+dependencies: [
+    .package(url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git", from: "2.2.0")
+    // before the tag exists: .package(path: "../farmerchat-sdk-suite")  (a checkout)
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "FarmerChatCore", package: "farmerchat-sdk-suite"),
+        .product(name: "FarmerChatSwiftUI", package: "farmerchat-sdk-suite"),   // SwiftUI UI (views iOS 16+)
+        // or .product(name: "FarmerChatUIKit", package: "farmerchat-sdk-suite") // UIKit UI, iOS 15+
+    ])
+]
 ```
+
+The products' names differ from the package's (`farmerchat-sdk-suite`), so the `.product(name:package:)`
+form is required. Each `versions/v2/ios/<Package>/` folder keeps its own `Package.swift` for local
+development; the root manifest points at the same sources.
 
 ### CocoaPods
 
@@ -109,13 +123,16 @@ FarmerChat.initialize(config: FarmerChatConfig(
 ))
 ```
 
-SwiftUI (iOS 16+):
+SwiftUI (views iOS 16+):
 
 ```swift
 import FarmerChatSwiftUI
 
 FarmerChatView()                       // embed
 FarmerChat.shared.present(from: self)  // modal from UIKit
+
+// An app that still supports iOS 15:
+if #available(iOS 16, *) { FarmerChatView() }
 ```
 
 UIKit (iOS 15+):

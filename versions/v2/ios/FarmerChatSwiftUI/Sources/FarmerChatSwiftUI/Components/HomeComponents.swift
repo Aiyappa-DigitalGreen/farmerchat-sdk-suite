@@ -610,6 +610,7 @@ public struct FCMultiSelectCard: View {
 
 // MARK: - SsfrCard (wheat/maize)
 
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCSsfrCard: View {
     @Environment(\.fcTheme) private var theme
     let onCropSelected: (String) -> Void
@@ -678,6 +679,7 @@ public struct FCSsfrCard: View {
 
 // MARK: - Text input overlay (bottom sheet style, imePadding equivalent)
 
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCTextInputOverlay: View {
     @Environment(\.fcTheme) private var theme
     @Binding var text: String
@@ -790,7 +792,7 @@ public struct FCVoiceInputOverlay: View {
             .padding(24)
             .frame(maxWidth: .infinity)
             .background(theme.content.surfacePrimary)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+            .fcClipTopCorners(24)
         }
     }
 
@@ -847,7 +849,7 @@ public struct FCPhotoSourceSheet: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
             .background(theme.content.surfacePrimary)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+            .fcClipTopCorners(24)
         }
     }
 }

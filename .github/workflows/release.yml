@@ -34,8 +34,8 @@
 #   - CocoaPods: FarmerChatUIKit.podspec's source tag is "ios-v#{s.version}", not "v#{version}", and its
 #     source_files reference '../FarmerChatCore/...' relative to the podspec dir, while trunk resolves
 #     paths from the repo root. The step checks for the ios-v tag and skips if it is missing.
-#   - SPM: there is no root Package.swift (only versions/v2/ios/Package.binary.swift), so
-#     `.package(url:)` against this repo does not resolve yet.
+#   - SPM: nothing to upload. The root Package.swift (iOS 15; SwiftUI views @available iOS 16) makes
+#     `.package(url: <this repo>, from: "X.Y.Z")` resolve from the tag itself; build-ios builds it.
 name: Release (v2)
 
 on:
@@ -204,6 +204,8 @@ jobs:
       - name: UIKit (iOS Simulator)
         working-directory: versions/v2/ios/FarmerChatUIKit
         run: xcodebuild -scheme FarmerChatUIKit -destination 'generic/platform=iOS Simulator' build -quiet
+      - name: Root package — what SPM hosts resolve (iOS Simulator, iOS 15 floor)
+        run: xcodebuild -scheme FarmerChat-Package -destination 'generic/platform=iOS Simulator' build -quiet
 
   build-web:
     needs: verify
@@ -438,8 +440,8 @@ jobs:
         env:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
-          echo "SPM publishes nothing beyond the git tag v$VERSION."
-          echo "::notice::SPM resolution needs a root Package.swift; the repo has none yet (only versions/v2/ios/Package.binary.swift). Being investigated separately."
+          echo "SPM publishes nothing beyond the git tag v$VERSION: hosts resolve the root Package.swift at that tag."
+          echo "::notice::iOS: .package(url: \"https://github.com/${{ github.repository }}.git\", from: \"$VERSION\") (products FarmerChatCore, FarmerChatSwiftUI, FarmerChatUIKit)"
 
   # ---------------------------------------------------------------------------- draft release ----
   github-release:

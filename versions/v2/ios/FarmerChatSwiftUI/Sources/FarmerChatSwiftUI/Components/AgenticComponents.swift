@@ -52,6 +52,7 @@ struct FCStreamStallHint: View {
 ///
 /// The tint comes from `theme.brand.feedbackFail`, so a host that themes the SDK gets its own
 /// failure colour rather than a hardcoded red.
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCStreamErrorCard: View {
     @Environment(\.fcTheme) private var theme
     let errorKind: StreamErrorKind
@@ -151,6 +152,7 @@ enum FCChipType {
 /// 14/14/14/10, 8pt gaps, a 24pt number badge (a check badge once picked), a labelMedium label
 /// (Bold only when selected) and a 24pt chevron while it still takes taps. Surface, label, chevron,
 /// border and badge colours follow Chip.kt's tables exactly.
+@available(iOS 16.0, macOS 13.0, *)
 struct FCAlignmentChipView: View {
     @Environment(\.fcTheme) private var theme
     let label: String
@@ -255,6 +257,7 @@ struct FCAlignmentChipView: View {
 ///
 /// Escalate gets an urgent treatment derived from `feedbackFail`, keeping the card coherent rather
 /// than dropping the brand accent into a red surface.
+@available(iOS 16.0, macOS 13.0, *)
 public struct FCAlignmentSurface: View {
     @Environment(\.fcTheme) private var theme
     let kind: AlignmentKind
