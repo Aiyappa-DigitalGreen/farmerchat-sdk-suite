@@ -9121,7 +9121,7 @@ at an **iOS 15** floor.
 | Root `Package.swift` (iOS 15, sources in `versions/v2/ios/*`, resources incl. FarmerIllustrations + privacy manifests) | DONE |
 | FarmerChatSwiftUI floor 16 → 15: `Theme/FCCompat.swift` shims `View.fontWeight` + `UnevenRoundedRectangle` (real API on iOS 16+, so iOS 16 rendering is unchanged); `FarmerChatView`, `FarmerChatInlineView`, `FarmerChatFabButton`, `FarmerChat.present(from:)` and the views using NavigationStack / ViewThatFits / ImageRenderer / axis TextField are `@available(iOS 16, *)` | DONE |
 | Guide (generated): remote snippet fixed to `.product(name:package: "farmerchat-sdk-suite")` (the old `["FarmerChatSwiftUI"]` form cannot resolve); `ios-v` tag wording removed | DONE |
-| CI (`sdk-ios.yml`) and release (`build-ios`) build the root package; `publish-spm` prints the install line | DONE, not yet run on GitHub |
+| CI (`sdk-ios.yml`) and release (`build-ios`) build the root package; `publish-spm` prints the install line | DONE: SDK iOS run 39730894914 (macos-latest) passed all steps incl. the root package; the release job has not run (no tag yet) |
 | iOS 15 fallback rendering (circular vs continuous corners, font-level weight) on an iOS 15 device/simulator | UNVERIFIED: no iOS 15 runtime installed |
 | CocoaPods | unchanged: still blocked (podspec paths), see RELEASING.md |
 
