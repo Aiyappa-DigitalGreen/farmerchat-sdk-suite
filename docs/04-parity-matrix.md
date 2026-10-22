@@ -9108,3 +9108,28 @@ dividers added the same day); the agentic stream client had no read timeout — 
 photo-sheet Camera/Photos tiles are not exposed to accessibility.
 Android Views follow-up (same day): table cards draw the app's/Compose's in-card dividers and spacing
 (device screenshot); photo-sheet Camera/Photos tiles are named accessible buttons (uiautomator dump).
+
+## iOS Swift Package Manager from this repository, as Android (2026-10-22, user: "use same as android")
+
+The artifact's open iOS choice was A (separate binary repo) or B (root manifest, iOS 16 for all). The
+user picked "same as android": one repository, one release tag, no extra repo or key. Shipped as B
+without B's cost: the root `Package.swift` serves FarmerChatCore / FarmerChatSwiftUI / FarmerChatUIKit
+at an **iOS 15** floor.
+
+| Item | State |
+|---|---|
+| Root `Package.swift` (iOS 15, sources in `versions/v2/ios/*`, resources incl. FarmerIllustrations + privacy manifests) | DONE |
+| FarmerChatSwiftUI floor 16 → 15: `Theme/FCCompat.swift` shims `View.fontWeight` + `UnevenRoundedRectangle` (real API on iOS 16+, so iOS 16 rendering is unchanged); `FarmerChatView`, `FarmerChatInlineView`, `FarmerChatFabButton`, `FarmerChat.present(from:)` and the views using NavigationStack / ViewThatFits / ImageRenderer / axis TextField are `@available(iOS 16, *)` | DONE |
+| Guide (generated): remote snippet fixed to `.product(name:package: "farmerchat-sdk-suite")` (the old `["FarmerChatSwiftUI"]` form cannot resolve); `ios-v` tag wording removed | DONE |
+| CI (`sdk-ios.yml`) and release (`build-ios`) build the root package; `publish-spm` prints the install line | DONE, not yet run on GitHub |
+| iOS 15 fallback rendering (circular vs continuous corners, font-level weight) on an iOS 15 device/simulator | UNVERIFIED: no iOS 15 runtime installed |
+| CocoaPods | unchanged: still blocked (podspec paths), see RELEASING.md |
+
+Verified 2026-10-22 (Xcode on this Mac): `xcodebuild -scheme FarmerChat-Package -destination
+'generic/platform=iOS Simulator' build` at the repo root → exit 0; FarmerChatCore `swift build && swift
+test` → 197 tests, 0 failures; FarmerChatSwiftUI and FarmerChatUIKit `xcodebuild … build` → exit 0
+(SwiftUI also clean with `SWIFT_COMPILATION_MODE=wholemodule`). Release simulation: a scratch clone tagged
+`v2.2.0`; a fresh iOS 15 host package depending on it by `file://` URL `from: "2.2.0"` with all three
+products resolved at 2.2.0 and built (exit 0), using `FarmerChatView` behind `if #available(iOS 16, *)`,
+`FarmerChatViewController` unguarded, and producing the three resource bundles (Core's carries the 4
+FarmerIllustrations folders). SampleApp / ConsumerApp target iOS 16 and are unaffected.
