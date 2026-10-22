@@ -48,7 +48,7 @@ trees — API names, config fields, environments, install lines, requirements.
   `versions/v2/android/build.gradle.kts` `farmerChatVersion`; iOS `DeviceInfoProvider.swift` and
   `FarmerChatUIKit.podspec` (git tag `ios-v<version>`); RN `package.json`; web `package.json` +
   `src/core/version.ts`. Bump all of them together, then `VERSION`, then re-run.
-- **Distribution.** Android resolves from Maven Central as `io.github.aiyappa-digitalgreen`
+- **Distribution.** Android resolves from Maven Central as `org.digitalgreen.farmerchat`
   (`farmerChatGroup`); the first release is still being set up, so the guide keeps the
   `mavenLocal()` fallback. iOS, React Native and web are not on CocoaPods / SPM / npm and the repo
   has no tags, so their installs are local-path installs.

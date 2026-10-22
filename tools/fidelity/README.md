@@ -3,7 +3,7 @@
 Proves the SDK's compose flavour renders **identically** to the FarmerChat app, screen by
 screen, by putting both on one emulator and diffing what they actually paint.
 
-Source of truth: `/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic` (read-only).
+Source of truth: `~/AndroidStudioProjects/fc-compose-agentic` (read-only).
 
 ## Why rendered screens and not a source diff
 
@@ -19,7 +19,7 @@ pixels. Every mismatch found on the Language screen was of that kind.
 # (testing is DEMO-only, 2026-10-16). For a same-backend comparison build the app's `demo` flavour
 # instead (BASE_URL mobile-app-demo): ./gradlew :app:assembleDemoDebug (apk under outputs/apk/demo/debug/).
 # The dev commands below are the historical setup; a dev-vs-demo pair can differ in labels/languages/feed
-cd /Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic
+cd ~/AndroidStudioProjects/fc-compose-agentic
 ./gradlew :app:assembleDevDebug
 adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk   # org.digitalgreen.farmer.chat
 

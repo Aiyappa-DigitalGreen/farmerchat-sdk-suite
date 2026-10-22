@@ -647,7 +647,7 @@ export function PhonePreview({ theme, appearance, setAppearance, screen, setScre
       {/* Device: pill field with a brand-accent focus ring, and a WHITE "Skip for
           now" pill — not a grey secondary button. */}
       <Input
-        defaultValue="Aiyappa"
+        defaultValue="Farmer"
         placeholder="Your name"
         className="h-12 w-full bg-card px-5"
         style={{ borderRadius: rBtn, borderColor: "var(--fc-accent)" }}

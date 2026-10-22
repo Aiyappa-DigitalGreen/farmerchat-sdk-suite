@@ -84,7 +84,7 @@ SWIFTUI = {
       "exists. Both are the same package, named <code>farmerchat-sdk-suite</code>."),
     CB([("Remote","swift","Package.swift","""dependencies: [
     .package(
-        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+        url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
         from: "%s"
     )
 ],
@@ -207,7 +207,7 @@ UIKIT = {
     SUB("Add the package to your project"),
     CB([("SPM","swift","Package.swift","""dependencies: [
     .package(
-        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+        url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
         from: "%s"
     )
 ],
@@ -315,7 +315,7 @@ OBJC = {
 pod 'FarmerChatUIKit', :path => '../farmerchat-sdk-suite/versions/v2/ios/FarmerChatUIKit'"""),
         ("SPM","swift","Package.swift","""dependencies: [
     .package(
-        url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+        url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
         from: "%s"
     )
 ],

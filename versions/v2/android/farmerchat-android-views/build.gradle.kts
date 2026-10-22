@@ -110,7 +110,7 @@ publishing {
                         "(FarmerChatActivity / FarmerChatFragment / FarmerChatFab). " +
                         "Depends on farmerchat-core."
                 )
-                url.set("https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite")
+                url.set("https://github.com/digitalgreenorg/farmerchat-sdk-suite")
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -120,14 +120,14 @@ publishing {
                 developers {
                     developer {
                         id.set("digitalgreen")
-                        email.set("aiyappa@digitalgreen.org")
+                        email.set("tech2@digitalgreen.org")
                         name.set("Digital Green")
                         organizationUrl.set("https://www.digitalgreen.org")
                     }
                 }
                 scm {
-                    url.set("https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite")
-                    connection.set("scm:git:https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git")
+                    url.set("https://github.com/digitalgreenorg/farmerchat-sdk-suite")
+                    connection.set("scm:git:https://github.com/digitalgreenorg/farmerchat-sdk-suite.git")
                 }
             }
         }

@@ -24,7 +24,7 @@ annotation class InternalFarmerChatApi
 
 /**
  * Published SDK version — the single runtime mirror of the Gradle coordinate
- * version (`io.github.aiyappa-digitalgreen:*:1.0.0`). Kept in sync with the
+ * version (`org.digitalgreen.farmerchat:*:1.0.0`). Kept in sync with the
  * `farmerChatVersion` declared in the root build script.
  */
 object FarmerChatVersion {

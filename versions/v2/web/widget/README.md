@@ -247,7 +247,7 @@ The rewrite uses `/stage/:path(.*)` because `:path*` does not match URLs ending 
 FarmerChat endpoint ends in `/`.
 
 One-time setup, done by the project owner in the Vercel dashboard: Add New → Project → import
-`Aiyappa-DigitalGreen/farmerchat-sdk-suite`, Root Directory `versions/v2`, Framework Preset
+`digitalgreenorg/farmerchat-sdk-suite`, Root Directory `versions/v2`, Framework Preset
 "Other" (`vercel.json` supplies the rest), environment variable `FC_GUEST_API_KEY`.
 
 Local check, the same build Vercel runs:

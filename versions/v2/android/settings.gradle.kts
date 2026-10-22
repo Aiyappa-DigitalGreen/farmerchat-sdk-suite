@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         // The SDK is resolved ONLINE, like any host app: :sample-consumer pulls
-        // io.github.aiyappa-digitalgreen:* from Maven Central (no mavenLocal). It cannot build until
+        // org.digitalgreen.farmerchat:* from Maven Central (no mavenLocal). It cannot build until
         // the first release is published there (RELEASING.md); CI and release.yml exclude it until then.
         google()
         mavenCentral()

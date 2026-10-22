@@ -9,20 +9,16 @@ workflow manually (Actions → Release (v2) → Run workflow) with `dry_run` tic
 ## One-time setup: Maven Central (Android)
 
 The Android build is ready: `./gradlew centralBundle` produces a signed bundle in the layout
-Central requires. What's left is an account, a namespace and two secrets, all outside the repo.
-For now the account is in **aiyappa@digitalgreen.org**'s name; it moves to a Digital Green account
-later (see the end of this section).
+Central requires. The SDK publishes as `org.digitalgreen.farmerchat:*`. What's left is an account,
+the verified `org.digitalgreen` namespace and four secrets, all outside the repo.
 
 1. **Create the Central Portal account.** Go to <https://central.sonatype.com>, choose *Sign in* →
-   *Sign up*, and register with `aiyappa@digitalgreen.org`. Confirm the email.
+   *Sign up*, and register with a shared Digital Green email the team controls. Confirm the email.
 
-2. **Verify the namespace `io.github.aiyappa-digitalgreen`.** The SDK is published as
-   `io.github.aiyappa-digitalgreen:*`, verified through the GitHub account
-   `Aiyappa-DigitalGreen`; no domain or DNS change is needed.
-   - If you signed up with *Continue with GitHub*, the Portal has already created and verified it.
-   - Otherwise: *Namespaces* → *Add Namespace* → `io.github.aiyappa-digitalgreen`. The Portal
-     shows a verification key. Create a **public** GitHub repository under `Aiyappa-DigitalGreen`
-     whose name is exactly that key, click *Verify Namespace*, then delete the repository.
+2. **Verify the namespace `org.digitalgreen`.** *Namespaces* → *Add Namespace* → `org.digitalgreen`.
+   The Portal shows a verification key. Whoever manages the digitalgreen.org DNS adds one **TXT**
+   record on the root domain (`@`) whose value is that key, next to the existing records. Then click
+   *Verify Namespace*. Check propagation with `dig TXT digitalgreen.org +short`.
 
 3. **Create a user token.** Portal → your account → *Generate User Token*. It has a username and
    a password. These are not your login password.
@@ -30,13 +26,13 @@ later (see the end of this section).
 4. **Create the signing key.** Central only accepts signed artifacts.
    ```bash
    brew install gnupg
-   gpg --quick-generate-key "FarmerChat SDK <aiyappa@digitalgreen.org>" rsa4096 sign 3y
+   gpg --quick-generate-key "FarmerChat SDK <team email>" rsa4096 sign 3y
    gpg --list-keys --keyid-format short          # note the key id
    gpg --keyserver keyserver.ubuntu.com --send-keys <KEY_ID>   # Central checks the public key here
    gpg --armor --export-secret-keys <KEY_ID> > signing-key.asc
    ```
-   Keep `signing-key.asc` and the passphrase somewhere safe, then delete the local file once it's
-   stored as a secret.
+   Keep `signing-key.asc` and the passphrase in the team's password manager, then delete the local
+   file once it's stored as a secret.
 
 5. **Store the four secrets in GitHub.**
    ```bash
@@ -51,22 +47,8 @@ later (see the end of this section).
    Open <https://central.sonatype.com> → *Deployments*, check `farmerchat-<version>` and click
    **Publish**. Artifacts appear on Maven Central within about 30 minutes.
 
-### Moving to the Digital Green account later
-
-The group `io.github.aiyappa-digitalgreen` is tied to the `Aiyappa-DigitalGreen` GitHub account.
-Two paths:
-
-- **Keep the group, change the owner.** Ask Central support (central-support@sonatype.com) to give a
-  Digital Green Portal account access to the namespace, then replace the
-  `MAVEN_CENTRAL_USERNAME`/`PASSWORD` secrets. Host apps notice nothing. The group still reads
-  `aiyappa-digitalgreen`.
-- **Move to a Digital Green group** (`org.digitalgreen.farmerchat` through the digitalgreen.org DNS
-  record, or `io.github.digitalgreenorg`). This is a **breaking** change for every host app: publish
-  the next MAJOR version under the new group, keep the old group's last version as is, and list
-  it under Breaking in CHANGELOG.md and MIGRATION.md (VERSIONING.md).
-
-Either way, update the `<developer>` email in the three Android `build.gradle.kts` POM blocks if
-the contact changes.
+The POM `<developer>` contact is set in the three Android `build.gradle.kts` POM blocks; change it
+there if the contact changes.
 
 ## Other registries
 

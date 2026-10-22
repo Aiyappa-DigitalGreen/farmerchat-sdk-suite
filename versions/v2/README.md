@@ -37,7 +37,7 @@ buildable and publishable independently of v1.
   (two-question pinning). iOS and React Native are build- and test-verified only.
   `docs/04-parity-matrix.md` has the per-change detail.
 
-Source of truth: **`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`** at **`919e5b2f`**
+Source of truth: **`~/AndroidStudioProjects/fc-compose-agentic`** at **`919e5b2f`**
 (re-baselined 2026-09-21 from `1b0553d2`; the 13-commit `1b0553d2..919e5b2f` delta — composer
 photo-strip padding, app-bar corner radii, two Home scroll fixes, the 52dp Home bar and its round
 weather pill, fully-opaque peeking tip cards, the Share button's accent sweep border, and markdown

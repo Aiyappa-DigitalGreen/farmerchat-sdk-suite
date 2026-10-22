@@ -70,7 +70,7 @@ private fun Dashboard(modifier: Modifier = Modifier, onOpenInline: () -> Unit = 
                 .padding(20.dp)
         ) {
             Text("GreenAcres", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Good morning, Aiyappa", color = Color(0xFFDCEDDC), fontSize = 14.sp)
+            Text("Good morning, Farmer", color = Color(0xFFDCEDDC), fontSize = 14.sp)
         }
 
         Column(

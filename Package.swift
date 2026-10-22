@@ -3,7 +3,7 @@
 // Swift Package Manager entry for the FarmerChat iOS SDK (v2), published the same way as Android:
 // from this repository, by the release tag (`v2.2.0`), with no extra repository or account.
 //
-//   .package(url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite", from: "2.2.0")
+//   .package(url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite", from: "2.2.0")
 //
 // Products: FarmerChatCore (no UI), FarmerChatSwiftUI, FarmerChatUIKit. The package builds for
 // iOS 15; FarmerChatSwiftUI's views are `@available(iOS 16, *)` (NavigationStack), so an iOS 15 host

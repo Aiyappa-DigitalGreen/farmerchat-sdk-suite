@@ -7,7 +7,7 @@
  *     `SdkMeta.versions` stays per platform so a future split cannot print a version a
  *     platform does not ship.
  *   - distribution (same wording as the integration guide, tools/guide-gen/content.py):
- *     Android resolves from Maven Central as io.github.aiyappa-digitalgreen (first release
+ *     Android resolves from Maven Central as org.digitalgreen.farmerchat (first release
  *     being set up; `mavenLocal()` until then). iOS, RN and web are not on CocoaPods / SPM /
  *     npm yet and there are no git tags, so their installs are local-path installs.
  *   - package ids, peer deps, requirements, Info.plist keys: from the v2 SDK sources
@@ -19,7 +19,7 @@
 import { currentCode, themeJSON } from "./export"
 import type { PlatformId, ThemeState } from "./theme"
 
-export const SDK_REPO = "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite"
+export const SDK_REPO = "https://github.com/digitalgreenorg/farmerchat-sdk-suite"
 
 /** Union of every platform's shipped versions (newest first) — the selector's options. */
 export const SDK_VERSIONS = ["2.2.0"] as const
@@ -114,7 +114,7 @@ export const SDK_META: SdkMeta[] = [
     name: "Android",
     // groupId is versions/v2/android/build.gradle.kts `farmerChatGroup`. The Kotlin package
     // and manifest namespaces stay org.digitalgreen.farmerchat.sdk.* (see the minSdk note below).
-    packageId: "io.github.aiyappa-digitalgreen:farmerchat-android-compose",
+    packageId: "org.digitalgreen.farmerchat:farmerchat-android-compose",
     versions: ["2.2.0"],
     reqs: ["Compose or Views", "AGP 8.13+ (Compose flavour)"],
     installLang: "kotlin",
@@ -124,12 +124,12 @@ export const SDK_META: SdkMeta[] = [
         "// build.gradle.kts (app). Resolves from Maven Central; until the first release is",
         "// published, add mavenLocal() and run ./gradlew publishToMavenLocal in versions/v2/android.",
         "dependencies {",
-        `    implementation("io.github.aiyappa-digitalgreen:farmerchat-android-compose:${v}")`,
+        `    implementation("org.digitalgreen.farmerchat:farmerchat-android-compose:${v}")`,
         "",
         "    // XML/Fragment hosts: the Views artifact additionally provides a real",
         "    // FarmerChatFab View (the Compose one is a @Composable). Adding BOTH is",
         "    // supported — FarmerChat.launch() prefers the Compose Activity when present.",
-        `    // implementation("io.github.aiyappa-digitalgreen:farmerchat-android-views:${v}")`,
+        `    // implementation("org.digitalgreen.farmerchat:farmerchat-android-views:${v}")`,
         "}",
         "",
         "// farmerchat-core arrives transitively via the POM — do not add it explicitly.",

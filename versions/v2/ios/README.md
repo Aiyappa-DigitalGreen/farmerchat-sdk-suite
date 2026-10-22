@@ -48,7 +48,7 @@ repository or account. In Xcode: File → Add Package Dependencies, paste the UR
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git", from: "2.2.0")
+    .package(url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git", from: "2.2.0")
     // before the tag exists: .package(path: "../farmerchat-sdk-suite")  (a checkout)
 ],
 targets: [

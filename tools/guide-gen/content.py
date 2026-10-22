@@ -12,7 +12,7 @@ Every v2 package ships the same version. Sources (keep in step when bumping):
 
 VERSION = "2.2.0"
 VERSION_MINOR = ".".join(VERSION.split(".")[:2])   # CocoaPods "~> 2.2"
-MAVEN_GROUP = "io.github.aiyappa-digitalgreen"
+MAVEN_GROUP = "org.digitalgreen.farmerchat"
 
 PERMS_ANDROID = """<uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

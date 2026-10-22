@@ -44,14 +44,14 @@ dokka {
 
 // -----------------------------------------------------------------------------
 // SINGLE SOURCE OF TRUTH for the published SDK coordinate.
-// groupId  = io.github.aiyappa-digitalgreen
+// groupId  = org.digitalgreen.farmerchat
 // version  = FarmerChatVersion (below)
 // Every publishable module reads project.group / project.version — no other
 // module hard-codes the group or version.
 // -----------------------------------------------------------------------------
-// Maven Central namespace io.github.aiyappa-digitalgreen (verified through GitHub, 2026-10-16). This is
+// Maven Central namespace org.digitalgreen (verified by a DNS TXT record on digitalgreen.org; see RELEASING.md). This is
 // the Maven group only; Kotlin packages stay org.digitalgreen.farmerchat.sdk.*.
-val farmerChatGroup = "io.github.aiyappa-digitalgreen"
+val farmerChatGroup = "org.digitalgreen.farmerchat"
 val farmerChatVersion = "2.2.0" // == FarmerChatVersion (agentic streaming; see versions/v2/README.md)
 
 // Expose to all modules (referenced by publish blocks and, optionally, runtime).
@@ -76,7 +76,7 @@ subprojects {
 // environment variables so NO credentials are committed. It is inert until the
 // URL is provided, so local `publishToMavenLocal` keeps working untouched.
 //
-//   Publish:  ./gradlew publishAllPublicationsToFarmerChatRepository //               -PfarmerchatRepoUrl=https://maven.pkg.github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite //               -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
+//   Publish:  ./gradlew publishAllPublicationsToFarmerChatRepository //               -PfarmerchatRepoUrl=https://maven.pkg.github.com/digitalgreenorg/farmerchat-sdk-suite //               -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
 //   Or set FARMERCHAT_REPO_URL / FARMERCHAT_REPO_USER / FARMERCHAT_REPO_TOKEN.
 //
 // Consumers then add that same URL to their settings.gradle.kts dependencyResolutionManagement.

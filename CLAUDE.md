@@ -5,7 +5,7 @@ These rules bind every contributor and every AI agent working in this repository
 ## 1. Source-of-truth chain (never invert it)
 
 ```
-fc-compose Android app source (/Users/Aiyappa/AndroidStudioProjects/fc-compose — READ-ONLY reference)
+fc-compose Android app source (~/AndroidStudioProjects/fc-compose — READ-ONLY reference)
   └─> docs/01-app-specification.md   (screens, navigation, lifecycle)
   └─> docs/02-api-reference.md       (endpoints, models, networking, prefs, analytics)
   └─> docs/03-sdk-architecture.md    (public SDK surface, packaging, adaptations)
@@ -15,7 +15,7 @@ fc-compose Android app source (/Users/Aiyappa/AndroidStudioProjects/fc-compose �
 
 - Code must be derivable from the docs. Docs must be derivable from the app source.
 - If code and docs disagree, the docs win until proven wrong against the app source; then fix the docs FIRST, then the code on ALL platforms.
-- NEVER modify anything under `/Users/Aiyappa/AndroidStudioProjects/fc-compose` — it is reference only.
+- NEVER modify anything under `~/AndroidStudioProjects/fc-compose` — it is reference only.
 
 ## 2. No-hallucination rules (STRICT)
 

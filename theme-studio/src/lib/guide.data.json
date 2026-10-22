@@ -17,7 +17,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -72,13 +72,13 @@
         "label": "Kotlin DSL",
         "lang": "kotlin",
         "fname": "app/build.gradle.kts",
-        "code": "dependencies {\n    implementation(\"io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0\")\n}"
+        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0\")\n}"
        },
        {
         "label": "Groovy",
         "lang": "groovy",
         "fname": "app/build.gradle",
-        "code": "dependencies {\n    implementation 'io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0'\n}"
+        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0'\n}"
        }
       ]
      },
@@ -497,7 +497,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -533,13 +533,13 @@
         "label": "Kotlin DSL",
         "lang": "kotlin",
         "fname": "app/build.gradle.kts",
-        "code": "dependencies {\n    implementation(\"io.github.aiyappa-digitalgreen:farmerchat-android-views:2.2.0\")\n}"
+        "code": "dependencies {\n    implementation(\"org.digitalgreen.farmerchat:farmerchat-android-views:2.2.0\")\n}"
        },
        {
         "label": "Groovy",
         "lang": "groovy",
         "fname": "app/build.gradle",
-        "code": "dependencies {\n    implementation 'io.github.aiyappa-digitalgreen:farmerchat-android-views:2.2.0'\n}"
+        "code": "dependencies {\n    implementation 'org.digitalgreen.farmerchat:farmerchat-android-views:2.2.0'\n}"
        }
       ]
      },
@@ -912,7 +912,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -931,7 +931,7 @@
         "label": "Remote",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatSwiftUI\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/digitalgreenorg/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatSwiftUI\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        },
        {
         "label": "Local checkout",
@@ -1321,7 +1321,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -1336,7 +1336,7 @@
         "label": "SPM",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/digitalgreenorg/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        },
        {
         "label": "SPM — local checkout",
@@ -1697,7 +1697,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -1718,7 +1718,7 @@
         "label": "SPM",
         "lang": "swift",
         "fname": "Package.swift",
-        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
+        "code": "dependencies: [\n    .package(\n        url: \"https://github.com/digitalgreenorg/farmerchat-sdk-suite.git\",\n        from: \"2.2.0\"\n    )\n],\ntargets: [\n    .target(name: \"MyApp\", dependencies: [\n        .product(name: \"FarmerChatCore\", package: \"farmerchat-sdk-suite\"),\n        .product(name: \"FarmerChatUIKit\", package: \"farmerchat-sdk-suite\")\n    ])\n]"
        }
       ]
      },
@@ -2136,7 +2136,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },
@@ -2578,7 +2578,7 @@
       "k": "warn",
       "tag": "Release status",
       "paras": [
-       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>io.github.aiyappa-digitalgreen:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find io.github.aiyappa-digitalgreen</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
+       "<strong>Android</strong> installs from <strong>Maven Central</strong> as <code>org.digitalgreen.farmerchat:*:2.2.0</code>, the same way as any other library. The first release is being set up: until it is published, Gradle reports <code>Could not find org.digitalgreen.farmerchat</code>. In the meantime, build the SDK from source with the <code>mavenLocal()</code> fallback shown in the Android install section.",
        "<strong>iOS</strong> installs with Swift Package Manager straight from the GitHub repository, like Android from one release tag: the remote form resolves once <code>v2.2.0</code> is pushed; until then point at a local checkout. <strong>React Native and Web</strong> are not on npm yet. Build from source and consume the package locally, as each install section shows."
       ]
      },

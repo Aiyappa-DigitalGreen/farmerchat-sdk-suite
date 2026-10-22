@@ -27,7 +27,7 @@ working exactly as before.
 
 ```bash
 ./gradlew publishAllPublicationsToFarmerChatRepository \
-  -PfarmerchatRepoUrl=https://maven.pkg.github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite \
+  -PfarmerchatRepoUrl=https://maven.pkg.github.com/digitalgreenorg/farmerchat-sdk-suite \
   -PfarmerchatRepoUser=<user> -PfarmerchatRepoToken=<token>
 ```
 
@@ -52,7 +52,7 @@ for projects on the same machine.
 
 ## Verified integration: RationSmart (`cattle_feed.org`)
 
-Done end-to-end on 2026-09-01 against `/Users/Aiyappa/AndroidStudioProjects/feed-formulation-frontend`.
+Done end-to-end on 2026-09-01 against `~/AndroidStudioProjects/feed-formulation-frontend`.
 
 **Before**: RationSmart included `:farmerchat-sdk` as a **source module by absolute path** from a
 different, older SDK checkout (`com.farmerchat.sdk.FarmerChatSdk`, a `fc_live_`-style partner key

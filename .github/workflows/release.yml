@@ -179,7 +179,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/out/aar"
           cp farmerchat-*/build/outputs/aar/*-release.aar "$GITHUB_WORKSPACE/out/aar/"
-          tar -C "$HOME/.m2/repository" -czf "$GITHUB_WORKSPACE/out/farmerchat-android-maven-local.tgz" io/github/aiyappa-digitalgreen
+          tar -C "$HOME/.m2/repository" -czf "$GITHUB_WORKSPACE/out/farmerchat-android-maven-local.tgz" org/digitalgreen/farmerchat
           ls -l "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/out/aar"
       - uses: actions/upload-artifact@v4
         with:
@@ -335,7 +335,7 @@ jobs:
       - name: Plan
         run: |
           echo "Maven Central: secrets=$HAS_CENTRAL | custom repo: $HAS_CUSTOM_REPO | dry_run=$DRY_RUN"
-          if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish io.github.aiyappa-digitalgreen:*:$VERSION"; fi
+          if [ "$DRY_RUN" = "true" ]; then echo "::notice::Dry run: would publish org.digitalgreen.farmerchat:*:$VERSION"; fi
       - uses: actions/checkout@v4
         if: env.DRY_RUN != 'true' && (env.HAS_CUSTOM_REPO == 'true' || env.HAS_CENTRAL == 'true')
       - uses: actions/setup-java@v4

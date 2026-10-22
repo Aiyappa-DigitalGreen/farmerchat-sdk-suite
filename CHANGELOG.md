@@ -11,7 +11,7 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
 
 ### Added (v2, all four platforms unless noted)
 - iOS: Swift Package Manager install straight from this repository, published by the same release
-  tag as Android: `.package(url: "https://github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite.git",
+  tag as Android: `.package(url: "https://github.com/digitalgreenorg/farmerchat-sdk-suite.git",
   from: "2.2.0")` with products `FarmerChatCore`, `FarmerChatSwiftUI`, `FarmerChatUIKit` (root
   `Package.swift`). Target dependencies use `.product(name:package: "farmerchat-sdk-suite")`.
 - iOS FarmerChatSwiftUI: the package floor drops from iOS 16 to iOS 15, so one package serves every
@@ -49,8 +49,6 @@ Every v2 package is 2.2.0. 2.2.0 has never been tagged or published, so all chan
   DEMO environment (were PROD).** No platform selects production on its own any more; a live app
   must set `environment: .prod` explicitly. All docs, READMEs, guide examples, sample apps and tests
   use DEMO.
-- Android Maven group is now `io.github.aiyappa-digitalgreen` (was `org.digitalgreen.farmerchat`).
-  Artifact names and Kotlin packages are unchanged; update the group in dependency lines.
 - A repeat `initialize` on iOS, React Native and Web now matches Android. It is a no-op unless
   `environment`, `mode` or `showDrawer`/`showHistory`/`showSettings` change. Before, every call
   replaced the instance without tearing the old one down, which leaked listeners. A changed host

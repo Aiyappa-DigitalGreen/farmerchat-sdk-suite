@@ -4357,7 +4357,7 @@ evidence that the values are right.
 ## iOS pass against the native app (`FarmerChat-iOS-Agentic-v2.3`)
 
 Until now iOS/RN/web had no side-by-side reference — the app existed only on Android, so the
-iOS SDK was verified by reading Kotlin and writing Swift. `/Users/Aiyappa/Desktop/FarmerChat-iOS-Agentic-v2.3`
+iOS SDK was verified by reading Kotlin and writing Swift. `~/Desktop/FarmerChat-iOS-Agentic-v2.3`
 is a native SwiftUI port of the same app and finally supplies an iOS ground truth, including an
 82KB `PARITY.md` of its own measured sweep.
 
@@ -4830,7 +4830,7 @@ a live countdown jitter. Both are single-line, so no leading is lost by leaving 
 
 ## App delta `193dbd64` → `cbfdcff8` (11 commits, 9 dated 2026-09-15) — ported 2026-09-16
 
-Source: `/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`, 14 files, 122 insertions.
+Source: `~/AndroidStudioProjects/fc-compose-agentic`, 14 files, 122 insertions.
 Four categories: button/footer geometry, one copy string, two chat-thread changes, and a Home
 feed caching optimisation. Android `Radius.Rounded` is `999.dp` (a pill), `Radius.MD` is `12.dp`.
 
@@ -5667,7 +5667,7 @@ and in `theme.json`.
 
 ## App delta `cbfdcff8..1b0553d2` ported (2026-09-17)
 
-Six commits on `fc-compose-agentic` (`/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`),
+Six commits on `fc-compose-agentic` (`~/AndroidStudioProjects/fc-compose-agentic`),
 five distinct changes across five app files. **Target tree: `versions/v2/` only.** The root
 `android/ ios/ react-native/ web/` trees are the 1.0.0 line; the precedent is the previous app
 delta (`b72ea4da`, "language screen legal intro names the AI"), which landed in `versions/v2/` on
@@ -5846,7 +5846,7 @@ explicit `top: 0` against it. No amount of `tsc` would have shown this.
 
 ## App delta `1b0553d2..919e5b2f` — 13 commits (2026-09-21)
 
-Ported from `/Users/Aiyappa/AndroidStudioProjects/fc-compose-agentic`, Android first, into
+Ported from `~/AndroidStudioProjects/fc-compose-agentic`, Android first, into
 `versions/v2/` only. One commit (`919e5b2f`) is a host build bump — `versionCode` 109→112, Kotlin
 2.4.20, Compose BOM 2026.09.00, the demo flavour renamed "FarmerChat(Beta)" — and is not portable:
 the SDK pins its own BOM at `2026.05.00`.
@@ -8579,8 +8579,8 @@ old browsers (Chrome 87 / Safari 14): not yet run on a device lab.
 - Javadoc jars come from Dokka 2.1 (`dokkaGeneratePublicationHtml`). AGP's `withJavadocJar()` was
   tried and dropped: its bundled Dokka crashes on the compose module under Kotlin 2.3 ("PermittedSubclasses
   requires ASM9").
-- POM `<developer>` now carries `aiyappa@digitalgreen.org` (user decision: a personal Central
-  account for now, Digital Green account later). That is the only POM change. The published
+- POM `<developer>` now carries a Digital Green contact (`tech2@digitalgreen.org` since
+  2026-10-22). That is the only POM change. The published
   coordinates were checked by diffing the mavenLocal POMs before and after.
 - Verified locally with a throwaway test key: the bundle builds, all six AAR/POM signatures verify
   (openpgp.js), and `testDebugUnitTest assembleDebug apiCheck` passes. The test key was deleted.
@@ -8604,23 +8604,24 @@ fallback. Not changed: v1 `android/` (1.1.0 is not going to Central); iOS/RN/web
 (npm and SPM/CocoaPods are not published). The deployed demo-app keeps its local `file:`
 dependency, because pointing it at npm before a release would break the live site's next deploy.
 
-## Android Maven group → io.github.aiyappa-digitalgreen (2026-10-16, user decision)
-The user chose the GitHub-verified namespace of their account `Aiyappa-DigitalGreen` instead of
-`org.digitalgreen` (which needs a DNS TXT record on digitalgreen.org). Single source:
+## Android Maven group: interim personal namespace (2026-10-16), reverted 2026-10-22
+On 2026-10-16 the group briefly moved to a GitHub-verified personal-account namespace to avoid the
+DNS TXT record that `org.digitalgreen` needs; nothing was published under it. On 2026-10-22 the user
+moved it back to `org.digitalgreen.farmerchat` (see the entry of that date). Single source:
 `farmerChatGroup` in `versions/v2/android/build.gradle.kts` (and the `GROUP` mirror). Only the
 **Maven group** changed: artifact ids and Kotlin packages (`org.digitalgreen.farmerchat.sdk.*`)
 are unchanged, so the `.api` baselines, imports and app code are untouched. Before publishing, the
 user was told: the group is permanent once published; a later move to a Digital Green group is a
 breaking MAJOR change (RELEASING.md). Updated: the android README + INTEGRATION.md, MIGRATION.md
 (new Breaking row), SECURITY.md, RELEASING.md, release.yml, the guide (13 coordinates),
-sample-consumer. Verified: `publishToMavenLocal` writes `~/.m2/.../io/github/aiyappa-digitalgreen/`
+sample-consumer. Verified: `publishToMavenLocal` writes `~/.m2/.../org/digitalgreen/farmerchat/`
 with the new group in the POMs; `testDebugUnitTest assembleDebug apiCheck` pass. v1 `android/`
 stays `org.digitalgreen.farmerchat` (not going to Central). External host RationSmart still points
 at the old group in mavenLocal; it must change its dependency lines to pick up new builds.
 
 ## Fresh-host integration test, Android Compose (2026-10-16)
 New app `~/AndroidStudioProjects/FarmerChatComposeDemo` (outside this repo): AGP 8.13.2, Kotlin
-2.2, compileSdk 36. It depends on `io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0`
+2.2, compileSdk 36. It depends on `org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0`
 from mavenLocal (Maven Central not released yet), and uses `FarmerChatFab` plus `openChat(question)`.
 On the rs_qa emulator (API 36), `DEV` environment:
 - builds on the first try; app and FAB render.
@@ -8641,8 +8642,8 @@ On the rs_qa emulator (API 36), `DEV` environment:
   client); iOS uses its own geolocate session. Verified: on a third-party page, geolocate went from
   blocked to 200. Web/RN typecheck + tests + builds and the widget build pass.
 - Fixed: every repo link (guide, POMs, podspec source, package.json `repository`, guide generator)
-  pointed at `github.com/digitalgreenorg/farmerchat-sdk-suite`, which is a 404. They now point at
-  the real public repo `github.com/Aiyappa-DigitalGreen/farmerchat-sdk-suite`.
+  pointed at a 404; they were pointed at the real public repo (since 2026-10-22,
+  `github.com/digitalgreenorg/farmerchat-sdk-suite`, pending the repo transfer).
 - Open (docs/05): backend CORS rejects the SDK's headers, so the web SDK only works behind a
   same-origin proxy.
 - Size, Android: the SDK adds 3.4 MB download / 3.7 MB APK to an R8-minified release app
@@ -9133,3 +9134,17 @@ test` → 197 tests, 0 failures; FarmerChatSwiftUI and FarmerChatUIKit `xcodebui
 products resolved at 2.2.0 and built (exit 0), using `FarmerChatView` behind `if #available(iOS 16, *)`,
 `FarmerChatViewController` unguarded, and producing the three resource bundles (Core's carries the 4
 FarmerIllustrations folders). SampleApp / ConsumerApp target iOS 16 and are unaffected.
+
+## Digital Green names everywhere (2026-10-22, user: "change … to digitalgreen without mentioning aiyappa anywhere")
+
+User decisions: Maven group `org.digitalgreen.farmerchat`; repo links point at
+`github.com/digitalgreenorg/farmerchat-sdk-suite` now, the repo transfer follows.
+
+| Item | State |
+|---|---|
+| Android group `org.digitalgreen.farmerchat` (`farmerChatGroup`, `GROUP`), POM url/scm → digitalgreenorg, POM developer email → `tech2@digitalgreen.org` | DONE; POMs regenerated and checked, `:farmerchat-core:compileDebugKotlin` passes |
+| Guide (regenerated), Theme Studio data/snippets, READMEs, INTEGRATION, MIGRATION (group no longer a breaking change: v1 and v2 share it), RELEASING (Central steps rewritten for the DNS-verified `org.digitalgreen` namespace), SECURITY, podspecs, package.json `repository`, Package.swift, workflows | DONE: 0 tracked files mention the old name |
+| Local paths in docs (`/Users/<name>/…` → `~/…`), sample greeting → "Farmer" | DONE |
+| `github.com/digitalgreenorg/farmerchat-sdk-suite` exists | NO: 404 until the repo is transferred; until then repo links and the iOS URL install 404 |
+| Maven Central publishing | Needs the `org.digitalgreen` namespace verified (DNS TXT on digitalgreen.org) before the first release |
+| Hosts building against mavenLocal (RationSmart) | must switch their dependency group after the next `publishToMavenLocal` |

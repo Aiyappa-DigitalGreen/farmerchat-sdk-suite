@@ -177,12 +177,12 @@ test.describe("Theme Studio E2E", () => {
 
   test("Get SDK: the guide's android install line uses the real Maven group", async ({ page }) => {
     await page.goto("/?view=sdk")
-    // groupId is `farmerChatGroup` in versions/v2/android/build.gradle.kts: io.github.aiyappa-digitalgreen.
+    // groupId is `farmerChatGroup` in versions/v2/android/build.gradle.kts: org.digitalgreen.farmerchat.
     // The old org.digitalgreen.farmerchat group resolves nowhere, so a host copying that install line
     // would get an unresolvable dependency. The install lines live in the guide's code blocks rather
     // than on a card, so assert inside the guide body.
     const guide = page.locator(".fcg-body")
-    await expect(guide.getByText("io.github.aiyappa-digitalgreen:farmerchat-android-compose:2.2.0", { exact: false }).first()).toBeVisible()
+    await expect(guide.getByText("org.digitalgreen.farmerchat:farmerchat-android-compose:2.2.0", { exact: false }).first()).toBeVisible()
     await expect(guide.getByText("org.digitalgreen.farmerchat:", { exact: false })).toHaveCount(0)
   })
 
