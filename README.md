@@ -29,15 +29,16 @@ Source of truth: the production Android app at `fc-compose` (org.digitalgreen.fa
 |---|---|---|---|
 | Android (Compose) | `farmerchat-android-compose` | API 26 (Android 8.0) | AAR (Maven coordinates `org.digitalgreen.farmerchat`) |
 | Android (XML Views) | `farmerchat-android-views` | API 26 (Android 8.0) | AAR |
-| iOS (SwiftUI) | `FarmerChatSwiftUI` | iOS 16.0 | SPM / XCFramework |
-| iOS (UIKit) | `FarmerChatUIKit` | iOS 15.0 | CocoaPods + SPM |
+| iOS (SwiftUI) | `FarmerChatSwiftUI` | iOS 15.0 to link; views iOS 16.0 | SPM from this repo (root `Package.swift`) / XCFramework |
+| iOS (UIKit) | `FarmerChatUIKit` | iOS 15.0 | SPM from this repo + CocoaPods |
 | React Native | `@digitalgreenorg/farmerchat-react-native` | Expo SDK 52+ / RN 0.76+ | npm |
 | Web | `@digitalgreenorg/farmerchat-web` | Modern browsers | npm |
 | Web widget | `@digitalgreenorg/farmerchat-widget` | Modern browsers | npm + one `<script>` (IIFE) |
 
 **Not published yet.** None of these is on Maven Central, CocoaPods trunk or npm, and the repo has no
 release tags. Build from source and consume locally: `./gradlew publishToMavenLocal` (Android),
-an SPM path dependency (iOS), or `npm install <path>` / `npm pack` (React Native, web). Each
+an SPM path dependency on a checkout (iOS; once `v2.2.0` is tagged, `.package(url:)` on this repo
+resolves with no other step), or `npm install <path>` / `npm pack` (React Native, web). Each
 platform README under `versions/v2/` has the exact steps.
 
 ## Confirmed design decisions
