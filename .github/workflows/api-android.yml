@@ -19,12 +19,12 @@ jobs:
       run:
         working-directory: versions/v2/android
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       # Fails if the compiled public API differs from the committed <module>/api/*.api baselines.
       # An intended change: run `./gradlew apiDump` and commit the .api diff.
       - name: Public API compatibility (apiCheck)
@@ -34,7 +34,7 @@ jobs:
         run: scripts/check-aar-size.sh
       - name: API reference (Dokka HTML)
         run: ./gradlew :dokkaGenerate
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: farmerchat-android-api-reference
           path: versions/v2/android/build/dokka/html
