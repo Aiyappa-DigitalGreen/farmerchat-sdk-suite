@@ -9135,7 +9135,7 @@ products resolved at 2.2.0 and built (exit 0), using `FarmerChatView` behind `if
 `FarmerChatViewController` unguarded, and producing the three resource bundles (Core's carries the 4
 FarmerIllustrations folders). SampleApp / ConsumerApp target iOS 16 and are unaffected.
 
-## Digital Green names everywhere (2026-10-22, user: "change … to digitalgreen without mentioning aiyappa anywhere")
+## Digital Green names everywhere (2026-10-22, user: Digital Green names only, no personal name anywhere)
 
 User decisions: Maven group `org.digitalgreen.farmerchat`; repo links point at
 `github.com/digitalgreenorg/farmerchat-sdk-suite` now, the repo transfer follows.
