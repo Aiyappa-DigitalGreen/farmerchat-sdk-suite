@@ -8207,7 +8207,7 @@ chat with the question answered. Android/iOS/RN not run on a device: UNVERIFIED 
 
 The Vercel project `farmerchat-widget` (farmerchat-widget.vercel.app) was deleted at the user's
 request; the URL now returns 404. The demo lives only on Railway
-(https://farmerchat-sdk-suite-production.up.railway.app), deployed from GitHub `main`. READMEs point
+(https://farmerchat-sdk-suite.vercel.app), deployed from GitHub `main`. READMEs point
 there. `web/widget/vercel/` is kept: `web/railway/server.mjs` imports its proxy handler.
 
 ## Empty-chat placeholder — all v2 platforms (2026-10-09, SDK addition)
@@ -9148,3 +9148,14 @@ User decisions: Maven group `org.digitalgreen.farmerchat`; repo links point at
 | `github.com/digitalgreenorg/farmerchat-sdk-suite` exists | NO: 404 until the repo is transferred; until then repo links and the iOS URL install 404 |
 | Maven Central publishing | Needs the `org.digitalgreen` namespace verified (DNS TXT on digitalgreen.org) before the first release |
 | Hosts building against mavenLocal (RationSmart) | must switch their dependency group after the next `publishToMavenLocal` |
+
+## Hosted site live on Vercel (2026-10-22)
+
+https://farmerchat-sdk-suite.vercel.app, Vercel project `farmerchat-sdk-suite` imported from GitHub
+(Root Directory `versions/v2`, preset Other, no environment variables; user: no keys in Vercel).
+Deploys only through Vercel's GitHub integration on push to `main`. Verified live: `/` and `/guide/`
+(guide, `/guide` → 308), `/showcase/`, `/app/`, `/demo/`, `/demo/mobile.html`, `/healthz` 200; the
+widget script 200 with `access-control-allow-origin: *` + nosniff/HSTS/referrer-policy; OTP via
+`/stage/` 403 for plain, `%5F`-encoded and `//` (Vercel 308s to the single-slash path, then 403)
+forms; the web app's proxied calls (privacy_policy, update_user_location, languages, get_labels) 200
+with no key stored in Vercel. All 16 Railway links replaced (guide regenerated).

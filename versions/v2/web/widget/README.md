@@ -11,7 +11,7 @@ reopening the panel keeps the current one (the panel stays mounted).
 It wraps the v2 web SDK (`../packages/farmerchat-web`, a `file:` dependency, so no source is copied).
 Every SDK config field works unchanged, including `enableAgenticChat`.
 
-**Live demo:** https://farmerchat-sdk-suite-production.up.railway.app, a sample host page with the widget against the
+**Live demo:** https://farmerchat-sdk-suite.vercel.app/demo/, a sample host page with the widget against the
 stage backend (agentic chat on, answers stream). Version 2.2.0, the same as every v2 platform.
 
 ## Requirements
@@ -199,12 +199,13 @@ open http://localhost:5182/demo/mobile.html          # 390×760 phone frame (ful
 `demo/index.html` reads `?env=`, `?base=`, `?geoKey=` (optional override; a key is built in),
 `?mode=FULL_JOURNEY` (default is the SDK's `CHAT_ONLY`), `?left=1` and `?label=` from the URL.
 
-## Hosted demo on Railway (GitHub CI/CD)
+## Hosted demo on Railway (retired 2026-10-22)
 
-Live: **https://farmerchat-sdk-suite-production.up.railway.app** (`/` redirects to `/demo/`; add
-`?replay=1` for the recorded streaming answer).
+Railway took the service down on 2026-10-22; the site now runs on Vercel (next section) at
+**https://farmerchat-sdk-suite.vercel.app** (`/` is the guide, `/demo/` the widget demo; add
+`?replay=1` for the recorded streaming answer). `railway/server.mjs` still runs the same site locally.
 
-The demo is served by `versions/v2/web/railway/server.mjs`, a zero-dependency Node server:
+The demo was served by `versions/v2/web/railway/server.mjs`, a zero-dependency Node server:
 - `/demo/` serves the demo pages;
 - `/dist/` serves the widget script and `illustrations/`;
 - `/stage/*` and `/stage-replay/*` go through the same proxy handler as the Vercel version
@@ -246,9 +247,11 @@ resolved upstream path, so phone login cannot be driven through it on either hos
 The rewrite uses `/stage/:path(.*)` because `:path*` does not match URLs ending in `/`, and every
 FarmerChat endpoint ends in `/`.
 
-One-time setup, done by the project owner in the Vercel dashboard: Add New → Project → import
-`digitalgreenorg/farmerchat-sdk-suite`, Root Directory `versions/v2`, Framework Preset
-"Other" (`vercel.json` supplies the rest), environment variable `FC_GUEST_API_KEY`.
+Live: **https://farmerchat-sdk-suite.vercel.app** (Vercel project `farmerchat-sdk-suite`, imported
+2026-10-22: Root Directory `versions/v2`, Framework Preset "Other"; `vercel.json` supplies the rest).
+No environment variable is set: the SDK sends its built-in guest key itself, and the proxy only adds
+`FC_GUEST_API_KEY` when a request lacks one. Verified live: guest calls through `/stage/` return 200
+and every OTP variant returns 403.
 
 Local check, the same build Vercel runs:
 

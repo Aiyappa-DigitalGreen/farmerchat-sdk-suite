@@ -7,7 +7,7 @@
 <header class="top">
   <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c3.2-3.5 6.8-3.5 10 0-3.2 3.5-6.8 3.5-10 0zM12 12c3.5 3.2 3.5 6.8 0 10-3.5-3.2-3.5-6.8 0-10zM12 12c-3.2 3.5-6.8 3.5-10 0 3.2-3.5 6.8-3.5 10 0z"/></svg>FarmerChat<span>SDK</span></a>
   <span class="ver">v{{VERSION}}</span>
-  <nav class="top-links" aria-label="Page"><a href="#what">What it is</a><a href="#how">How it works</a><a href="#platforms">Add to your app</a><a href="#requirements">Requirements</a><a href="#website">Website</a><a href="#guide">Developer guide</a><a href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Live demo</a></nav>
+  <nav class="top-links" aria-label="Page"><a href="#what">What it is</a><a href="#how">How it works</a><a href="#platforms">Add to your app</a><a href="#requirements">Requirements</a><a href="#website">Website</a><a href="#guide">Developer guide</a><a href="https://farmerchat-sdk-suite.vercel.app/demo/" target="_blank" rel="noopener">Live demo</a></nav>
   <button class="cmt" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Comment</button>
 </header>
 
@@ -23,7 +23,7 @@
       <p class="lede">The same public surface ships on <strong>seven flavours across four
       platforms</strong>. Every one is documented in full on this page, with the identical section
       list, so an integration written against one translates directly to the others.</p>
-      <div class="cta"><a class="btn btn-sun" href="#platforms">Start integrating</a><a class="btn btn-line" href="#guide">Read the guide</a><a class="btn btn-line" href="https://farmerchat-sdk-suite-production.up.railway.app/demo/" target="_blank" rel="noopener">Try the live demo</a></div>
+      <div class="cta"><a class="btn btn-sun" href="#platforms">Start integrating</a><a class="btn btn-line" href="#guide">Read the guide</a><a class="btn btn-line" href="https://farmerchat-sdk-suite.vercel.app/demo/" target="_blank" rel="noopener">Try the live demo</a></div>
     </div>
     <div class="phones">
   <figure class="phone"><span class="phone-btns" aria-hidden="true"></span><span class="phone-cam" aria-hidden="true"></span>
@@ -92,7 +92,7 @@
       <h2 class="sec-title">On a plain HTML page</h2>
       <p>The FarmerChat widget is one script. Paste these two tags before <code>&lt;/body&gt;</code> and a chat button appears in the corner of the page; tapping it opens FarmerChat in a panel (full screen on phones).</p>
       <p>To open chat from your own button, call <code>FarmerChatWidget.open()</code>, or <code>FarmerChatWidget.open(&#x27;When should I harvest paddy?&#x27;)</code> to ask straight away.</p>
-      <div class="note warn"><span class="tag">Before you go live</span><p>FarmerChat&#x27;s servers do not yet accept the SDK&#x27;s requests from other websites: their browser rules (CORS) block the headers the SDK sends. Until the FarmerChat team allows them, point the widget at a small proxy, as the <a href="https://farmerchat-sdk-suite-production.up.railway.app">live demo</a> does with <code>customBaseUrl</code>.</p><p>The script URL below is the demo&#x27;s copy. For production, host <code>farmerchat-widget.iife.js</code> and its <code>illustrations/</code> folder on your own site or CDN.</p></div>
+      <div class="note warn"><span class="tag">Before you go live</span><p>FarmerChat&#x27;s servers do not yet accept the SDK&#x27;s requests from other websites: their browser rules (CORS) block the headers the SDK sends. Until the FarmerChat team allows them, point the widget at a small proxy, as the <a href="https://farmerchat-sdk-suite.vercel.app">live demo</a> does with <code>customBaseUrl</code>.</p><p>The script URL below is the demo&#x27;s copy. For production, host <code>farmerchat-widget.iife.js</code> and its <code>illustrations/</code> folder on your own site or CDN.</p></div>
     </div>
     <div class="cb web-code"><div class="cb-bar"><div class="cb-tabs single">index.html</div><button class="cb-copy" type="button">Copy</button></div><div class="cb-pane" data-cb="cbweb" data-i="0"><pre><code><span class="t-c">&lt;!-- 1. Settings (all optional) --&gt;</span>
 &lt;script&gt;
@@ -107,7 +107,7 @@
 &lt;/script&gt;
 
 <span class="t-c">&lt;!-- 2. The widget --&gt;</span>
-&lt;script src=<span class="t-s">&quot;https://farmerchat-sdk-suite-production.up.railway.app/dist/farmerchat-widget.iife.js&quot;</span>&gt;&lt;/script&gt;</code></pre></div></div>
+&lt;script src=<span class="t-s">&quot;https://farmerchat-sdk-suite.vercel.app/dist/farmerchat-widget.iife.js&quot;</span>&gt;&lt;/script&gt;</code></pre></div></div>
   </div>
 </section>
 
