@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build && node web/vercel-site.mjs",
+  "outputDirectory": "vercel-out",
+  "rewrites": [
+    { "source": "/stage/:path(.*)", "destination": "/api/stage?p=:path" },
+    { "source": "/stage-replay/:path(.*)", "destination": "/api/stage?p=:path&replay=1" },
+    { "source": "/healthz", "destination": "/api/healthz" }
+  ],
+  "redirects": [
+    { "source": "/guide", "destination": "/guide/", "permanent": true },
+    { "source": "/showcase", "destination": "/showcase/", "permanent": true },
+    { "source": "/demo", "destination": "/demo/", "permanent": true },
+    { "source": "/app", "destination": "/app/", "permanent": true }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000" }
+      ]
+    },
+    {
+      "source": "/dist/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    }
+  ],
+  "functions": { "api/stage.js": { "maxDuration": 60 } }
+}

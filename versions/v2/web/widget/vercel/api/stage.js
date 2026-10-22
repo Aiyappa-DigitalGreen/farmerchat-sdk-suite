@@ -16,6 +16,10 @@ import { REPLAY_EVENTS } from './_replay.js';
 const UPSTREAM = 'https://farmerchat.farmstack.co/mobile-app-demo/';
 const GUEST_PATHS = /\/(initialize_user|send_tokens)\/?$/;
 const AGENTIC_PATH = /get_answer_for_text_query_agentic\/?$/;
+// generate_otp, verify_otp, verify_otp_less_android_sdk_token (docs/02 #17, #19, #21). This proxy is
+// public: it must not become a way to send login codes to arbitrary phone numbers. Checked on the
+// resolved upstream path, so it holds on Vercel too, where the path arrives as `?p=`.
+const OTP_PATHS = /\/api\/user\/(generate_otp|verify_otp)/;
 const HOP = new Set(['host', 'connection', 'content-length', 'origin', 'referer', 'accept-encoding',
   'transfer-encoding', 'keep-alive', 'upgrade', 'x-forwarded-for', 'x-forwarded-host',
   'x-forwarded-proto', 'x-real-ip', 'forwarded']);
@@ -94,6 +98,13 @@ export default async function handler(req, res) {
   if (!target) {
     res.writeHead(400, { ...cors(req), 'content-type': 'text/plain' });
     return res.end('Bad path');
+  }
+  // Decode, collapse `//` and fold case first: upstreams normalize `api//user/Generate%5FOTP/` back.
+  let guarded;
+  try { guarded = decodeURIComponent(target.pathname); } catch { guarded = target.pathname; }
+  if (OTP_PATHS.test(guarded.replace(/\/{2,}/g, '/').toLowerCase())) {
+    res.writeHead(403, { ...cors(req), 'content-type': 'text/plain' });
+    return res.end('Phone login is disabled on this demo');
   }
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k) && v != null) headers[k] = Array.isArray(v) ? v.join(', ') : v;

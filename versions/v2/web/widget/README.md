@@ -225,38 +225,39 @@ To test it locally, the same way Railway runs it:
 cd versions/v2 && npm run build && PORT=8920 npm start   # http://localhost:8920/demo/
 ```
 
-## Hosted demo on Vercel (retired)
+## Hosted site on Vercel (GitHub CI/CD, since 2026-10-22)
 
-The Vercel project `farmerchat-widget` was deleted on 2026-10-09; Railway (above) is the only
-host. The `vercel/` folder stays because the Railway server reuses its proxy handler
-(`vercel/api/stage.js`, `vercel/api/_replay.js`). What it used to do on Vercel:
+Railway took the service down on 2026-10-22 ("Application not found"), so the same site now
+builds on Vercel from GitHub. Vercel's GitHub integration builds every push to `main`; nobody
+deploys by hand and no Vercel token lives in this repo or in CI (repo `CLAUDE.md` §8).
 
-`vercel/` turns the demo into a static site plus one serverless function:
-
-| Path | What |
+| File | What |
 |---|---|
-| `/demo/` (`/` redirects here) | `demo/index.html` and `demo/mobile.html` |
-| `/dist/` | the built widget (`farmerchat-widget.iife.js`) |
-| `/stage/*` → `vercel/api/stage.js` | the hosted twin of `demo/stage-proxy.mjs`. It forwards to the fixed stage host only, adds the guest `API-Key` on the two guest endpoints from the `FC_GUEST_API_KEY` env var (set in the Vercel project, never in a file), and streams responses through |
-| `/stage-replay/*` | the same, except the agentic answer endpoint plays a recorded streaming answer (`vercel/api/_replay.js`, sanitized) |
+| `versions/v2/vercel.json` | build = `npm run build && node web/vercel-site.mjs`, output `vercel-out/`, the `/stage` rewrites, security headers, `Access-Control-Allow-Origin: *` on `/dist/` |
+| `versions/v2/web/vercel-site.mjs` | assembles the static twin of `railway/server.mjs`: `/` + `/guide/` (guide), `/showcase/`, `/app/`, `/demo/` (index + mobile only), `/dist/` |
+| `versions/v2/api/stage.js` | re-exports `vercel/api/stage.js`, the one proxy shared with the Railway server |
+| `versions/v2/api/healthz.js` | `/healthz` → `ok` |
 
-On a non-localhost host the demo page uses `/stage/` with agentic chat on. `?replay=1` switches to `/stage-replay/`: whatever is asked, the answer
-replays one recorded stream (progress steps "Loading your farms" → "Farms loaded", then text). Locally
-the switch uses the replay proxy on :8896 (`REPLAY_SSE=<capture> PORT=8896 node demo/stage-proxy.mjs`).
-
-Deploy (Vercel project `farmerchat-widget`):
-
-```bash
-npm run build                      # after building ../packages/farmerchat-web
-node vercel/prepare.mjs            # assembles vercel/.site (gitignored; keeps .site/.vercel)
-npx vercel --cwd "$PWD/vercel/.site" --prod --yes
-```
-
-`prepare.mjs` keeps `.site/.vercel`, the link to the project. If that folder is lost, run
-`vercel link --yes --project farmerchat-widget --cwd vercel/.site` first, or the deploy creates a new
-project. One-time setup: `vercel env add FC_GUEST_API_KEY production --cwd vercel/.site`.
+The proxy (`vercel/api/stage.js`) forwards to the fixed DEMO host only, adds the guest `API-Key`
+on the two guest endpoints from the `FC_GUEST_API_KEY` env var (set in the Vercel project by its
+owner, never in a file), streams responses, and refuses the OTP endpoints with 403 on the
+resolved upstream path, so phone login cannot be driven through it on either host.
+`/stage-replay/*` is the same except the agentic answer plays a recorded stream (`vercel/api/_replay.js`).
 The rewrite uses `/stage/:path(.*)` because `:path*` does not match URLs ending in `/`, and every
 FarmerChat endpoint ends in `/`.
+
+One-time setup, done by the project owner in the Vercel dashboard: Add New → Project → import
+`Aiyappa-DigitalGreen/farmerchat-sdk-suite`, Root Directory `versions/v2`, Framework Preset
+"Other" (`vercel.json` supplies the rest), environment variable `FC_GUEST_API_KEY`.
+
+Local check, the same build Vercel runs:
+
+```bash
+cd versions/v2 && npm run build && node web/vercel-site.mjs   # → versions/v2/vercel-out
+```
+
+`vercel/prepare.mjs` is the older single-widget assembly from the deleted `farmerchat-widget`
+project (2026-10-09); it is not used.
 
 ## Verification (2026-10-08)
 
