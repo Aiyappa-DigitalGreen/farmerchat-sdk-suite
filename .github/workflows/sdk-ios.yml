@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Core (swift test)
         working-directory: versions/v2/ios/FarmerChatCore
         run: swift build && swift test
